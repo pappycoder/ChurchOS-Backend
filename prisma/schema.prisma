@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Connection URLs for Migrate are now configured in prisma.config.ts
 }
 
 // ─── Enums ───────────────────────────────────────────────
@@ -94,6 +94,7 @@ model Church {
   cell_groups       CellGroup[]
   assets            Asset[]
   audit_logs        AuditLog[]
+  attendances       Attendance[]
   church_configs    ChurchConfig[]
 
   @@map("churches")
@@ -128,7 +129,7 @@ model Profile {
   user_id       String   @unique // Supabase Auth user ID
   church_id     String
   branch_id     String?
-  member_id     String?
+  member_id     String?  @unique
   role          String   @default("member")
   first_name    String
   last_name     String
@@ -178,8 +179,9 @@ model Member {
   risk_scores         RiskScore[]
   engagement_scores   EngagementScore[]
   life_events         LifeEvent[]
-  pastoral_notes_from PastoralNote[]      @relation("Author")
+  pastoral_notes_from  PastoralNote[]      @relation("Author")
   pastoral_notes_about PastoralNote[]     @relation("Subject")
+  department_members   DepartmentMember[]
 
   @@index([church_id, branch_id, status])
   @@index([phone])
@@ -619,6 +621,8 @@ model ChurchConfig {
   value       Json
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
+
+  church Church @relation(fields: [church_id], references: [id])
 
   @@unique([church_id, key])
   @@map("church_configs")

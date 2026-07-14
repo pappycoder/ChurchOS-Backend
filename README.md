@@ -18,7 +18,7 @@ This repository contains the backend API for ChurchOS. It is built with:
 
 ## Repository Structure
 
-```
+```text
 ChurchOS-Backend/
 ├── .github/
 │   └── workflows/
@@ -182,11 +182,11 @@ This repo includes a GitHub Actions workflow that automatically creates issues f
 1. Go to **Settings → Secrets and variables → Actions**
 2. Add these repository secrets:
 
-| Secret | Value |
-|---|---|
-| `GH_PAT` | Personal Access Token with `repo`, `project`, `read:org` scopes |
-| `ORG_NAME` | `pappycoder` |
-| `PROJECT_NUMBER` | `2` |
+   | Secret | Value |
+   |---|---|
+   | `GH_PAT` | Personal Access Token with `repo`, `project`, `read:org` scopes |
+   | `ORG_NAME` | `pappycoder` |
+   | `PROJECT_NUMBER` | `2` |
 
 3. The workflow runs automatically when `churchos_github_projects_import.csv` is pushed to `main`
 4. You can also trigger it manually from the **Actions** tab
@@ -218,7 +218,7 @@ To update or add new tasks:
 
 Once running, API documentation is available at:
 
-```
+```text
 http://localhost:3001/api/v1/docs
 ```
 
