@@ -75,11 +75,12 @@ async function getProjectMetadata() {
 }
 
 /**
- * Create a single-select custom field if it doesn't exist
+ * Create a single-select custom field if it doesn't exist.
+ * If creation fails because the name is taken, reuse the existing field.
  */
 async function createCustomFieldIfMissing(projectId, fields, fieldName, options) {
-  if (fields[fieldName] && fields[fieldName].options.length > 0) {
-    console.log(`Field "${fieldName}" already exists.`);
+  if (fields[fieldName]) {
+    console.log(`Field "${fieldName}" already exists. Reusing.`);
     return fields[fieldName];
   }
 
@@ -115,16 +116,28 @@ async function createCustomFieldIfMissing(projectId, fields, fieldName, options)
     description: '',
   }));
 
-  const result = await graphqlWithAuth(mutation, {
-    projectId,
-    name: fieldName,
-    options: optionInputs,
-  });
+  try {
+    const result = await graphqlWithAuth(mutation, {
+      projectId,
+      name: fieldName,
+      options: optionInputs,
+    });
 
-  return {
-    id: result.createProjectV2Field.projectV2Field.id,
-    options: result.createProjectV2Field.projectV2Field.options,
-  };
+    return {
+      id: result.createProjectV2Field.projectV2Field.id,
+      options: result.createProjectV2Field.projectV2Field.options,
+    };
+  } catch (error) {
+    const message = error.errors?.[0]?.message || error.message || '';
+    if (message.toLowerCase().includes('already been taken')) {
+      console.warn(`Field "${fieldName}" is already taken. Fetching existing field...`);
+      const { fields: refreshedFields } = await getProjectMetadata();
+      if (refreshedFields[fieldName]) {
+        return refreshedFields[fieldName];
+      }
+    }
+    throw error;
+  }
 }
 
 /**

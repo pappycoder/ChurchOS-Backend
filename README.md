@@ -166,6 +166,7 @@ To update or add new tasks:
    - Create new issues
    - Update existing issues (matched by title)
    - Add/update them in project #2 with custom fields (Target Repo, Phase, Module, Priority)
+   - Reuse existing project fields when names are already taken
 
 ## API Documentation
 
