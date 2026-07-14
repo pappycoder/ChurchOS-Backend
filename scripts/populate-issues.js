@@ -207,7 +207,7 @@ async function run() {
   console.log(`Found project ID: ${projectId}`);
 
   console.log('Ensuring custom fields exist...');
-  const repositoryField = await createCustomFieldIfMissing(projectId, fields, 'Repository', [
+  const targetRepoField = await createCustomFieldIfMissing(projectId, fields, 'Target Repo', [
     'ChurchOS-Backend',
     'ChurchOS-Web',
     'ChurchOS-Mobile',
@@ -243,7 +243,7 @@ async function run() {
   ]);
 
   const fieldMap = {
-    Repository: repositoryField,
+    'Target Repo': targetRepoField,
     Phase: phaseField,
     Module: moduleField,
     Priority: priorityField,
@@ -312,7 +312,7 @@ async function run() {
 
       // Update custom fields
       const fieldUpdates = [
-        { field: fieldMap.Repository, value: row.Repo },
+        { field: fieldMap['Target Repo'], value: row.Repo },
         { field: fieldMap.Phase, value: row.Phase },
         { field: fieldMap.Module, value: row.Module },
         { field: fieldMap.Priority, value: row.Priority },

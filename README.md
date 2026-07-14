@@ -165,7 +165,7 @@ To update or add new tasks:
 3. The workflow will:
    - Create new issues
    - Update existing issues (matched by title)
-   - Add/update them in project #2 with custom fields (Repository, Phase, Module, Priority)
+   - Add/update them in project #2 with custom fields (Target Repo, Phase, Module, Priority)
 
 ## API Documentation
 
