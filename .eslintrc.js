@@ -48,7 +48,7 @@ module.exports = {
   },
 
   // Files to exclude from linting.
-  ignorePatterns: ['.eslintrc.js', 'prisma.config.*'],
+  ignorePatterns: ['.eslintrc.js', '.config/prisma.config.*'],
 
   // Custom rule overrides.
   // These rules extend or relax the recommended rules for this project.
