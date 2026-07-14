@@ -1,0 +1,35 @@
+name: Populate ChurchOS Project Issues
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'churchos_github_projects_import.csv'
+  workflow_dispatch:
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install @octokit/rest @octokit/graphql csv-parse
+
+      - name: Populate issues
+        run: node scripts/populate-issues.js
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          ORG_NAME: ${{ secrets.ORG_NAME }}
+          PROJECT_NUMBER: ${{ secrets.PROJECT_NUMBER }}
+          CSV_PATH: churchos_github_projects_import.csv
