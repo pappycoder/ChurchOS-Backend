@@ -1,14 +1,14 @@
-const fs = require('fs');
-const { parse } = require('csv-parse/sync');
-const { Octokit } = require('@octokit/rest');
-const { graphql } = require('@octokit/graphql');
+const fs = require("fs");
+const { parse } = require("csv-parse/sync");
+const { Octokit } = require("@octokit/rest");
+const { graphql } = require("@octokit/graphql");
 
-const ORG_NAME = process.env.ORG_NAME || 'pappycoder';
-const PROJECT_NUMBER = parseInt(process.env.PROJECT_NUMBER || '2', 10);
-const CSV_PATH = process.env.CSV_PATH || 'churchos_github_projects_import.csv';
+const ORG_NAME = process.env.ORG_NAME || "pappycoder";
+const PROJECT_NUMBER = parseInt(process.env.PROJECT_NUMBER || "2", 10);
+const CSV_PATH = process.env.CSV_PATH || "churchos_github_projects_import.csv";
 
 if (!process.env.GH_PAT) {
-  console.error('Error: GH_PAT environment variable is required.');
+  console.error("Error: GH_PAT environment variable is required.");
   process.exit(1);
 }
 
@@ -21,9 +21,9 @@ const graphqlWithAuth = graphql.defaults({
 });
 
 const repos = {
-  'ChurchOS-Backend': { owner: ORG_NAME, repo: 'ChurchOS-Backend' },
-  'ChurchOS-Web': { owner: ORG_NAME, repo: 'ChurchOS-Web' },
-  'ChurchOS-Mobile': { owner: ORG_NAME, repo: 'ChurchOS-Mobile' },
+  "ChurchOS-Backend": { owner: ORG_NAME, repo: "ChurchOS-Backend" },
+  "ChurchOS-Web": { owner: ORG_NAME, repo: "ChurchOS-Web" },
+  "ChurchOS-Mobile": { owner: ORG_NAME, repo: "ChurchOS-Mobile" },
 };
 
 /**
@@ -56,11 +56,16 @@ async function getProjectMetadata() {
     }
   `;
 
-  const result = await graphqlWithAuth(query, { org: ORG_NAME, number: PROJECT_NUMBER });
+  const result = await graphqlWithAuth(query, {
+    org: ORG_NAME,
+    number: PROJECT_NUMBER,
+  });
   const project = result.organization.projectV2;
 
   if (!project) {
-    throw new Error(`Project #${PROJECT_NUMBER} not found in organization ${ORG_NAME}`);
+    throw new Error(
+      `Project #${PROJECT_NUMBER} not found in organization ${ORG_NAME}`,
+    );
   }
 
   const fields = {};
@@ -76,9 +81,13 @@ async function getProjectMetadata() {
 
 /**
  * Create a single-select custom field if it doesn't exist.
- * If creation fails because the name is taken, reuse the existing field.
  */
-async function createCustomFieldIfMissing(projectId, fields, fieldName, options) {
+async function createCustomFieldIfMissing(
+  projectId,
+  fields,
+  fieldName,
+  options,
+) {
   if (fields[fieldName]) {
     console.log(`Field "${fieldName}" already exists. Reusing.`);
     return fields[fieldName];
@@ -112,8 +121,8 @@ async function createCustomFieldIfMissing(projectId, fields, fieldName, options)
 
   const optionInputs = options.map((name) => ({
     name,
-    color: 'GRAY',
-    description: '',
+    color: "GRAY",
+    description: "",
   }));
 
   try {
@@ -128,9 +137,11 @@ async function createCustomFieldIfMissing(projectId, fields, fieldName, options)
       options: result.createProjectV2Field.projectV2Field.options,
     };
   } catch (error) {
-    const message = error.errors?.[0]?.message || error.message || '';
-    if (message.toLowerCase().includes('already been taken')) {
-      console.warn(`Field "${fieldName}" is already taken. Fetching existing field...`);
+    const message = error.errors?.[0]?.message || error.message || "";
+    if (message.toLowerCase().includes("already been taken")) {
+      console.warn(
+        `Field "${fieldName}" is already taken. Fetching existing field...`,
+      );
       const { fields: refreshedFields } = await getProjectMetadata();
       if (refreshedFields[fieldName]) {
         return refreshedFields[fieldName];
@@ -182,22 +193,43 @@ async function updateProjectField(projectId, itemId, fieldId, optionId) {
   await graphqlWithAuth(mutation, { projectId, itemId, fieldId, optionId });
 }
 
+// In-memory cache for loaded issues to prevent repeated API paginations
+const issueCache = {};
+
 /**
- * Find existing issue by partial title match
+ * Find existing issue with paginated search coverage
  */
 async function findExistingIssue(owner, repo, title) {
+  const cacheKey = `${owner}/${repo}`;
   try {
-    // GitHub search has rate limits, so we list recent issues
-    const { data: issues } = await octokit.rest.issues.listForRepo({
-      owner,
-      repo,
-      state: 'all',
-      per_page: 100,
-    });
+    if (!issueCache[cacheKey]) {
+      console.log(`Fetching all issues from ${repo} to build cache...`);
+      let allIssues = [];
+      let page = 1;
+      let hasMore = true;
 
-    return issues.find((issue) => issue.title.includes(title));
+      while (hasMore) {
+        const { data: issues } = await octokit.rest.issues.listForRepo({
+          owner,
+          repo,
+          state: "all",
+          per_page: 100,
+          page,
+        });
+
+        allIssues = allIssues.concat(issues);
+        if (issues.length < 100) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+      issueCache[cacheKey] = allIssues;
+    }
+
+    return issueCache[cacheKey].find((issue) => issue.title.includes(title));
   } catch (error) {
-    console.error(`Error searching issues in ${repo}:`, error.message);
+    console.error(`Error listing issues in ${repo}:`, error.message);
     return null;
   }
 }
@@ -206,60 +238,91 @@ async function findExistingIssue(owner, repo, title) {
  * Main execution
  */
 async function run() {
-  console.log('Loading CSV...');
+  console.log("Loading CSV...");
   if (!fs.existsSync(CSV_PATH)) {
     throw new Error(`CSV file not found: ${CSV_PATH}`);
   }
 
-  const csv = fs.readFileSync(CSV_PATH, 'utf8');
+  const csv = fs.readFileSync(CSV_PATH, "utf8");
   const rows = parse(csv, { columns: true, skip_empty_lines: true });
   console.log(`Loaded ${rows.length} rows from CSV.`);
 
-  console.log('Fetching project metadata...');
+  console.log("Fetching project metadata...");
   const { projectId, fields } = await getProjectMetadata();
   console.log(`Found project ID: ${projectId}`);
 
-  console.log('Ensuring custom fields exist...');
-  const targetRepoField = await createCustomFieldIfMissing(projectId, fields, 'Target Repo', [
-    'ChurchOS-Backend',
-    'ChurchOS-Web',
-    'ChurchOS-Mobile',
-  ]);
+  console.log("Ensuring custom fields exist...");
+  const targetRepoField = await createCustomFieldIfMissing(
+    projectId,
+    fields,
+    "Target Repo",
+    ["ChurchOS-Backend", "ChurchOS-Web", "ChurchOS-Mobile"],
+  );
 
-  const phaseField = await createCustomFieldIfMissing(projectId, fields, 'Phase', [
-    'Phase 0',
-    'Phase 1',
-    'Phase 2',
-    'Phase 3',
-    'Phase 4',
-  ]);
+  const phaseField = await createCustomFieldIfMissing(
+    projectId,
+    fields,
+    "Phase",
+    ["Phase 0", "Phase 1", "Phase 2", "Phase 3", "Phase 4"],
+  );
 
-  const moduleField = await createCustomFieldIfMissing(projectId, fields, 'Module', [
-    'Auth',
-    'Members',
-    'Attendance',
-    'Giving',
-    'WhatsApp',
-    'Events',
-    'Media',
-    'Pastoral',
-    'Operations',
-    'DevOps',
-    'Sync',
-    'AI',
-  ]);
+  // Combined module values representing EVERY module used in your CSV rows
+  const moduleField = await createCustomFieldIfMissing(
+    projectId,
+    fields,
+    "Module",
+    [
+      "Prisma",
+      "Project Setup",
+      "API",
+      "Common",
+      "Auth",
+      "DevOps",
+      "Members",
+      "Attendance",
+      "Giving",
+      "WhatsApp",
+      "Events",
+      "Media",
+      "Admin",
+      "Pastoral",
+      "Operations",
+      "Sync",
+      "Design",
+      "State",
+      "Layout",
+      "Dashboard",
+      "Settings",
+      "Finance",
+      "Database",
+      "Home",
+      "Sermons",
+      "Prayer",
+      "Notifications",
+      "Quality",
+      "Distribution",
+    ],
+  );
 
-  const priorityField = await createCustomFieldIfMissing(projectId, fields, 'Priority', [
-    'High',
-    'Medium',
-    'Low',
-  ]);
+  const priorityField = await createCustomFieldIfMissing(
+    projectId,
+    fields,
+    "Priority",
+    ["High", "Medium", "Low"],
+  );
+
+  // Fetch standard 'Status' field from GitHub's default layout
+  const statusField = fields["Status"] || null;
+  if (!statusField) {
+    console.warn("Could not retrieve default 'Status' field options.");
+  }
 
   const fieldMap = {
-    'Target Repo': targetRepoField,
+    "Target Repo": targetRepoField,
     Phase: phaseField,
     Module: moduleField,
     Priority: priorityField,
+    Status: statusField,
   };
 
   let created = 0;
@@ -281,22 +344,28 @@ async function run() {
       `**Module:** ${row.Module}`,
       `**Priority:** ${row.Priority}`,
       `**Repository:** ${row.Repo}`,
-      '',
+      "",
       row.Description,
-    ].join('\n');
+    ].join("\n");
 
     const labels = row.Labels
-      ? row.Labels.split(',')
+      ? row.Labels.split(",")
           .map((l) => l.trim())
           .filter(Boolean)
       : [];
 
     try {
-      const existingIssue = await findExistingIssue(target.owner, target.repo, row.Title);
+      const existingIssue = await findExistingIssue(
+        target.owner,
+        target.repo,
+        row.Title,
+      );
 
       let issue;
       if (existingIssue) {
-        console.log(`Updating existing issue #${existingIssue.number}: ${title}`);
+        console.log(
+          `Updating existing issue #${existingIssue.number}: ${title}`,
+        );
         const { data: updatedIssue } = await octokit.rest.issues.update({
           owner: target.owner,
           repo: target.repo,
@@ -323,29 +392,47 @@ async function run() {
       console.log(`Adding issue #${issue.number} to project...`);
       const itemId = await addIssueToProject(projectId, issue.node_id);
 
-      // Update custom fields
+      // Map values and include 'Status' tracking
       const fieldUpdates = [
-        { field: fieldMap['Target Repo'], value: row.Repo },
+        { field: fieldMap["Target Repo"], value: row.Repo },
         { field: fieldMap.Phase, value: row.Phase },
         { field: fieldMap.Module, value: row.Module },
         { field: fieldMap.Priority, value: row.Priority },
       ];
 
+      if (fieldMap.Status) {
+        fieldUpdates.push({ field: fieldMap.Status, value: row.Status });
+      }
+
       for (const { field, value } of fieldUpdates) {
-        const option = field.options.find((opt) => opt.name === value);
+        if (!field) continue;
+
+        // Match case-sensitively or fallback case-insensitively
+        let option = field.options.find((opt) => opt.name === value);
+        if (!option && value) {
+          option = field.options.find(
+            (opt) => opt.name.toLowerCase() === value.toLowerCase(),
+          );
+        }
+
         if (option) {
           await updateProjectField(projectId, itemId, field.id, option.id);
         } else {
-          console.warn(`Option "${value}" not found for field. Skipping.`);
+          console.warn(
+            `Option "${value}" not found for field "${field.id}". Skipping.`,
+          );
         }
       }
+
+      // Delay to avoid hitting rate limits
+      await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
       console.error(`Failed to process "${title}":`, error.message);
       failed++;
     }
   }
 
-  console.log('\n=== Summary ===');
+  console.log("\n=== Summary ===");
   console.log(`Created: ${created}`);
   console.log(`Updated: ${updated}`);
   console.log(`Skipped: ${skipped}`);
@@ -358,6 +445,6 @@ async function run() {
 }
 
 run().catch((error) => {
-  console.error('Workflow failed:', error);
+  console.error("Workflow failed:", error);
   process.exit(1);
 });
