@@ -1,75 +1,75 @@
 Repo,Phase,Module,Title,Description,Priority,Labels,Status
 ChurchOS-Backend,Phase 0,Project Setup,Initialize NestJS project with TypeScript strict mode,"Set up NestJS project structure, configure tsconfig, eslint, prettier, and initial module folders.",High,"setup,backend",Todo
-ChurchOS-Backend,Phase 0,Project Setup,Configure environment variables and validation,"Create .env.example and ConfigModule with validation for Supabase, Redis, Paystack, 360dialog, Resend, Termii.",High,"setup,backend",Todo
-ChurchOS-Backend,Phase 0,Supabase,Create Supabase module and service client,"Implement SupabaseModule and SupabaseService with admin client and user-scoped client.",High,"supabase,backend",Todo
-ChurchOS-Backend,Phase 0,Supabase,Set up Supabase database migrations,"Create SQL migrations for churches, branches, profiles, members, families, services, attendance, giving_categories, transactions, recurring_giving, events, messages, pastoral_notes, audit_logs.",High,"supabase,database,backend",Todo
-ChurchOS-Backend,Phase 0,Supabase,Implement Row-Level Security policies,"Enable RLS on tenant tables and create policies scoped by church_id, branch_id, and user role.",High,"security,supabase,backend",Todo
-ChurchOS-Backend,Phase 0,Auth,Create authentication guard using Supabase JWT,"Implement SupabaseAuthGuard to validate JWT tokens and attach user profile.",High,"auth,backend",Todo
+ChurchOS-Backend,Phase 0,Project Setup,Configure environment variables and validation,"Create .env.example and ConfigModule with validation for Prisma, Supabase Auth, Redis, Paystack, 360dialog, Resend, Termii.",High,"setup,backend",Todo
+ChurchOS-Backend,Phase 0,Prisma,Initialize Prisma project and define schema,"Set up Prisma with PostgreSQL, define all core models (churches, branches, profiles, members, families, services, attendance, transactions, events, messages, pastoral_notes, audit_logs).",High,"prisma,database,backend",Todo
+ChurchOS-Backend,Phase 0,Prisma,Run initial Prisma migration and seed data,"Run prisma migrate dev, create seed script with dev churches, branches, members, services, giving categories, and users.",High,"prisma,database,backend",Todo
+ChurchOS-Backend,Phase 0,Prisma,Create PrismaModule and PrismaService for NestJS,"Implement PrismaService extending PrismaClient with onModuleInit/onModuleDestroy lifecycle hooks and transaction support.",High,"prisma,backend",Todo
+ChurchOS-Backend,Phase 0,Auth,Create Supabase Auth module and JWT guard,"Implement SupabaseModule, SupabaseService, and SupabaseAuthGuard to validate JWT tokens from Supabase Auth.",High,"auth,supabase,backend",Todo
 ChurchOS-Backend,Phase 0,Auth,Implement RBAC decorators and guard,"Create @RequirePermissions decorator and PermissionsGuard with Redis-cached permissions.",High,"auth,rbac,backend",Todo
 ChurchOS-Backend,Phase 0,Common,Add global exception filter and response interceptor,"Standardize API responses and errors across all endpoints.",High,"api,backend",Todo
 ChurchOS-Backend,Phase 0,Common,Add request logging and audit logging middleware,"Implement structured JSON logging and audit log triggers.",Medium,"logging,backend",Todo
 ChurchOS-Backend,Phase 0,DevOps,Create Dockerfile for backend service,"Write production-ready Dockerfile with multi-stage build.",Medium,"devops,backend",Todo
 ChurchOS-Backend,Phase 0,DevOps,Add GitHub Actions CI/CD workflow,"Create workflow for lint, test, build, and deploy on push to main/develop.",Medium,"devops,backend",Todo
-ChurchOS-Backend,Phase 1,Auth,Implement church registration endpoint,"POST /auth/register creates Supabase user, church, branch, profile with church_admin role.",High,"auth,backend",Todo
-ChurchOS-Backend,Phase 1,Auth,Implement MFA setup and verification endpoints,"POST /auth/mfa/setup returns QR code; verify TOTP codes.",Medium,"auth,backend",Todo
-ChurchOS-Backend,Phase 1,Members,Implement member CRUD service,"Create MembersService with create, update, soft delete, find by id, and list with filters.",High,"members,backend",Todo
+ChurchOS-Backend,Phase 1,Auth,Implement church registration endpoint,"POST /auth/register creates Supabase user, then creates church, branch, profile via Prisma with church_admin role.",High,"auth,backend",Todo
+ChurchOS-Backend,Phase 1,Auth,Implement MFA setup and verification endpoints,"POST /auth/mfa/setup returns QR code; verify TOTP codes via Supabase Auth.",Medium,"auth,backend",Todo
+ChurchOS-Backend,Phase 1,Members,Implement member CRUD service,"Create MembersService with Prisma: create, update, soft delete, find by id, and list with filters.",High,"members,prisma,backend",Todo
 ChurchOS-Backend,Phase 1,Members,Implement member API endpoints,"Create REST endpoints: GET /members, POST /members, GET /members/:id, PATCH /members/:id, DELETE /members/:id.",High,"members,api,backend",Todo
-ChurchOS-Backend,Phase 1,Members,Implement member search and pagination,"Add full-text search, status filters, branch filters, and pagination.",High,"members,backend",Todo
+ChurchOS-Backend,Phase 1,Members,Implement member search and pagination,"Add full-text search via Prisma $queryRaw, status filters, branch filters, and pagination.",High,"members,prisma,backend",Todo
 ChurchOS-Backend,Phase 1,Members,Implement CSV bulk import endpoint,"POST /members/bulk-import with validation, dry-run, and error reporting.",Medium,"members,backend",Todo
 ChurchOS-Backend,Phase 1,Members,Implement QR code generation for members,"Generate QR codes encoding member ID + checksum.",Medium,"members,qr,backend",Todo
-ChurchOS-Backend,Phase 1,Members,Implement family management endpoints,"Create families and family_members endpoints with relationship types.",Medium,"members,family,backend",Todo
-ChurchOS-Backend,Phase 1,Attendance,Implement services CRUD,"Create service scheduling endpoints.",High,"attendance,backend",Todo
-ChurchOS-Backend,Phase 1,Attendance,Implement attendance recording endpoints,"POST /attendance and POST /attendance/bulk with duplicate detection.",High,"attendance,backend",Todo
-ChurchOS-Backend,Phase 1,Attendance,Implement attendance summary and trends,"GET /attendance/summary and GET /attendance/trends with charts data.",High,"attendance,backend",Todo
+ChurchOS-Backend,Phase 1,Members,Implement family management endpoints,"Create families and family_members endpoints with relationship types via Prisma.",Medium,"members,family,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Attendance,Implement services CRUD,"Create service scheduling endpoints via Prisma.",High,"attendance,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Attendance,Implement attendance recording endpoints,"POST /attendance and POST /attendance/bulk with duplicate detection via Prisma.",High,"attendance,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Attendance,Implement attendance summary and trends,"GET /attendance/summary and GET /attendance/trends with charts data via Prisma aggregation.",High,"attendance,prisma,backend",Todo
 ChurchOS-Backend,Phase 1,Attendance,Implement visitor attendance recording,"Record visitors without member accounts and auto-create follow-up tasks.",Medium,"attendance,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Implement giving categories CRUD,"Create and manage giving categories per church.",High,"giving,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Integrate Paystack initialization endpoint,"POST /giving/initialize creates pending transaction and returns Paystack URL.",High,"giving,payments,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Implement Paystack webhook handler,"Verify signature, process charge.success with idempotency.",High,"giving,payments,webhook,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Implement cash giving recording endpoint,"POST /giving/cash records cash transactions and generates receipt numbers.",High,"giving,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Implement giving summary report endpoint,"GET /giving/reports/summary returns totals, categories, trends.",High,"giving,reports,backend",Todo
-ChurchOS-Backend,Phase 1,Giving,Implement PDF receipt generation service,"Generate branded PDF receipts and store URLs.",High,"giving,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Implement giving categories CRUD,"Create and manage giving categories per church via Prisma.",High,"giving,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Integrate Paystack initialization endpoint,"POST /giving/initialize creates pending transaction via Prisma and returns Paystack URL.",High,"giving,payments,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Implement Paystack webhook handler,"Verify signature, process charge.success with idempotency, update transaction via Prisma.",High,"giving,payments,webhook,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Implement cash giving recording endpoint,"POST /giving/cash records cash transactions via Prisma and generates receipt numbers.",High,"giving,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Implement giving summary report endpoint,"GET /giving/reports/summary returns totals, categories, trends via Prisma aggregation.",High,"giving,reports,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Giving,Implement PDF receipt generation service,"Generate branded PDF receipts and store URLs in transaction via Prisma.",High,"giving,backend",Todo
 ChurchOS-Backend,Phase 1,WhatsApp,Set up 360dialog webhook endpoint,"POST /webhooks/whatsapp receives and parses inbound messages.",High,"whatsapp,backend",Todo
 ChurchOS-Backend,Phase 1,WhatsApp,Implement command router,"Route CHECKIN, GIVE, HELP commands to handlers.",High,"whatsapp,backend",Todo
-ChurchOS-Backend,Phase 1,WhatsApp,Implement CHECKIN command handler,"Validate member, find service, record attendance, send confirmation.",High,"whatsapp,attendance,backend",Todo
+ChurchOS-Backend,Phase 1,WhatsApp,Implement CHECKIN command handler,"Validate member via Prisma, find service, record attendance via Prisma, send confirmation.",High,"whatsapp,attendance,prisma,backend",Todo
 ChurchOS-Backend,Phase 1,WhatsApp,Implement GIVE command handler,"Generate Paystack payment link and send via WhatsApp.",High,"whatsapp,giving,backend",Todo
 ChurchOS-Backend,Phase 1,WhatsApp,Implement HELP command handler,"Return list of available commands.",Medium,"whatsapp,backend",Todo
-ChurchOS-Backend,Phase 1,WhatsApp,Implement message logging,"Store all inbound/outbound messages in messages table.",Medium,"whatsapp,backend",Todo
+ChurchOS-Backend,Phase 1,WhatsApp,Implement message logging,"Store all inbound/outbound messages in messages table via Prisma.",Medium,"whatsapp,prisma,backend",Todo
 ChurchOS-Backend,Phase 1,WhatsApp,Implement outbound message queue,"Queue outbound messages via BullMQ with rate limiting.",Medium,"whatsapp,backend",Todo
-ChurchOS-Backend,Phase 1,Events,Implement event CRUD endpoints,"Create events with metadata, capacity, pricing.",High,"events,backend",Todo
-ChurchOS-Backend,Phase 1,Events,Implement free event registration,"POST /events/:id/register creates registration.",High,"events,backend",Todo
-ChurchOS-Backend,Phase 1,Media,Implement sermon upload endpoint,"Upload audio to Supabase Storage and create sermon record.",Medium,"media,backend",Todo
-ChurchOS-Backend,Phase 1,Media,Implement sermon listing and search,"GET /sermons with search and filters.",Medium,"media,backend",Todo
+ChurchOS-Backend,Phase 1,Events,Implement event CRUD endpoints,"Create events with metadata, capacity, pricing via Prisma.",High,"events,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Events,Implement free event registration,"POST /events/:id/register creates registration via Prisma.",High,"events,prisma,backend",Todo
+ChurchOS-Backend,Phase 1,Media,Implement sermon upload endpoint,"Upload audio to Supabase Storage and create sermon record via Prisma.",Medium,"media,backend",Todo
+ChurchOS-Backend,Phase 1,Media,Implement sermon listing and search,"GET /sermons with search and filters via Prisma.",Medium,"media,prisma,backend",Todo
 ChurchOS-Backend,Phase 2,Giving,Integrate Flutterwave initialization and webhook,"Add Flutterwave as secondary payment processor.",High,"giving,payments,backend",Todo
 ChurchOS-Backend,Phase 2,Giving,Implement payment processor failover,"Fallback to Flutterwave if Paystack fails.",High,"giving,payments,backend",Todo
-ChurchOS-Backend,Phase 2,Giving,Implement recurring giving setup,"Store authorization codes and schedule charges.",High,"giving,backend",Todo
-ChurchOS-Backend,Phase 2,Giving,Implement recurring giving cron job,"Daily job charges active recurring giving plans.",High,"giving,backend",Todo
+ChurchOS-Backend,Phase 2,Giving,Implement recurring giving setup,"Store authorization codes and schedule charges via Prisma.",High,"giving,prisma,backend",Todo
+ChurchOS-Backend,Phase 2,Giving,Implement recurring giving cron job,"Daily job charges active recurring giving plans via Prisma.",High,"giving,prisma,backend",Todo
 ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast creation endpoint,"POST /whatsapp/broadcast with filters and scheduling.",High,"whatsapp,backend",Todo
 ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast queue processor,"Process broadcast jobs in batches with rate limiting.",High,"whatsapp,backend",Todo
-ChurchOS-Backend,Phase 2,WhatsApp,Implement template management endpoints,"CRUD for WhatsApp templates.",Medium,"whatsapp,backend",Todo
+ChurchOS-Backend,Phase 2,WhatsApp,Implement template management endpoints,"CRUD for WhatsApp templates via Prisma.",Medium,"whatsapp,prisma,backend",Todo
 ChurchOS-Backend,Phase 2,WhatsApp,Integrate Termii SMS fallback,"Send SMS when WhatsApp delivery fails.",Medium,"whatsapp,sms,backend",Todo
 ChurchOS-Backend,Phase 2,WhatsApp,Implement AI chatbot integration,"Use OpenAI/Groq for FAQ and intent classification with RAG.",Medium,"whatsapp,ai,backend",Todo
-ChurchOS-Backend,Phase 2,Events,Implement paid event registration and ticketing,"Generate QR tickets with HMAC and payment integration.",High,"events,backend",Todo
+ChurchOS-Backend,Phase 2,Events,Implement paid event registration and ticketing,"Generate QR tickets with HMAC and payment integration via Prisma.",High,"events,prisma,backend",Todo
 ChurchOS-Backend,Phase 2,Events,Implement ticket validation endpoint,"POST /events/:id/tickets/validate.",High,"events,backend",Todo
-ChurchOS-Backend,Phase 2,Admin,Implement multi-branch support,"Branch CRUD, member transfer, headquarters dashboard.",High,"admin,backend",Todo
-ChurchOS-Backend,Phase 3,Pastoral,Implement pastoral notes CRUD with encryption,"AES-256-GCM encryption for counseling notes.",High,"pastoral,backend",Todo
-ChurchOS-Backend,Phase 3,Pastoral,Implement risk score calculation,"Nightly job calculates member risk scores.",High,"pastoral,backend",Todo
-ChurchOS-Backend,Phase 3,Pastoral,Implement engagement score calculation,"Nightly job calculates member engagement scores.",High,"pastoral,backend",Todo
-ChurchOS-Backend,Phase 3,Pastoral,Implement life event tracking and workflows,"Detect birthdays, bereavements, trigger alerts.",Medium,"pastoral,backend",Todo
-ChurchOS-Backend,Phase 3,Operations,Implement department management,"Department CRUD and member assignments.",Medium,"operations,backend",Todo
-ChurchOS-Backend,Phase 3,Operations,Implement cell group management,"Cell group CRUD, nearest group recommendation.",Medium,"operations,backend",Todo
-ChurchOS-Backend,Phase 3,Operations,Implement asset and inventory management,"Asset register with QR codes and maintenance tracking.",Low,"operations,backend",Todo
-ChurchOS-Backend,Phase 4,Sync,Implement offline sync push/pull endpoints,"POST /sync/push and GET /sync/pull with conflict resolution.",High,"sync,backend",Todo
-ChurchOS-Backend,Phase 4,Sync,Implement sync queue processing,"Process sync jobs with idempotency and retry logic.",High,"sync,backend",Todo
+ChurchOS-Backend,Phase 2,Admin,Implement multi-branch support,"Branch CRUD, member transfer, headquarters dashboard via Prisma.",High,"admin,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Pastoral,Implement pastoral notes CRUD with encryption,"AES-256-GCM encryption for counseling notes, stored via Prisma.",High,"pastoral,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Pastoral,Implement risk score calculation,"Nightly job calculates member risk scores via Prisma.",High,"pastoral,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Pastoral,Implement engagement score calculation,"Nightly job calculates member engagement scores via Prisma.",High,"pastoral,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Pastoral,Implement life event tracking and workflows,"Detect birthdays, bereavements, trigger alerts via Prisma.",Medium,"pastoral,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Operations,Implement department management,"Department CRUD and member assignments via Prisma.",Medium,"operations,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Operations,Implement cell group management,"Cell group CRUD, nearest group recommendation via Prisma.",Medium,"operations,prisma,backend",Todo
+ChurchOS-Backend,Phase 3,Operations,Implement asset and inventory management,"Asset register with QR codes and maintenance tracking via Prisma.",Low,"operations,prisma,backend",Todo
+ChurchOS-Backend,Phase 4,Sync,Implement offline sync push/pull endpoints,"POST /sync/push and GET /sync/pull with conflict resolution via Prisma.",High,"sync,backend",Todo
+ChurchOS-Backend,Phase 4,Sync,Implement sync queue processing,"Process sync jobs with idempotency and retry logic via Prisma.",High,"sync,backend",Todo
 ChurchOS-Backend,Phase 4,API,Create third-party developer API documentation and keys,"OpenAPI spec and API key management.",Medium,"api,backend",Todo
 ChurchOS-Web,Phase 0,Project Setup,Initialize Next.js 14 project with shadcn/ui,"Set up Next.js App Router, TypeScript, Tailwind, shadcn/ui.",High,"setup,frontend",Todo
-ChurchOS-Web,Phase 0,Project Setup,Configure environment variables,"Create .env.example for Supabase URL, anon key, API URL.",High,"setup,frontend",Todo
+ChurchOS-Web,Phase 0,Project Setup,Configure environment variables,"Create .env.example for Supabase Auth URL, anon key, API URL.",High,"setup,frontend",Todo
 ChurchOS-Web,Phase 0,Project Setup,Set up PWA configuration,"Configure next-pwa, manifest.json, service worker, app icons.",Medium,"setup,pwa,frontend",Todo
 ChurchOS-Web,Phase 0,Design,Configure Tailwind theme with ChurchOS design tokens,"Set colors, typography, spacing, shadows in tailwind.config.",High,"design,frontend",Todo
 ChurchOS-Web,Phase 0,Design,Install base shadcn/ui components,"Install button, input, card, dialog, table, form, select, toast, etc.",High,"design,frontend",Todo
 ChurchOS-Web,Phase 0,State,Set up Zustand for global UI state,"Create auth store, sidebar store, notification store.",Medium,"state,frontend",Todo
 ChurchOS-Web,Phase 0,State,Set up TanStack Query for server state,"Configure React Query client and API hooks pattern.",High,"state,frontend",Todo
-ChurchOS-Web,Phase 0,Supabase,Configure Supabase SSR client,"Create server and client Supabase clients with middleware.",High,"supabase,frontend",Todo
-ChurchOS-Web,Phase 0,API,Create API client with interceptors,"Axios/fetch wrapper with auth header and error handling.",High,"api,frontend",Todo
+ChurchOS-Web,Phase 0,Auth,Configure Supabase Auth SSR client,"Create server and client Supabase auth clients with middleware. All data fetching goes through NestJS REST API.",High,"auth,supabase,frontend",Todo
+ChurchOS-Web,Phase 0,API,Create API client with interceptors,"Axios/fetch wrapper with auth header and error handling for NestJS backend.",High,"api,frontend",Todo
 ChurchOS-Web,Phase 0,DevOps,Create Dockerfile for web,"Production Dockerfile for Next.js.",Medium,"devops,frontend",Todo
 ChurchOS-Web,Phase 0,DevOps,Add GitHub Actions CI/CD workflow,"Lint, test, build, deploy to Vercel.",Medium,"devops,frontend",Todo
 ChurchOS-Web,Phase 1,Auth,Build login page,"Create /login with email/password form and Supabase auth.",High,"auth,frontend",Todo
@@ -119,7 +119,7 @@ ChurchOS-Mobile,Phase 0,Project Setup,Initialize Flutter project,"Set up Flutter
 ChurchOS-Mobile,Phase 0,Project Setup,Configure pubspec.yaml dependencies,"Add http, dio, supabase_flutter, riverpod, flutter_secure_storage, sqflite, workmanager, mobile_scanner, local_auth, etc.",High,"setup,mobile",Todo
 ChurchOS-Mobile,Phase 0,Project Setup,Configure app icons and splash screen,"Add ChurchOS logo and splash assets.",Medium,"setup,mobile",Todo
 ChurchOS-Mobile,Phase 0,State,Set up Riverpod for state management,"Create providers for auth, members, giving, etc.",High,"state,mobile",Todo
-ChurchOS-Mobile,Phase 0,Supabase,Configure Supabase client,"Initialize Supabase with auth and storage.",High,"supabase,mobile",Todo
+ChurchOS-Mobile,Phase 0,Auth,Configure Supabase Auth client,"Initialize Supabase for authentication only. All data from NestJS REST API.",High,"auth,supabase,mobile",Todo
 ChurchOS-Mobile,Phase 0,Database,Set up local SQLite database,"Create tables for offline members, attendance, transactions.",High,"database,mobile",Todo
 ChurchOS-Mobile,Phase 0,Database,Set up Hive for cache,"Cache settings, sync metadata.",Medium,"database,mobile",Todo
 ChurchOS-Mobile,Phase 0,DevOps,Add GitHub Actions workflow,"Analyze, test, build Android APK/AAB.",Medium,"devops,mobile",Todo

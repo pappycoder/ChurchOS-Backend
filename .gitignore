@@ -1,8 +1,11 @@
-# Nestjs specific
+# NestJS specific
 /dist
 /node_modules
 /build
 /tmp
+
+# Prisma
+# Do NOT ignore prisma/migrations - they should be committed
 
 # Logs
 logs

@@ -7,7 +7,9 @@ NestJS API for ChurchOS — Church Management & Digital Ministry Platform.
 This repository contains the backend API for ChurchOS. It is built with:
 
 - **NestJS** — Modular TypeScript backend framework
-- **Supabase** — PostgreSQL database + Auth + Storage + Realtime
+- **Prisma** — Type-safe ORM for PostgreSQL
+- **Supabase Auth** — Authentication, MFA, session management
+- **Supabase Storage** — File uploads (photos, receipts, media)
 - **Upstash Redis** — Caching and BullMQ job queues
 - **Paystack / Flutterwave** — Payment processing
 - **360dialog** — WhatsApp Business API
@@ -21,6 +23,10 @@ ChurchOS-Backend/
 ├── .github/
 │   └── workflows/
 │       └── populate-project-issues.yml  # Auto-create GitHub issues from CSV
+├── prisma/
+│   ├── schema.prisma                    # Database schema
+│   ├── migrations/                      # Migration files
+│   └── seed.ts                          # Seed data
 ├── scripts/
 │   └── populate-issues.js               # Issue population script
 ├── src/
@@ -35,7 +41,8 @@ ChurchOS-Backend/
 │   ├── media/                           # Sermons and media
 │   ├── pastoral/                        # Pastoral care and intelligence
 │   ├── admin/                           # RBAC, config, reports
-│   ├── supabase/                        # Supabase client module
+│   ├── prisma/                          # Prisma client module
+│   ├── supabase/                        # Supabase client (auth + storage only)
 │   ├── common/                          # Guards, interceptors, filters
 │   └── config/                          # Environment configuration
 ├── churchos_github_projects_import.csv  # Project tasks
@@ -51,7 +58,8 @@ ChurchOS-Backend/
 
 - Node.js 20+
 - npm or pnpm
-- Supabase project
+- PostgreSQL database
+- Supabase project (Auth + Storage only)
 - Upstash Redis instance
 
 ### Installation
@@ -73,6 +81,7 @@ Required variables:
 ```env
 NODE_ENV=development
 PORT=3001
+DATABASE_URL=postgresql://user:password@localhost:5432/churchos
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_ANON_KEY=your-anon-key
@@ -91,6 +100,15 @@ WEB_URL=http://localhost:3000
 ### Running Locally
 
 ```bash
+# Start PostgreSQL and Redis (if using Docker)
+docker-compose up -d
+
+# Run Prisma migrations
+npx prisma migrate dev
+
+# Seed the database
+npx prisma db seed
+
 # Development
 npm run start:dev
 
@@ -112,20 +130,48 @@ npm run test:integration
 npm run test:e2e
 ```
 
-## Database Migrations
+## Database
 
-Migrations are managed via Supabase CLI:
+### Prisma Commands
 
 ```bash
-# Create new migration
-supabase migration new add_members_table
+# Create a new migration after schema changes
+npx prisma migrate dev --name add_members_table
 
-# Apply migrations
-supabase db push
+# Apply pending migrations in production
+npx prisma migrate deploy
 
-# Reset local database
-supabase db reset
+# Reset local database (drops all data)
+npx prisma migrate reset
+
+# Generate Prisma Client after schema changes
+npx prisma generate
+
+# Open Prisma Studio (visual database browser)
+npx prisma studio
+
+# Seed the database
+npx prisma db seed
 ```
+
+### Schema Overview
+
+The database schema is defined in `prisma/schema.prisma`. Key models include:
+
+- **Churches & Branches** — Multi-tenant structure
+- **Profiles** — Links Supabase Auth users to ChurchOS roles
+- **Members** — Church member records with full contact info
+- **Families** — Family groupings and relationships
+- **Services & Attendance** — Service scheduling and check-in tracking
+- **Giving Categories & Transactions** — Digital and cash giving records
+- **Events & Registrations** — Event management and sign-ups
+- **Messages & Templates** — WhatsApp communication logs
+- **Pastoral Notes** — Encrypted counseling records
+- **Audit Logs** — Full activity trail
+
+### Data Isolation
+
+All queries are scoped by `church_id` to ensure multi-tenant data isolation. This is enforced via Prisma middleware and NestJS guards.
 
 ## GitHub Project Automation
 
