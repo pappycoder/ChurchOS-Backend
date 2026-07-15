@@ -273,8 +273,17 @@ All notable changes to this project are documented below. Update this section wi
   - 8 unit tests passing: `test/unit/auth/auth.service.spec.ts`.
 
 - **2026-07-15** — Fixed TypeScript/ESLint config for test files.
-  - Moved `rootDir: "./src"` from `tsconfig.json` to `tsconfig.build.json` only.
-  - Expanded `tsconfig.json` exclude list: `test`, `jest.config.*`.
-  - Created `tsconfig.eslint.json` — includes both `src/` and `test/` for ESLint parsing.
-  - Updated `.eslintrc.js` to use `tsconfig.eslint.json` for parser project.
+  - `tsconfig.json` is now the base config: no `rootDir`, includes both `src/` and `test/`.
+  - `tsconfig.build.json` extends base, adds `rootDir: "./src"`, excludes `test/` + specs.
+  - `.eslintrc.js` points to `tsconfig.json` directly (removed `tsconfig.eslint.json`).
   - All 19 tests pass, build compiles clean, lint passes with zero errors.
+
+- **2026-07-15** — Rewrote Redis module for local dev + cloud support.
+  - Installed `ioredis` for local Redis (`redis://`) alongside `@upstash/redis` for cloud (`https://`).
+  - Rewrote `RedisService` to auto-detect URL scheme and use appropriate client.
+  - Updated `env.validation.ts`: `REDIS_URL` accepts both `redis://` and `https://`, added optional `UPSTASH_REDIS_TOKEN`.
+  - Updated `HealthController` to use `redis.ping()` instead of `redis.client.ping()`.
+  - Updated `RateLimitGuard` to skip when using `ioredis` (requires Upstash).
+
+- **2026-07-15** — Fixed `compression` import in `main.ts`.
+  - Changed `import compression from 'compression'` to `import * as compression from 'compression'` (CommonJS compat).
