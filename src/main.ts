@@ -23,6 +23,7 @@ import { AppModule } from './app.module';
 import { env } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 /**
  * Bootstraps and starts the NestJS application.
@@ -75,6 +76,9 @@ async function bootstrap(): Promise<void> {
 
   // Step 5: Register global logging interceptor.
   app.useGlobalInterceptors(new LoggingInterceptor());
+
+  // Step 6: Register global response interceptor.
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   // Step 5: Enable CORS (Cross-Origin Resource Sharing).
   // Allows the ChurchOS web frontend (Next.js) running on a different port/origin

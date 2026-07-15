@@ -215,3 +215,17 @@ All notable changes to this project are documented below. Update this section wi
 
 - **2026-07-15** — Created GitHub Actions CI/CD workflow (Task #12).
   - Created `.github/workflows/ci.yml` — lint, build, test with PostgreSQL service container.
+
+- **2026-07-15** — Added response interceptor (Phase 0 remaining).
+  - Created `src/common/interceptors/response.interceptor.ts` — wraps all responses in `{ success, data, meta }`.
+  - Supports paginated responses with `total`, `page`, `limit`, `totalPages` in meta.
+  - Registered globally in `main.ts`.
+
+- **2026-07-15** — Added Redis module (Phase 0 remaining).
+  - Created `src/redis/redis.service.ts` — Upstash Redis client with convenience methods.
+  - Created `src/redis/redis.module.ts` — global RedisModule.
+  - Installed `@upstash/redis`.
+
+- **2026-07-15** — Added health check endpoint (Phase 0 remaining).
+  - Created `src/health/health.controller.ts` — `GET /health` checks database + Redis.
+  - Returns `{ status, timestamp, uptime, services: { database, redis } }`.
