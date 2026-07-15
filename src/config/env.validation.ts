@@ -50,6 +50,9 @@ const envSchema = z.object({
 
   // ─── AI (Optional) ────────────────────────────────────────
   OPENAI_API_KEY: z.string().optional(),
+
+  // ─── Monitoring (Optional) ────────────────────────────────
+  SENTRY_DSN: z.string().optional(),
 });
 
 /**

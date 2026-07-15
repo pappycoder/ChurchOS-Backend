@@ -229,3 +229,23 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-07-15** — Added health check endpoint (Phase 0 remaining).
   - Created `src/health/health.controller.ts` — `GET /health` checks database + Redis.
   - Returns `{ status, timestamp, uptime, services: { database, redis } }`.
+
+- **2026-07-15** — Added Sentry error tracking (early setup).
+  - Installed `@sentry/nestjs`, `@sentry/profiling-node`.
+  - Created `src/common/interceptors/sentry.interceptor.ts` — captures exceptions with context.
+  - Added `SENTRY_DSN` to env validation (optional).
+  - Sentry only activates when `SENTRY_DSN` is set.
+
+- **2026-07-15** — Added rate limiting (early setup).
+  - Installed `@upstash/ratelimit`.
+  - Created `src/common/guards/rate-limit.guard.ts` — sliding window rate limiter.
+  - Created `@RateLimit()` decorator for per-route custom limits.
+  - Default: 100 req/min, Auth: 10 req/min, Sensitive: 5 req/min.
+
+- **2026-07-15** — Added Helmet security headers and compression (early setup).
+  - Installed `helmet`, `compression`.
+  - Added `app.use(helmet())` and `app.use(compression())` in `main.ts`.
+
+- **2026-07-15** — Added graceful shutdown hooks (early setup).
+  - Added `app.enableShutdownHooks()` in `main.ts`.
+  - Ensures Prisma, Redis disconnect cleanly on SIGTERM/SIGINT.

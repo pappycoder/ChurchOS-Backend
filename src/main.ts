@@ -19,11 +19,16 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as Sentry from '@sentry/nestjs';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { env } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { SentryInterceptor } from './common/interceptors/sentry.interceptor';
 
 /**
  * Bootstraps and starts the NestJS application.
@@ -41,6 +46,17 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
  * @returns {Promise<void>}
  */
 async function bootstrap(): Promise<void> {
+  // Step 0: Initialize Sentry (only if SENTRY_DSN is set).
+  if (env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: env.SENTRY_DSN,
+      environment: env.NODE_ENV,
+      integrations: [nodeProfilingIntegration()],
+      tracesSampleRate: env.NODE_ENV === 'production' ? 0.2 : 1.0,
+      profilesSampleRate: env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    });
+  }
+
   // Step 1: Create the NestJS application instance.
   // NestFactory.create() initializes the IoC container, resolves all modules,
   // and creates the underlying HTTP adapter (Express by default).
@@ -51,7 +67,15 @@ async function bootstrap(): Promise<void> {
   // Example: @Get('members') on MembersController → GET /api/v1/members
   app.setGlobalPrefix('api/v1');
 
-  // Step 3: Configure global ValidationPipe.
+  // Step 3: Enable security headers with Helmet.
+  // Sets various HTTP headers to help protect the app from common web vulnerabilities.
+  app.use(helmet());
+
+  // Step 4: Enable gzip compression.
+  // Compresses response bodies for faster transfer to clients.
+  app.use(compression());
+
+  // Step 5: Configure global ValidationPipe.
   // This pipe automatically validates incoming request bodies, query params,
   // and path params against class-validator decorators on DTO classes.
   // - whitelist: true → strips properties not defined in the DTO
@@ -69,18 +93,21 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // Step 4: Register global exception filter.
+  // Step 6: Register global exception filter.
   // Catches all unhandled exceptions and returns standardized JSON error responses.
   // Handles HttpException, ZodError, Prisma errors, and generic errors.
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Step 5: Register global logging interceptor.
+  // Step 7: Register global logging interceptor.
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // Step 6: Register global response interceptor.
+  // Step 8: Register global response interceptor.
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  // Step 5: Enable CORS (Cross-Origin Resource Sharing).
+  // Step 9: Register global Sentry interceptor.
+  app.useGlobalInterceptors(new SentryInterceptor());
+
+  // Step 10: Enable CORS (Cross-Origin Resource Sharing).
   // Allows the ChurchOS web frontend (Next.js) running on a different port/origin
   // to make API requests to this backend. Credentials are enabled to support
   // cookie-based authentication if needed.
@@ -89,7 +116,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  // Step 6: Configure Swagger/OpenAPI documentation.
+  // Step 11: Configure Swagger/OpenAPI documentation.
   // The DocumentBuilder creates a configuration object that defines the API
   // metadata: title, description, version, authentication scheme (Bearer JWT),
   // and endpoint tags for grouping related controllers.
@@ -131,7 +158,7 @@ async function bootstrap(): Promise<void> {
     .addTag('admin', 'Administration')
     .build();
 
-  // Step 7: Generate the Swagger document and serve it.
+  // Step 12: Generate the Swagger document and serve it.
   // SwaggerModule.createDocument() scans all controllers and their decorators
   // (@ApiProperty, @ApiOperation, etc.) to build the OpenAPI 3.0 spec.
   // SwaggerModule.setup() serves the Swagger UI at the specified path.
@@ -149,10 +176,15 @@ async function bootstrap(): Promise<void> {
     customSiteTitle: 'ChurchOS API Documentation',
   });
 
-  // Step 8: Start the HTTP server.
+  // Step 13: Start the HTTP server.
   // The PORT is read from validated environment variables.
   const port = env.PORT;
   await app.listen(port);
+
+  // Step 14: Enable graceful shutdown hooks.
+  // Ensures Prisma, Redis, and other resources disconnect cleanly on SIGTERM/SIGINT.
+  app.enableShutdownHooks();
+
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger docs: http://localhost:${port}/api/v1/docs`);
 }
