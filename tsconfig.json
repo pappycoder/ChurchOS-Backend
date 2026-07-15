@@ -23,8 +23,10 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["prisma", "dist", "node_modules"]
 }

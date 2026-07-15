@@ -15,7 +15,7 @@
 |---|---|
 | Runtime | Node.js 20+ |
 | Framework | NestJS 10 (TypeScript) |
-| ORM | Prisma 6 (PostgreSQL) |
+| ORM | Prisma 7 (PostgreSQL) |
 | Auth | Supabase Auth (JWT, MFA) |
 | Validation | class-validator + class-transformer |
 | API Docs | Swagger / OpenAPI 3.0 |
@@ -37,6 +37,8 @@ npm run test           # Jest unit tests
 npx prisma generate    # Regenerate Prisma Client after schema changes
 npx prisma migrate dev # Create a new migration
 npx prisma studio      # Visual database browser
+npx prisma db seed     # Seed database with dev data
+npm run prisma:seed    # Alternative seed command
 ```
 
 ## Architecture
@@ -45,31 +47,37 @@ npx prisma studio      # Visual database browser
 
 ```text
 src/
-├── main.ts                 # Application bootstrap, Swagger setup, CORS, ValidationPipe
+├── main.ts                 # Application bootstrap, Swagger, CORS, ValidationPipe, ExceptionFilter
 ├── app.module.ts           # Root module — imports ConfigModule, PrismaModule
+├── config/                 # Environment config, validation schema
+│   ├── env.validation.ts   # Zod schema for env vars (validated at startup)
+│   └── index.ts            # Barrel exports
 ├── prisma/                 # Prisma ORM integration (global module)
 │   ├── prisma.module.ts    # Global PrismaModule registration
 │   ├── prisma.service.ts   # PrismaService with lifecycle hooks (connect/disconnect)
 │   └── index.ts            # Barrel exports
-├── auth/                   # Authentication & authorization (Supabase Auth)
-│   ├── decorators/         # @RequirePermissions, @CurrentUser
+├── common/                 # Shared guards, interceptors, decorators, filters
+│   ├── decorators/         # @CurrentUser, @CurrentUserProfile, Swagger helpers
+│   │   ├── api-paginated.decorator.ts
+│   │   ├── api-standard-responses.decorator.ts
+│   │   ├── current-user.decorator.ts
+│   │   └── index.ts
+│   └── filters/            # GlobalExceptionFilter
+│       ├── global-exception.filter.ts
+│       └── index.ts
+├── auth/                   # Authentication & authorization (Supabase Auth) [PLANNED]
+│   ├── decorators/         # @RequirePermissions
 │   ├── guards/             # SupabaseAuthGuard, PermissionsGuard
 │   └── strategies/         # JWT strategy
-├── members/                # Member CRUD, search, families
-├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual)
-├── giving/                 # Giving categories, transactions, recurring, receipts
-├── events/                 # Events, registrations, ticketing
-├── whatsapp/               # WhatsApp webhooks, commands, broadcasts
-├── media/                  # Sermon uploads, media library
-├── pastoral/               # Pastoral notes, life events, risk scoring
-├── admin/                  # RBAC, church config, reports, dashboard
-├── supabase/               # Supabase client (Auth + Storage only)
-├── common/                 # Shared guards, interceptors, exception filters
-│   ├── filters/            # GlobalExceptionFilter
-│   ├── interceptors/       # ResponseTransformer
-│   └── ...
-├── config/                 # Environment config, validation schema
-└── ...
+├── members/                # Member CRUD, search, families [PLANNED]
+├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
+├── giving/                 # Giving categories, transactions, recurring, receipts [PLANNED]
+├── events/                 # Events, registrations, ticketing [PLANNED]
+├── whatsapp/               # WhatsApp webhooks, commands, broadcasts [PLANNED]
+├── media/                  # Sermon uploads, media library [PLANNED]
+├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
+├── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
+└── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
 ### Conventions
@@ -78,35 +86,41 @@ src/
 - **DTOs** use `class-validator` decorators for automatic validation via `ValidationPipe`.
 - **Prisma queries** must always scope by `church_id` for multi-tenant data isolation.
 - **Response format** is standardized: `{ success: true, data: ..., message: ... }`.
-- **Error format** is standardized: `{ success: false, error: { code, message, details } }`.
+- **Error format** is standardized: `{ success: false, error: { code, message, details, timestamp, path, method } }`.
 - **File naming** uses kebab-case for files, PascalCase for classes.
 - **Modules** follow the NestJS convention: `*.module.ts`, `*.service.ts`, `*.controller.ts`, `*.dto.ts`, `*.entity.ts`.
+- **Environment variables** are validated at startup via Zod schema in `src/config/env.validation.ts`.
+- **Swagger decorators** use reusable helpers from `src/common/decorators/` (e.g., `@ApiCreateEndpoint()`).
 
 ### Database
 
-- PostgreSQL via Prisma ORM.
+- PostgreSQL 16 via Prisma ORM 7.
 - Schema defined in `prisma/schema.prisma` (26+ models, 8 enums).
 - All tables use UUID primary keys.
 - Snake_case column names via `@@map()`.
 - Multi-tenant isolation enforced via `church_id` on all queryable models.
+- Prisma 7 uses `@prisma/adapter-pg` driver adapter for connection management.
 
 ### Environment Variables
 
-Copy `.env.example` to `.env`. Key variables:
+Copy `.env.example` to `.env`. All variables are validated at startup via Zod schema.
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-side Supabase key |
-| `SUPABASE_ANON_KEY` | Client-side Supabase key |
-| `REDIS_URL` | Upstash Redis connection |
-| `PAYSTACK_SECRET_KEY` | Paystack payment processing |
-| `FLUTTERWAVE_SECRET_KEY` | Flutterwave payment processing |
-| `360DIALOG_API_KEY` | WhatsApp Business API |
-| `RESEND_API_KEY` | Email delivery |
-| `TERMII_API_KEY` | SMS fallback |
-| `OPENAI_API_KEY` | AI chatbot features |
+| Variable | Required | Purpose |
+|---|---|---|
+| `NODE_ENV` | Yes | `development`, `production`, or `test` |
+| `PORT` | Yes | Server port (default: 3001) |
+| `WEB_URL` | Yes | Frontend URL for CORS |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-side Supabase key |
+| `SUPABASE_ANON_KEY` | Yes | Client-side Supabase key |
+| `REDIS_URL` | Yes | Upstash Redis connection |
+| `PAYSTACK_SECRET_KEY` | No | Paystack payment processing |
+| `FLUTTERWAVE_SECRET_KEY` | No | Flutterwave payment processing |
+| `360DIALOG_API_KEY` | No | WhatsApp Business API |
+| `RESEND_API_KEY` | No | Email delivery |
+| `TERMII_API_KEY` | No | SMS fallback |
+| `OPENAI_API_KEY` | No | AI chatbot features |
 
 ## Related Projects
 
@@ -167,3 +181,9 @@ All notable changes to this project are documented below. Update this section wi
   - Handles: HttpException, ZodError, Prisma errors (P2002, P2025, P2003, P2014), generic errors.
   - Returns consistent error format: `{ success, error: { code, message, details, timestamp, path, method } }`.
   - Registered globally in `main.ts` via `app.useGlobalFilters()`.
+- **2026-07-15** — Created seed data script (Task #2 — continued).
+  - Created `prisma/seed.ts` with development data.
+  - Seeds: 1 church, 1 branch, 6 giving categories, 2 services, 10 members, 1 admin profile, 3 transactions.
+  - Added `tsconfig.seed.json` for seed file compilation.
+  - Excluded `prisma/` from main build to avoid rootDir conflicts.
+  - Run with `npx prisma db seed`.
