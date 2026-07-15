@@ -22,6 +22,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
+import { CommonModule } from './common/common.module';
+import { SupabaseModule } from './supabase/supabase.module';
+import { AuthModule } from './auth/auth.module';
 
 /**
  * Root application module.
@@ -52,6 +55,15 @@ import { PrismaModule } from './prisma/prisma.module';
     // PrismaModule is decorated with @Global(), so PrismaService is available
     // in any module that needs database operations without additional imports.
     PrismaModule,
+
+    // Step 3: Import CommonModule for shared services (AuditLoggingService).
+    CommonModule,
+
+    // Step 4: Import SupabaseModule for Supabase client access.
+    SupabaseModule,
+
+    // Step 5: Import AuthModule for JWT authentication.
+    AuthModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

@@ -57,18 +57,20 @@ src/
 │   ├── prisma.service.ts   # PrismaService with lifecycle hooks (connect/disconnect)
 │   └── index.ts            # Barrel exports
 ├── common/                 # Shared guards, interceptors, decorators, filters
-│   ├── decorators/         # @CurrentUser, @CurrentUserProfile, Swagger helpers
-│   │   ├── api-paginated.decorator.ts
-│   │   ├── api-standard-responses.decorator.ts
-│   │   ├── current-user.decorator.ts
-│   │   └── index.ts
-│   └── filters/            # GlobalExceptionFilter
-│       ├── global-exception.filter.ts
-│       └── index.ts
-├── auth/                   # Authentication & authorization (Supabase Auth) [PLANNED]
-│   ├── decorators/         # @RequirePermissions
-│   ├── guards/             # SupabaseAuthGuard, PermissionsGuard
-│   └── strategies/         # JWT strategy
+│   ├── common.module.ts    # Global module (AuditLoggingService)
+│   ├── decorators/         # @CurrentUser, @RequireRoles, Swagger helpers
+│   ├── filters/            # GlobalExceptionFilter
+│   ├── interceptors/       # LoggingInterceptor (registered globally)
+│   └── services/           # AuditLoggingService
+├── supabase/               # Supabase client wrapper (global)
+│   ├── supabase.service.ts
+│   ├── supabase.module.ts
+│   └── index.ts
+├── auth/                   # Authentication & authorization (Supabase Auth)
+│   ├── auth.module.ts      # Passport + JWT strategy
+│   ├── guards/             # JwtAuthGuard, RolesGuard
+│   ├── strategies/         # JwtStrategy (passport-jwt)
+│   └── decorators/         # @RequireRoles()
 ├── members/                # Member CRUD, search, families [PLANNED]
 ├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
 ├── giving/                 # Giving categories, transactions, recurring, receipts [PLANNED]
@@ -187,3 +189,29 @@ All notable changes to this project are documented below. Update this section wi
   - Added `tsconfig.seed.json` for seed file compilation.
   - Excluded `prisma/` from main build to avoid rootDir conflicts.
   - Run with `npx prisma db seed`.
+
+- **2026-07-15** — Added request logging and audit logging (Task #8).
+  - Created `src/common/interceptors/logging.interceptor.ts` — logs method, URL, status, duration, IP, user agent, request ID.
+  - Created `src/common/services/audit-logging.service.ts` — records data mutations to `audit_logs` table.
+  - Created `src/common/common.module.ts` — global module providing AuditLoggingService.
+  - Registered LoggingInterceptor globally in `main.ts`.
+
+- **2026-07-15** — Added Supabase Auth module and JWT guard (Task #9).
+  - Created `src/supabase/` — SupabaseService + global SupabaseModule.
+  - Created `src/auth/strategies/jwt.strategy.ts` — Passport JWT strategy for Supabase tokens.
+  - Created `src/auth/guards/jwt-auth.guard.ts` — JWT validation guard.
+  - Created `src/auth/auth.module.ts` — Passport + JWT strategy registration.
+  - Added `SUPABASE_JWT_SECRET` to env validation and `.env.example`.
+  - Installed `@supabase/supabase-js`, `@nestjs/passport`, `passport`, `passport-jwt`.
+
+- **2026-07-15** — Added RBAC decorators and guard (Task #10).
+  - Created `src/auth/decorators/roles.decorator.ts` — `@RequireRoles()` decorator.
+  - Created `src/auth/guards/roles.guard.ts` — checks user role from Profile model.
+
+- **2026-07-15** — Created production Dockerfile (Task #11).
+  - Multi-stage build: deps → prisma generate → build → production runner.
+  - Non-root user (churchos:1001).
+  - Created `.dockerignore`.
+
+- **2026-07-15** — Created GitHub Actions CI/CD workflow (Task #12).
+  - Created `.github/workflows/ci.yml` — lint, build, test with PostgreSQL service container.

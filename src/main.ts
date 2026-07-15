@@ -22,6 +22,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { env } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 /**
  * Bootstraps and starts the NestJS application.
@@ -71,6 +72,9 @@ async function bootstrap(): Promise<void> {
   // Catches all unhandled exceptions and returns standardized JSON error responses.
   // Handles HttpException, ZodError, Prisma errors, and generic errors.
   app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Step 5: Register global logging interceptor.
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Step 5: Enable CORS (Cross-Origin Resource Sharing).
   // Allows the ChurchOS web frontend (Next.js) running on a different port/origin
