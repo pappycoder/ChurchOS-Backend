@@ -142,3 +142,28 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-07-14** — Created `prisma.config.ts` for Prisma 7 compatibility. Prisma 7 requires the database URL to be configured here instead of in `schema.prisma`. Installed `dotenv` for `.env` variable loading.
 - **2026-07-14** — Fixed TypeScript build: excluded `prisma.config.ts` from `tsconfig.build.json`, removed deprecated `ignoreDeprecations: "6.0"` from `tsconfig.json` (incompatible with TypeScript 5.6+).
 - **2026-07-14** — Fixed ESLint parsing error for `prisma.config.d.ts` (Prisma 7 generated file). Removed deprecated `baseUrl` from `tsconfig.json`, updated `paths` to use relative `"./src/*"`. Added `prisma.config.ts` and `prisma.config.d.ts` to ESLint ignorePatterns.
+- **2026-07-15** — Enhanced Swagger/OpenAPI documentation setup (Task #5).
+  - Enhanced `DocumentBuilder` configuration with detailed API description, contact, and license info.
+  - Added named Bearer Auth scheme `supabase-auth` with full configuration.
+  - Added `deepScanRoutes` and `persistAuthorization` Swagger UI options.
+  - Created `src/common/decorators/` with reusable Swagger decorators:
+    - `ApiPaginatedResponse()` — Standard paginated response wrapper with query params.
+    - `ApiCreateEndpoint()` — Standard CRUD create documentation.
+    - `ApiListEndpoint()` — Standard CRUD list documentation.
+    - `ApiGetEndpoint()` — Standard CRUD single-item documentation.
+    - `ApiUpdateEndpoint()` — Standard CRUD update documentation.
+    - `ApiDeleteEndpoint()` — Standard CRUD delete documentation.
+    - `CurrentUser()` — Parameter decorator for authenticated user.
+    - `CurrentUserProfile()` — Parameter decorator for user's church profile.
+- **2026-07-15** — Added environment validation with Zod (Task #6).
+  - Installed `zod` for runtime schema validation.
+  - Created `src/config/env.validation.ts` with full Zod schema for all env vars.
+  - Required vars: `NODE_ENV`, `PORT`, `WEB_URL`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `REDIS_URL`.
+  - Optional vars: `PAYSTACK_*`, `FLUTTERWAVE_SECRET_KEY`, `360DIALOG_*`, `RESEND_API_KEY`, `TERMII_API_KEY`, `OPENAI_API_KEY`.
+  - Updated `src/main.ts` to import and validate env vars at startup before any other code runs.
+  - Application fails fast with descriptive error messages if required vars are missing.
+- **2026-07-15** — Added global exception filter (Task #7).
+  - Created `src/common/filters/global-exception.filter.ts` with standardized error responses.
+  - Handles: HttpException, ZodError, Prisma errors (P2002, P2025, P2003, P2014), generic errors.
+  - Returns consistent error format: `{ success, error: { code, message, details, timestamp, path, method } }`.
+  - Registered globally in `main.ts` via `app.useGlobalFilters()`.
