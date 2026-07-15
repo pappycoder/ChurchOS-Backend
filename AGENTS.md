@@ -249,3 +249,32 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-07-15** — Added graceful shutdown hooks (early setup).
   - Added `app.enableShutdownHooks()` in `main.ts`.
   - Ensures Prisma, Redis disconnect cleanly on SIGTERM/SIGINT.
+
+- **2026-07-15** — Set up Jest test infrastructure (Phase 1).
+  - Created `jest.config.ts` with `ts-jest` preset, `@/` path aliases, coverage thresholds.
+  - Added `jest` to `tsconfig.json` types array.
+  - Excluded `jest.config.ts` from `tsconfig.build.json`.
+  - Created `test/helpers/prisma-mock.helper.ts` — generic Proxy-based Prisma mock factory.
+  - Created `test/helpers/test-app.helper.ts` — NestJS test app builder with production-like config.
+  - Created `test/fixtures/` — mock data for churches, branches, members, profiles, users.
+
+- **2026-07-15** — Added RequestContext middleware + service (Phase 1).
+  - Created `src/common/services/request-context.service.ts` — AsyncLocalStorage-based tenant context.
+  - Created `src/common/middleware/request-context.middleware.ts` — extracts userId, churchId, branchId, role from JWT.
+  - Registered middleware in `CommonModule` via `NestModule.configure()`.
+  - 11 unit tests passing: `test/unit/common/request-context.service.spec.ts`.
+
+- **2026-07-15** — Completed Auth module (Phase 1).
+  - Created `src/auth/dto/register.dto.ts` — registration DTO with class-validator decorators.
+  - Created `src/auth/dto/auth-response.dto.ts` — RegisterResponseDto, ProfileResponseDto.
+  - Created `src/auth/auth.service.ts` — register (Supabase + Prisma transaction), getProfile.
+  - Created `src/auth/auth.controller.ts` — POST /auth/register (public), GET /auth/me (protected).
+  - Updated `src/auth/auth.module.ts` — imports SupabaseModule, registers AuthService + AuthController.
+  - 8 unit tests passing: `test/unit/auth/auth.service.spec.ts`.
+
+- **2026-07-15** — Fixed TypeScript/ESLint config for test files.
+  - Moved `rootDir: "./src"` from `tsconfig.json` to `tsconfig.build.json` only.
+  - Expanded `tsconfig.json` exclude list: `test`, `jest.config.*`.
+  - Created `tsconfig.eslint.json` — includes both `src/` and `test/` for ESLint parsing.
+  - Updated `.eslintrc.js` to use `tsconfig.eslint.json` for parser project.
+  - All 19 tests pass, build compiles clean, lint passes with zero errors.

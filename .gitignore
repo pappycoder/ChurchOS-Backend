@@ -4,6 +4,11 @@
 /build
 /tmp
 
+# Jest config build artifacts (jest.config.ts is the source)
+jest.config.js
+jest.config.js.map
+jest.config.d.ts
+
 # Prisma
 # Do NOT ignore prisma/migrations - they should be committed
 

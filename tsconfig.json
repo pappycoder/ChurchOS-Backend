@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "rootDir": "./src",
     "module": "commonjs",
     "declaration": true,
     "removeComments": true,
@@ -23,7 +22,7 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "jest"],
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -29,9 +29,10 @@ const envSchema = z.object({
   SUPABASE_JWT_SECRET: z.string().min(1, 'SUPABASE_JWT_SECRET is required'),
 
   // ─── Redis (Cache + Queue) ────────────────────────────────
-  REDIS_URL: z.string().startsWith('redis://', {
-    message: 'REDIS_URL must be a valid Redis connection string',
+  REDIS_URL: z.string().refine((val) => val.startsWith('redis://') || val.startsWith('https://'), {
+    message: 'REDIS_URL must start with redis:// (local) or https:// (Upstash)',
   }),
+  UPSTASH_REDIS_TOKEN: z.string().optional(),
 
   // ─── Payments (Optional for MVP, required for production) ─
   PAYSTACK_SECRET_KEY: z.string().optional(),

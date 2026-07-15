@@ -1,9 +1,7 @@
 /**
  * @file auth.module.ts
- * @description Authentication module providing JWT guard and Supabase Auth integration.
- *
- * Imports the Passport module and registers the JwtStrategy so that
- * JwtAuthGuard can be used on any protected route.
+ * @description Authentication module providing JWT guard, Supabase Auth integration,
+ * registration, and profile management.
  *
  * @module auth/auth.module
  * @since 1.0.0
@@ -12,6 +10,9 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { SupabaseModule } from '../supabase/supabase.module';
 
 /**
  * Auth module providing authentication infrastructure.
@@ -27,8 +28,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
  * ```
  */
 @Module({
-  imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
-  providers: [JwtStrategy],
-  exports: [PassportModule],
+  imports: [PassportModule.register({ defaultStrategy: 'jwt' }), SupabaseModule],
+  controllers: [AuthController],
+  providers: [JwtStrategy, AuthService],
+  exports: [PassportModule, AuthService],
 })
 export class AuthModule {}

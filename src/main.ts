@@ -22,7 +22,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import helmet from 'helmet';
-import compression from 'compression';
+import * as compression from 'compression';
 import { AppModule } from './app.module';
 import { env } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -147,15 +147,6 @@ async function bootstrap(): Promise<void> {
       },
       'supabase-auth',
     )
-    .addTag('auth', 'Authentication & authorization')
-    .addTag('members', 'Member management')
-    .addTag('attendance', 'Service attendance tracking')
-    .addTag('giving', 'Giving & transactions')
-    .addTag('events', 'Event management')
-    .addTag('whatsapp', 'WhatsApp integration')
-    .addTag('media', 'Media & sermons')
-    .addTag('pastoral', 'Pastoral care')
-    .addTag('admin', 'Administration')
     .build();
 
   // Step 12: Generate the Swagger document and serve it.

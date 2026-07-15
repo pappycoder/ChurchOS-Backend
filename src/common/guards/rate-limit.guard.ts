@@ -88,6 +88,10 @@ export class RateLimitGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly redis: RedisService,
   ) {
+    if (!this.redis.isUpstash) {
+      this.logger.warn('Rate limiting disabled: requires Upstash Redis (local dev uses ioredis)');
+      return;
+    }
     try {
       this.ratelimit = new Ratelimit({
         redis: this.redis.client as unknown as Redis,

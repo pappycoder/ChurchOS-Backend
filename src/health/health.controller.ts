@@ -57,7 +57,7 @@ export class HealthController {
 
     // Check Redis
     try {
-      await this.redis.client.ping();
+      await this.redis.ping();
       services.redis = 'up';
     } catch {
       services.redis = 'down';

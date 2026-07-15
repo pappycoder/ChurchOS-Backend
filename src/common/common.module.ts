@@ -10,19 +10,28 @@
  * @since 1.0.0
  */
 
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AuditLoggingService } from './services/audit-logging.service';
+import { RequestContextService } from './services/request-context.service';
+import { RequestContextMiddleware } from './middleware/request-context.middleware';
 
 /**
- * Global module providing shared services.
+ * Global module providing shared services and middleware.
  *
  * @example
  * // Imported automatically via @Global() — available in all modules:
- * constructor(private readonly audit: AuditLoggingService) {}
+ * constructor(
+ *   private readonly audit: AuditLoggingService,
+ *   private readonly requestContext: RequestContextService,
+ * ) {}
  */
 @Global()
 @Module({
-  providers: [AuditLoggingService],
-  exports: [AuditLoggingService],
+  providers: [AuditLoggingService, RequestContextService],
+  exports: [AuditLoggingService, RequestContextService],
 })
-export class CommonModule {}
+export class CommonModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
