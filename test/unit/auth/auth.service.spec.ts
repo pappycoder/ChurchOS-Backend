@@ -74,7 +74,7 @@ describe('AuthService', () => {
 
   describe('register', () => {
     const validDto: RegisterDto = {
-      email: 'pastor@gracecommunity.ng',
+      email: 'pastor@gracecommunity.com',
       password: 'SecureP@ss123',
       firstName: 'Adebayo',
       lastName: 'Ogundimu',

@@ -15,7 +15,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class RegisterDto {
   @ApiProperty({
     description: 'Admin email address',
-    example: 'pastor@gracecommunity.ng',
+    example: 'pastor@gracecommunity.com',
   })
   @IsEmail()
   @IsNotEmpty()
