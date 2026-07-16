@@ -14,13 +14,22 @@ import {
   Logger,
   ConflictException,
   NotFoundException,
+  UnauthorizedException,
   InternalServerErrorException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { RedisService } from '../redis/redis.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto, ProfileResponseDto } from './dto/auth-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { LoginResponseDto } from './dto/session-response.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
@@ -29,7 +38,9 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
+    private readonly redis: RedisService,
     private readonly audit: AuditLoggingService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -47,6 +58,7 @@ export class AuthService {
    * @throws InternalServerErrorException if Supabase or DB operations fail
    */
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    // TODO: Change Supabase rate limit back to 30/5mins after testing (currently set to 3000/5mins)
     // Step 1: Create Supabase Auth user
     const { data: authData, error: authError } = await this.supabase.client.auth.signUp({
       email: dto.email,
@@ -61,8 +73,20 @@ export class AuthService {
     });
 
     if (authError) {
+      this.logger.error(`Supabase signUp error: ${authError.message} (status: ${authError.status})`);
       if (authError.message?.includes('already registered')) {
         throw new ConflictException('An account with this email already exists');
+      }
+      if (
+        authError.message?.includes('rate limit') ||
+        authError.message?.includes('too many') ||
+        authError.status === 429
+      ) {
+        this.logger.warn(`Supabase signUp rate limited for ${dto.email}`);
+        throw new HttpException(
+          'Too many registration attempts. Please try again in a few minutes.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       }
       this.logger.error(`Supabase signUp failed: ${authError.message}`);
       throw new InternalServerErrorException('Failed to create user account');
@@ -192,6 +216,297 @@ export class AuthService {
             isHeadquarters: profile.branch.is_headquarters,
           }
         : undefined,
+    };
+  }
+
+  /**
+   * Authenticates a user with email and password.
+   *
+   * Flow:
+   * 1. Call Supabase signInWithPassword
+   * 2. Fetch profile from Prisma
+   * 3. Audit-log the login event
+   * 4. Return tokens and profile
+   *
+   * @param dto - Login credentials
+   * @returns Login response with tokens and profile
+   * @throws UnauthorizedException on invalid credentials
+   */
+  async login(dto: LoginDto): Promise<LoginResponseDto> {
+    const { data, error } = await this.supabase.client.auth.signInWithPassword({
+      email: dto.email,
+      password: dto.password,
+    });
+
+    if (error) {
+      if (
+        error.message?.includes('rate limit') ||
+        error.message?.includes('too many') ||
+        error.status === 429
+      ) {
+        this.logger.warn(`Login rate limited for ${dto.email}`);
+        throw new HttpException(
+          'Too many login attempts. Please try again in a few minutes.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      this.logger.warn(`Login failed for ${dto.email}: ${error.message}`);
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!data.user || !data.session) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const userId = data.user.id;
+
+    // Fetch profile
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        church_id: true,
+        branch_id: true,
+        role: true,
+        first_name: true,
+        last_name: true,
+      },
+    });
+
+    // Audit-log the login (even if profile is missing)
+    await this.audit.log({
+      userId,
+      churchId: profile?.church_id || '',
+      entity: 'auth',
+      action: 'LOGIN',
+      entityId: userId,
+      newValues: { email: dto.email },
+    });
+
+    this.logger.log(`User logged in: ${dto.email}`);
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+      userId,
+      email: data.user.email || dto.email,
+      profile: profile
+        ? {
+            id: profile.id,
+            churchId: profile.church_id,
+            branchId: profile.branch_id || undefined,
+            role: profile.role,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+          }
+        : undefined,
+    };
+  }
+
+  /**
+   * Logs out a user by blacklisting their JWT token in Redis.
+   *
+   * @param userId - Supabase Auth user ID
+   * @param token - JWT token to blacklist
+   * @param churchId - Church ID for audit logging
+   */
+  async logout(userId: string, token: string, churchId: string): Promise<void> {
+    // Calculate TTL from JWT expiry (default 3600s if we can't parse)
+    const ttlSeconds = 3600;
+
+    // Blacklist the token in Redis
+    await this.redis.set(`auth:blacklist:${token}`, userId, ttlSeconds);
+
+    // Audit-log the logout
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'auth',
+      action: 'LOGOUT',
+      entityId: userId,
+      newValues: { timestamp: new Date().toISOString() },
+    });
+
+    this.logger.log(`User logged out: ${userId}`);
+  }
+
+  /**
+   * Initiates a password reset by sending a reset email via Supabase.
+   *
+   * Always returns success to prevent email enumeration.
+   *
+   * @param email - Email address to send reset link to
+   * @param redirectTo - URL to redirect to after password reset
+   */
+  async forgotPassword(email: string, redirectTo?: string): Promise<void> {
+    const webUrl = this.config.get<string>('WEB_URL', 'http://localhost:3000');
+    const redirectUrl = redirectTo || `${webUrl}/reset-password`;
+
+    const { error } = await this.supabase.client.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      this.logger.error(`Forgot password failed for ${email}: ${error.message}`);
+      // Don't throw — always return success to prevent email enumeration
+    } else {
+      this.logger.log(`Password reset email sent to: ${email}`);
+    }
+  }
+
+  /**
+   * Completes a password reset with a recovery token.
+   *
+   * @param token - Recovery token from email link
+   * @param newPassword - New password to set
+   * @throws BadRequestException if token is invalid or expired
+   */
+  async resetPassword(_token: string, newPassword: string): Promise<void> {
+    const { error } = await this.supabase.client.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      this.logger.error(`Password reset failed: ${error.message}`);
+      throw new BadRequestException('Invalid or expired recovery token');
+    }
+
+    this.logger.log('Password reset completed successfully');
+  }
+
+  /**
+   * Changes password for an authenticated user.
+   *
+   * Flow:
+   * 1. Verify current password by calling signInWithPassword
+   * 2. Update to new password
+   * 3. Audit-log the event
+   *
+   * @param userId - Supabase Auth user ID
+   * @param email - User email (for re-authentication)
+   * @param currentPassword - Current password for verification
+   * @param newPassword - New password to set
+   * @throws UnauthorizedException if current password is incorrect
+   */
+  async changePassword(
+    userId: string,
+    email: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    // Step 1: Verify current password
+    const { error: signInError } = await this.supabase.client.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      this.logger.warn(`Change password failed for ${userId}: current password incorrect`);
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Step 2: Update to new password
+    const { error: updateError } = await this.supabase.client.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      this.logger.error(`Change password update failed for ${userId}: ${updateError.message}`);
+      throw new InternalServerErrorException('Failed to update password');
+    }
+
+    // Step 3: Audit-log
+    await this.audit.log({
+      userId,
+      churchId: '',
+      entity: 'auth',
+      action: 'UPDATE',
+      entityId: userId,
+      newValues: { action: 'password_changed' },
+    });
+
+    this.logger.log(`Password changed for user: ${userId}`);
+  }
+
+  /**
+   * Updates profile details (name, phone) for the authenticated user.
+   *
+   * @param userId - Supabase Auth user ID
+   * @param dto - Profile update data (partial)
+   * @returns Updated profile response
+   * @throws NotFoundException if profile doesn't exist
+   */
+  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<ProfileResponseDto> {
+    // Check if profile exists
+    const existing = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // Build update data (only include provided fields)
+    const updateData: Record<string, unknown> = {};
+    if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
+    if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
+    if (dto.phone !== undefined) updateData.phone = dto.phone;
+
+    // Skip if nothing to update
+    if (Object.keys(updateData).length === 0) {
+      return this.getProfile(userId);
+    }
+
+    await this.prisma.profile.update({
+      where: { user_id: userId },
+      data: updateData,
+    });
+
+    // Audit-log
+    await this.audit.log({
+      userId,
+      churchId: existing.church_id,
+      entity: 'profile',
+      action: 'UPDATE',
+      entityId: existing.id,
+      newValues: updateData,
+    });
+
+    this.logger.log(`Profile updated for user: ${userId}`);
+
+    return this.getProfile(userId);
+  }
+
+  /**
+   * Refreshes the session tokens using Supabase's refreshSession.
+   *
+   * @param refreshToken - Current refresh token
+   * @returns New tokens and expiry
+   * @throws UnauthorizedException if refresh fails
+   */
+  async refreshSession(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: number;
+  }> {
+    const { data, error } = await this.supabase.client.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      this.logger.warn(`Session refresh failed: ${error.message}`);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (!data.session) {
+      throw new UnauthorizedException('Failed to refresh session');
+    }
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
     };
   }
 }

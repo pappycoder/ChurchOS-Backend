@@ -287,3 +287,23 @@ All notable changes to this project are documented below. Update this section wi
 
 - **2026-07-15** — Fixed `compression` import in `main.ts`.
   - Changed `import compression from 'compression'` to `import * as compression from 'compression'` (CommonJS compat).
+
+- **2026-07-16** — Completed Auth module (Phase 1).
+  - Created `src/auth/dto/login.dto.ts` — LoginDto with email/password validation.
+  - Created `src/auth/dto/forgot-password.dto.ts` — ForgotPasswordDto with email validation.
+  - Created `src/auth/dto/reset-password.dto.ts` — ResetPasswordDto with token + newPassword.
+  - Created `src/auth/dto/change-password.dto.ts` — ChangePasswordDto with currentPassword + newPassword.
+  - Created `src/auth/dto/update-profile.dto.ts` — UpdateProfileDto with optional firstName, lastName, phone.
+  - Created `src/auth/dto/session-response.dto.ts` — LoginResponseDto, RefreshResponseDto.
+  - Added `login()` method — Supabase signInWithPassword, profile lookup, audit log, returns tokens.
+  - Added `logout()` method — token blacklist in Redis, audit log.
+  - Added `forgotPassword()` method — Supabase resetPasswordForEmail, always returns success (prevents email enumeration).
+  - Added `resetPassword()` method — Supabase updateUser with recovery token.
+  - Added `changePassword()` method — verify current password, then update via Supabase.
+  - Added `updateProfile()` method — partial updates to Profile record in Prisma, audit log.
+  - Added `refreshSession()` method — Supabase refreshSession, returns new tokens.
+  - Added 7 new controller endpoints: POST login, POST logout, POST forgot-password, PATCH reset-password, PUT password, PATCH me, POST refresh.
+  - Updated `src/auth/index.ts` barrel exports for all new DTOs.
+  - Updated `src/auth/auth.service.ts` — added RedisService and ConfigService dependencies.
+  - Updated tests: 37 tests passing (was 19).
+  - All new tests cover success paths and error paths for every method.

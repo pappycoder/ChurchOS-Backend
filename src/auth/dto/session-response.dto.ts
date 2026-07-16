@@ -1,0 +1,83 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/**
+ * Response DTO for login — contains JWT tokens and user info.
+ *
+ * @module auth/dto/session-response.dto
+ */
+export class LoginResponseDto {
+  @ApiProperty({
+    description: 'JWT access token',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken!: string;
+
+  @ApiPropertyOptional({
+    description: 'Refresh token (if Supabase returns one)',
+    example: 'v1:abc123:def456...',
+  })
+  refreshToken?: string;
+
+  @ApiProperty({
+    description: 'Token expiry timestamp (Unix seconds)',
+    example: 1700003600,
+  })
+  expiresAt!: number;
+
+  @ApiProperty({
+    description: 'Supabase Auth user ID',
+    example: '11111111-1111-1111-1111-111111111111',
+  })
+  userId!: string;
+
+  @ApiProperty({
+    description: 'User email',
+    example: 'pastor@gracecommunity.com',
+  })
+  email!: string;
+
+  @ApiPropertyOptional({
+    description: 'ChurchOS profile',
+    example: {
+      id: '22222222-2222-2222-2222-222222222222',
+      churchId: '00000000-0000-0000-0000-000000000001',
+      branchId: '33333333-3333-3333-3333-333333333333',
+      role: 'church_admin',
+      firstName: 'Adebayo',
+      lastName: 'Ogundimu',
+    },
+  })
+  profile?: {
+    id: string;
+    churchId: string;
+    branchId?: string;
+    role: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+/**
+ * Response DTO for session refresh.
+ *
+ * @module auth/dto/session-response.dto
+ */
+export class RefreshResponseDto {
+  @ApiProperty({
+    description: 'New JWT access token',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken!: string;
+
+  @ApiPropertyOptional({
+    description: 'New refresh token',
+    example: 'v1:xyz789:ghi012...',
+  })
+  refreshToken?: string;
+
+  @ApiProperty({
+    description: 'New token expiry timestamp (Unix seconds)',
+    example: 1700007200,
+  })
+  expiresAt!: number;
+}

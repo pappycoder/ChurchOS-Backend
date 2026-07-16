@@ -22,8 +22,8 @@ export class RegisterDto {
   email!: string;
 
   @ApiProperty({
-    description: 'Password (minimum 8 characters)',
-    example: 'SecureP@ss123',
+    description: 'User password (minimum 8 characters)',
+    example: 'ChurchOS2026!',
     minLength: 8,
   })
   @IsString()

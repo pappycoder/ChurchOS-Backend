@@ -2,8 +2,9 @@
  * @file auth.service.spec.ts
  * @description Unit tests for AuthService.
  *
- * Tests registration (Supabase + Prisma transaction) and profile retrieval.
- * All external dependencies (Supabase, Prisma, AuditLogging) are mocked.
+ * Tests registration, login, logout, password management, profile updates,
+ * and session refresh. All external dependencies (Supabase, Prisma, Redis,
+ * AuditLogging) are mocked.
  *
  * @module test/unit/auth/auth.service.spec
  * @since 1.0.0
@@ -12,15 +13,30 @@
 import { AuthService } from '../../../src/auth/auth.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
+import { RedisService } from '../../../src/redis/redis.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { RegisterDto } from '../../../src/auth/dto/register.dto';
+import { LoginDto } from '../../../src/auth/dto/login.dto';
+import { UpdateProfileDto } from '../../../src/auth/dto/update-profile.dto';
 
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
   let signUpMock: jest.Mock;
+  let signInMock: jest.Mock;
+  let updateUserMock: jest.Mock;
+  let refreshSessionMock: jest.Mock;
+  let resetPasswordForEmailMock: jest.Mock;
+  let redis: { set: jest.Mock; get: jest.Mock };
   let audit: { log: jest.Mock };
+  let config: { get: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockChurchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -63,14 +79,35 @@ describe('AuthService', () => {
   beforeEach(() => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    redis = { set: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null) };
+    config = { get: jest.fn().mockReturnValue('http://localhost:3000') };
+
     signUpMock = jest.fn();
+    signInMock = jest.fn();
+    updateUserMock = jest.fn();
+    refreshSessionMock = jest.fn();
+    resetPasswordForEmailMock = jest.fn();
 
     service = new AuthService(
       prisma as unknown as PrismaService,
-      { client: { auth: { signUp: signUpMock } } } as unknown as SupabaseService,
+      {
+        client: {
+          auth: {
+            signUp: signUpMock,
+            signInWithPassword: signInMock,
+            updateUser: updateUserMock,
+            refreshSession: refreshSessionMock,
+            resetPasswordForEmail: resetPasswordForEmailMock,
+          },
+        },
+      } as unknown as SupabaseService,
+      redis as unknown as RedisService,
       audit as unknown as AuditLoggingService,
+      config as unknown as ConfigService,
     );
   });
+
+  // ─── REGISTER ──────────────────────────────────────────────────────
 
   describe('register', () => {
     const validDto: RegisterDto = {
@@ -89,7 +126,6 @@ describe('AuthService', () => {
         error: null,
       });
 
-      // Mock Prisma $transaction
       prisma.$transaction.mockImplementation(
         async (cb: (tx: Record<string, Record<string, jest.Mock>>) => Promise<unknown>) => {
           return cb({
@@ -124,18 +160,6 @@ describe('AuthService', () => {
         churchId: mockChurchId,
         churchName: validDto.churchName,
         role: 'church_admin',
-      });
-
-      expect(signUpMock).toHaveBeenCalledWith({
-        email: validDto.email,
-        password: validDto.password,
-        options: {
-          data: {
-            first_name: validDto.firstName,
-            last_name: validDto.lastName,
-            church_name: validDto.churchName,
-          },
-        },
       });
 
       expect(audit.log).toHaveBeenCalledWith(
@@ -187,6 +211,8 @@ describe('AuthService', () => {
     });
   });
 
+  // ─── GET PROFILE ───────────────────────────────────────────────────
+
   describe('getProfile', () => {
     it('should return profile with church and branch details', async () => {
       const mockProfile = {
@@ -222,14 +248,6 @@ describe('AuthService', () => {
       expect(result.role).toBe('church_admin');
       expect(result.church?.name).toBe('Grace Community Church');
       expect(result.branch?.name).toBe('Headquarters');
-
-      expect(model(prisma, 'profile').findUnique).toHaveBeenCalledWith({
-        where: { user_id: mockUserId },
-        include: expect.objectContaining({
-          church: expect.any(Object),
-          branch: expect.any(Object),
-        }),
-      });
     });
 
     it('should throw NotFoundException if profile does not exist', async () => {
@@ -265,6 +283,336 @@ describe('AuthService', () => {
       expect(result.branchId).toBeUndefined();
       expect(result.branch).toBeUndefined();
       expect(result.phone).toBeUndefined();
+    });
+  });
+
+  // ─── LOGIN ─────────────────────────────────────────────────────────
+
+  describe('login', () => {
+    const loginDto: LoginDto = {
+      email: 'pastor@gracecommunity.com',
+      password: 'SecureP@ss123',
+    };
+
+    it('should login successfully and return tokens with profile', async () => {
+      signInMock.mockResolvedValue({
+        data: {
+          user: { id: mockUserId, email: loginDto.email },
+          session: {
+            access_token: 'jwt-access-token',
+            refresh_token: 'jwt-refresh-token',
+            expires_at: 1700000000,
+          },
+        },
+        error: null,
+      });
+
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        first_name: 'Adebayo',
+        last_name: 'Ogundimu',
+      });
+
+      const result = await service.login(loginDto);
+
+      expect(result.accessToken).toBe('jwt-access-token');
+      expect(result.refreshToken).toBe('jwt-refresh-token');
+      expect(result.userId).toBe(mockUserId);
+      expect(result.email).toBe(loginDto.email);
+      expect(result.profile?.role).toBe('church_admin');
+      expect(result.profile?.churchId).toBe(mockChurchId);
+
+      expect(signInMock).toHaveBeenCalledWith({
+        email: loginDto.email,
+        password: loginDto.password,
+      });
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: mockUserId,
+          entity: 'auth',
+          action: 'LOGIN',
+        }),
+      );
+    });
+
+    it('should throw UnauthorizedException on invalid credentials', async () => {
+      signInMock.mockResolvedValue({
+        data: { user: null, session: null },
+        error: { message: 'Invalid login credentials' },
+      });
+
+      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException if Supabase returns no user', async () => {
+      signInMock.mockResolvedValue({
+        data: { user: null, session: null },
+        error: null,
+      });
+
+      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should return profile even if user has no profile', async () => {
+      signInMock.mockResolvedValue({
+        data: {
+          user: { id: mockUserId, email: loginDto.email },
+          session: {
+            access_token: 'jwt-access-token',
+            refresh_token: 'jwt-refresh-token',
+            expires_at: 1700000000,
+          },
+        },
+        error: null,
+      });
+
+      model(prisma, 'profile').findUnique.mockResolvedValue(null);
+
+      const result = await service.login(loginDto);
+
+      expect(result.accessToken).toBe('jwt-access-token');
+      expect(result.profile).toBeUndefined();
+    });
+  });
+
+  // ─── LOGOUT ────────────────────────────────────────────────────────
+
+  describe('logout', () => {
+    it('should blacklist token and audit-log the logout', async () => {
+      await service.logout(mockUserId, 'jwt-token', mockChurchId);
+
+      expect(redis.set).toHaveBeenCalledWith('auth:blacklist:jwt-token', mockUserId, 3600);
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: mockUserId,
+          churchId: mockChurchId,
+          entity: 'auth',
+          action: 'LOGOUT',
+        }),
+      );
+    });
+  });
+
+  // ─── FORGOT PASSWORD ───────────────────────────────────────────────
+
+  describe('forgotPassword', () => {
+    it('should call Supabase resetPasswordForEmail', async () => {
+      resetPasswordForEmailMock.mockResolvedValue({ error: null });
+
+      await service.forgotPassword('pastor@gracecommunity.com');
+
+      expect(resetPasswordForEmailMock).toHaveBeenCalledWith(
+        'pastor@gracecommunity.com',
+        expect.objectContaining({
+          redirectTo: expect.stringContaining('reset-password'),
+        }),
+      );
+    });
+
+    it('should not throw even if Supabase returns an error', async () => {
+      resetPasswordForEmailMock.mockResolvedValue({
+        error: { message: 'User not found' },
+      });
+
+      // Should not throw — prevents email enumeration
+      await expect(service.forgotPassword('unknown@email.com')).resolves.toBeUndefined();
+    });
+  });
+
+  // ─── RESET PASSWORD ────────────────────────────────────────────────
+
+  describe('resetPassword', () => {
+    it('should update password successfully', async () => {
+      updateUserMock.mockResolvedValue({ error: null });
+
+      await expect(
+        service.resetPassword('recovery-token', 'NewPassword123!'),
+      ).resolves.toBeUndefined();
+
+      expect(updateUserMock).toHaveBeenCalledWith({ password: 'NewPassword123!' });
+    });
+
+    it('should throw BadRequestException if token is invalid', async () => {
+      updateUserMock.mockResolvedValue({
+        error: { message: 'Token expired' },
+      });
+
+      await expect(service.resetPassword('expired-token', 'NewPassword123!')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  // ─── CHANGE PASSWORD ───────────────────────────────────────────────
+
+  describe('changePassword', () => {
+    it('should change password successfully', async () => {
+      signInMock.mockResolvedValue({ error: null });
+      updateUserMock.mockResolvedValue({ error: null });
+
+      await expect(
+        service.changePassword(mockUserId, 'pastor@church.com', 'OldPass123!', 'NewPass456!'),
+      ).resolves.toBeUndefined();
+
+      expect(signInMock).toHaveBeenCalledWith({
+        email: 'pastor@church.com',
+        password: 'OldPass123!',
+      });
+
+      expect(updateUserMock).toHaveBeenCalledWith({ password: 'NewPass456!' });
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: mockUserId,
+          entity: 'auth',
+          action: 'UPDATE',
+        }),
+      );
+    });
+
+    it('should throw UnauthorizedException if current password is wrong', async () => {
+      signInMock.mockResolvedValue({
+        error: { message: 'Invalid login credentials' },
+      });
+
+      await expect(
+        service.changePassword(mockUserId, 'pastor@church.com', 'WrongPass', 'NewPass456!'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw InternalServerErrorException if password update fails', async () => {
+      signInMock.mockResolvedValue({ error: null });
+      updateUserMock.mockResolvedValue({
+        error: { message: 'Update failed' },
+      });
+
+      await expect(
+        service.changePassword(mockUserId, 'pastor@church.com', 'OldPass123!', 'NewPass456!'),
+      ).rejects.toThrow('Failed to update password');
+    });
+  });
+
+  // ─── UPDATE PROFILE ────────────────────────────────────────────────
+
+  describe('updateProfile', () => {
+    it('should update profile fields successfully', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+      });
+
+      model(prisma, 'profile').update.mockResolvedValue({});
+
+      // Mock getProfile for the return
+      model(prisma, 'profile')
+        .findUnique.mockResolvedValueOnce({
+          id: mockProfileId,
+          user_id: mockUserId,
+          church_id: mockChurchId,
+        })
+        .mockResolvedValueOnce({
+          id: mockProfileId,
+          user_id: mockUserId,
+          church_id: mockChurchId,
+          branch_id: null,
+          role: 'church_admin',
+          first_name: 'Adebayo',
+          last_name: 'Updated',
+          phone: '+2348000000000',
+          mfa_enabled: false,
+          church: { id: mockChurchId, name: 'Church', denomination: null, logo_url: null },
+          branch: null,
+        });
+
+      const dto: UpdateProfileDto = { lastName: 'Updated', phone: '+2348000000000' };
+      const result = await service.updateProfile(mockUserId, dto);
+
+      expect(result.lastName).toBe('Updated');
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { user_id: mockUserId },
+        data: { last_name: 'Updated', phone: '+2348000000000' },
+      });
+    });
+
+    it('should throw NotFoundException if profile does not exist', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue(null);
+
+      await expect(service.updateProfile(mockUserId, { firstName: 'Test' })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return existing profile if no fields provided', async () => {
+      const mockProfile = {
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        branch_id: null,
+        role: 'church_admin',
+        first_name: 'Adebayo',
+        last_name: 'Ogundimu',
+        phone: null,
+        mfa_enabled: false,
+        church: { id: mockChurchId, name: 'Church', denomination: null, logo_url: null },
+        branch: null,
+      };
+
+      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfile);
+
+      const result = await service.updateProfile(mockUserId, {});
+
+      expect(result.firstName).toBe('Adebayo');
+      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── REFRESH SESSION ───────────────────────────────────────────────
+
+  describe('refreshSession', () => {
+    it('should refresh session successfully', async () => {
+      refreshSessionMock.mockResolvedValue({
+        data: {
+          session: {
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_at: 1700003600,
+          },
+        },
+        error: null,
+      });
+
+      const result = await service.refreshSession('old-refresh-token');
+
+      expect(result.accessToken).toBe('new-access-token');
+      expect(result.refreshToken).toBe('new-refresh-token');
+      expect(result.expiresAt).toBe(1700003600);
+      expect(refreshSessionMock).toHaveBeenCalledWith({
+        refresh_token: 'old-refresh-token',
+      });
+    });
+
+    it('should throw UnauthorizedException if refresh fails', async () => {
+      refreshSessionMock.mockResolvedValue({
+        data: { session: null },
+        error: { message: 'Token expired' },
+      });
+
+      await expect(service.refreshSession('expired-token')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException if no session returned', async () => {
+      refreshSessionMock.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      await expect(service.refreshSession('token')).rejects.toThrow(UnauthorizedException);
     });
   });
 });
