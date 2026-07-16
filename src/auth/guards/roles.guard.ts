@@ -14,15 +14,7 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { Request } from 'express';
-
-/**
- * Request user shape after JWT validation.
- */
-interface JwtUser {
-  sub: string;
-  email?: string;
-}
+import { AuthenticatedRequest } from '../../common/decorators/current-user.decorator';
 
 /**
  * Guard that checks user roles against the @RequireRoles() decorator.
@@ -55,8 +47,8 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
-    const user = request.user as JwtUser | undefined;
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const user = request.user;
 
     if (!user?.sub) {
       throw new ForbiddenException('No authenticated user');

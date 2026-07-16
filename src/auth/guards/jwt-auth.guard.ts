@@ -2,21 +2,24 @@
  * @file jwt-auth.guard.ts
  * @description Guard that protects routes with Supabase JWT validation.
  *
- * Uses Passport's AuthGuard('jwt') under the hood to extract and verify
- * the Bearer token from the Authorization header. On success, the decoded
+ * Extracts and verifies the JWT from the Authorization header using
+ * Supabase's public JWKS endpoint (ES256). On success, the decoded
  * user payload is attached to `request.user`.
  *
  * @module auth/guards/jwt-auth.guard
  * @since 1.0.0
  */
 
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { Observable } from 'rxjs';
+import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { Request } from 'express';
+import { JwksService } from '../services/jwks.service';
+import { SupabaseJwtPayload } from '../strategies/jwt.strategy';
 
 /**
  * JWT authentication guard for Supabase Auth tokens.
+ *
+ * Uses the `jose` library to verify JWTs against Supabase's remote JWKS.
+ * Works with both ES256 (new Supabase) and HS256 (legacy) tokens.
  *
  * Apply to any route that requires a valid JWT:
  *
@@ -24,14 +27,18 @@ import { Request } from 'express';
  * ```typescript
  * @UseGuards(JwtAuthGuard)
  * @Get('profile')
- * getProfile(@CurrentUser() user: { sub: string; email: string }) {
+ * getProfile(@CurrentUser() user: SupabaseJwtPayload) {
  *   return user;
  * }
  * ```
  */
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {
-  canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+export class JwtAuthGuard {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
+  constructor(private readonly jwksService: JwksService) {}
+
+  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const authHeader = request.headers.authorization;
 
@@ -39,16 +46,41 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new UnauthorizedException('Missing or invalid Authorization header');
     }
 
-    return super.canActivate(context);
-  }
+    const token = authHeader.slice(7);
 
-  /**
-   * Handles authentication failures from Passport.
-   */
-  handleRequest<TUser = unknown>(err: Error | null, user: TUser | false): TUser {
-    if (err || !user) {
-      throw err || new UnauthorizedException('Invalid or expired token');
-    }
-    return user;
+    return this.jwksService
+      .verifyToken(token)
+      .then(({ payload }) => {
+        if (!payload.sub) {
+          throw new UnauthorizedException('Invalid token: missing subject claim');
+        }
+
+        // Map JWT payload to SupabaseJwtPayload
+        // Include both `sub` and `id` (mapped from sub) for compatibility
+        const user: SupabaseJwtPayload = {
+          id: payload.sub,
+          sub: payload.sub,
+          email: payload.email as string | undefined,
+          phone: payload.phone as string | undefined,
+          app_metadata: (payload.app_metadata as Record<string, unknown>) || {},
+          user_metadata: (payload.user_metadata as Record<string, unknown>) || {},
+          role: payload.role as string | undefined,
+          iat: payload.iat,
+          exp: payload.exp,
+        };
+
+        // Attach to request.user for @CurrentUser() and downstream middleware
+        (request as unknown as { user: SupabaseJwtPayload }).user = user;
+
+        return true;
+      })
+      .catch((error) => {
+        if (error instanceof UnauthorizedException) {
+          throw error;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`JWT verification failed: ${message}`);
+        throw new UnauthorizedException('Invalid or expired token');
+      });
   }
 }

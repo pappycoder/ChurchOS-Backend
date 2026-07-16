@@ -16,7 +16,7 @@
 | Runtime | Node.js 20+ |
 | Framework | NestJS 10 (TypeScript) |
 | ORM | Prisma 7 (PostgreSQL) |
-| Auth | Supabase Auth (JWT, MFA) |
+| Auth | Supabase Auth (JWT ES256 via JWKS, MFA) |
 | Validation | class-validator + class-transformer |
 | API Docs | Swagger / OpenAPI 3.0 |
 | Payments | Paystack, Flutterwave |
@@ -67,9 +67,10 @@ src/
 │   ├── supabase.module.ts
 │   └── index.ts
 ├── auth/                   # Authentication & authorization (Supabase Auth)
-│   ├── auth.module.ts      # Passport + JWT strategy
-│   ├── guards/             # JwtAuthGuard, RolesGuard
-│   ├── strategies/         # JwtStrategy (passport-jwt)
+│   ├── auth.module.ts      # Auth module (JWKS + guard registration)
+│   ├── guards/             # JwtAuthGuard (jose JWKS), RolesGuard
+│   ├── services/           # JwksService (Supabase JWKS endpoint)
+│   ├── strategies/         # SupabaseJwtPayload type definitions
 │   └── decorators/         # @RequireRoles()
 ├── members/                # Member CRUD, search, families [PLANNED]
 ├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
@@ -116,6 +117,7 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-side Supabase key |
 | `SUPABASE_ANON_KEY` | Yes | Client-side Supabase key |
+| `SUPABASE_JWT_SECRET` | No | Legacy HS256 secret (optional — ES256 tokens verified via JWKS) |
 | `REDIS_URL` | Yes | Upstash Redis connection |
 | `PAYSTACK_SECRET_KEY` | No | Paystack payment processing |
 | `FLUTTERWAVE_SECRET_KEY` | No | Flutterwave payment processing |
@@ -307,3 +309,15 @@ All notable changes to this project are documented below. Update this section wi
   - Updated `src/auth/auth.service.ts` — added RedisService and ConfigService dependencies.
   - Updated tests: 37 tests passing (was 19).
   - All new tests cover success paths and error paths for every method.
+
+- **2026-07-16** — Fixed JWT verification for Supabase ES256 tokens.
+  - **Root cause:** Supabase now signs JWTs with ES256 (asymmetric ECDSA), not HS256 (symmetric HMAC). The old `passport-jwt` strategy only supported HS256 verification.
+  - Installed `jose` library for JWKS-based JWT verification.
+  - Created `src/auth/services/jwks.service.ts` — fetches & caches Supabase's public keys from `/.well-known/jwks.json` with automatic key rotation.
+  - Rewrote `src/auth/guards/jwt-auth.guard.ts` — standalone NestJS guard using `jose.jwtVerify()` via JWKS. No longer depends on Passport.
+  - Stripped Passport from `src/auth/auth.module.ts` — removed `PassportModule`, `JwtStrategy`. Auth module now registers `JwksService` + `JwtAuthGuard` directly.
+  - Converted `src/auth/strategies/jwt.strategy.ts` to type-only file exporting `SupabaseJwtPayload`.
+  - Made `SUPABASE_JWT_SECRET` optional in `src/config/env.validation.ts` (no longer used for verification).
+  - Updated `src/common/decorators/current-user.decorator.ts` — `SupabaseUser` is now a type alias for `SupabaseJwtPayload` (includes both `id` and `sub`).
+  - Updated `src/auth/guards/roles.guard.ts`, `src/common/interceptors/sentry.interceptor.ts` — replaced Passport `Request` types with `AuthenticatedRequest`.
+  - 37 tests passing, build clean, lint clean.

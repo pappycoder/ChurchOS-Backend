@@ -13,7 +13,8 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } fr
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import * as Sentry from '@sentry/nestjs';
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 
 /**
  * Interceptor that captures exceptions and reports them to Sentry.
@@ -39,7 +40,7 @@ export class SentryInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
     return next.handle().pipe(
       catchError((error) => {
@@ -50,7 +51,7 @@ export class SentryInterceptor implements NestInterceptor {
 
           if (request.user) {
             scope.setUser({
-              id: (request.user as Record<string, unknown>).sub as string,
+              id: request.user.id,
             });
           }
 
