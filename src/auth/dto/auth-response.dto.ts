@@ -38,13 +38,19 @@ export class ProfileResponseDto {
   @ApiProperty({ description: 'Profile ID', example: '22222222-2222-2222-2222-222222222222' })
   id!: string;
 
-  @ApiProperty({ description: 'Supabase Auth user ID', example: '11111111-1111-1111-1111-111111111111' })
+  @ApiProperty({
+    description: 'Supabase Auth user ID',
+    example: '11111111-1111-1111-1111-111111111111',
+  })
   userId!: string;
 
   @ApiProperty({ description: 'Church ID', example: '00000000-0000-0000-0000-000000000001' })
   churchId!: string;
 
-  @ApiPropertyOptional({ description: 'Branch ID', example: '33333333-3333-3333-3333-333333333333' })
+  @ApiPropertyOptional({
+    description: 'Branch ID',
+    example: '33333333-3333-3333-3333-333333333333',
+  })
   branchId?: string;
 
   @ApiProperty({ description: 'User role', example: 'church_admin' })

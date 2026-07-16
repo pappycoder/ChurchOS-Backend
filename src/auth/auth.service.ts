@@ -73,7 +73,9 @@ export class AuthService {
     });
 
     if (authError) {
-      this.logger.error(`Supabase signUp error: ${authError.message} (status: ${authError.status})`);
+      this.logger.error(
+        `Supabase signUp error: ${authError.message} (status: ${authError.status})`,
+      );
       if (authError.message?.includes('already registered')) {
         throw new ConflictException('An account with this email already exists');
       }

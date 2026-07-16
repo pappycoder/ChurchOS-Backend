@@ -26,7 +26,7 @@ const envSchema = z.object({
   }),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
   SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
-  SUPABASE_JWT_SECRET: z.string().min(1, 'SUPABASE_JWT_SECRET is required'),
+  SUPABASE_JWT_SECRET: z.string().optional(),
 
   // ─── Redis (Cache + Queue) ────────────────────────────────
   REDIS_URL: z.string().refine((val) => val.startsWith('redis://') || val.startsWith('https://'), {
