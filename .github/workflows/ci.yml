@@ -2,7 +2,7 @@ name: ChurchOS Backend CI
 
 on:
   push:
-    branches: [main, staging]
+    branches: ['**']
   pull_request:
     branches: [main]
 
