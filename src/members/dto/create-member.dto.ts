@@ -96,7 +96,7 @@ export class CreateMemberDto {
 
   @ApiPropertyOptional({
     description: 'Branch ID to assign member to',
-    example: '33333333-3333-3333-3333-333333333333',
+    example: 'cf82908b-e0fe-456e-9464-8179eb8feda0',
   })
   @IsUUID()
   @IsOptional()
