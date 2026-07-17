@@ -176,6 +176,8 @@ All notable changes to this project are documented below. Update this section wi
   - Updated `src/main.ts` compression import to use default import (esModuleInterop).
   - Created 28 new unit tests (84 total, up from 56).
   - All tests passing, build clean, lint clean.
+  - Added comprehensive JSDoc comments to all 25 new source files across media, church, and branches modules (file headers, class docs, method params/returns/throws).
+  - Verified UUID usage: all IDs come from Prisma `@default(uuid())`, no manual UUID generation for DB IDs, all test fixture IDs use UUID format.
 
 - **2026-07-14** — Initial NestJS project setup with TypeScript strict mode.
   - Created `package.json` with NestJS core, Prisma, Swagger, class-validator deps.
