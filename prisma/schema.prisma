@@ -110,6 +110,7 @@ model Branch {
   state       String?
   phone       String?
   email       String?
+  photo_url   String?
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
@@ -134,6 +135,7 @@ model Profile {
   first_name    String
   last_name     String
   phone         String?
+  avatar_url    String?
   mfa_enabled   Boolean  @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt

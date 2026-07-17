@@ -24,6 +24,8 @@
 | Email | Resend |
 | SMS | Termii |
 | Cache/Queue | Upstash Redis (BullMQ) |
+| Image Processing | sharp (WebP optimization) |
+| File Upload | Supabase Storage + multer |
 | Monitoring | Sentry, Logtail |
 
 ### Key Commands
@@ -72,12 +74,14 @@ src/
 │   ├── services/           # JwksService (Supabase JWKS endpoint)
 │   ├── strategies/         # SupabaseJwtPayload type definitions
 │   └── decorators/         # @RequireRoles()
-├── members/                # Member CRUD, search, families [PLANNED]
+├── members/                # Member CRUD, search, families
 ├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
 ├── giving/                 # Giving categories, transactions, recurring, receipts [PLANNED]
 ├── events/                 # Events, registrations, ticketing [PLANNED]
 ├── whatsapp/               # WhatsApp webhooks, commands, broadcasts [PLANNED]
-├── media/                  # Sermon uploads, media library [PLANNED]
+├── media/                  # File uploads, image optimization (Supabase Storage + sharp)
+├── church/                 # Church CRUD, config, staff invitation/management
+├── branches/               # Branch CRUD, multi-tenant scoping
 ├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
 ├── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
@@ -94,6 +98,8 @@ src/
 - **Modules** follow the NestJS convention: `*.module.ts`, `*.service.ts`, `*.controller.ts`, `*.dto.ts`, `*.entity.ts`.
 - **Environment variables** are validated at startup via Zod schema in `src/config/env.validation.ts`.
 - **Swagger decorators** use reusable helpers from `src/common/decorators/` (e.g., `@ApiCreateEndpoint()`).
+- **File uploads**: Use `MediaService` for all file uploads. Images are auto-optimized to WebP (quality 80, max 1200px). When updating an image URL, the old image is deleted from storage in the same transaction.
+- **Multi-tenancy**: Branch CRUD queries scope by `church_id`. Branch deletion is blocked if members exist.
 
 ### Database
 
@@ -125,6 +131,8 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 | `RESEND_API_KEY` | No | Email delivery |
 | `TERMII_API_KEY` | No | SMS fallback |
 | `OPENAI_API_KEY` | No | AI chatbot features |
+| `SUPABASE_STORAGE_BUCKET` | No (default: media) | Supabase Storage bucket name for file uploads |
+| `MAX_FILE_SIZE_MB` | No (default: 5) | Maximum upload file size in megabytes |
 
 ## Related Projects
 
@@ -139,6 +147,35 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-17** — Completed Church, Branch, and Media modules (Phase 1).
+  - Created `src/church/` — ChurchModule with ChurchService, ChurchController.
+    - GET/PATCH /church — Church details CRUD with partial updates.
+    - GET/PATCH /church/config — Church configuration key-value management.
+    - POST /church/invite — Staff invitation via Supabase admin invite API.
+    - GET /church/staff — Paginated staff listing with search/filter.
+    - PATCH /church/staff/:id/role — Update staff role.
+    - DELETE /church/staff/:id — Soft-delete staff (role set to "removed").
+    - Image optimization: deletes old logo from Supabase Storage when replaced.
+  - Created `src/branches/` — BranchesModule with BranchesService, BranchesController.
+    - POST /branches — Create branch (validates single headquarters).
+    - GET /branches — Paginated branch list with search/sort.
+    - GET /branches/:id — Get single branch with member count.
+    - PATCH /branches/:id — Update branch (deletes old photo on replacement).
+    - DELETE /branches/:id — Delete branch (blocked if members exist).
+  - Created `src/media/` — MediaModule with MediaService, MediaController.
+    - POST /media/upload/image — Upload image with sharp optimization (WebP, 1200px, Q80).
+    - POST /media/upload — Upload file without optimization.
+    - DELETE /media/:path — Delete file from Supabase Storage.
+    - Image optimization pipeline: sharp → resize (max 1200×1200, inside fit) → webp (quality 80) → strip metadata.
+  - Added `photo_url` field to Branch model, `avatar_url` field to Profile model.
+  - Installed `sharp` (image processing), `@types/multer`, `@types/uuid`.
+  - Added `esModuleInterop: true` to tsconfig.json for proper ESM/CJS interop.
+  - Added `SUPABASE_STORAGE_BUCKET` and `MAX_FILE_SIZE_MB` to env validation.
+  - Updated `app.module.ts` to import MediaModule, ChurchModule, BranchesModule.
+  - Updated `src/main.ts` compression import to use default import (esModuleInterop).
+  - Created 28 new unit tests (84 total, up from 56).
+  - All tests passing, build clean, lint clean.
 
 - **2026-07-14** — Initial NestJS project setup with TypeScript strict mode.
   - Created `package.json` with NestJS core, Prisma, Swagger, class-validator deps.

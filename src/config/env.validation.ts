@@ -52,6 +52,10 @@ const envSchema = z.object({
   // ─── AI (Optional) ────────────────────────────────────────
   OPENAI_API_KEY: z.string().optional(),
 
+  // ─── Storage (Supabase Storage) ──────────────────────────
+  SUPABASE_STORAGE_BUCKET: z.string().default('media'),
+  MAX_FILE_SIZE_MB: z.coerce.number().default(5),
+
   // ─── Monitoring (Optional) ────────────────────────────────
   SENTRY_DSN: z.string().optional(),
 });

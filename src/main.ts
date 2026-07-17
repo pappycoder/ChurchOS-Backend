@@ -22,7 +22,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import helmet from 'helmet';
-import * as compression from 'compression';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { env } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
