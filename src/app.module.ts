@@ -25,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
+import { MembersModule } from './members/members.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 
@@ -67,10 +68,13 @@ import { HealthModule } from './health/health.module';
     // Step 5: Import AuthModule for JWT authentication.
     AuthModule,
 
-    // Step 6: Import RedisModule for caching and queues.
+    // Step 6: Import MembersModule for member management.
+    MembersModule,
+
+    // Step 7: Import RedisModule for caching and queues.
     RedisModule,
 
-    // Step 7: Import HealthModule for health check endpoint.
+    // Step 8: Import HealthModule for health check endpoint.
     HealthModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
