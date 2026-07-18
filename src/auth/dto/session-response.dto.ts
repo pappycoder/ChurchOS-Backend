@@ -32,7 +32,7 @@ export class LoginResponseDto {
 
   @ApiProperty({
     description: 'User email',
-    example: 'pastor@gracecommunity.com',
+    example: 'pastor@demo.com',
   })
   email!: string;
 

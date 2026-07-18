@@ -9,7 +9,7 @@ import { IsEmail, IsNotEmpty } from 'class-validator';
 export class ForgotPasswordDto {
   @ApiProperty({
     description: 'Email address to send password reset link',
-    example: 'pastor@gracecommunity.com',
+    example: 'pastor@demo.com',
   })
   @IsEmail()
   @IsNotEmpty()

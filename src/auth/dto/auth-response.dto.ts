@@ -15,7 +15,7 @@ export class RegisterResponseDto {
   })
   userId!: string;
 
-  @ApiProperty({ description: 'User email', example: 'pastor@gracecommunity.com' })
+  @ApiProperty({ description: 'User email', example: 'pastor@demo.com' })
   email!: string;
 
   @ApiProperty({

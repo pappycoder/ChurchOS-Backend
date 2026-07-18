@@ -20,6 +20,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
+    "delete-data": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts",
+    "delete-data:dry": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts --dry-run",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },
