@@ -114,12 +114,12 @@ export class BranchesService {
       ];
     }
 
-    const orderBy: Prisma.BranchOrderByWithRelationInput = {};
+    const orderBy: Prisma.BranchOrderByWithRelationInput[] = [];
     if (query.sortBy) {
-      orderBy[query.sortBy] = query.sortOrder || 'asc';
+      orderBy.push({ [query.sortBy]: (query.sortOrder || 'asc') as Prisma.SortOrder });
     } else {
-      orderBy.is_headquarters = 'desc';
-      orderBy.name = 'asc';
+      orderBy.push({ is_headquarters: 'desc' });
+      orderBy.push({ name: 'asc' });
     }
 
     const [branches, total] = await Promise.all([

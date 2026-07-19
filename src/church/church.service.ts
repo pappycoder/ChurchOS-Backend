@@ -252,7 +252,9 @@ export class ChurchService {
 
     if (inviteError) {
       this.logger.error(`Supabase invite error: ${inviteError.message}`);
-      throw new InternalServerErrorException('Failed to send staff invitation');
+      throw new InternalServerErrorException(
+        `Failed to send staff invitation: ${inviteError.message}`,
+      );
     }
 
     if (!inviteData?.user) {

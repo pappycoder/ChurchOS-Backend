@@ -20,7 +20,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
@@ -165,6 +165,10 @@ export class ChurchController {
     'List staff members',
     'Returns a paginated list of all staff profiles for the church.',
   )
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term for name/email' })
+  @ApiQuery({ name: 'role', required: false, type: String, description: 'Filter by role' })
   /**
    * Lists staff members with pagination and filtering.
    * @param page - Page number (optional)
