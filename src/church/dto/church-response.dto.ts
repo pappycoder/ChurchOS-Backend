@@ -14,7 +14,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  */
 export class ChurchResponseDto {
   @ApiProperty({ description: 'Church ID', example: '11111111-0000-0000-0000-000000000000' })
-  id!: string;
+  churchId!: string;
 
   @ApiProperty({ description: 'Church name', example: 'Redeemed Christian Church of God' })
   name!: string;

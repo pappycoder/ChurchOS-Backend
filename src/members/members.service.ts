@@ -158,11 +158,11 @@ export class MembersService {
     }
 
     // Determine sort order
-    const orderBy: Prisma.MemberOrderByWithRelationInput = {};
+    const orderBy: Prisma.MemberOrderByWithRelationInput[] = [];
     if (query.sortBy) {
-      orderBy[query.sortBy] = query.sortOrder || 'asc';
+      orderBy.push({ [query.sortBy]: (query.sortOrder || 'asc') as Prisma.SortOrder });
     } else {
-      orderBy.created_at = 'desc';
+      orderBy.push({ created_at: 'desc' });
     }
 
     const [members, total] = await Promise.all([
@@ -885,7 +885,7 @@ export class MembersService {
     updated_at: Date;
   }): MemberResponseDto {
     return {
-      id: member.id,
+      memberId: member.id,
       churchId: member.church_id,
       branchId: member.branch_id || undefined,
       firstName: member.first_name,

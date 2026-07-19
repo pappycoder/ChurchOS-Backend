@@ -39,7 +39,7 @@ export class LoginResponseDto {
   @ApiPropertyOptional({
     description: 'ChurchOS profile',
     example: {
-      id: '22222222-2222-2222-2222-222222222222',
+      profileId: '22222222-2222-2222-2222-222222222222',
       churchId: '00000000-0000-0000-0000-000000000001',
       branchId: '33333333-3333-3333-3333-333333333333',
       role: 'church_admin',
@@ -48,7 +48,7 @@ export class LoginResponseDto {
     },
   })
   profile?: {
-    id: string;
+    profileId: string;
     churchId: string;
     branchId?: string;
     role: string;

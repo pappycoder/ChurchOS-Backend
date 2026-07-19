@@ -100,24 +100,24 @@ export class BranchesController {
     return this.branchesService.findAll(churchId, query);
   }
 
-  @Get(':id')
+  @Get(':branchId')
   @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @ApiGetEndpoint('Get branch', 'Retrieves a single branch by ID with member count.')
   /**
    * Retrieves a single branch by ID.
-   * @param id - Branch UUID
+   * @param branchId - Branch UUID
    * @param req - Authenticated request with user profile
    * @returns BranchResponseDto with branch details
    */
   async findOne(
-    @Param('id') id: string,
+    @Param('branchId') branchId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<BranchResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.branchesService.findOne(id, churchId);
+    return this.branchesService.findOne(branchId, churchId);
   }
 
-  @Patch(':id')
+  @Patch(':branchId')
   @RequireRoles('church_admin')
   @ApiUpdateEndpoint(
     'Update a branch',
@@ -125,23 +125,23 @@ export class BranchesController {
   )
   /**
    * Updates branch details.
-   * @param id - Branch UUID
+   * @param branchId - Branch UUID
    * @param dto - Update data (all fields optional)
    * @param user - Current authenticated user
    * @param req - Authenticated request with user profile
    * @returns Updated BranchResponseDto
    */
   async update(
-    @Param('id') id: string,
+    @Param('branchId') branchId: string,
     @Body() dto: UpdateBranchDto,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<BranchResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.branchesService.update(id, dto, churchId, user.id);
+    return this.branchesService.update(branchId, dto, churchId, user.id);
   }
 
-  @Delete(':id')
+  @Delete(':branchId')
   @RequireRoles('church_admin')
   @ApiDeleteEndpoint(
     'Delete a branch',
@@ -149,17 +149,17 @@ export class BranchesController {
   )
   /**
    * Deletes a branch.
-   * @param id - Branch UUID
+   * @param branchId - Branch UUID
    * @param user - Current authenticated user
    * @param req - Authenticated request with user profile
    * @returns Object with success status
    */
   async remove(
-    @Param('id') id: string,
+    @Param('branchId') branchId: string,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    return this.branchesService.remove(id, churchId, user.id);
+    return this.branchesService.remove(branchId, churchId, user.id);
   }
 }

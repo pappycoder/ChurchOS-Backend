@@ -299,7 +299,7 @@ export class ChurchService {
     this.logger.log(`Staff invited: ${dto.email} → ${dto.role} (${churchId})`);
 
     return {
-      id: profile.id,
+      profileId: profile.id,
       userId: profile.user_id,
       email: dto.email,
       firstName: profile.first_name,
@@ -350,7 +350,7 @@ export class ChurchService {
     const emailMap = await this.getEmailsByUserIds(userIds);
 
     const data = profiles.map((p) => ({
-      id: p.id,
+      profileId: p.id,
       userId: p.user_id,
       email: emailMap.get(p.user_id) || '',
       firstName: p.first_name,
@@ -422,7 +422,7 @@ export class ChurchService {
     this.logger.log(`Staff role updated: ${profileId} → ${dto.role}`);
 
     return {
-      id: updated.id,
+      profileId: updated.id,
       userId: updated.user_id,
       email,
       firstName: updated.first_name,
@@ -534,7 +534,7 @@ export class ChurchService {
     _count?: { branches: number; members: number };
   }): ChurchResponseDto {
     return {
-      id: church.id,
+      churchId: church.id,
       name: church.name,
       denomination: church.denomination || undefined,
       address: church.address || undefined,

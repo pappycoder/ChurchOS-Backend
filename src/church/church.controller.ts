@@ -167,7 +167,12 @@ export class ChurchController {
   )
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term for name/email' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for name/email',
+  })
   @ApiQuery({ name: 'role', required: false, type: String, description: 'Filter by role' })
   /**
    * Lists staff members with pagination and filtering.
@@ -189,28 +194,28 @@ export class ChurchController {
     return this.churchService.listStaff(churchId, { page, limit, search, role });
   }
 
-  @Patch('staff/:id/role')
+  @Patch('staff/:profileId/role')
   @RequireRoles('church_admin')
   @ApiUpdateEndpoint('Update staff role', 'Changes the role of a staff member within the church.')
   /**
    * Updates a staff member's role.
-   * @param id - Profile UUID
+   * @param profileId - Profile UUID
    * @param dto - New role data
    * @param user - Current authenticated user
    * @param req - Authenticated request with user profile
    * @returns Updated StaffResponseDto
    */
   async updateStaffRole(
-    @Param('id') id: string,
+    @Param('profileId') profileId: string,
     @Body() dto: UpdateStaffRoleDto,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<StaffResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.churchService.updateStaffRole(churchId, id, dto, user.id);
+    return this.churchService.updateStaffRole(churchId, profileId, dto, user.id);
   }
 
-  @Delete('staff/:id')
+  @Delete('staff/:profileId')
   @RequireRoles('church_admin')
   @ApiDeleteEndpoint(
     'Remove staff member',
@@ -218,17 +223,17 @@ export class ChurchController {
   )
   /**
    * Soft-deletes a staff member by setting role to "removed".
-   * @param id - Profile UUID
+   * @param profileId - Profile UUID
    * @param user - Current authenticated user
    * @param req - Authenticated request with user profile
    * @returns Object with success status
    */
   async removeStaff(
-    @Param('id') id: string,
+    @Param('profileId') profileId: string,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    return this.churchService.removeStaff(churchId, id, user.id);
+    return this.churchService.removeStaff(churchId, profileId, user.id);
   }
 }

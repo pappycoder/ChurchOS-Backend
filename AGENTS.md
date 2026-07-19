@@ -160,6 +160,24 @@ All notable changes to this project are documented below. Update this section wi
   - Helps diagnose Supabase configuration issues (e.g. invalid email, SMTP not configured).
   - Changed in `src/church/church.service.ts:255`.
 
+- **2026-07-19** — Completed Members module and created Attendance module.
+  - **Members module**: Full CRUD, search, bulk import (CSV/XLSX), export, QR code generation, giving/attendance history, admin notes. Fixed `orderBy` array pattern for Prisma 7 compatibility.
+  - **Attendance module**: Created `src/attendance/` with AttendanceModule, AttendanceService, AttendanceController, and 6 DTOs.
+    - Service CRUD: `POST /services`, `GET /services`, `GET /services/:id`, `PATCH /services/:id`.
+    - Attendance recording: `POST /attendance`, `POST /attendance/bulk`, `POST /attendance/visitor`.
+    - Analytics: `GET /attendance/summary`, `GET /attendance/trends`, `GET /attendance/by-service/:id`.
+    - Duplicate check-in prevention via `@@unique([service_id, member_id])`.
+    - All queries scoped by `church_id` for multi-tenant isolation.
+  - Registered `AttendanceModule` in `app.module.ts`.
+
+- **2026-07-19** — Renamed generic `:id` route parameters to descriptive names across all controllers.
+  - `attendance.controller.ts`: `:id` → `:serviceId` (2 routes).
+  - `members.controller.ts`: `:id` → `:memberId` (7 routes).
+  - `branches.controller.ts`: `:id` → `:branchId` (3 routes).
+  - `church.controller.ts`: `staff/:id` → `staff/:profileId` (2 routes).
+  - Improves Swagger documentation clarity by showing which entity ID each endpoint expects.
+  - Build compiles cleanly.
+
 - **2026-07-17** — Completed Church, Branch, and Media modules (Phase 1).
   - Created `src/church/` — ChurchModule with ChurchService, ChurchController.
     - GET/PATCH /church — Church details CRUD with partial updates.

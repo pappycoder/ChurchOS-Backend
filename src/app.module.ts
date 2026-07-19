@@ -29,6 +29,7 @@ import { MembersModule } from './members/members.module';
 import { MediaModule } from './media/media.module';
 import { ChurchModule } from './church/church.module';
 import { BranchesModule } from './branches/branches.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 
@@ -83,7 +84,10 @@ import { HealthModule } from './health/health.module';
     // Step 9: Import BranchesModule for branch CRUD.
     BranchesModule,
 
-    // Step 10: Import RedisModule for caching and queues.
+    // Step 10: Import AttendanceModule for attendance and service management.
+    AttendanceModule,
+
+    // Step 11: Import RedisModule for caching and queues.
     RedisModule,
 
     // Step 11: Import HealthModule for health check endpoint.

@@ -14,7 +14,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  */
 export class BranchResponseDto {
   @ApiProperty({ description: 'Branch ID', example: '33333333-0000-0000-0000-000000000000' })
-  id!: string;
+  branchId!: string;
 
   @ApiProperty({ description: 'Church ID', example: '11111111-0000-0000-0000-000000000000' })
   churchId!: string;

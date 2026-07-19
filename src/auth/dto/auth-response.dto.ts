@@ -36,7 +36,7 @@ export class RegisterResponseDto {
 
 export class ProfileResponseDto {
   @ApiProperty({ description: 'Profile ID', example: '22222222-2222-2222-2222-222222222222' })
-  id!: string;
+  profileId!: string;
 
   @ApiProperty({
     description: 'Supabase Auth user ID',
@@ -71,14 +71,14 @@ export class ProfileResponseDto {
   @ApiPropertyOptional({
     description: 'Church details',
     example: {
-      id: '00000000-0000-0000-0000-000000000001',
+      churchId: '00000000-0000-0000-0000-000000000001',
       name: 'Grace Community Church',
       denomination: 'Pentecostal',
       logoUrl: 'https://example.com/logo.png',
     },
   })
   church?: {
-    id: string;
+    churchId: string;
     name: string;
     denomination?: string;
     logoUrl?: string;
@@ -87,13 +87,13 @@ export class ProfileResponseDto {
   @ApiPropertyOptional({
     description: 'Branch details',
     example: {
-      id: '33333333-3333-3333-3333-333333333333',
+      branchId: '33333333-3333-3333-3333-333333333333',
       name: 'Headquarters',
       isHeadquarters: true,
     },
   })
   branch?: {
-    id: string;
+    branchId: string;
     name: string;
     isHeadquarters: boolean;
   };

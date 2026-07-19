@@ -194,7 +194,7 @@ export class AuthService {
     }
 
     return {
-      id: profile.id,
+      profileId: profile.id,
       userId: profile.user_id,
       churchId: profile.church_id,
       branchId: profile.branch_id || undefined,
@@ -205,7 +205,7 @@ export class AuthService {
       mfaEnabled: profile.mfa_enabled,
       church: profile.church
         ? {
-            id: profile.church.id,
+            churchId: profile.church.id,
             name: profile.church.name,
             denomination: profile.church.denomination || undefined,
             logoUrl: profile.church.logo_url || undefined,
@@ -213,7 +213,7 @@ export class AuthService {
         : undefined,
       branch: profile.branch
         ? {
-            id: profile.branch.id,
+            branchId: profile.branch.id,
             name: profile.branch.name,
             isHeadquarters: profile.branch.is_headquarters,
           }
@@ -295,7 +295,7 @@ export class AuthService {
       email: data.user.email || dto.email,
       profile: profile
         ? {
-            id: profile.id,
+            profileId: profile.id,
             churchId: profile.church_id,
             branchId: profile.branch_id || undefined,
             role: profile.role,

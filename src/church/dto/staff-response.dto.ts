@@ -14,7 +14,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  */
 export class StaffResponseDto {
   @ApiProperty({ description: 'Profile ID', example: '55555555-0000-0000-0000-000000000000' })
-  id!: string;
+  profileId!: string;
 
   @ApiProperty({
     description: 'Supabase Auth user ID',

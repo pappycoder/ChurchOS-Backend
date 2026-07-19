@@ -95,49 +95,49 @@ export class MembersController {
   /**
    * Get a single member by ID.
    */
-  @Get(':id')
+  @Get(':memberId')
   @ApiGetEndpoint('Get member by ID', 'Retrieves a single member by their UUID.')
   async findOne(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<MemberResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.getMemberById(id, churchId);
+    return this.membersService.getMemberById(memberId, churchId);
   }
 
   /**
    * Update a member's details (partial update).
    */
-  @Patch(':id')
+  @Patch(':memberId')
   @ApiUpdateEndpoint(
     'Update member details',
     'Updates a member with partial data. Only provided fields are updated.',
   )
   async update(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Body() dto: UpdateMemberDto,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<MemberResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.updateMember(id, dto, churchId, user.id);
+    return this.membersService.updateMember(memberId, dto, churchId, user.id);
   }
 
   /**
    * Soft-delete a member (set status to inactive).
    */
-  @Delete(':id')
+  @Delete(':memberId')
   @ApiDeleteEndpoint(
     'Delete a member',
     'Soft-deletes a member by setting their status to inactive.',
   )
   async remove(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.membersService.softDeleteMember(id, churchId, user.id);
+    await this.membersService.softDeleteMember(memberId, churchId, user.id);
     return { success: true };
   }
 
@@ -242,23 +242,23 @@ export class MembersController {
   /**
    * Generate QR code data for a member.
    */
-  @Get(':id/qr-code')
+  @Get(':memberId/qr-code')
   @ApiGetEndpoint('Generate QR code', 'Generates QR code data for member check-in scanning.')
   async generateQRCode(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ qrData: string; memberId: string }> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.generateMemberQRCode(id, churchId);
+    return this.membersService.generateMemberQRCode(memberId, churchId);
   }
 
   /**
    * Get giving history for a member.
    */
-  @Get(':id/giving')
+  @Get(':memberId/giving')
   @ApiGetEndpoint('Get giving history', 'Retrieves the giving transaction history for a member.')
   async getGivingHistory(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<{
     data: Array<{
@@ -271,17 +271,17 @@ export class MembersController {
     }>;
   }> {
     const churchId = req.profile?.church_id || '';
-    const data = await this.membersService.getMemberGivingHistory(id, churchId);
+    const data = await this.membersService.getMemberGivingHistory(memberId, churchId);
     return { data };
   }
 
   /**
    * Get attendance history for a member.
    */
-  @Get(':id/attendance')
+  @Get(':memberId/attendance')
   @ApiGetEndpoint('Get attendance history', 'Retrieves the attendance history for a member.')
   async getAttendanceHistory(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<{
     data: Array<{
@@ -293,26 +293,26 @@ export class MembersController {
     }>;
   }> {
     const churchId = req.profile?.church_id || '';
-    const data = await this.membersService.getMemberAttendanceHistory(id, churchId);
+    const data = await this.membersService.getMemberAttendanceHistory(memberId, churchId);
     return { data };
   }
 
   /**
    * Add an admin note to a member.
    */
-  @Post(':id/notes')
+  @Post(':memberId/notes')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Add admin note',
     description: 'Adds a timestamped admin note to a member record.',
   })
   async addNote(
-    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Body() body: { note: string },
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.addMemberNote(id, body.note, churchId, user.id);
+    return this.membersService.addMemberNote(memberId, body.note, churchId, user.id);
   }
 }

@@ -15,7 +15,7 @@ export class MemberResponseDto {
     description: 'Member ID (UUID)',
     example: '44444444-4444-4444-4444-444444444444',
   })
-  id!: string;
+  memberId!: string;
 
   @ApiProperty({
     description: 'Church ID',

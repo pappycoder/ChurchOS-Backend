@@ -296,7 +296,7 @@ export class BranchesService {
     memberCount: number,
   ): BranchResponseDto {
     return {
-      id: branch.id,
+      branchId: branch.id,
       churchId: branch.church_id,
       name: branch.name,
       isHeadquarters: branch.is_headquarters,
