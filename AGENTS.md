@@ -148,6 +148,18 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-07-19** — Fixed Prisma orderBy validation error in branch listing.
+  - **Root cause:** `BranchesService.findAll()` passed `orderBy` as a single object (`{ is_headquarters: 'desc', name: 'asc' }`), but Prisma 7 expects an array (`BranchOrderByWithRelationInput[]`).
+  - Changed `orderBy` type from `Prisma.BranchOrderByWithRelationInput` to `Prisma.BranchOrderByWithRelationInput[]`.
+  - Default sort is now `[{ is_headquarters: 'desc' }, { name: 'asc' }]`.
+  - Custom `sortBy` pushes a single sort criterion into the array.
+  - Fixed in `src/branches/branches.service.ts:117-123`.
+
+- **2026-07-19** — Improved staff invitation error handling.
+  - Supabase invite errors now surface the actual error message in the API response instead of a generic "Failed to send staff invitation".
+  - Helps diagnose Supabase configuration issues (e.g. invalid email, SMTP not configured).
+  - Changed in `src/church/church.service.ts:255`.
+
 - **2026-07-17** — Completed Church, Branch, and Media modules (Phase 1).
   - Created `src/church/` — ChurchModule with ChurchService, ChurchController.
     - GET/PATCH /church — Church details CRUD with partial updates.
