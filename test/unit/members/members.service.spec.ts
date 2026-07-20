@@ -106,7 +106,7 @@ describe('MembersService', () => {
 
       const result = await service.createMember(dto, mockChurchId, mockUserId);
 
-      expect(result.id).toBe(mockMemberId);
+      expect(result.memberId).toBe(mockMemberId);
       expect(result.firstName).toBe('Chioma');
       expect(result.lastName).toBe('Eze');
       expect(model('member').create).toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe('MembersService', () => {
 
       const result = await service.getMemberById(mockMemberId, mockChurchId);
 
-      expect(result.id).toBe(mockMemberId);
+      expect(result.memberId).toBe(mockMemberId);
       expect(result.firstName).toBe('Chioma');
     });
 
@@ -190,7 +190,7 @@ describe('MembersService', () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(result.data[0].id).toBe(mockMemberId);
+      expect(result.data[0].memberId).toBe(mockMemberId);
     });
 
     it('should apply status filter', async () => {
@@ -292,7 +292,7 @@ describe('MembersService', () => {
 
       const result = await service.updateMember(mockMemberId, {}, mockChurchId, mockUserId);
 
-      expect(result.id).toBe(mockMemberId);
+      expect(result.memberId).toBe(mockMemberId);
       expect(model('member').update).not.toHaveBeenCalled();
     });
   });

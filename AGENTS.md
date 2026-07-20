@@ -76,10 +76,11 @@ src/
 │   └── decorators/         # @RequireRoles()
 ├── members/                # Member CRUD, search, families
 ├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
-├── giving/                 # Giving categories, transactions, recurring, receipts [PLANNED]
+├── giving/                 # Giving categories, transactions, receipts (Paystack + Flutterwave + PDFKit)
 ├── events/                 # Events, registrations, ticketing [PLANNED]
 ├── whatsapp/               # WhatsApp webhooks, commands, broadcasts [PLANNED]
 ├── media/                  # File uploads, image optimization (Supabase Storage + sharp)
+├── profile/                # Profile CRUD, photo upload, role management, soft-delete
 ├── church/                 # Church CRUD, config, staff invitation/management
 ├── branches/               # Branch CRUD, multi-tenant scoping
 ├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
@@ -147,6 +148,49 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-20** — Completed ProfileModule (Phase 1).
+  - Created `src/profile/` — ProfileModule with ProfileService, ProfileController, and 4 DTOs.
+    - `GET /profiles/me` — Get current user's full profile with church and branch details.
+    - `PATCH /profiles/me` — Update own profile (firstName, lastName, phone) with partial updates.
+    - `POST /profiles/me/photo` — Upload profile photo via MediaService (Supabase Storage + sharp optimization). Deletes previous avatar.
+    - `GET /profiles` — List all profiles with pagination, search (name/phone), role filter, branch filter, sortable columns.
+    - `GET /profiles/:profileId` — Get profile by ID (same-church access).
+    - `PATCH /profiles/:profileId/role` — Update user role (admin only). 9 valid roles. Prevents self-demotion and super_admin modification.
+    - `DELETE /profiles/:profileId` — Soft-delete profile (admin only). Prevents self-deactivation.
+  - Migrated `getProfile()` and `updateProfile()` from `AuthService` to `ProfileService`.
+  - Removed `GET /auth/me` and `PATCH /auth/me` endpoints from AuthController (now at `/api/v1/profiles/me`).
+  - Registered `ProfileModule` in `app.module.ts` (imports AuthModule + MediaModule).
+  - 23 new unit tests: `test/unit/profile/profile.service.spec.ts`.
+  - Build clean, lint clean, all tests passing.
+
+- **2026-07-20** — Completed GivingModule (Phase 1).
+  - Created `src/giving/` — GivingModule with GivingService, GivingController, PaystackService, FlutterwaveService, ReceiptService, and 8 DTOs.
+    - `POST /giving/categories` — Create giving category (admin only). Validates name uniqueness within church.
+    - `GET /giving/categories` — List categories with optional isActive filter. Ordered by display_order.
+    - `GET /giving/categories/:categoryId` — Get single category by ID (same-church).
+    - `PATCH /giving/categories/:categoryId` — Update category (admin only). Validates name uniqueness on rename.
+    - `DELETE /giving/categories/:categoryId` — Deactivate category (admin only). Soft-delete only.
+    - `POST /giving/initialize` — Initialize digital payment (Paystack or Flutterwave). Creates pending transaction, returns authorization URL.
+    - `GET /giving/verify/:reference` — Verify payment via gateway API. Updates transaction status.
+    - `POST /giving/webhook/paystack` — Paystack webhook handler. Validates HMAC-SHA512 `x-paystack-signature`. Idempotent for terminal states.
+    - `POST /giving/webhook/flutterwave` — Flutterwave webhook handler. Validates HMAC-SHA512 `verif-hash` header.
+    - `POST /giving/cash` — Record cash/bank transfer giving (admin/secretary/treasurer). Auto-generates receipt number.
+    - `GET /giving/transactions` — List transactions with pagination, category/member/status/type/date/gateway filters, sorting.
+    - `GET /giving/transactions/:transactionId` — Get transaction details (same-church).
+    - `GET /giving/transactions/:transactionId/receipt` — Download PDF receipt (only for successful transactions).
+  - Created `src/giving/services/payment-gateway.interface.ts` — `PaymentGatewayProvider` interface, `PaymentInitializeResult`, `PaymentVerifyResult`, `WebhookEvent` types.
+  - Created `src/giving/services/flutterwave.service.ts` — Flutterwave v3 API: initialize (Naira, no conversion), verify by `tx_ref`, webhook HMAC-SHA512 via `verif-hash` header, status/channel mapping.
+  - Refactored `src/giving/services/paystack.service.ts` — implements `PaymentGatewayProvider` interface. Naira→Kobo conversion, `x-paystack-signature` webhook validation.
+  - Created `src/giving/services/receipt.service.ts` — PDF receipt generation with PDFKit. Receipt numbers: `{YEAR}/{PREFIX}/{SEQUENTIAL}` (e.g. `2026/TIT/0001`).
+  - Refactored `src/giving/giving.service.ts` — injected `Map<string, PaymentGatewayProvider>` registry instead of `PaystackService`. Added `resolveGateway()`, `getDefaultGateway()`. Default gateway from Church config `default_payment_gateway`, falls back to `'paystack'`.
+  - Updated `src/giving/giving.module.ts` — registered FlutterwaveService, added `PAYMENT_GATEWAY_REGISTRY` factory provider.
+  - Added `PaymentGateway` enum and `payment_gateway` field (default: `paystack`) to Prisma `Transaction` model.
+  - Installed `pdfkit` + `@types/pdfkit`.
+  - Registered `GivingModule` in `app.module.ts`.
+  - Added 7th seed category: Welfare/Mission. Updated seed transactions with `payment_gateway` field.
+  - 38 GivingService + 14 FlutterwaveService unit tests (52 giving tests, 167 total).
+  - Build clean, lint clean, all tests passing.
 
 - **2026-07-19** — Fixed Prisma orderBy validation error in branch listing.
   - **Root cause:** `BranchesService.findAll()` passed `orderBy` as a single object (`{ is_headquarters: 'desc', name: 'asc' }`), but Prisma 7 expects an array (`BranchOrderByWithRelationInput[]`).

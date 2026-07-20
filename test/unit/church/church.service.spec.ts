@@ -65,7 +65,7 @@ describe('ChurchService', () => {
 
       const result = await service.getChurch('church-1');
 
-      expect(result.id).toBe('church-1');
+      expect(result.churchId).toBe('church-1');
       expect(result.name).toBe('Grace Community Church');
       expect(result.branchCount).toBe(3);
       expect(result.memberCount).toBe(150);
@@ -107,7 +107,7 @@ describe('ChurchService', () => {
 
       const result = await service.updateChurch('church-1', {}, 'user-1');
 
-      expect(result.id).toBe('church-1');
+      expect(result.churchId).toBe('church-1');
       expect(prisma.church.update).not.toHaveBeenCalled();
     });
   });

@@ -211,8 +211,8 @@ describe('ProfileService', () => {
 
   describe('uploadProfilePhoto', () => {
     it('should upload photo and update avatar_url', async () => {
-      model(prisma, 'profile').findUnique
-        .mockResolvedValueOnce({
+      model(prisma, 'profile')
+        .findUnique.mockResolvedValueOnce({
           id: mockProfileId,
           user_id: mockUserId,
           church_id: mockChurchId,

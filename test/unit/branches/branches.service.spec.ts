@@ -89,7 +89,7 @@ describe('BranchesService', () => {
 
       const result = await service.findOne('branch-1', 'church-1');
 
-      expect(result.id).toBe('branch-1');
+      expect(result.branchId).toBe('branch-1');
     });
 
     it('should throw NotFoundException if branch not found', async () => {

@@ -5,7 +5,7 @@
  * Seeds the database with realistic development data including:
  * - 1 church ("Grace Community Church")
  * - 1 headquarters branch
- * - 6 default giving categories
+ * - 7 default giving categories
  * - 2 services (Sunday Service, Wednesday Bible Study)
  * - 10 sample members with realistic Nigerian names
  * - 1 admin profile
@@ -110,6 +110,12 @@ async function main(): Promise<void> {
       name: 'Building Project',
       description: 'Church building project',
       display_order: 6,
+      is_recurring: false,
+    },
+    {
+      name: 'Welfare/Mission',
+      description: 'Welfare and mission support',
+      display_order: 7,
       is_recurring: false,
     },
   ];
@@ -330,7 +336,8 @@ async function main(): Promise<void> {
           type: TransactionType.digital,
           status: TransactionStatus.success,
           payment_reference: `TITHSEED${Date.now()}${i}`,
-          payment_method: 'paystack',
+          payment_method: 'card',
+          payment_gateway: 'paystack',
           receipt_number: `GCC/TIT/2026/${String(i + 1).padStart(4, '0')}`,
         },
       });

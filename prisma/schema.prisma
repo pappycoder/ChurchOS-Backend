@@ -32,6 +32,12 @@ enum TransactionType {
   bank_transfer
 }
 
+enum PaymentGateway {
+  paystack
+  flutterwave
+  manual
+}
+
 enum EventType {
   service
   conference
@@ -292,7 +298,8 @@ model Transaction {
   type              TransactionType @default(digital)
   status            TransactionStatus @default(pending)
   payment_reference String?         @unique
-  payment_method    String?         // paystack, flutterwave, cash, bank_transfer
+  payment_gateway   PaymentGateway  @default(paystack)
+  payment_method    String?         // card, bank, ussd, mobile_money, cash, bank_transfer
   receipt_number    String?
   receipt_url       String?
   metadata          Json            @default("{}")
