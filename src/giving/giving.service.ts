@@ -16,10 +16,11 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
-import { PaymentGatewayProvider } from './services/payment-gateway.interface';
+import { PaymentGatewayProvider, PAYMENT_GATEWAY_REGISTRY } from './services/payment-gateway.interface';
 import { ReceiptService, ReceiptTransactionData } from './services/receipt.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -46,7 +47,7 @@ export class GivingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
-    private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
+    @Inject(PAYMENT_GATEWAY_REGISTRY) private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly receipt: ReceiptService,
   ) {}
 

@@ -16,12 +16,7 @@ import { GivingService } from './giving.service';
 import { PaystackService } from './services/paystack.service';
 import { FlutterwaveService } from './services/flutterwave.service';
 import { ReceiptService } from './services/receipt.service';
-import { PaymentGatewayProvider } from './services/payment-gateway.interface';
-
-/**
- * Token for the payment gateway registry map.
- */
-export const PAYMENT_GATEWAY_REGISTRY = 'PAYMENT_GATEWAY_REGISTRY';
+import { PaymentGatewayProvider, PAYMENT_GATEWAY_REGISTRY } from './services/payment-gateway.interface';
 
 /**
  * Giving module providing category management, payment processing,

@@ -92,3 +92,10 @@ export interface PaymentGatewayProvider {
   /** Map a gateway payment channel to an internal payment method string */
   mapChannelToPaymentMethod(channel: string): string;
 }
+
+/**
+ * Injection token for the payment gateway registry map.
+ * Provided by GivingModule via a factory that populates
+ * registered PaymentGatewayProvider instances.
+ */
+export const PAYMENT_GATEWAY_REGISTRY = 'PAYMENT_GATEWAY_REGISTRY';
