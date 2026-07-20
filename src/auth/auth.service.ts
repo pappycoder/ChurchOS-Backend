@@ -13,7 +13,6 @@ import {
   Injectable,
   Logger,
   ConflictException,
-  NotFoundException,
   UnauthorizedException,
   InternalServerErrorException,
   BadRequestException,
@@ -25,10 +24,9 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { RegisterDto } from './dto/register.dto';
-import { RegisterResponseDto, ProfileResponseDto } from './dto/auth-response.dto';
+import { RegisterResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/session-response.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -158,67 +156,6 @@ export class AuthService {
       );
       throw new InternalServerErrorException('Failed to complete registration');
     }
-  }
-
-  /**
-   * Retrieves the full profile for an authenticated user.
-   *
-   * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @returns Profile with church and branch details
-   * @throws NotFoundException if no profile exists for the user
-   */
-  async getProfile(userId: string): Promise<ProfileResponseDto> {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-      include: {
-        church: {
-          select: {
-            id: true,
-            name: true,
-            denomination: true,
-            logo_url: true,
-          },
-        },
-        branch: {
-          select: {
-            id: true,
-            name: true,
-            is_headquarters: true,
-          },
-        },
-      },
-    });
-
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    return {
-      profileId: profile.id,
-      userId: profile.user_id,
-      churchId: profile.church_id,
-      branchId: profile.branch_id || undefined,
-      role: profile.role,
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      phone: profile.phone || undefined,
-      mfaEnabled: profile.mfa_enabled,
-      church: profile.church
-        ? {
-            churchId: profile.church.id,
-            name: profile.church.name,
-            denomination: profile.church.denomination || undefined,
-            logoUrl: profile.church.logo_url || undefined,
-          }
-        : undefined,
-      branch: profile.branch
-        ? {
-            branchId: profile.branch.id,
-            name: profile.branch.name,
-            isHeadquarters: profile.branch.is_headquarters,
-          }
-        : undefined,
-    };
   }
 
   /**
@@ -429,55 +366,6 @@ export class AuthService {
     });
 
     this.logger.log(`Password changed for user: ${userId}`);
-  }
-
-  /**
-   * Updates profile details (name, phone) for the authenticated user.
-   *
-   * @param userId - Supabase Auth user ID
-   * @param dto - Profile update data (partial)
-   * @returns Updated profile response
-   * @throws NotFoundException if profile doesn't exist
-   */
-  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<ProfileResponseDto> {
-    // Check if profile exists
-    const existing = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-    });
-
-    if (!existing) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    // Build update data (only include provided fields)
-    const updateData: Record<string, unknown> = {};
-    if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
-    if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
-    if (dto.phone !== undefined) updateData.phone = dto.phone;
-
-    // Skip if nothing to update
-    if (Object.keys(updateData).length === 0) {
-      return this.getProfile(userId);
-    }
-
-    await this.prisma.profile.update({
-      where: { user_id: userId },
-      data: updateData,
-    });
-
-    // Audit-log
-    await this.audit.log({
-      userId,
-      churchId: existing.church_id,
-      entity: 'profile',
-      action: 'UPDATE',
-      entityId: existing.id,
-      newValues: updateData,
-    });
-
-    this.logger.log(`Profile updated for user: ${userId}`);
-
-    return this.getProfile(userId);
   }
 
   /**

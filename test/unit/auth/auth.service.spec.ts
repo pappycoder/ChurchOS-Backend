@@ -16,15 +16,9 @@ import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { RedisService } from '../../../src/redis/redis.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ConfigService } from '@nestjs/config';
-import {
-  ConflictException,
-  NotFoundException,
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { RegisterDto } from '../../../src/auth/dto/register.dto';
 import { LoginDto } from '../../../src/auth/dto/login.dto';
-import { UpdateProfileDto } from '../../../src/auth/dto/update-profile.dto';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -208,81 +202,6 @@ describe('AuthService', () => {
       prisma.$transaction.mockRejectedValue(new Error('DB connection failed'));
 
       await expect(service.register(validDto)).rejects.toThrow('Failed to complete registration');
-    });
-  });
-
-  // ─── GET PROFILE ───────────────────────────────────────────────────
-
-  describe('getProfile', () => {
-    it('should return profile with church and branch details', async () => {
-      const mockProfile = {
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-        branch_id: 'branch-1',
-        role: 'church_admin',
-        first_name: 'Adebayo',
-        last_name: 'Ogundimu',
-        phone: '+234 803 456 7890',
-        mfa_enabled: false,
-        church: {
-          id: mockChurchId,
-          name: 'Grace Community Church',
-          denomination: 'Pentecostal',
-          logo_url: null,
-        },
-        branch: {
-          id: 'branch-1',
-          name: 'Headquarters',
-          is_headquarters: true,
-        },
-      };
-
-      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfile);
-
-      const result = await service.getProfile(mockUserId);
-
-      expect(result.id).toBe(mockProfileId);
-      expect(result.userId).toBe(mockUserId);
-      expect(result.churchId).toBe(mockChurchId);
-      expect(result.role).toBe('church_admin');
-      expect(result.church?.name).toBe('Grace Community Church');
-      expect(result.branch?.name).toBe('Headquarters');
-    });
-
-    it('should throw NotFoundException if profile does not exist', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue(null);
-
-      await expect(service.getProfile('nonexistent-user')).rejects.toThrow(NotFoundException);
-    });
-
-    it('should handle profile without branch', async () => {
-      const mockProfile = {
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-        branch_id: null,
-        role: 'member',
-        first_name: 'Chioma',
-        last_name: 'Nwosu',
-        phone: null,
-        mfa_enabled: false,
-        church: {
-          id: mockChurchId,
-          name: 'Grace Community Church',
-          denomination: 'Pentecostal',
-          logo_url: null,
-        },
-        branch: null,
-      };
-
-      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfile);
-
-      const result = await service.getProfile(mockUserId);
-
-      expect(result.branchId).toBeUndefined();
-      expect(result.branch).toBeUndefined();
-      expect(result.phone).toBeUndefined();
     });
   });
 
@@ -494,81 +413,6 @@ describe('AuthService', () => {
       await expect(
         service.changePassword(mockUserId, 'pastor@church.com', 'OldPass123!', 'NewPass456!'),
       ).rejects.toThrow('Failed to update password');
-    });
-  });
-
-  // ─── UPDATE PROFILE ────────────────────────────────────────────────
-
-  describe('updateProfile', () => {
-    it('should update profile fields successfully', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue({
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-      });
-
-      model(prisma, 'profile').update.mockResolvedValue({});
-
-      // Mock getProfile for the return
-      model(prisma, 'profile')
-        .findUnique.mockResolvedValueOnce({
-          id: mockProfileId,
-          user_id: mockUserId,
-          church_id: mockChurchId,
-        })
-        .mockResolvedValueOnce({
-          id: mockProfileId,
-          user_id: mockUserId,
-          church_id: mockChurchId,
-          branch_id: null,
-          role: 'church_admin',
-          first_name: 'Adebayo',
-          last_name: 'Updated',
-          phone: '+2348000000000',
-          mfa_enabled: false,
-          church: { id: mockChurchId, name: 'Church', denomination: null, logo_url: null },
-          branch: null,
-        });
-
-      const dto: UpdateProfileDto = { lastName: 'Updated', phone: '+2348000000000' };
-      const result = await service.updateProfile(mockUserId, dto);
-
-      expect(result.lastName).toBe('Updated');
-      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
-        where: { user_id: mockUserId },
-        data: { last_name: 'Updated', phone: '+2348000000000' },
-      });
-    });
-
-    it('should throw NotFoundException if profile does not exist', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue(null);
-
-      await expect(service.updateProfile(mockUserId, { firstName: 'Test' })).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should return existing profile if no fields provided', async () => {
-      const mockProfile = {
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-        branch_id: null,
-        role: 'church_admin',
-        first_name: 'Adebayo',
-        last_name: 'Ogundimu',
-        phone: null,
-        mfa_enabled: false,
-        church: { id: mockChurchId, name: 'Church', denomination: null, logo_url: null },
-        branch: null,
-      };
-
-      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfile);
-
-      const result = await service.updateProfile(mockUserId, {});
-
-      expect(result.firstName).toBe('Adebayo');
-      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
     });
   });
 

@@ -11,10 +11,9 @@
 
 import {
   Controller,
-  Get,
   Post,
-  Patch,
   Put,
+  Patch,
   Body,
   HttpCode,
   HttpStatus,
@@ -29,7 +28,6 @@ import {
   ApiOkResponse,
   ApiCreatedResponse,
   ApiBadRequestResponse,
-  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -37,8 +35,7 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
-import { RegisterResponseDto, ProfileResponseDto } from './dto/auth-response.dto';
+import { RegisterResponseDto } from './dto/auth-response.dto';
 import { LoginResponseDto, RefreshResponseDto } from './dto/session-response.dto';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -175,48 +172,6 @@ export class AuthController {
       dto.newPassword,
     );
     return { success: true };
-  }
-
-  /**
-   * Update the current user's profile.
-   *
-   * Supports partial updates — only provided fields are updated.
-   */
-  @Patch('me')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('supabase-auth')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Update current user profile',
-    description: "Updates the authenticated user's profile. Only provided fields are updated.",
-  })
-  @ApiOkResponse({ description: 'Profile updated successfully', type: ProfileResponseDto })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
-  async updateProfile(
-    @CurrentUser() user: SupabaseUser,
-    @Body() dto: UpdateProfileDto,
-  ): Promise<ProfileResponseDto> {
-    return this.authService.updateProfile(user.id, dto);
-  }
-
-  /**
-   * Get the current authenticated user's profile.
-   *
-   * Returns the full profile including church and branch details.
-   */
-  @Get('me')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('supabase-auth')
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description:
-      "Returns the authenticated user's ChurchOS profile with church and branch details.",
-  })
-  @ApiOkResponse({ description: 'Profile retrieved successfully', type: ProfileResponseDto })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
-  async getMe(@CurrentUser() user: SupabaseUser): Promise<ProfileResponseDto> {
-    return this.authService.getProfile(user.id);
   }
 
   /**

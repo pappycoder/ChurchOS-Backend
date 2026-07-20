@@ -30,6 +30,7 @@ import { MediaModule } from './media/media.module';
 import { ChurchModule } from './church/church.module';
 import { BranchesModule } from './branches/branches.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { ProfileModule } from './profile/profile.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 
@@ -87,10 +88,13 @@ import { HealthModule } from './health/health.module';
     // Step 10: Import AttendanceModule for attendance and service management.
     AttendanceModule,
 
-    // Step 11: Import RedisModule for caching and queues.
+    // Step 11: Import ProfileModule for profile management and role updates.
+    ProfileModule,
+
+    // Step 12: Import RedisModule for caching and queues.
     RedisModule,
 
-    // Step 11: Import HealthModule for health check endpoint.
+    // Step 13: Import HealthModule for health check endpoint.
     HealthModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
