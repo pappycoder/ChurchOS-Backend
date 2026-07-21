@@ -32,7 +32,7 @@ describe('ScoringService', () => {
       prisma.eventRegistration.count.mockResolvedValue(2);
       prisma.message.count.mockResolvedValue(5);
 
-      prisma.engagementScore.upsert.mockResolvedValue({} as any);
+      (prisma.engagementScore.upsert as jest.Mock).mockResolvedValue({ id: 'es-1', score: 65 });
 
       const result = await service.calculateEngagementScores(mockChurchId);
 
@@ -60,7 +60,11 @@ describe('ScoringService', () => {
         checkin_at: new Date(),
       });
 
-      prisma.riskScore.upsert.mockResolvedValue({} as any);
+      (prisma.riskScore.upsert as jest.Mock).mockResolvedValue({
+        id: 'rs-1',
+        score: 75,
+        level: 'high',
+      });
 
       const result = await service.calculateRiskScores(mockChurchId);
 

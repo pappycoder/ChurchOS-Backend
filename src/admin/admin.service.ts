@@ -614,7 +614,24 @@ export class AdminService {
   /**
    * Maps a Prisma Department record to a response DTO.
    */
-  private mapDepartmentToResponseDto(dept: any, members: any[]): DepartmentResponseDto {
+  private mapDepartmentToResponseDto(
+    dept: {
+      id: string;
+      church_id: string;
+      name: string;
+      description: string | null;
+      parent_id: string | null;
+      created_at: Date;
+      updated_at: Date;
+    },
+    members: Array<{
+      id: string;
+      member_id: string;
+      role: string;
+      joined_at: Date;
+      member?: { first_name: string; last_name: string } | null;
+    }>,
+  ): DepartmentResponseDto {
     // Step 1: Map the department fields to camelCase DTO properties
     return {
       id: dept.id,
@@ -642,7 +659,18 @@ export class AdminService {
   /**
    * Maps a Prisma CellGroup record to a response DTO.
    */
-  private mapCellGroupToResponseDto(group: any): CellGroupResponseDto {
+  private mapCellGroupToResponseDto(group: {
+    id: string;
+    church_id: string;
+    name: string;
+    leader_id: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    meeting_day: string | null;
+    meeting_time: string | null;
+    created_at: Date;
+    updated_at: Date;
+  }): CellGroupResponseDto {
     // Step 1: Map the cell group fields to camelCase DTO properties
     return {
       id: group.id,

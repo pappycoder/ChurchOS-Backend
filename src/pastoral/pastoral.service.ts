@@ -21,6 +21,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { Prisma } from '@prisma/client';
 import { CreatePastoralNoteDto } from './dto/create-pastoral-note.dto';
 import { UpdatePastoralNoteDto } from './dto/update-pastoral-note.dto';
 import { ListPastoralNotesDto } from './dto/list-pastoral-notes.dto';
@@ -139,13 +140,12 @@ export class PastoralService {
     data: PastoralNoteResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    // Step 1: Calculate pagination parameters from query defaults
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     // Step 2: Build the base where clause scoped to the church
-    const where: any = { church_id: churchId };
+    const where: Prisma.PastoralNoteWhereInput = { church_id: churchId };
 
     // Step 3: Apply optional member filter
     if (query.memberId) {
@@ -282,7 +282,7 @@ export class PastoralService {
     }
 
     // Step 4: Build the update payload with only provided fields
-    const updateData: any = {};
+    const updateData: Prisma.PastoralNoteUpdateInput = {};
 
     // Step 5: Encrypt new content if provided
     if (dto.content !== undefined) {
@@ -461,7 +461,10 @@ export class PastoralService {
    * @param userId - User's member ID
    * @returns Prisma filter object or null if no restriction needed
    */
-  private getConfidentialityFilter(userRole: string, userId: string): any {
+  private getConfidentialityFilter(
+    userRole: string,
+    userId: string,
+  ): Prisma.PastoralNoteWhereInput | null {
     // Step 1: Check if the user is an admin or pastor role
     const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
 
@@ -487,7 +490,11 @@ export class PastoralService {
    * @param userId - User's member ID
    * @throws ForbiddenException if access is denied
    */
-  private checkConfidentialityAccess(note: any, userRole: string, userId: string): void {
+  private checkConfidentialityAccess(
+    note: { confidentiality: string; author_id: string },
+    userRole: string,
+    userId: string,
+  ): void {
     // Step 1: Allow all staff to access standard notes
     if (note.confidentiality === 'standard') {
       return; // All staff can access
@@ -520,7 +527,21 @@ export class PastoralService {
    * @param decryptedContent - Decrypted content string
    * @returns Response DTO
    */
-  private mapToResponseDto(note: any, decryptedContent: string): PastoralNoteResponseDto {
+  private mapToResponseDto(
+    note: {
+      id: string;
+      church_id: string;
+      member_id: string;
+      author_id: string;
+      confidentiality: string;
+      tags: string[];
+      created_at: Date;
+      updated_at: Date;
+      member?: { first_name: string; last_name: string } | null;
+      author?: { first_name: string; last_name: string } | null;
+    },
+    decryptedContent: string,
+  ): PastoralNoteResponseDto {
     // Step 1: Transform the Prisma record snake_case fields to camelCase DTO format
     return {
       id: note.id,
@@ -561,7 +582,7 @@ export class PastoralService {
         member_id: dto.memberId,
         type: dto.type,
         date: new Date(dto.date),
-        details: dto.details || {},
+        details: (dto.details || {}) as Prisma.InputJsonValue,
       },
       include: {
         member: { select: { first_name: true, last_name: true } },
@@ -599,13 +620,12 @@ export class PastoralService {
     data: LifeEventResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    // Step 1: Calculate pagination parameters from query defaults
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     // Step 2: Build the base where clause scoped to the church
-    const where: any = { church_id: churchId };
+    const where: Prisma.LifeEventWhereInput = { church_id: churchId };
 
     // Step 3: Apply optional member filter
     if (query.memberId) {
@@ -761,7 +781,17 @@ export class PastoralService {
   /**
    * Maps a Prisma LifeEvent record to a response DTO.
    */
-  private mapLifeEventToResponseDto(event: any): LifeEventResponseDto {
+  private mapLifeEventToResponseDto(event: {
+    id: string;
+    church_id: string;
+    member_id: string;
+    type: string;
+    date: Date;
+    details: Prisma.JsonValue;
+    notified: boolean;
+    created_at: Date;
+    member?: { first_name: string; last_name: string } | null;
+  }): LifeEventResponseDto {
     // Step 1: Transform the Prisma record to camelCase response format
     return {
       id: event.id,
@@ -771,7 +801,7 @@ export class PastoralService {
       memberLastName: event.member?.last_name || '',
       type: event.type,
       date: event.date.toISOString(),
-      details: event.details || {},
+      details: (event.details || {}) as Record<string, unknown>,
       notified: event.notified,
       createdAt: event.created_at.toISOString(),
     };

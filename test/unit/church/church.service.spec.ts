@@ -10,7 +10,8 @@ import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 describe('ChurchService', () => {
   let service: ChurchService;
   let prisma: ReturnType<typeof createPrismaMock>;
-  let supabaseClient: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let supabaseClient: Record<string, any> & { auth: { admin: Record<string, jest.Mock> } };
   let auditLog: jest.Mock;
   let mediaDelete: jest.Mock;
 

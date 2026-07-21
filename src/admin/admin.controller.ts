@@ -29,7 +29,11 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  SupabaseUser,
+  AuthenticatedRequest,
+} from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
 import { ScoringService } from '../pastoral/scoring.service';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
@@ -64,7 +68,7 @@ export class AdminController {
   async createDepartment(
     @Body() dto: CreateDepartmentDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -78,7 +82,7 @@ export class AdminController {
   @Get('departments')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'List departments' })
-  async listDepartments(@Req() req: any): Promise<DepartmentResponseDto[]> {
+  async listDepartments(@Req() req: AuthenticatedRequest): Promise<DepartmentResponseDto[]> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate to AdminService to list all departments
@@ -94,7 +98,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Get a department by ID' })
   async getDepartmentById(
     @Param('departmentId') departmentId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -113,7 +117,7 @@ export class AdminController {
     @Param('departmentId') departmentId: string,
     @Body() dto: Partial<CreateDepartmentDto>,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -132,7 +136,7 @@ export class AdminController {
   async deleteDepartment(
     @Param('departmentId') departmentId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -152,7 +156,7 @@ export class AdminController {
     @Param('departmentId') departmentId: string,
     @Body() dto: AddDepartmentMemberDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -173,7 +177,7 @@ export class AdminController {
     @Param('departmentId') departmentId: string,
     @Param('memberId') memberId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -193,7 +197,7 @@ export class AdminController {
   async createCellGroup(
     @Body() dto: CreateCellGroupDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -207,7 +211,7 @@ export class AdminController {
   @Get('cell-groups')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'List cell groups' })
-  async listCellGroups(@Req() req: any): Promise<CellGroupResponseDto[]> {
+  async listCellGroups(@Req() req: AuthenticatedRequest): Promise<CellGroupResponseDto[]> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate to AdminService to list all cell groups
@@ -224,7 +228,7 @@ export class AdminController {
     @Query('latitude') latitude: number,
     @Query('longitude') longitude: number,
     @Query('limit') limit: number,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<NearestGroupResponseDto[]> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -241,7 +245,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Get a cell group by ID' })
   async getCellGroupById(
     @Param('groupId') groupId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -260,7 +264,7 @@ export class AdminController {
     @Param('groupId') groupId: string,
     @Body() dto: Partial<CreateCellGroupDto>,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -279,7 +283,7 @@ export class AdminController {
   async deleteCellGroup(
     @Param('groupId') groupId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -295,7 +299,10 @@ export class AdminController {
   @Get('dashboard/attention')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get members needing pastoral attention' })
-  async getMembersNeedingAttention(@Query('limit') limit: number, @Req() req: any) {
+  async getMembersNeedingAttention(
+    @Query('limit') limit: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate to ScoringService to get high-risk members, default limit 20
@@ -308,7 +315,7 @@ export class AdminController {
   @Get('dashboard/engagement')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get engagement score distribution' })
-  async getEngagementDistribution(@Req() req: any) {
+  async getEngagementDistribution(@Req() req: AuthenticatedRequest) {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate to ScoringService to get engagement distribution
@@ -321,7 +328,7 @@ export class AdminController {
   @Get('dashboard/rising-stars')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get rising star members' })
-  async getRisingStars(@Query('limit') limit: number, @Req() req: any) {
+  async getRisingStars(@Query('limit') limit: number, @Req() req: AuthenticatedRequest) {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate to ScoringService to get rising stars, default limit 10
@@ -335,7 +342,7 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin')
   @ApiOperation({ summary: 'Trigger manual score recalculation' })
-  async recalculateScores(@Req() req: any) {
+  async recalculateScores(@Req() req: AuthenticatedRequest) {
     // Step 1: Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Run engagement and risk score calculations in parallel

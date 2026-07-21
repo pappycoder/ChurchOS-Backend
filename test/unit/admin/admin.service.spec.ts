@@ -123,7 +123,7 @@ describe('AdminService', () => {
     it('should add a member to a department', async () => {
       prisma.department.findFirst.mockResolvedValue(mockDepartment);
       prisma.departmentMember.findUnique.mockResolvedValue(null);
-      prisma.departmentMember.create.mockResolvedValue({} as any);
+      prisma.departmentMember.create.mockResolvedValue({} as never);
 
       await service.addDepartmentMember(
         mockDepartmentId,
@@ -137,7 +137,11 @@ describe('AdminService', () => {
 
     it('should prevent duplicate membership', async () => {
       prisma.department.findFirst.mockResolvedValue(mockDepartment);
-      prisma.departmentMember.findUnique.mockResolvedValue({} as any);
+      (prisma.departmentMember.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dm-1',
+        member_id: 'm-1',
+        department_id: 'd-1',
+      });
 
       await expect(
         service.addDepartmentMember(

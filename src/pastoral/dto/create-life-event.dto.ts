@@ -46,5 +46,5 @@ export class CreateLifeEventDto {
   })
   @IsOptional()
   @IsObject()
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }

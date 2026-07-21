@@ -29,7 +29,11 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  SupabaseUser,
+  AuthenticatedRequest,
+} from '../common/decorators/current-user.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 import { PastoralService } from './pastoral.service';
 import { CreatePastoralNoteDto } from './dto/create-pastoral-note.dto';
@@ -65,7 +69,7 @@ export class PastoralController {
   async createNote(
     @Body() dto: CreatePastoralNoteDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -90,7 +94,7 @@ export class PastoralController {
   async listNotes(
     @Query() query: ListPastoralNotesDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Step 1: Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
@@ -114,7 +118,7 @@ export class PastoralController {
   async getNoteById(
     @Param('noteId') noteId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
     // Step 1: Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
@@ -140,7 +144,7 @@ export class PastoralController {
     @Param('noteId') noteId: string,
     @Body() dto: UpdatePastoralNoteDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
     // Step 1: Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
@@ -164,7 +168,7 @@ export class PastoralController {
   async deleteNote(
     @Param('noteId') noteId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
@@ -190,7 +194,7 @@ export class PastoralController {
   async createLifeEvent(
     @Body() dto: CreateLifeEventDto,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<LifeEventResponseDto> {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -209,7 +213,7 @@ export class PastoralController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
   @ApiPaginatedResponse(LifeEventResponseDto)
   @ApiOperation({ summary: 'List life events with filters' })
-  async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: any) {
+  async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: AuthenticatedRequest) {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate the listing to the pastoral service
@@ -226,7 +230,10 @@ export class PastoralController {
   @Get('life-events/upcoming')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
   @ApiOperation({ summary: 'Get upcoming life events' })
-  async getUpcomingLifeEvents(@Query('daysAhead') daysAhead: number, @Req() req: any) {
+  async getUpcomingLifeEvents(
+    @Query('daysAhead') daysAhead: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Step 2: Delegate the query to the pastoral service with default 30-day lookahead
@@ -246,7 +253,7 @@ export class PastoralController {
   @ApiOperation({ summary: 'Get a life event by ID' })
   async getLifeEventById(
     @Param('eventId') eventId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<LifeEventResponseDto> {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
@@ -269,7 +276,7 @@ export class PastoralController {
   async deleteLifeEvent(
     @Param('eventId') eventId: string,
     @CurrentUser() user: SupabaseUser,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     // Step 1: Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';

@@ -19,6 +19,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 /**
  * Weight configuration for engagement score factors.
@@ -92,14 +93,14 @@ export class ScoringService {
           where: { member_id: member.id },
           update: {
             score,
-            factors: factors as any,
+            factors: factors as unknown as Prisma.InputJsonValue,
             calculated_at: new Date(),
           },
           create: {
             church_id: churchId,
             member_id: member.id,
             score,
-            factors: factors as any,
+            factors: factors as unknown as Prisma.InputJsonValue,
           },
         });
 
@@ -158,7 +159,7 @@ export class ScoringService {
           update: {
             score,
             level,
-            factors: factors as any,
+            factors: factors as unknown as Prisma.InputJsonValue,
             calculated_at: new Date(),
           },
           create: {
@@ -166,7 +167,7 @@ export class ScoringService {
             member_id: member.id,
             score,
             level,
-            factors: factors as any,
+            factors: factors as unknown as Prisma.InputJsonValue,
           },
         });
 
@@ -190,7 +191,7 @@ export class ScoringService {
    * @param limit - Max results
    * @returns Members with risk scores
    */
-  async getMembersNeedingAttention(churchId: string, limit = 20): Promise<any[]> {
+  async getMembersNeedingAttention(churchId: string, limit = 20) {
     // Step 1: Query risk scores filtered to high/critical levels, ordered by highest score first
     return this.prisma.riskScore.findMany({
       where: {
@@ -258,7 +259,7 @@ export class ScoringService {
    * @param limit - Max results
    * @returns Top engaging members
    */
-  async getRisingStars(churchId: string, limit = 10): Promise<any[]> {
+  async getRisingStars(churchId: string, limit = 10) {
     // Step 1: Query high-scoring engagement records ordered by score descending
     return this.prisma.engagementScore.findMany({
       where: {

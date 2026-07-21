@@ -38,7 +38,7 @@ export class LifeEventResponseDto {
 
   // Step 7: Optional structured details
   @ApiPropertyOptional()
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 
   // Step 8: Whether a greeting notification was sent
   @ApiProperty()

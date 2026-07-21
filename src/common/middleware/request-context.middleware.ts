@@ -19,6 +19,7 @@ import { decodeJwt } from 'jose';
 import { RequestContextService } from '../services/request-context.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
@@ -68,7 +69,7 @@ export class RequestContextMiddleware implements NestMiddleware {
         app_metadata: {},
         user_metadata: {},
         role: undefined,
-      } as any;
+      } as SupabaseJwtPayload;
     }
 
     // Look up the user's profile to get church_id, branch_id, and role
