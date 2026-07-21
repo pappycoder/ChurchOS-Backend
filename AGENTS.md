@@ -23,7 +23,7 @@
 | WhatsApp | 360dialog Business API |
 | Email | Resend |
 | SMS | Termii |
-| Cache/Queue | Upstash Redis (BullMQ) |
+| Cache/Queue | Redis (ioredis + BullMQ) |
 | Image Processing | sharp (WebP optimization) |
 | File Upload | Supabase Storage + multer |
 | Monitoring | Sentry, Logtail |
@@ -65,30 +65,30 @@ src/
 │   ├── interceptors/       # LoggingInterceptor (registered globally)
 │   └── services/           # AuditLoggingService
 ├── supabase/               # Supabase client wrapper (global)
-│   ├── supabase.service.ts
-│   ├── supabase.module.ts
-│   └── index.ts
-├── auth/                   # Authentication & authorization (Supabase Auth)
-│   ├── auth.module.ts      # Auth module (JWKS + guard registration)
+├── auth/                   # Authentication & authorization (Supabase Auth, MFA)
 │   ├── guards/             # JwtAuthGuard (jose JWKS), RolesGuard
-│   ├── services/           # JwksService (Supabase JWKS endpoint)
-│   ├── strategies/         # SupabaseJwtPayload type definitions
+│   ├── services/           # JwksService
 │   └── decorators/         # @RequireRoles()
-├── members/                # Member CRUD, search, families
-├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual) [PLANNED]
-├── giving/                 # Giving categories, transactions, receipts (Paystack + Flutterwave + PDFKit)
-├── events/                 # Events, registrations, ticketing [PLANNED]
-├── whatsapp/               # WhatsApp webhooks, commands, broadcasts [PLANNED]
-├── media/                  # File uploads, image optimization (Supabase Storage + sharp), media library browsing
-├── profile/                # Profile CRUD, photo upload, role management, soft-delete
+├── config/                 # Environment config, validation schema (Zod)
+├── prisma/                 # Prisma ORM integration (global module + service)
+├── members/                # Member CRUD, search, bulk import, CSV/XLSX export, QR codes
+├── attendance/             # Service attendance, check-in (QR, WhatsApp, manual)
+├── giving/                 # Giving categories, multi-gateway payments, cash/bank, PDF receipts, webhooks
+├── events/                 # Event CRUD, free/paid registration, multi-tier ticketing, payment webhook, ticket validation
+├── sermons/                # Sermon archive CRUD, search, speaker/series/tag/date-range filtering
+├── whatsapp/               # WhatsApp 360dialog webhooks, command router, outbound messaging
+├── communication/          # Resend email service + Termii SMS service, Message table logging
+├── media/                  # File uploads, image optimization, media library browsing
+├── profile/                # Profile CRUD, photo upload, role management, MFA, soft-delete
 ├── church/                 # Church CRUD, config, staff invitation/management
 ├── branches/               # Branch CRUD, multi-tenant scoping
-├── events/                 # Events, registrations, ticketing
-├── sermons/                # Sermon archive, search, filtering
-├── whatsapp/               # WhatsApp webhooks, commands, broadcasts
+├── family/                 # Family CRUD, member associations, head-of-family tracking
+├── templates/              # Message template CRUD, channel/status/search filters
+├── queues/                 # BullMQ queue infrastructure, 5 named queues, processors
+│   ├── queues.module.ts    # BullModule config, Redis connection, graceful shutdown
+│   └── processors/         # WhatsApp, Email, SMS, RecurringGiving, NightlyJobs processors
 ├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
-├── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
-└── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
+└── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
 ```
 
 ### Conventions
@@ -151,6 +151,13 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 3: Queue Integration, Paid Ticketing, DevOps Hardening.
+  - **3E DevOps Hardening**: Fixed Redis URL (`host` → `url`, port 6379). Added `defaultJobOptions` (3 attempts, exponential backoff 5s, TTLs) to all 5 BullMQ queues. Enhanced health endpoint with per-queue metrics. Added graceful queue shutdown via `OnModuleDestroy`.
+  - **3A WhatsApp Queue Integration**: `WhatsAppOutboundProcessor` now calls `WhatsAppService.sendMessage()`. Added `@OnQueueCompleted`/`@OnQueueFailed` handlers.
+  - **3B Resend Email Service**: Created `src/communication/resend.service.ts` (Resend API wrapper, Message table logging). Created `CommunicationModule`. Wired `EmailOutboundProcessor`. Added `RESEND_FROM` env var.
+  - **3C Termii SMS Service**: Created `src/communication/termii.service.ts` (Termii API wrapper, Message table logging). Wired `SmsOutboundProcessor`. Added `TERMII_FROM` env var.
+  - **3D Paid Ticketing**: Prisma schema: `TicketStatus`/`RegistrationPaymentStatus` enums, `EventTicketTier` model, extended `EventRegistration`/`Ticket`, nullable `Transaction.category_id`. EventsService: free/paid registration branching, `confirmTicketPayment()`, `validateTicket()`, `createTicketTier()`. New endpoints: `POST /events/:eventId/tiers`, `POST /events/:eventId/tickets/validate`, `POST /events/:eventId/webhook/paystack`. Exported `PAYMENT_GATEWAY_REGISTRY` from GivingModule. 227 tests passing, build clean.
 
 - **2026-07-21** — Fixed Swagger `$ref` resolution errors for paginated response DTOs.
   - **Root cause:** `ApiPaginatedResponse` used `getSchemaPath(itemClass)` to generate `$ref` strings but never registered the DTO class as an OpenAPI schema via `ApiExtraModels`.

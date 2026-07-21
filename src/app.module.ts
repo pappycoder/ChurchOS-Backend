@@ -41,6 +41,7 @@ import { HealthModule } from './health/health.module';
 import { QueuesModule } from './queues/queues.module';
 import { FamilyModule } from './family/family.module';
 import { TemplatesModule } from './templates/templates.module';
+import { CommunicationModule } from './communication/communication.module';
 
 /**
  * Root application module.
@@ -139,6 +140,9 @@ import { TemplatesModule } from './templates/templates.module';
 
     // Step 20: Import TemplatesModule for message templates.
     TemplatesModule,
+
+    // Step 21: Import CommunicationModule for email (Resend) and SMS (Termii).
+    CommunicationModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

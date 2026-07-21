@@ -6,6 +6,10 @@
  * - Application is running
  * - Database (PostgreSQL) is reachable
  * - Redis is reachable
+ * - All BullMQ queues are operational with job count metrics
+ *
+ * Queue health includes per-queue breakdowns of active, waiting,
+ * completed, and failed job counts for operational visibility.
  *
  * @module health/health.controller
  * @since 1.0.0
@@ -19,6 +23,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 /**
+ * Per-queue health metrics including job count breakdown.
+ */
+interface QueueMetrics {
+  status: 'up' | 'down';
+  active: number;
+  waiting: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+}
+
+/**
  * Health check response structure.
  */
 interface HealthStatus {
@@ -29,7 +45,7 @@ interface HealthStatus {
     database: 'up' | 'down';
     redis: 'up' | 'down';
   };
-  queues: Record<string, 'up' | 'down'>;
+  queues: Record<string, QueueMetrics>;
 }
 
 @ApiTags('health')
@@ -55,7 +71,6 @@ export class HealthController {
       redis: 'down' as 'up' | 'down',
     };
 
-    // Check database
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       services.database = 'up';
@@ -63,7 +78,6 @@ export class HealthController {
       services.database = 'down';
     }
 
-    // Check Redis
     try {
       await this.redis.ping();
       services.redis = 'up';
@@ -71,7 +85,7 @@ export class HealthController {
       services.redis = 'down';
     }
 
-    const queues: Record<string, 'up' | 'down'> = {};
+    const queues: Record<string, QueueMetrics> = {};
     const queueEntries: [string, Queue][] = [
       ['whatsapp-outbound', this.whatsappQueue],
       ['email-outbound', this.emailQueue],
@@ -82,15 +96,35 @@ export class HealthController {
 
     for (const [name, queue] of queueEntries) {
       try {
-        await queue.getJobCounts();
-        queues[name] = 'up';
+        const counts = await queue.getJobCounts(
+          'active',
+          'waiting',
+          'completed',
+          'failed',
+          'delayed',
+        );
+        queues[name] = {
+          status: 'up',
+          active: counts.active ?? 0,
+          waiting: counts.waiting ?? 0,
+          completed: counts.completed ?? 0,
+          failed: counts.failed ?? 0,
+          delayed: counts.delayed ?? 0,
+        };
       } catch {
-        queues[name] = 'down';
+        queues[name] = {
+          status: 'down',
+          active: 0,
+          waiting: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        };
       }
     }
 
     const allServicesUp = services.database === 'up' && services.redis === 'up';
-    const allQueuesUp = Object.values(queues).every((v) => v === 'up');
+    const allQueuesUp = Object.values(queues).every((q) => q.status === 'up');
     const noneUp = services.database === 'down' && services.redis === 'down';
 
     return {

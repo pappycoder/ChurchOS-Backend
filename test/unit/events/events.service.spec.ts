@@ -19,6 +19,7 @@ describe('EventsService', () => {
   let service: EventsService;
   let prisma: ReturnType<typeof createPrismaMock>;
   let audit: { log: jest.Mock };
+  let gatewayRegistry: Map<string, unknown>;
 
   const mockChurchId = '11111111-1111-1111-1111-111111111111';
   const mockUserId = '22222222-2222-2222-2222-222222222222';
@@ -48,15 +49,25 @@ describe('EventsService', () => {
     event_id: mockEventId,
     member_id: mockMemberId,
     custom_data: {},
+    payment_status: 'pending',
+    payment_reference: null,
+    transaction_id: null,
+    ticket_id: null,
+    tier_id: null,
+    quantity: 1,
+    checked_in: false,
+    checked_in_at: null,
     created_at: new Date('2026-07-20T10:00:00.000Z'),
   };
 
   beforeEach(() => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    gatewayRegistry = new Map();
     service = new EventsService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
+      gatewayRegistry as never,
     );
   });
 
@@ -129,7 +140,11 @@ describe('EventsService', () => {
 
   describe('getEvent', () => {
     it('should return event by ID', async () => {
-      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 5 } });
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 5 },
+        ticket_tiers: [],
+      });
 
       const result = await service.getEvent(mockEventId, mockChurchId);
 
@@ -208,11 +223,26 @@ describe('EventsService', () => {
   });
 
   describe('registerForEvent', () => {
-    it('should register a member for an event', async () => {
-      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 0 } });
+    it('should register a member for a free event with ticket', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
       prisma.eventRegistration.findUnique.mockResolvedValue(null);
       prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
-      prisma.eventRegistration.create.mockResolvedValue(mockRegistration);
+      prisma.eventRegistration.create.mockResolvedValue({
+        ...mockRegistration,
+        payment_status: 'paid',
+      });
+      prisma.ticket.create.mockResolvedValue({
+        id: '77777777-7777-7777-7777-777777777777',
+        code: 'EVT-20260721-A1B2C3',
+        status: 'paid',
+        tier_name: 'General',
+        price_paid: 0,
+      });
+      prisma.eventRegistration.update.mockResolvedValue(mockRegistration);
 
       const result = await service.registerForEvent(
         mockEventId,
@@ -224,6 +254,7 @@ describe('EventsService', () => {
 
       expect(result.registrationId).toBe(mockRegistration.id);
       expect(result.memberId).toBe(mockMemberId);
+      expect(result.paymentStatus).toBe('paid');
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'event_registration', action: 'CREATE' }),
       );
@@ -238,7 +269,11 @@ describe('EventsService', () => {
     });
 
     it('should throw ConflictException if already registered', async () => {
-      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 0 } });
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
       prisma.eventRegistration.findUnique.mockResolvedValue(mockRegistration);
 
       await expect(
@@ -247,7 +282,11 @@ describe('EventsService', () => {
     });
 
     it('should throw BadRequestException if event at capacity', async () => {
-      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 200 } });
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 200 },
+        ticket_tiers: [],
+      });
       prisma.eventRegistration.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -256,7 +295,11 @@ describe('EventsService', () => {
     });
 
     it('should throw NotFoundException if member not found', async () => {
-      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 0 } });
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
       prisma.eventRegistration.findUnique.mockResolvedValue(null);
       prisma.member.findFirst.mockResolvedValue(null);
 
@@ -289,7 +332,10 @@ describe('EventsService', () => {
   describe('cancelRegistration', () => {
     it('should cancel a registration', async () => {
       prisma.event.findFirst.mockResolvedValue(mockEvent);
-      prisma.eventRegistration.findUnique.mockResolvedValue(mockRegistration);
+      prisma.eventRegistration.findUnique.mockResolvedValue({
+        ...mockRegistration,
+        ticket_id: null,
+      });
       prisma.eventRegistration.delete.mockResolvedValue(mockRegistration);
 
       await service.cancelRegistration(mockEventId, mockMemberId, mockChurchId, mockUserId);

@@ -751,7 +751,7 @@ export class MembersService {
       id: t.id,
       amount: t.amount,
       currency: t.currency,
-      categoryId: t.category_id,
+      categoryId: t.category_id ?? '',
       status: t.status,
       createdAt: t.created_at.toISOString(),
     }));

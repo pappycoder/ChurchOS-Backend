@@ -45,9 +45,11 @@ const envSchema = z.object({
 
   // ─── Email (Resend) ───────────────────────────────────────
   RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().default('noreply@churchos.app'),
 
   // ─── SMS (Termii) ─────────────────────────────────────────
   TERMII_API_KEY: z.string().optional(),
+  TERMII_FROM: z.string().default('ChurchOS'),
 
   // ─── AI (Optional) ────────────────────────────────────────
   OPENAI_API_KEY: z.string().optional(),

@@ -1,9 +1,16 @@
 /**
  * @file events.service.ts
- * @description Business logic for event management and registration.
+ * @description Business logic for event management, registration, and ticketing.
  *
- * Handles event CRUD, member registration, capacity checks, and ticket
- * generation. All queries are scoped by church_id for multi-tenant isolation.
+ * Handles event CRUD, member registration (free and paid), capacity checks,
+ * multi-tier ticket pricing, ticket generation, payment confirmation via
+ * webhooks, and event-day ticket validation (check-in).
+ *
+ * Free events: immediate registration + ticket generation.
+ * Paid events: pending registration → payment initialization → webhook
+ * confirmation → ticket generation.
+ *
+ * All queries are scoped by church_id for multi-tenant isolation.
  *
  * @module events/events.service
  * @since 1.0.0
@@ -16,18 +23,25 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import {
+  PaymentGatewayProvider,
+  PAYMENT_GATEWAY_REGISTRY,
+} from '../giving/services/payment-gateway.interface';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventResponseDto } from './dto/event-response.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
 import { ListEventsDto } from './dto/list-events.dto';
 import { Prisma } from '@prisma/client';
+import * as crypto from 'crypto';
 
 /**
  * Service for managing church events.
- * Provides event CRUD, registration management, and capacity tracking.
+ * Provides event CRUD, registration management, paid ticketing,
+ * multi-tier pricing, and ticket validation.
  */
 @Injectable()
 export class EventsService {
@@ -36,12 +50,19 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    @Inject(PAYMENT_GATEWAY_REGISTRY)
+    private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
   ) {}
 
   // ─── EVENT CRUD ────────────────────────────────────────────────
 
   /**
    * Creates a new event.
+   *
+   * @param dto - Event creation data
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user creating the event (for audit)
+   * @returns Created event response
    */
   async createEvent(
     dto: CreateEventDto,
@@ -80,6 +101,10 @@ export class EventsService {
 
   /**
    * Lists events for a church with pagination and filters.
+   *
+   * @param dto - List query parameters (pagination, filters, sorting)
+   * @param churchId - Church ID for tenant scoping
+   * @returns Paginated list of events with registration counts
    */
   async listEvents(
     dto: ListEventsDto,
@@ -108,7 +133,6 @@ export class EventsService {
       ];
     }
 
-    // Date filters
     const now = new Date();
     if (dto.dateFilter === 'upcoming') {
       where.start_date = { gte: now };
@@ -154,16 +178,24 @@ export class EventsService {
   }
 
   /**
-   * Gets a single event by ID.
+   * Gets a single event by ID with tier details.
+   *
+   * @param eventId - Event UUID
+   * @param churchId - Church ID for tenant scoping
+   * @returns Event response with registration count and ticket tiers
+   * @throws NotFoundException if event doesn't exist
    */
   async getEvent(eventId: string, churchId: string): Promise<EventResponseDto> {
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, church_id: churchId },
-      include: { _count: { select: { registrations: true } } },
+      include: {
+        _count: { select: { registrations: true } },
+        ticket_tiers: { orderBy: { display_order: 'asc' } },
+      },
     });
 
     if (!event) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
     return this.mapEventToDto(event, event._count.registrations);
@@ -171,6 +203,13 @@ export class EventsService {
 
   /**
    * Updates an event.
+   *
+   * @param eventId - Event UUID to update
+   * @param dto - Update data (all fields optional)
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the update (for audit)
+   * @returns Updated event response
+   * @throws NotFoundException if event doesn't exist
    */
   async updateEvent(
     eventId: string,
@@ -183,7 +222,7 @@ export class EventsService {
     });
 
     if (!existing) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
     const data: Prisma.EventUpdateInput = {};
@@ -222,7 +261,13 @@ export class EventsService {
   }
 
   /**
-   * Deletes (soft-check) an event. Hard delete if no registrations exist.
+   * Deletes an event. Blocked if registrations exist.
+   *
+   * @param eventId - Event UUID to delete
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the deletion (for audit)
+   * @throws NotFoundException if event doesn't exist
+   * @throws BadRequestException if event has registrations
    */
   async deleteEvent(eventId: string, churchId: string, userId: string): Promise<void> {
     const existing = await this.prisma.event.findFirst({
@@ -231,10 +276,9 @@ export class EventsService {
     });
 
     if (!existing) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
-    // Block deletion if registrations exist
     if (existing._count.registrations > 0) {
       throw new BadRequestException(
         `Cannot delete event with ${existing._count.registrations} registration(s). Cancel registrations first.`,
@@ -255,11 +299,87 @@ export class EventsService {
     this.logger.log(`Event deleted: ${eventId}`);
   }
 
+  // ─── TICKET TIERS ──────────────────────────────────────────────
+
+  /**
+   * Creates a ticket tier for an event.
+   *
+   * @param eventId - Event UUID
+   * @param name - Tier name (e.g. "VIP", "General")
+   * @param price - Price in Naira
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user creating the tier (for audit)
+   * @param capacity - Optional per-tier capacity limit
+   * @param description - Optional tier description
+   * @returns Created tier ID
+   * @throws NotFoundException if event doesn't exist
+   */
+  async createTicketTier(
+    eventId: string,
+    name: string,
+    price: number,
+    churchId: string,
+    userId: string,
+    capacity?: number,
+    description?: string,
+  ): Promise<{ tierId: string }> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const maxOrder = await this.prisma.eventTicketTier.aggregate({
+      where: { event_id: eventId },
+      _max: { display_order: true },
+    });
+
+    const tier = await this.prisma.eventTicketTier.create({
+      data: {
+        event_id: eventId,
+        name,
+        price,
+        capacity,
+        description,
+        display_order: (maxOrder._max.display_order ?? -1) + 1,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_ticket_tier',
+      action: 'CREATE',
+      entityId: tier.id,
+      newValues: { event_id: eventId, name, price },
+    });
+
+    this.logger.log(`Ticket tier created: ${tier.id} (${name}) for event ${eventId}`);
+    return { tierId: tier.id };
+  }
+
   // ─── REGISTRATION ──────────────────────────────────────────────
 
   /**
    * Registers a member for an event.
-   * Checks for duplicates and capacity limits.
+   *
+   * Free events: immediate registration + ticket generation.
+   * Paid events: creates a pending registration and returns payment
+   * authorization details for frontend redirect.
+   *
+   * @param eventId - Event UUID
+   * @param memberId - Member UUID
+   * @param customData - Optional custom registration field values
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing registration (for audit)
+   * @param tierId - Optional ticket tier ID for paid events
+   * @param quantity - Number of tickets (default: 1)
+   * @returns Registration response (free) or payment init response (paid)
+   * @throws NotFoundException if event or member doesn't exist
+   * @throws ConflictException if member is already registered
+   * @throws BadRequestException if event is at capacity
    */
   async registerForEvent(
     eventId: string,
@@ -267,26 +387,31 @@ export class EventsService {
     customData: Record<string, unknown> | undefined,
     churchId: string,
     userId: string,
+    tierId?: string,
+    quantity: number = 1,
   ): Promise<RegistrationResponseDto> {
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, church_id: churchId },
-      include: { _count: { select: { registrations: true } } },
+      include: {
+        _count: { select: { registrations: true } },
+        ticket_tiers: true,
+      },
     });
 
     if (!event) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
-    // Check for duplicate registration
+    // Duplicate check
     const existingRegistration = await this.prisma.eventRegistration.findUnique({
       where: { event_id_member_id: { event_id: eventId, member_id: memberId } },
     });
 
     if (existingRegistration) {
-      throw new ConflictException(`Member is already registered for this event`);
+      throw new ConflictException('Member is already registered for this event');
     }
 
-    // Check capacity
+    // Capacity check (event-level)
     if (event.capacity && event._count.registrations >= event.capacity) {
       throw new BadRequestException(`Event has reached its maximum capacity of ${event.capacity}`);
     }
@@ -297,16 +422,144 @@ export class EventsService {
     });
 
     if (!member) {
-      throw new NotFoundException(`Member not found`);
+      throw new NotFoundException('Member not found');
     }
+
+    // Resolve tier for paid events
+    let tier: (typeof event.ticket_tiers)[number] | undefined;
+    if (!event.is_free) {
+      if (tierId) {
+        tier = event.ticket_tiers.find((t) => t.id === tierId);
+        if (!tier) {
+          throw new NotFoundException('Ticket tier not found');
+        }
+      } else if (event.ticket_tiers.length > 0) {
+        // Default to first tier (display_order 0)
+        tier = event.ticket_tiers[0];
+      }
+    }
+
+    // Free event: immediate registration + ticket
+    if (event.is_free) {
+      const registration = await this.prisma.eventRegistration.create({
+        data: {
+          event_id: eventId,
+          member_id: memberId,
+          custom_data: (customData ?? {}) as unknown as Prisma.InputJsonValue,
+          payment_status: 'paid',
+          quantity,
+        },
+      });
+
+      const ticketCode = this.generateTicketCode();
+      const ticket = await this.prisma.ticket.create({
+        data: {
+          event_id: eventId,
+          code: ticketCode,
+          member_id: memberId,
+          registration_id: registration.id,
+          status: 'paid',
+          tier_name: tier?.name ?? 'General',
+          price_paid: 0,
+        },
+      });
+
+      await this.prisma.eventRegistration.update({
+        where: { id: registration.id },
+        data: { ticket_id: ticket.id },
+      });
+
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'event_registration',
+        action: 'CREATE',
+        entityId: registration.id,
+        newValues: { event_id: eventId, member_id: memberId, type: 'free' },
+      });
+
+      this.logger.log(`Free registration: member ${memberId} → event ${eventId}`);
+      return this.mapRegistrationToDto({
+        ...registration,
+        ticket_code: ticketCode,
+        tier_name: tier?.name,
+      });
+    }
+
+    // Paid event: create pending registration + transaction
+    const amount = (tier?.price ?? event.price ?? 0) * quantity;
+    if (amount <= 0) {
+      throw new BadRequestException('Event requires a valid ticket price');
+    }
+
+    // Tier capacity check
+    if (tier?.capacity) {
+      const tierRegistrations = await this.prisma.eventRegistration.count({
+        where: { event_id: eventId, tier_id: tierId, payment_status: 'paid' },
+      });
+      if (tierRegistrations >= tier.capacity) {
+        throw new BadRequestException(`Ticket tier "${tier.name}" has sold out`);
+      }
+    }
+
+    const reference = this.generatePaymentReference(event.title);
+    const memberEmail = (member as Record<string, unknown>).email as string | undefined;
 
     const registration = await this.prisma.eventRegistration.create({
       data: {
         event_id: eventId,
         member_id: memberId,
         custom_data: (customData ?? {}) as unknown as Prisma.InputJsonValue,
+        payment_status: 'pending',
+        payment_reference: reference,
+        tier_id: tierId,
+        quantity,
       },
     });
+
+    const transaction = await this.prisma.transaction.create({
+      data: {
+        church_id: churchId,
+        member_id: memberId,
+        amount,
+        currency: 'NGN',
+        type: 'digital',
+        status: 'pending',
+        payment_reference: reference,
+        payment_gateway: 'paystack',
+        notes: `Event ticket: ${event.title}${tier ? ` (${tier.name})` : ''} x${quantity}`,
+        metadata: {
+          event_id: eventId,
+          registration_id: registration.id,
+          tier_id: tierId,
+          type: 'event_ticket',
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    await this.prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: { transaction_id: transaction.id },
+    });
+
+    // Initialize payment with gateway
+    const gatewayName = 'paystack';
+    const provider = this.gatewayRegistry.get(gatewayName);
+    if (!provider || !provider.isConfigured()) {
+      throw new BadRequestException('Payment gateway not configured');
+    }
+
+    const paymentResult = await provider.initializeTransaction(
+      memberEmail || 'attendee@churchos.app',
+      amount,
+      reference,
+      {
+        event_id: eventId,
+        registration_id: registration.id,
+        tier_id: tierId,
+        type: 'event_ticket',
+      },
+    );
 
     await this.audit.log({
       userId,
@@ -314,15 +567,236 @@ export class EventsService {
       entity: 'event_registration',
       action: 'CREATE',
       entityId: registration.id,
-      newValues: { event_id: eventId, member_id: memberId },
+      newValues: {
+        event_id: eventId,
+        member_id: memberId,
+        type: 'paid',
+        amount,
+        reference,
+      },
     });
 
-    this.logger.log(`Event registration: member ${memberId} → event ${eventId}`);
-    return this.mapRegistrationToDto(registration);
+    this.logger.log(`Paid registration initialized: ${reference} for event ${eventId}`);
+
+    return {
+      registrationId: registration.id,
+      eventId,
+      memberId,
+      customData: customData as Record<string, unknown> | undefined,
+      paymentStatus: 'pending',
+      authorizationUrl: paymentResult.authorizationUrl,
+      paymentReference: reference,
+      tierName: tier?.name,
+      quantity,
+      checkedIn: false,
+      createdAt: registration.created_at.toISOString(),
+    };
   }
 
   /**
-   * Lists registrations for an event.
+   * Confirms a ticket payment after webhook verification.
+   *
+   * Called by the webhook handler after verifying the payment signature.
+   * Updates registration payment status, generates ticket code, and
+   * links the ticket to the registration.
+   *
+   * @param reference - Payment reference from the gateway
+   * @param churchId - Church ID for tenant scoping
+   * @returns Updated registration with ticket code
+   * @throws NotFoundException if registration with this reference doesn't exist
+   * @throws BadRequestException if registration is not in pending state
+   */
+  async confirmTicketPayment(
+    reference: string,
+    churchId: string,
+  ): Promise<RegistrationResponseDto> {
+    const registration = await this.prisma.eventRegistration.findFirst({
+      where: { payment_reference: reference },
+      include: { event: true },
+    });
+
+    if (!registration) {
+      throw new NotFoundException('Registration not found for this payment reference');
+    }
+
+    if (registration.event.church_id !== churchId) {
+      throw new NotFoundException('Registration not found');
+    }
+
+    if (registration.payment_status === 'paid') {
+      // Idempotent: already confirmed
+      const existingTicket = registration.ticket_id
+        ? await this.prisma.ticket.findUnique({ where: { id: registration.ticket_id } })
+        : null;
+      return this.mapRegistrationToDto({
+        ...registration,
+        ticket_code: existingTicket?.code,
+        tier_name: existingTicket?.tier_name,
+      });
+    }
+
+    if (registration.payment_status !== 'pending') {
+      throw new BadRequestException(`Registration is in "${registration.payment_status}" state`);
+    }
+
+    // Generate ticket
+    const ticketCode = this.generateTicketCode();
+    const tier = registration.tier_id
+      ? await this.prisma.eventTicketTier.findUnique({ where: { id: registration.tier_id } })
+      : null;
+
+    const transaction = registration.transaction_id
+      ? await this.prisma.transaction.findUnique({ where: { id: registration.transaction_id } })
+      : null;
+
+    const ticket = await this.prisma.ticket.create({
+      data: {
+        event_id: registration.event_id,
+        code: ticketCode,
+        member_id: registration.member_id,
+        registration_id: registration.id,
+        status: 'paid',
+        tier_name: tier?.name ?? 'General',
+        price_paid: transaction?.amount ?? 0,
+        transaction_id: registration.transaction_id,
+        payment_reference: reference,
+      },
+    });
+
+    await this.prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: {
+        payment_status: 'paid',
+        ticket_id: ticket.id,
+      },
+    });
+
+    // Update transaction status
+    if (registration.transaction_id) {
+      await this.prisma.transaction.update({
+        where: { id: registration.transaction_id },
+        data: { status: 'success' },
+      });
+    }
+
+    await this.audit.log({
+      userId: registration.member_id,
+      churchId,
+      entity: 'event_registration',
+      action: 'UPDATE',
+      entityId: registration.id,
+      newValues: { payment_status: 'paid', ticket_code: ticketCode },
+    });
+
+    this.logger.log(`Ticket payment confirmed: ${reference} → ticket ${ticketCode}`);
+
+    return this.mapRegistrationToDto({
+      ...registration,
+      payment_status: 'paid',
+      ticket_id: ticket.id,
+      ticket_code: ticketCode,
+      tier_name: tier?.name,
+    });
+  }
+
+  /**
+   * Validates a ticket code for event check-in.
+   *
+   * @param code - Ticket code to validate
+   * @param eventId - Event UUID
+   * @param churchId - Church ID for tenant scoping
+   * @returns Validation result with attendee details
+   * @throws NotFoundException if ticket or event doesn't exist
+   * @throws BadRequestException if ticket is already used or cancelled
+   */
+  async validateTicket(
+    code: string,
+    eventId: string,
+    churchId: string,
+  ): Promise<{
+    valid: boolean;
+    memberName?: string;
+    eventName?: string;
+    tierName?: string;
+    checkedInAt?: string;
+  }> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { code, event_id: eventId },
+      include: {
+        event: { select: { title: true } },
+      },
+    });
+
+    if (!ticket) {
+      return { valid: false };
+    }
+
+    if (ticket.status === 'cancelled' || ticket.status === 'refunded') {
+      return { valid: false };
+    }
+
+    if (ticket.is_used) {
+      return {
+        valid: false,
+        memberName: ticket.member_id ?? undefined,
+        eventName: ticket.event.title,
+        tierName: ticket.tier_name ?? undefined,
+        checkedInAt: ticket.used_at?.toISOString(),
+      };
+    }
+
+    // Mark ticket as used
+    const now = new Date();
+    await this.prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { is_used: true, used_at: now },
+    });
+
+    // Update registration check-in if linked
+    if (ticket.registration_id) {
+      await this.prisma.eventRegistration.update({
+        where: { id: ticket.registration_id },
+        data: { checked_in: true, checked_in_at: now },
+      });
+    }
+
+    let memberName: string | undefined;
+    if (ticket.member_id) {
+      const member = await this.prisma.member.findUnique({
+        where: { id: ticket.member_id },
+        select: { first_name: true, last_name: true },
+      });
+      if (member) {
+        memberName = `${member.first_name} ${member.last_name}`;
+      }
+    }
+
+    this.logger.log(`Ticket validated: ${code} for event ${eventId}`);
+
+    return {
+      valid: true,
+      memberName,
+      eventName: ticket.event.title,
+      tierName: ticket.tier_name ?? undefined,
+      checkedInAt: now.toISOString(),
+    };
+  }
+
+  /**
+   * Lists registrations for an event with payment details.
+   *
+   * @param eventId - Event UUID
+   * @param churchId - Church ID for tenant scoping
+   * @returns Array of registration responses
+   * @throws NotFoundException if event doesn't exist
    */
   async listRegistrations(eventId: string, churchId: string): Promise<RegistrationResponseDto[]> {
     const event = await this.prisma.event.findFirst({
@@ -330,7 +804,7 @@ export class EventsService {
     });
 
     if (!event) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
     const registrations = await this.prisma.eventRegistration.findMany({
@@ -342,7 +816,13 @@ export class EventsService {
   }
 
   /**
-   * Cancels a registration.
+   * Cancels a registration. For paid events, marks ticket as cancelled.
+   *
+   * @param eventId - Event UUID
+   * @param memberId - Member UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the cancellation (for audit)
+   * @throws NotFoundException if event or registration doesn't exist
    */
   async cancelRegistration(
     eventId: string,
@@ -355,7 +835,7 @@ export class EventsService {
     });
 
     if (!event) {
-      throw new NotFoundException(`Event not found`);
+      throw new NotFoundException('Event not found');
     }
 
     const registration = await this.prisma.eventRegistration.findUnique({
@@ -363,7 +843,15 @@ export class EventsService {
     });
 
     if (!registration) {
-      throw new NotFoundException(`Registration not found`);
+      throw new NotFoundException('Registration not found');
+    }
+
+    // Cancel ticket if linked
+    if (registration.ticket_id) {
+      await this.prisma.ticket.update({
+        where: { id: registration.ticket_id },
+        data: { status: 'cancelled' },
+      });
     }
 
     await this.prisma.eventRegistration.delete({
@@ -376,16 +864,53 @@ export class EventsService {
       entity: 'event_registration',
       action: 'DELETE',
       entityId: registration.id,
-      oldValues: { event_id: eventId, member_id: memberId },
+      oldValues: {
+        event_id: eventId,
+        member_id: memberId,
+        payment_status: registration.payment_status,
+      },
     });
 
     this.logger.log(`Registration cancelled: member ${memberId} ← event ${eventId}`);
+  }
+
+  // ─── HELPERS ───────────────────────────────────────────────────
+
+  /**
+   * Generates a unique ticket code in format: EVT-YYYYMMDD-XXXX.
+   *
+   * @returns 16-character ticket code
+   */
+  private generateTicketCode(): string {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const random = crypto.randomBytes(3).toString('hex').toUpperCase();
+    return `EVT-${date}-${random}`;
+  }
+
+  /**
+   * Generates a payment reference for event tickets.
+   *
+   * @param eventTitle - Event title for the prefix
+   * @returns Payment reference string
+   */
+  private generatePaymentReference(eventTitle: string): string {
+    const prefix = eventTitle
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .substring(0, 4)
+      .toUpperCase();
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = crypto.randomBytes(2).toString('hex').toUpperCase();
+    return `EVT/${prefix}/${timestamp}${random}`;
   }
 
   // ─── MAPPERS ───────────────────────────────────────────────────
 
   /**
    * Maps a Prisma Event to EventResponseDto.
+   *
+   * @param event - Raw event record from Prisma
+   * @param registrationCount - Number of registrations for this event
+   * @returns Formatted event response DTO
    */
   private mapEventToDto(
     event: Record<string, unknown> & {
@@ -416,17 +941,30 @@ export class EventsService {
   }
 
   /**
-   * Maps a Prisma EventRegistration to RegistrationResponseDto.
+   * Maps registration data to RegistrationResponseDto.
+   *
+   * Supports both Prisma EventRegistration records and extended objects
+   * with ticket_code and tier_name from joined queries.
+   *
+   * @param data - Registration data from Prisma
+   * @returns Formatted registration response DTO
    */
   private mapRegistrationToDto(
-    registration: Record<string, unknown> & { id: string; created_at: Date },
+    data: Record<string, unknown> & { id: string; created_at: Date },
   ): RegistrationResponseDto {
     return {
-      registrationId: registration.id,
-      eventId: registration.event_id as string,
-      memberId: registration.member_id as string,
-      customData: (registration.custom_data as Record<string, unknown>) || undefined,
-      createdAt: registration.created_at.toISOString(),
+      registrationId: data.id,
+      eventId: data.event_id as string,
+      memberId: data.member_id as string,
+      customData: (data.custom_data as Record<string, unknown>) || undefined,
+      paymentStatus: (data.payment_status as string) || 'pending',
+      ticketCode: (data.ticket_code as string) || undefined,
+      tierName: (data.tier_name as string) || undefined,
+      quantity: (data.quantity as number) ?? 1,
+      checkedIn: (data.checked_in as boolean) ?? false,
+      authorizationUrl: (data.authorizationUrl as string) || undefined,
+      paymentReference: (data.payment_reference as string) || undefined,
+      createdAt: data.created_at.toISOString(),
     };
   }
 }

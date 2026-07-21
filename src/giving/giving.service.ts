@@ -379,7 +379,10 @@ export class GivingService {
 
       if (verification.status === 'success') {
         const paymentMethod = provider.mapChannelToPaymentMethod(verification.channel);
-        const receiptNumber = await this.generateReceiptNumber(transaction.category.name, churchId);
+        const receiptNumber = await this.generateReceiptNumber(
+          transaction.category?.name ?? '',
+          churchId,
+        );
 
         const updated = await this.prisma.transaction.update({
           where: { id: transaction.id },
@@ -474,7 +477,7 @@ export class GivingService {
     // Generate receipt number on success
     if (status === 'success') {
       updateData.receipt_number = await this.generateReceiptNumber(
-        transaction.category.name,
+        transaction.category?.name ?? '',
         transaction.church_id,
       );
     }
@@ -679,7 +682,7 @@ export class GivingService {
       receiptNumber: transaction.receipt_number || 'PENDING',
       amount: transaction.amount,
       currency: transaction.currency,
-      categoryName: transaction.category.name,
+      categoryName: transaction.category?.name ?? '',
       paymentMethod: transaction.payment_method || 'unknown',
       createdAt: transaction.created_at,
       churchName: church?.name || 'Church',
@@ -764,7 +767,7 @@ export class GivingService {
     church_id: string;
     branch_id: string | null;
     member_id: string | null;
-    category_id: string;
+    category_id: string | null;
     amount: number;
     currency: string;
     type: string;
@@ -777,15 +780,15 @@ export class GivingService {
     notes: string | null;
     created_at: Date;
     updated_at: Date;
-    category: { name: string };
+    category: { name: string } | null;
   }): TransactionResponseDto {
     return {
       transactionId: transaction.id,
       churchId: transaction.church_id,
       branchId: transaction.branch_id || undefined,
       memberId: transaction.member_id || undefined,
-      categoryId: transaction.category_id,
-      categoryName: transaction.category.name,
+      categoryId: transaction.category_id ?? '',
+      categoryName: transaction.category?.name ?? '',
       amount: transaction.amount,
       currency: transaction.currency,
       type: transaction.type,

@@ -70,6 +70,20 @@ enum FormStatus {
   closed
 }
 
+enum TicketStatus {
+  reserved
+  paid
+  cancelled
+  refunded
+}
+
+enum RegistrationPaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
 // ─── Core Models ─────────────────────────────────────────
 
 model Church {
@@ -294,7 +308,7 @@ model Transaction {
   church_id         String
   branch_id         String?
   member_id         String?
-  category_id       String
+  category_id       String?
   amount            Float
   currency          String          @default("NGN")
   type              TransactionType @default(digital)
@@ -312,7 +326,7 @@ model Transaction {
   church  Church          @relation(fields: [church_id], references: [id])
   branch  Branch?         @relation(fields: [branch_id], references: [id])
   member  Member?         @relation(fields: [member_id], references: [id])
-  category GivingCategory @relation(fields: [category_id], references: [id])
+  category GivingCategory? @relation(fields: [category_id], references: [id])
 
   @@index([church_id, member_id, created_at])
   @@index([payment_reference])
@@ -363,17 +377,26 @@ model Event {
   branch            Branch?             @relation(fields: [branch_id], references: [id])
   registrations     EventRegistration[]
   tickets           Ticket[]
+  ticket_tiers      EventTicketTier[]
 
   @@index([church_id, start_date])
   @@map("events")
 }
 
 model EventRegistration {
-  id          String   @id @default(uuid())
-  event_id    String
-  member_id   String
-  custom_data Json     @default("{}")
-  created_at  DateTime @default(now())
+  id                String                   @id @default(uuid())
+  event_id          String
+  member_id         String
+  custom_data       Json                     @default("{}")
+  payment_status    RegistrationPaymentStatus @default(pending)
+  payment_reference String?
+  transaction_id    String?
+  ticket_id         String?
+  tier_id           String?
+  quantity          Int                      @default(1)
+  checked_in        Boolean                  @default(false)
+  checked_in_at     DateTime?
+  created_at        DateTime                 @default(now())
 
   event  Event  @relation(fields: [event_id], references: [id])
   member Member @relation(fields: [member_id], references: [id])
@@ -383,18 +406,40 @@ model EventRegistration {
 }
 
 model Ticket {
-  id          String   @id @default(uuid())
-  event_id    String
-  code        String   @unique
-  member_id   String?
-  is_used     Boolean  @default(false)
-  used_at     DateTime?
-  created_at  DateTime @default(now())
+  id                String       @id @default(uuid())
+  event_id          String
+  code              String       @unique
+  member_id         String?
+  registration_id   String?
+  tier_name         String?
+  price_paid        Float?
+  transaction_id    String?
+  payment_reference String?
+  status            TicketStatus @default(reserved)
+  is_used           Boolean      @default(false)
+  used_at           DateTime?
+  created_at        DateTime     @default(now())
 
   event Event @relation(fields: [event_id], references: [id])
 
   @@index([event_id])
   @@map("tickets")
+}
+
+model EventTicketTier {
+  id            String   @id @default(uuid())
+  event_id      String
+  name          String
+  price         Float
+  capacity      Int?
+  description   String?
+  display_order Int      @default(0)
+  created_at    DateTime @default(now())
+
+  event Event @relation(fields: [event_id], references: [id])
+
+  @@index([event_id])
+  @@map("event_ticket_tiers")
 }
 
 // ─── Communication ───────────────────────────────────────

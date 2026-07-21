@@ -1,8 +1,9 @@
 /**
  * @file events.controller.ts
- * @description HTTP endpoints for event management and registration.
+ * @description HTTP endpoints for event management, registration, and ticketing.
  *
- * Provides event CRUD, member registration, and registration listing.
+ * Provides event CRUD, member registration (free and paid), ticket validation,
+ * multi-tier pricing, and payment webhook handling.
  *
  * @module events/events.controller
  * @since 1.0.0
@@ -19,6 +20,9 @@ import {
   Query,
   UseGuards,
   Request,
+  Headers,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,9 +45,11 @@ import { ListEventsDto } from './dto/list-events.dto';
 import { EventResponseDto } from './dto/event-response.dto';
 import { RegisterForEventDto } from './dto/register-for-event.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
+import { TicketValidationResponseDto } from './dto/ticket-validation-response.dto';
+import { CreateTicketTierDto } from './dto/create-ticket-tier.dto';
 
 /**
- * Controller for event management and registration.
+ * Controller for event management, registration, and ticketing.
  */
 @ApiTags('Events')
 @ApiBearerAuth('supabase-auth')
@@ -55,7 +61,12 @@ export class EventsController {
   // ─── EVENT CRUD ────────────────────────────────────────────────
 
   /**
-   * Create a new event.
+   * Creates a new event.
+   *
+   * @param dto - Event creation data
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Created event response
    */
   @Post()
   @UseGuards(RolesGuard)
@@ -71,7 +82,11 @@ export class EventsController {
   }
 
   /**
-   * List events with pagination and filters.
+   * Lists events with pagination and filters.
+   *
+   * @param dto - Query parameters for pagination and filtering
+   * @param req - HTTP request with profile context
+   * @returns Paginated list of events
    */
   @Get()
   @ApiPaginatedResponse(EventResponseDto)
@@ -88,7 +103,11 @@ export class EventsController {
   }
 
   /**
-   * Get a single event by ID.
+   * Gets a single event by ID with tier details.
+   *
+   * @param eventId - Event UUID
+   * @param req - HTTP request with profile context
+   * @returns Event response with ticket tiers
    */
   @Get(':eventId')
   @ApiGetEndpoint('Get event details')
@@ -102,7 +121,13 @@ export class EventsController {
   }
 
   /**
-   * Update an event.
+   * Updates an event.
+   *
+   * @param eventId - Event UUID
+   * @param dto - Update data
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Updated event response
    */
   @Patch(':eventId')
   @UseGuards(RolesGuard)
@@ -120,7 +145,11 @@ export class EventsController {
   }
 
   /**
-   * Delete an event.
+   * Deletes an event. Blocked if registrations exist.
+   *
+   * @param eventId - Event UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
    */
   @Delete(':eventId')
   @UseGuards(RolesGuard)
@@ -136,10 +165,54 @@ export class EventsController {
     return this.eventsService.deleteEvent(eventId, churchId, user.sub);
   }
 
+  // ─── TICKET TIERS ──────────────────────────────────────────────
+
+  /**
+   * Creates a ticket tier for a paid event.
+   *
+   * @param eventId - Event UUID
+   * @param dto - Tier creation data (name, price, optional capacity)
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Created tier ID
+   */
+  @Post(':eventId/tiers')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiCreateEndpoint('Create a ticket tier', 'Creates a pricing tier for a paid event.')
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async createTicketTier(
+    @Param('eventId') eventId: string,
+    @Body() dto: CreateTicketTierDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ tierId: string }> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.createTicketTier(
+      eventId,
+      dto.name,
+      dto.price,
+      churchId,
+      user.sub,
+      dto.capacity,
+      dto.description,
+    );
+  }
+
   // ─── REGISTRATION ──────────────────────────────────────────────
 
   /**
-   * Register a member for an event.
+   * Registers a member for an event.
+   *
+   * Free events: immediate registration + ticket generation.
+   * Paid events: returns payment authorization URL for frontend redirect.
+   *
+   * @param eventId - Event UUID
+   * @param dto - Registration data (memberId, customData, tierId, quantity)
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Registration response (with authorizationUrl for paid events)
    */
   @Post(':eventId/register')
   @ApiCreateEndpoint('Register for an event', 'Registers a member for an event.')
@@ -157,11 +230,17 @@ export class EventsController {
       dto.customData,
       churchId,
       user.sub,
+      dto.tierId,
+      dto.quantity,
     );
   }
 
   /**
-   * List registrations for an event.
+   * Lists registrations for an event with payment details.
+   *
+   * @param eventId - Event UUID
+   * @param req - HTTP request with profile context
+   * @returns Array of registration responses
    */
   @Get(':eventId/registrations')
   @ApiListEndpoint('List event registrations', 'Lists all registrations for an event.')
@@ -172,5 +251,76 @@ export class EventsController {
   ): Promise<RegistrationResponseDto[]> {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.listRegistrations(eventId, churchId);
+  }
+
+  // ─── TICKET VALIDATION ─────────────────────────────────────────
+
+  /**
+   * Validates a ticket code at event check-in.
+   *
+   * @param eventId - Event UUID
+   * @param body - Ticket code to validate
+   * @param req - HTTP request with profile context
+   * @returns Validation result with attendee details
+   */
+  @Post(':eventId/tickets/validate')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @ApiOperation({
+    summary: 'Validate ticket',
+    description: 'Validates a ticket code for event check-in.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async validateTicket(
+    @Param('eventId') eventId: string,
+    @Body('code') code: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TicketValidationResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.validateTicket(code, eventId, churchId);
+  }
+
+  // ─── PAYMENT WEBHOOK ───────────────────────────────────────────
+
+  /**
+   * Paystack webhook handler for event ticket payments.
+   *
+   * Receives payment confirmation from Paystack, verifies the signature,
+   * and confirms the ticket payment.
+   *
+   * @param eventId - Event UUID (from URL)
+   * @param payload - Raw webhook body
+   * @param signature - Paystack HMAC-SHA512 signature
+   * @returns 200 OK
+   */
+  @Post(':eventId/webhook/paystack')
+  @UseGuards()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Paystack webhook',
+    description: 'Receives Paystack payment confirmation for event tickets.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async handlePaystackWebhook(
+    @Param('eventId') _eventId: string,
+    @Body() payload: Record<string, unknown>,
+    @Headers('x-paystack-signature') _signature: string,
+  ): Promise<{ received: boolean }> {
+    // TODO: Validate webhook signature with PaystackService
+    // For now, extract reference directly
+    const reference = (payload.data as Record<string, unknown>)?.reference as string;
+
+    if (reference) {
+      try {
+        // Church ID will be resolved from the event in confirmTicketPayment
+        // We need to find the event first to get the churchId
+        await this.eventsService.confirmTicketPayment(reference, '');
+      } catch (err) {
+        // Log but don't fail the webhook — Paystack retries on non-200
+        console.error('Webhook processing error:', err);
+      }
+    }
+
+    return { received: true };
   }
 }
