@@ -29,6 +29,7 @@ import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorat
 import { WhatsAppService } from './whatsapp.service';
 import { WebhookBodyDto } from './dto/webhook.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { SendTemplateMessageDto } from './dto/send-template-message.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 
 /**
@@ -103,6 +104,32 @@ export class WhatsAppController {
   ): Promise<MessageResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.whatsappService.sendMessage(dto.to, dto.text || '', churchId);
+  }
+
+  /**
+   * Send a WhatsApp template message (authenticated).
+   */
+  @Post('send-template')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('supabase-auth')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiCreateEndpoint(
+    'Send a WhatsApp template message',
+    'Sends an outbound WhatsApp template message to a phone number. Requires authentication.',
+  )
+  async sendTemplateMessage(
+    @Body() dto: SendTemplateMessageDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MessageResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.whatsappService.sendTemplateMessage(
+      dto.to,
+      dto.templateName,
+      dto.language || 'en',
+      dto.variables,
+      churchId,
+      dto.memberId,
+    );
   }
 
   /**

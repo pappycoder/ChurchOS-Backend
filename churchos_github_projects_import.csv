@@ -59,9 +59,9 @@ SortOrder,Repo,Phase,Module,Title,Description,Priority,Labels,Status,Iteration,S
 51,ChurchOS-Backend,Phase 2,Giving,Implement payment processor failover,Fallback to Flutterwave if Paystack fails.,High,"giving,payments,backend",Done,Phase 2,2026-10-01,2026-10-09
 52,ChurchOS-Backend,Phase 2,Giving,Implement recurring giving setup,Store authorization codes and schedule charges via Prisma.,High,"giving,prisma,backend",Done,Phase 2,2026-10-01,2026-10-09
 53,ChurchOS-Backend,Phase 2,Giving,Implement recurring giving cron job,Daily job charges active recurring giving plans via Prisma.,High,"giving,prisma,backend",Done,Phase 2,2026-10-01,2026-10-09
-54,ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast creation endpoint,POST /whatsapp/broadcast with filters and scheduling.,High,"whatsapp,backend",Todo,Phase 2,2026-10-13,2026-10-23
-55,ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast queue processor,Process broadcast jobs in batches with rate limiting.,High,"whatsapp,backend",Todo,Phase 2,2026-10-13,2026-10-23
-56,ChurchOS-Backend,Phase 2,WhatsApp,Implement template management endpoints,CRUD for WhatsApp templates via Prisma.,Medium,"whatsapp,prisma,backend",Todo,Phase 2,2026-10-13,2026-10-23
+54,ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast creation endpoint,POST /broadcasts with filters and scheduling.,High,"whatsapp,backend",Done,Phase 2,2026-10-13,2026-10-23
+55,ChurchOS-Backend,Phase 2,WhatsApp,Implement broadcast queue processor,Process broadcast jobs in batches with rate limiting.,High,"whatsapp,backend",Done,Phase 2,2026-10-13,2026-10-23
+56,ChurchOS-Backend,Phase 2,WhatsApp,Implement template management endpoints,CRUD for WhatsApp templates via Prisma.,Medium,"whatsapp,prisma,backend",Done,Phase 2,2026-10-13,2026-10-23
 57,ChurchOS-Backend,Phase 2,WhatsApp,Integrate Termii SMS fallback,Send SMS when WhatsApp delivery fails.,Medium,"whatsapp,sms,backend",Done,Phase 2,2026-10-13,2026-10-23
 58,ChurchOS-Backend,Phase 2,WhatsApp,Implement AI chatbot integration,Use OpenAI/Groq for FAQ and intent classification with RAG.,Medium,"whatsapp,ai,backend",Todo,Phase 2,2026-10-13,2026-10-23
 59,ChurchOS-Backend,Phase 2,Events,Implement paid event registration and ticketing,Generate QR tickets with HMAC and payment integration via Prisma.,High,"events,prisma,backend",Done,Phase 2,2026-10-13,2026-10-23

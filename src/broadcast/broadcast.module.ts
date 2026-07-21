@@ -1,0 +1,23 @@
+/**
+ * @file broadcast.module.ts
+ * @description Broadcast messaging module.
+ *
+ * Provides BroadcastService and BroadcastController for creating and managing
+ * broadcast campaigns across WhatsApp, SMS, and Email channels.
+ *
+ * @module broadcast/broadcast.module
+ * @since 1.0.0
+ */
+
+import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { BroadcastController } from './broadcast.controller';
+import { BroadcastService } from './broadcast.service';
+
+@Module({
+  imports: [AuthModule],
+  controllers: [BroadcastController],
+  providers: [BroadcastService],
+  exports: [BroadcastService],
+})
+export class BroadcastModule {}

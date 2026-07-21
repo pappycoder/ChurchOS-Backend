@@ -56,6 +56,9 @@ export class TemplatesService {
         content: dto.content,
         channel: dto.channel,
         language: dto.language || 'en',
+        category: dto.category,
+        variables: (dto.variables ?? []) as Prisma.InputJsonValue,
+        external_id: dto.externalId,
       },
     });
 
@@ -164,6 +167,10 @@ export class TemplatesService {
     if (dto.channel !== undefined) updateData.channel = dto.channel;
     if (dto.status !== undefined) updateData.status = dto.status;
     if (dto.language !== undefined) updateData.language = dto.language;
+    if (dto.category !== undefined) updateData.category = dto.category;
+    if (dto.variables !== undefined) updateData.variables = dto.variables as Prisma.InputJsonValue;
+    if (dto.externalId !== undefined) updateData.external_id = dto.externalId;
+    if (dto.externalStatus !== undefined) updateData.external_status = dto.externalStatus;
 
     if (Object.keys(updateData).length === 0) {
       return this.mapToResponseDto(existing);
@@ -233,6 +240,10 @@ export class TemplatesService {
     channel: string;
     language: string;
     status: string;
+    category: string | null;
+    variables: Prisma.JsonValue;
+    external_id: string | null;
+    external_status: string | null;
     created_at: Date;
     updated_at: Date;
   }): TemplateResponseDto {
@@ -244,6 +255,10 @@ export class TemplatesService {
       channel: template.channel,
       language: template.language,
       status: template.status,
+      category: template.category ?? undefined,
+      variables: Array.isArray(template.variables) ? (template.variables as string[]) : undefined,
+      externalId: template.external_id ?? undefined,
+      externalStatus: template.external_status ?? undefined,
       createdAt: template.created_at.toISOString(),
       updatedAt: template.updated_at.toISOString(),
     };

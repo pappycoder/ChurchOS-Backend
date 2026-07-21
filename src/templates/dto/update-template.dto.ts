@@ -9,7 +9,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsArray } from 'class-validator';
 
 export class UpdateTemplateDto {
   @ApiPropertyOptional()
@@ -38,4 +38,39 @@ export class UpdateTemplateDto {
   @IsOptional()
   @IsString()
   language?: string;
+
+  @ApiPropertyOptional({
+    description: 'WhatsApp template category (WhatsApp only)',
+    enum: ['MARKETING', 'UTILITY', 'AUTHENTICATION'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MARKETING', 'UTILITY', 'AUTHENTICATION'])
+  category?: string;
+
+  @ApiPropertyOptional({
+    description: 'Variable names used in the template content',
+    example: ['name', 'church'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  variables?: string[];
+
+  @ApiPropertyOptional({
+    description: 'External template ID/name from WhatsApp',
+    example: 'churchos:welcome_message',
+  })
+  @IsOptional()
+  @IsString()
+  externalId?: string;
+
+  @ApiPropertyOptional({
+    description: 'External approval status from WhatsApp',
+    enum: ['APPROVED', 'PENDING', 'REJECTED'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['APPROVED', 'PENDING', 'REJECTED'])
+  externalStatus?: string;
 }

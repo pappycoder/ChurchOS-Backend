@@ -41,6 +41,7 @@ import { HealthModule } from './health/health.module';
 import { QueuesModule } from './queues/queues.module';
 import { FamilyModule } from './family/family.module';
 import { TemplatesModule } from './templates/templates.module';
+import { BroadcastModule } from './broadcast/broadcast.module';
 import { CommunicationModule } from './communication/communication.module';
 import { PastoralModule } from './pastoral/pastoral.module';
 import { AdminModule } from './admin/admin.module';
@@ -142,6 +143,9 @@ import { AdminModule } from './admin/admin.module';
 
     // Import TemplatesModule for message templates.
     TemplatesModule,
+
+    // Import BroadcastModule for broadcast messaging campaigns.
+    BroadcastModule,
 
     // Import CommunicationModule for email (Resend) and SMS (Termii).
     CommunicationModule,

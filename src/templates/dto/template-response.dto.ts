@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TemplateResponseDto {
   @ApiProperty()
@@ -29,6 +29,18 @@ export class TemplateResponseDto {
 
   @ApiProperty()
   status!: string;
+
+  @ApiPropertyOptional()
+  category?: string;
+
+  @ApiPropertyOptional({ example: ['name', 'church'] })
+  variables?: string[];
+
+  @ApiPropertyOptional()
+  externalId?: string;
+
+  @ApiPropertyOptional()
+  externalStatus?: string;
 
   @ApiProperty()
   createdAt!: string;

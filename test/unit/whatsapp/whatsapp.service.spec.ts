@@ -401,4 +401,52 @@ describe('WhatsAppService', () => {
       );
     });
   });
+
+  describe('sendTemplateMessage', () => {
+    it('should send a WhatsApp template message', async () => {
+      prisma.message.create.mockResolvedValue(mockMessage);
+
+      const result = await service.sendTemplateMessage(
+        mockPhone,
+        'welcome_message',
+        'en',
+        { name: 'Ade', church: 'Grace Community Church' },
+        mockChurchId,
+        mockMemberId,
+      );
+
+      expect(result.messageId).toBe(mockMessage.id);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/messages'),
+        expect.objectContaining({
+          body: expect.stringContaining('"type":"template"'),
+        }),
+      );
+    });
+
+    it('should throw if WhatsApp API is not configured', async () => {
+      config.get.mockImplementation((key: string, defaultVal?: string) => {
+        if (key === 'WHATSAPP_API_KEY') return undefined;
+        if (key === 'WHATSAPP_API_URL') return 'https://mock.api.url';
+        if (key === 'WHATSAPP_PHONE_NUMBER_ID') return '123456789';
+        return defaultVal;
+      });
+
+      await expect(
+        service.sendTemplateMessage(mockPhone, 'welcome_message', 'en', {}, mockChurchId),
+      ).rejects.toThrow('WhatsApp API not configured');
+    });
+  });
+
+  describe('interpolateTemplate', () => {
+    it('should replace {{variable}} placeholders', () => {
+      const result = service.interpolateTemplate('Hello {{name}}!', { name: 'Ade' });
+      expect(result).toBe('Hello Ade!');
+    });
+
+    it('should replace {variable} placeholders', () => {
+      const result = service.interpolateTemplate('Hello {name}!', { name: 'Ade' });
+      expect(result).toBe('Hello Ade!');
+    });
+  });
 });

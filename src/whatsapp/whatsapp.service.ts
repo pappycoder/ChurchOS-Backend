@@ -169,6 +169,140 @@ export class WhatsAppService {
   }
 
   /**
+   * Sends a WhatsApp template message via 360dialog Cloud API.
+   *
+   * Template messages are required for any outbound message outside the
+   * 24-hour customer service window. The template must be pre-approved
+   * by Meta and registered with 360dialog.
+   *
+   * @param to - Recipient phone number
+   * @param templateName - WhatsApp template name
+   * @param language - Template language code (default: en)
+   * @param variables - Variable values to interpolate into the template
+   * @param churchId - Church ID for tenant scoping
+   * @param memberId - Optional member ID for message logging
+   * @returns Created message response
+   */
+  async sendTemplateMessage(
+    to: string,
+    templateName: string,
+    language: string,
+    variables: Record<string, string> | undefined,
+    churchId: string,
+    memberId?: string,
+  ): Promise<MessageResponseDto> {
+    const apiKey = this.config.get<string>('WHATSAPP_API_KEY');
+    const apiUrl = this.config.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com/v18.0');
+
+    if (!apiKey) {
+      throw new InternalServerErrorException('WhatsApp API not configured');
+    }
+
+    const phoneNumberId = this.config.get<string>('WHATSAPP_PHONE_NUMBER_ID');
+
+    const bodyComponents = this.buildTemplateComponents(variables);
+
+    try {
+      const response = await fetch(`${apiUrl}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: to.replace('+', ''),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: language || 'en' },
+            components: bodyComponents,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        this.logger.error(`360dialog template send failed: ${response.status} ${error}`);
+        throw new InternalServerErrorException('Failed to send WhatsApp template message');
+      }
+
+      const result = (await response.json()) as {
+        messages?: { id: string }[];
+      };
+      const waMessageId = result.messages?.[0]?.id;
+
+      const message = await this.prisma.message.create({
+        data: {
+          church_id: churchId,
+          member_id: memberId ?? null,
+          phone: to,
+          direction: MessageDirection.outbound,
+          channel: 'whatsapp',
+          content: `Template: ${templateName}`,
+          status: 'sent',
+          metadata: {
+            wa_message_id: waMessageId,
+            template_name: templateName,
+            variables,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      this.logger.log(`WhatsApp template sent: ${to} (${templateName})`);
+
+      return this.mapMessageToDto(message);
+    } catch (err) {
+      if (err instanceof InternalServerErrorException) throw err;
+      this.logger.error(`WhatsApp template send error: ${(err as Error).message}`);
+      throw new InternalServerErrorException('Failed to send WhatsApp template message');
+    }
+  }
+
+  /**
+   * Builds WhatsApp Cloud API template body components from variable values.
+   *
+   * Maps simple key-value variables into the body component format expected
+   * by the WhatsApp Cloud API.
+   */
+  private buildTemplateComponents(variables?: Record<string, string>): Record<string, unknown>[] {
+    if (!variables || Object.keys(variables).length === 0) {
+      return [];
+    }
+
+    const parameters = Object.entries(variables).map(([key, value]) => ({
+      type: 'text',
+      text: value,
+      parameter_name: key,
+    }));
+
+    return [
+      {
+        type: 'body',
+        parameters,
+      },
+    ];
+  }
+
+  /**
+   * Interpolates variables into a template content string.
+   *
+   * Supports {{variable}} and {variable} placeholder syntax.
+   *
+   * @param content - Template content with placeholders
+   * @param variables - Variable values to substitute
+   * @returns Interpolated content string
+   */
+  interpolateTemplate(content: string, variables?: Record<string, string>): string {
+    if (!variables) return content;
+
+    return content.replace(/\{\{(\w+)\}\}|\{(\w+)\}/g, (_match, double, single) => {
+      const key = double || single;
+      return variables[key] ?? '';
+    });
+  }
+
+  /**
    * Lists messages with pagination and filters.
    */
   async listMessages(

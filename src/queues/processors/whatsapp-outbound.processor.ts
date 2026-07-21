@@ -67,6 +67,43 @@ export class WhatsAppOutboundProcessor {
   }
 
   /**
+   * Processes a single outbound WhatsApp template message job.
+   *
+   * Delegates to WhatsAppService.sendTemplateMessage(). On success, stores
+   * the created message ID in the job data for fallback linking.
+   */
+  @Process('send-template')
+  async handleSendTemplate(
+    job: Job<{
+      to: string;
+      templateName: string;
+      language: string;
+      variables?: Record<string, string>;
+      churchId: string;
+      memberId?: string;
+      messageId?: string;
+    }>,
+  ): Promise<void> {
+    const { to, templateName, language, variables, churchId, memberId } = job.data;
+    this.logger.log(`Processing WhatsApp template message to ${to} (job ${job.id})`);
+
+    const result = await this.whatsappService.sendTemplateMessage(
+      to,
+      templateName,
+      language,
+      variables,
+      churchId,
+      memberId,
+    );
+
+    if (result.messageId) {
+      await job.updateData({ ...job.data, messageId: result.messageId });
+    }
+
+    this.logger.log(`WhatsApp template message sent to ${to} (job ${job.id})`);
+  }
+
+  /**
    * Handles job completion for observability logging.
    *
    * @param job - The completed BullMQ job

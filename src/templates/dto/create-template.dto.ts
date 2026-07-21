@@ -7,14 +7,14 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsArray } from 'class-validator';
 
 export class CreateTemplateDto {
   @ApiProperty({ example: 'Welcome Message' })
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 'Hello {name}, welcome to {church}!' })
+  @ApiProperty({ example: 'Hello {{name}}, welcome to {{church}}!' })
   @IsString()
   content!: string;
 
@@ -27,4 +27,31 @@ export class CreateTemplateDto {
   @IsOptional()
   @IsString()
   language?: string;
+
+  @ApiPropertyOptional({
+    description: 'WhatsApp template category (WhatsApp only)',
+    enum: ['MARKETING', 'UTILITY', 'AUTHENTICATION'],
+    example: 'MARKETING',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MARKETING', 'UTILITY', 'AUTHENTICATION'])
+  category?: string;
+
+  @ApiPropertyOptional({
+    description: 'Variable names used in the template content',
+    example: ['name', 'church'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  variables?: string[];
+
+  @ApiPropertyOptional({
+    description: 'External template ID/name from WhatsApp (e.g. namespace:template_name)',
+    example: 'churchos:welcome_message',
+  })
+  @IsOptional()
+  @IsString()
+  externalId?: string;
 }

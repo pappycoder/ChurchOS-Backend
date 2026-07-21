@@ -83,8 +83,9 @@ src/
 ├── church/                 # Church CRUD, config, staff invitation/management
 ├── branches/               # Branch CRUD, multi-tenant scoping
 ├── family/                 # Family CRUD, member associations, head-of-family tracking
-├── templates/              # Message template CRUD, channel/status/search filters
-├── queues/                 # BullMQ queue infrastructure, 5 named queues, processors
+├── templates/              # Message template CRUD, channel/status/search filters (WhatsApp/SMS/Email)
+├── broadcast/              # Broadcast campaigns with audience filtering and queue dispatch
+├── queues/                 # BullMQ queue infrastructure, 6 named queues, processors
 │   ├── queues.module.ts    # BullModule config, Redis connection, graceful shutdown
 │   └── processors/         # WhatsApp, Email, SMS, RecurringGiving, NightlyJobs processors
 ├── pastoral/               # Pastoral notes (AES-256-GCM), life events, engagement & risk scoring
@@ -158,6 +159,11 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 6: WhatsApp Templates + Broadcasts.
+  - **6A WhatsApp Templates**: Extended `Template` model with WhatsApp-specific fields (`category`, `variables`, `external_id`, `external_status`). Updated `TemplatesService` and DTOs to support these fields. Added `WhatsAppService.sendTemplateMessage()` using 360dialog Cloud API template message format with variable interpolation. Added `POST /whatsapp/send-template` endpoint. Template must be `published` and channel-matched before use in broadcasts.
+  - **6B Broadcasts**: Created `Broadcast` and `BroadcastRecipient` models with Prisma migration. Created `src/broadcast/` module with `BroadcastService`, `BroadcastController`, and DTOs. Added 4 endpoints: `POST /broadcasts`, `GET /broadcasts`, `GET /broadcasts/:broadcastId`, `PATCH /broadcasts/:broadcastId/cancel`. Implemented audience filtering by status, branch, gender, and search. Broadcasts enqueue messages to channel-specific outbound queues (`whatsapp-outbound`, `sms-outbound`, `email-outbound`). Created `BroadcastProcessor` and registered `broadcast` queue in `QueuesModule`. Wired `BroadcastModule` into `AppModule`.
+  - Added 20 new tests: `test/unit/templates/templates.service.spec.ts` (4), `test/unit/broadcast/broadcast.service.spec.ts` (10), WhatsApp template/interpolation tests in `test/unit/whatsapp/whatsapp.service.spec.ts` (6). Total: **310 tests passing across 20 suites**. Build clean, lint clean (0 errors, 0 warnings).
 
 - **2026-07-21** — Completed Wave 5: Recurring Giving + SMS Fallback.
   - **5A Recurring Giving (Automated Charges)**:

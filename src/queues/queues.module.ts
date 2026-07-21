@@ -27,11 +27,13 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CommunicationModule } from '../communication/communication.module';
 import { PastoralModule } from '../pastoral/pastoral.module';
 import { GivingModule } from '../giving/giving.module';
+import { BroadcastModule } from '../broadcast/broadcast.module';
 import { WhatsAppOutboundProcessor } from './processors/whatsapp-outbound.processor';
 import { EmailOutboundProcessor } from './processors/email-outbound.processor';
 import { SmsOutboundProcessor } from './processors/sms-outbound.processor';
 import { RecurringGivingProcessor } from './processors/recurring-giving.processor';
 import { NightlyJobsProcessor } from './processors/nightly-jobs.processor';
+import { BroadcastProcessor } from './processors/broadcast.processor';
 
 const DEFAULT_JOB_OPTIONS = {
   attempts: 3,
@@ -57,11 +59,13 @@ const DEFAULT_JOB_OPTIONS = {
       { name: 'sms-outbound', defaultJobOptions: DEFAULT_JOB_OPTIONS },
       { name: 'recurring-giving', defaultJobOptions: DEFAULT_JOB_OPTIONS },
       { name: 'nightly-jobs', defaultJobOptions: DEFAULT_JOB_OPTIONS },
+      { name: 'broadcast', defaultJobOptions: DEFAULT_JOB_OPTIONS },
     ),
     WhatsAppModule,
     CommunicationModule,
     PastoralModule,
     GivingModule,
+    BroadcastModule,
   ],
   providers: [
     WhatsAppOutboundProcessor,
@@ -69,6 +73,7 @@ const DEFAULT_JOB_OPTIONS = {
     SmsOutboundProcessor,
     RecurringGivingProcessor,
     NightlyJobsProcessor,
+    BroadcastProcessor,
   ],
   exports: [BullModule],
 })
@@ -81,6 +86,7 @@ export class QueuesModule implements OnModuleDestroy {
     @InjectQueue('sms-outbound') private readonly smsQueue: Queue,
     @InjectQueue('recurring-giving') private readonly recurringQueue: Queue,
     @InjectQueue('nightly-jobs') private readonly nightlyQueue: Queue,
+    @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
   ) {}
 
   async onModuleDestroy(): Promise<void> {
@@ -91,6 +97,7 @@ export class QueuesModule implements OnModuleDestroy {
       this.smsQueue.close(),
       this.recurringQueue.close(),
       this.nightlyQueue.close(),
+      this.broadcastQueue.close(),
     ]);
     this.logger.log('All BullMQ queue connections closed');
   }

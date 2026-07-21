@@ -118,6 +118,7 @@ model Church {
   church_configs    ChurchConfig[]
   sermons           Sermon[]
   media_assets      MediaAsset[]
+  broadcasts        Broadcast[]
 
   @@map("churches")
 }
@@ -467,18 +468,66 @@ model Message {
 }
 
 model Template {
-  id          String   @id @default(uuid())
-  church_id   String
-  name        String
-  content     String
-  channel     String   // whatsapp, sms, email
-  language    String   @default("en")
-  status      String   @default("draft") // draft, published, archived
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id              String   @id @default(uuid())
+  church_id       String
+  name            String
+  content         String
+  channel         String   // whatsapp, sms, email
+  language        String   @default("en")
+  status          String   @default("draft") // draft, published, archived
+  // WhatsApp-specific template fields
+  category        String?  // MARKETING, UTILITY, AUTHENTICATION (WhatsApp only)
+  variables       Json     @default("[]") // array of variable names for interpolation
+  external_id     String?  // WhatsApp template namespace/name
+  external_status String?  // APPROVED, PENDING, REJECTED
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  broadcasts Broadcast[]
 
   @@index([church_id])
+  @@index([church_id, channel, status])
   @@map("templates")
+}
+
+model Broadcast {
+  id               String   @id @default(uuid())
+  church_id        String
+  name             String
+  template_id      String
+  channel          String   // whatsapp, sms, email
+  audience_filter  Json     @default("{}")
+  status           String   @default("draft") // draft, scheduled, sending, sent, cancelled, failed
+  scheduled_at     DateTime?
+  sent_at          DateTime?
+  total_recipients Int      @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  church      Church              @relation(fields: [church_id], references: [id])
+  template    Template            @relation(fields: [template_id], references: [id])
+  recipients  BroadcastRecipient[]
+
+  @@index([church_id, status])
+  @@index([church_id, scheduled_at])
+  @@map("broadcasts")
+}
+
+model BroadcastRecipient {
+  id           String   @id @default(uuid())
+  broadcast_id String
+  member_id    String?
+  phone        String
+  status       String   @default("pending") // pending, sent, failed
+  sent_at      DateTime?
+  error        String?
+  created_at   DateTime @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcast_id], references: [id], onDelete: Cascade)
+
+  @@index([broadcast_id])
+  @@index([broadcast_id, status])
+  @@map("broadcast_recipients")
 }
 
 // ─── Media / Sermons ─────────────────────────────────────
