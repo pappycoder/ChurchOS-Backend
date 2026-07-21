@@ -10,3 +10,5 @@ export * from './media.service';
 export * from './media.controller';
 export * from './dto/upload-media.dto';
 export * from './dto/media-response.dto';
+export * from './dto/list-library.dto';
+export * from './dto/media-asset-response.dto';

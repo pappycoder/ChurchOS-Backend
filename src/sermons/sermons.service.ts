@@ -1,0 +1,283 @@
+/**
+ * @file sermons.service.ts
+ * @description Business logic for sermon management.
+ *
+ * Handles sermon CRUD with full-text search, filtering, and pagination.
+ * All queries are scoped by church_id for multi-tenant isolation.
+ *
+ * @module sermons/sermons.service
+ * @since 1.0.0
+ */
+
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { CreateSermonDto } from './dto/create-sermon.dto';
+import { UpdateSermonDto } from './dto/update-sermon.dto';
+import { SermonResponseDto } from './dto/sermon-response.dto';
+import { ListSermonsDto } from './dto/list-sermons.dto';
+import { Prisma } from '@prisma/client';
+
+/**
+ * Service for managing sermon records.
+ * Provides sermon CRUD with search, filtering, and pagination.
+ */
+@Injectable()
+export class SermonsService {
+  private readonly logger = new Logger(SermonsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLoggingService,
+  ) {}
+
+  /**
+   * Creates a new sermon record.
+   */
+  async createSermon(
+    dto: CreateSermonDto,
+    churchId: string,
+    userId: string,
+  ): Promise<SermonResponseDto> {
+    const sermon = await this.prisma.sermon.create({
+      data: {
+        church_id: churchId,
+        title: dto.title,
+        speaker: dto.speaker,
+        sermon_date: new Date(dto.sermonDate),
+        scripture_reference: dto.scriptureReference,
+        series_name: dto.seriesName,
+        tags: dto.tags ?? [],
+        description: dto.description,
+        duration_seconds: dto.durationSeconds,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'sermon',
+      action: 'CREATE',
+      entityId: sermon.id,
+      newValues: { title: dto.title },
+    });
+
+    this.logger.log(`Sermon created: ${sermon.id} (${dto.title})`);
+    return this.mapSermonToDto(sermon);
+  }
+
+  /**
+   * Lists sermons with pagination and filters.
+   */
+  async listSermons(
+    dto: ListSermonsDto,
+    churchId: string,
+  ): Promise<{ data: SermonResponseDto[]; total: number }> {
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.SermonWhereInput = {
+      church_id: churchId,
+    };
+
+    if (dto.speaker) {
+      where.speaker = { contains: dto.speaker, mode: 'insensitive' };
+    }
+
+    if (dto.series) {
+      where.series_name = { contains: dto.series, mode: 'insensitive' };
+    }
+
+    if (dto.tag) {
+      where.tags = { has: dto.tag };
+    }
+
+    if (dto.search) {
+      where.OR = [
+        { title: { contains: dto.search, mode: 'insensitive' } },
+        { speaker: { contains: dto.search, mode: 'insensitive' } },
+        { scripture_reference: { contains: dto.search, mode: 'insensitive' } },
+        { series_name: { contains: dto.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (dto.startDate) {
+      where.sermon_date = {
+        ...(where.sermon_date as Prisma.DateTimeFilter),
+        gte: new Date(dto.startDate),
+      };
+    }
+    if (dto.endDate) {
+      where.sermon_date = {
+        ...(where.sermon_date as Prisma.DateTimeFilter),
+        lte: new Date(dto.endDate),
+      };
+    }
+
+    const orderBy: Prisma.SermonOrderByWithRelationInput =
+      dto.sortBy === 'title'
+        ? { title: dto.sortOrder ?? 'asc' }
+        : dto.sortBy === 'created_at'
+          ? { created_at: dto.sortOrder ?? 'desc' }
+          : { sermon_date: dto.sortOrder ?? 'desc' };
+
+    const [sermons, total] = await Promise.all([
+      this.prisma.sermon.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.sermon.count({ where }),
+    ]);
+
+    return {
+      data: sermons.map((s) => this.mapSermonToDto(s)),
+      total,
+    };
+  }
+
+  /**
+   * Gets a single sermon by ID.
+   */
+  async getSermon(sermonId: string, churchId: string): Promise<SermonResponseDto> {
+    const sermon = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!sermon) {
+      throw new NotFoundException(`Sermon not found`);
+    }
+
+    return this.mapSermonToDto(sermon);
+  }
+
+  /**
+   * Updates a sermon.
+   */
+  async updateSermon(
+    sermonId: string,
+    dto: UpdateSermonDto,
+    churchId: string,
+    userId: string,
+  ): Promise<SermonResponseDto> {
+    const existing = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Sermon not found`);
+    }
+
+    const data: Prisma.SermonUpdateInput = {};
+
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.speaker !== undefined) data.speaker = dto.speaker;
+    if (dto.sermonDate !== undefined) data.sermon_date = new Date(dto.sermonDate);
+    if (dto.scriptureReference !== undefined) data.scripture_reference = dto.scriptureReference;
+    if (dto.seriesName !== undefined) data.series_name = dto.seriesName;
+    if (dto.tags !== undefined) data.tags = dto.tags;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.durationSeconds !== undefined) data.duration_seconds = dto.durationSeconds;
+
+    const updated = await this.prisma.sermon.update({
+      where: { id: sermonId },
+      data,
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'sermon',
+      action: 'UPDATE',
+      entityId: sermonId,
+      newValues: dto as unknown as Record<string, unknown>,
+    });
+
+    this.logger.log(`Sermon updated: ${sermonId}`);
+    return this.mapSermonToDto(updated);
+  }
+
+  /**
+   * Deletes a sermon.
+   */
+  async deleteSermon(sermonId: string, churchId: string, userId: string): Promise<void> {
+    const existing = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Sermon not found`);
+    }
+
+    await this.prisma.sermon.delete({ where: { id: sermonId } });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'sermon',
+      action: 'DELETE',
+      entityId: sermonId,
+      oldValues: { title: existing.title },
+    });
+
+    this.logger.log(`Sermon deleted: ${sermonId}`);
+  }
+
+  /**
+   * Sets the audio URL for a sermon (called after Supabase Storage upload).
+   */
+  async setAudioUrl(
+    sermonId: string,
+    audioUrl: string,
+    churchId: string,
+    _userId: string,
+  ): Promise<SermonResponseDto> {
+    const existing = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Sermon not found`);
+    }
+
+    const updated = await this.prisma.sermon.update({
+      where: { id: sermonId },
+      data: { audio_url: audioUrl },
+    });
+
+    this.logger.log(`Sermon audio URL set: ${sermonId}`);
+    return this.mapSermonToDto(updated);
+  }
+
+  // ─── MAPPERS ───────────────────────────────────────────────────
+
+  /**
+   * Maps a Prisma Sermon to SermonResponseDto.
+   */
+  private mapSermonToDto(
+    sermon: Record<string, unknown> & {
+      id: string;
+      sermon_date: Date;
+      created_at: Date;
+      updated_at: Date;
+    },
+  ): SermonResponseDto {
+    return {
+      sermonId: sermon.id,
+      churchId: sermon.church_id as string,
+      title: sermon.title as string,
+      speaker: (sermon.speaker as string) || undefined,
+      sermonDate: sermon.sermon_date.toISOString(),
+      scriptureReference: (sermon.scripture_reference as string) || undefined,
+      seriesName: (sermon.series_name as string) || undefined,
+      tags: (sermon.tags as string[]) || [],
+      audioUrl: (sermon.audio_url as string) || undefined,
+      durationSeconds: (sermon.duration_seconds as number) || undefined,
+      description: (sermon.description as string) || undefined,
+      createdAt: sermon.created_at.toISOString(),
+      updatedAt: sermon.updated_at.toISOString(),
+    };
+  }
+}

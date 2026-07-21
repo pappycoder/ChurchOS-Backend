@@ -32,6 +32,9 @@ import { BranchesModule } from './branches/branches.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ProfileModule } from './profile/profile.module';
 import { GivingModule } from './giving/giving.module';
+import { EventsModule } from './events/events.module';
+import { SermonsModule } from './sermons/sermons.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 
@@ -95,10 +98,19 @@ import { HealthModule } from './health/health.module';
     // Step 12: Import GivingModule for giving categories, transactions, and receipts.
     GivingModule,
 
-    // Step 13: Import RedisModule for caching and queues.
+    // Step 13: Import EventsModule for event management and registration.
+    EventsModule,
+
+    // Step 14: Import SermonsModule for sermon archive.
+    SermonsModule,
+
+    // Step 15: Import WhatsAppModule for WhatsApp integration.
+    WhatsAppModule,
+
+    // Step 16: Import RedisModule for caching and queues.
     RedisModule,
 
-    // Step 14: Import HealthModule for health check endpoint.
+    // Step 17: Import HealthModule for health check endpoint.
     HealthModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.

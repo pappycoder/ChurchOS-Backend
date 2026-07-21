@@ -16,7 +16,10 @@ import { GivingService } from './giving.service';
 import { PaystackService } from './services/paystack.service';
 import { FlutterwaveService } from './services/flutterwave.service';
 import { ReceiptService } from './services/receipt.service';
-import { PaymentGatewayProvider, PAYMENT_GATEWAY_REGISTRY } from './services/payment-gateway.interface';
+import {
+  PaymentGatewayProvider,
+  PAYMENT_GATEWAY_REGISTRY,
+} from './services/payment-gateway.interface';
 
 /**
  * Giving module providing category management, payment processing,

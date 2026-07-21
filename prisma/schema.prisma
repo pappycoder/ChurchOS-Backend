@@ -102,6 +102,8 @@ model Church {
   audit_logs        AuditLog[]
   attendances       Attendance[]
   church_configs    ChurchConfig[]
+  sermons           Sermon[]
+  media_assets      MediaAsset[]
 
   @@map("churches")
 }
@@ -429,6 +431,46 @@ model Template {
 
   @@index([church_id])
   @@map("templates")
+}
+
+// ─── Media / Sermons ─────────────────────────────────────
+
+model Sermon {
+  id                 String    @id @default(uuid())
+  church_id          String
+  title              String
+  speaker            String?
+  sermon_date        DateTime
+  scripture_reference String?
+  series_name        String?
+  tags               String[]
+  audio_url          String?
+  duration_seconds   Int?
+  description        String?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  church Church @relation(fields: [church_id], references: [id])
+
+  @@index([church_id, sermon_date])
+  @@map("sermons")
+}
+
+model MediaAsset {
+  id          String   @id @default(uuid())
+  church_id   String
+  filename    String
+  url         String
+  mime_type   String
+  size_bytes  Int
+  folder      String   @default("general")
+  permissions String   @default("members") // public, members, leadership
+  created_at  DateTime @default(now())
+
+  church Church @relation(fields: [church_id], references: [id])
+
+  @@index([church_id, folder])
+  @@map("media_assets")
 }
 
 // ─── Pastoral Care ───────────────────────────────────────

@@ -12,12 +12,17 @@ import {
   Logger,
   BadRequestException,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { MediaResponseDto } from './dto/media-response.dto';
+import { ListLibraryDto } from './dto/list-library.dto';
+import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
 import sharp from 'sharp';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 
 /** Allowed MIME types for image uploads */
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
@@ -67,6 +72,7 @@ export class MediaService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {
     this.bucket = this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'media');
   }
@@ -104,6 +110,18 @@ export class MediaService {
     const { data: urlData } = this.supabase.client.storage.from(this.bucket).getPublicUrl(path);
 
     const metadata = await sharp(optimized.buffer).metadata();
+
+    await this.prisma.mediaAsset.create({
+      data: {
+        church_id: churchId,
+        filename,
+        url: urlData.publicUrl,
+        mime_type: 'image/webp',
+        size_bytes: optimized.buffer.length,
+        folder,
+        permissions: 'members',
+      },
+    });
 
     return {
       url: urlData.publicUrl,
@@ -146,6 +164,18 @@ export class MediaService {
 
     const { data: urlData } = this.supabase.client.storage.from(this.bucket).getPublicUrl(path);
 
+    await this.prisma.mediaAsset.create({
+      data: {
+        church_id: churchId,
+        filename,
+        url: urlData.publicUrl,
+        mime_type: file.mimetype,
+        size_bytes: file.buffer.length,
+        folder,
+        permissions: 'members',
+      },
+    });
+
     return {
       url: urlData.publicUrl,
       path,
@@ -178,6 +208,156 @@ export class MediaService {
     if (extractedPath) {
       await this.deleteFile(extractedPath);
     }
+  }
+
+  /**
+   * Lists media assets with pagination, folder filter, and search.
+   */
+  async listLibrary(
+    dto: ListLibraryDto,
+    churchId: string,
+  ): Promise<{ data: MediaAssetResponseDto[]; total: number }> {
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.MediaAssetWhereInput = {
+      church_id: churchId,
+    };
+
+    if (dto.folder) {
+      where.folder = { contains: dto.folder, mode: 'insensitive' };
+    }
+
+    if (dto.mimeType) {
+      where.mime_type = { contains: dto.mimeType, mode: 'insensitive' };
+    }
+
+    if (dto.permissions) {
+      where.permissions = dto.permissions;
+    }
+
+    if (dto.search) {
+      where.filename = { contains: dto.search, mode: 'insensitive' };
+    }
+
+    const orderBy: Prisma.MediaAssetOrderByWithRelationInput =
+      dto.sortBy === 'filename'
+        ? { filename: dto.sortOrder ?? 'asc' }
+        : dto.sortBy === 'size_bytes'
+          ? { size_bytes: dto.sortOrder ?? 'desc' }
+          : { created_at: dto.sortOrder ?? 'desc' };
+
+    const [assets, total] = await Promise.all([
+      this.prisma.mediaAsset.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.mediaAsset.count({ where }),
+    ]);
+
+    return {
+      data: assets.map((a) => this.mapAssetToDto(a)),
+      total,
+    };
+  }
+
+  /**
+   * Gets a single media asset by ID.
+   */
+  async getAsset(assetId: string, churchId: string): Promise<MediaAssetResponseDto> {
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+
+    return this.mapAssetToDto(asset);
+  }
+
+  /**
+   * Gets unique folder list for the church's media assets.
+   */
+  async getFolders(churchId: string): Promise<string[]> {
+    const result = await this.prisma.mediaAsset.groupBy({
+      by: ['folder'],
+      where: { church_id: churchId },
+      orderBy: { folder: 'asc' },
+    });
+
+    return result.map((r) => r.folder);
+  }
+
+  /**
+   * Deletes a media asset from both the database and Supabase Storage.
+   */
+  async deleteAsset(assetId: string, churchId: string): Promise<void> {
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+
+    // Delete from Supabase Storage (best-effort)
+    const path = this.extractPathFromUrl(asset.url);
+    if (path) {
+      await this.deleteFile(path);
+    }
+
+    await this.prisma.mediaAsset.delete({ where: { id: assetId } });
+
+    this.logger.log(`Media asset deleted: ${assetId}`);
+  }
+
+  /**
+   * Updates the permissions on a media asset.
+   */
+  async updatePermissions(
+    assetId: string,
+    permissions: string,
+    churchId: string,
+  ): Promise<MediaAssetResponseDto> {
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+
+    const updated = await this.prisma.mediaAsset.update({
+      where: { id: assetId },
+      data: { permissions },
+    });
+
+    return this.mapAssetToDto(updated);
+  }
+
+  // ─── MAPPERS ───────────────────────────────────────────────────
+
+  /**
+   * Maps a Prisma MediaAsset to MediaAssetResponseDto.
+   */
+  private mapAssetToDto(
+    asset: Record<string, unknown> & { id: string; created_at: Date },
+  ): MediaAssetResponseDto {
+    return {
+      assetId: asset.id,
+      churchId: asset.church_id as string,
+      filename: asset.filename as string,
+      url: asset.url as string,
+      mimeType: asset.mime_type as string,
+      sizeBytes: asset.size_bytes as number,
+      folder: asset.folder as string,
+      permissions: asset.permissions as string,
+      createdAt: asset.created_at.toISOString(),
+    };
   }
 
   /**

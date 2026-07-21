@@ -1,0 +1,231 @@
+/**
+ * @file sermons.service.spec.ts
+ * @description Unit tests for SermonsService.
+ *
+ * Tests sermon CRUD, search, filtering, and pagination.
+ *
+ * @module test/unit/sermons/sermons.service.spec
+ * @since 1.0.0
+ */
+
+import { SermonsService } from '../../../src/sermons/sermons.service';
+import { PrismaService } from '../../../src/prisma/prisma.service';
+import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { NotFoundException } from '@nestjs/common';
+import { createPrismaMock } from '../../helpers/prisma-mock.helper';
+
+describe('SermonsService', () => {
+  let service: SermonsService;
+  let prisma: ReturnType<typeof createPrismaMock>;
+  let audit: { log: jest.Mock };
+
+  const mockChurchId = '11111111-1111-1111-1111-111111111111';
+  const mockUserId = '22222222-2222-2222-2222-222222222222';
+  const mockSermonId = '77777777-7777-7777-7777-777777777777';
+
+  const mockSermon = {
+    id: mockSermonId,
+    church_id: mockChurchId,
+    title: 'Walking in Faith',
+    speaker: 'Pastor John Doe',
+    sermon_date: new Date('2026-07-20T09:00:00.000Z'),
+    scripture_reference: 'Hebrews 11:1-6',
+    series_name: 'Faith Foundations',
+    tags: ['faith', 'trust'],
+    audio_url: null,
+    duration_seconds: 2400,
+    description: 'A sermon about faith',
+    created_at: new Date('2026-07-20T10:00:00.000Z'),
+    updated_at: new Date('2026-07-20T10:00:00.000Z'),
+  };
+
+  beforeEach(() => {
+    prisma = createPrismaMock();
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
+    service = new SermonsService(
+      prisma as unknown as PrismaService,
+      audit as unknown as AuditLoggingService,
+    );
+  });
+
+  describe('createSermon', () => {
+    it('should create a sermon and return SermonResponseDto', async () => {
+      prisma.sermon.create.mockResolvedValue(mockSermon);
+
+      const result = await service.createSermon(
+        {
+          title: 'Walking in Faith',
+          speaker: 'Pastor John Doe',
+          sermonDate: '2026-07-20T09:00:00.000Z',
+          scriptureReference: 'Hebrews 11:1-6',
+          seriesName: 'Faith Foundations',
+          tags: ['faith', 'trust'],
+          durationSeconds: 2400,
+        },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(result.sermonId).toBe(mockSermonId);
+      expect(result.title).toBe('Walking in Faith');
+      expect(result.speaker).toBe('Pastor John Doe');
+      expect(result.tags).toEqual(['faith', 'trust']);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'CREATE' }),
+      );
+    });
+  });
+
+  describe('listSermons', () => {
+    it('should return paginated sermons', async () => {
+      prisma.sermon.findMany.mockResolvedValue([mockSermon]);
+      prisma.sermon.count.mockResolvedValue(1);
+
+      const result = await service.listSermons({}, mockChurchId);
+
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      expect(result.data[0].sermonId).toBe(mockSermonId);
+    });
+
+    it('should filter by speaker', async () => {
+      prisma.sermon.findMany.mockResolvedValue([]);
+      prisma.sermon.count.mockResolvedValue(0);
+
+      await service.listSermons({ speaker: 'Pastor John' }, mockChurchId);
+
+      expect(prisma.sermon.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            speaker: expect.objectContaining({ contains: 'Pastor John' }),
+          }),
+        }),
+      );
+    });
+
+    it('should filter by tag', async () => {
+      prisma.sermon.findMany.mockResolvedValue([]);
+      prisma.sermon.count.mockResolvedValue(0);
+
+      await service.listSermons({ tag: 'faith' }, mockChurchId);
+
+      expect(prisma.sermon.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tags: { has: 'faith' } }),
+        }),
+      );
+    });
+
+    it('should search across multiple fields', async () => {
+      prisma.sermon.findMany.mockResolvedValue([]);
+      prisma.sermon.count.mockResolvedValue(0);
+
+      await service.listSermons({ search: 'faith' }, mockChurchId);
+
+      expect(prisma.sermon.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ title: expect.objectContaining({ contains: 'faith' }) }),
+            ]),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('getSermon', () => {
+    it('should return sermon by ID', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+
+      const result = await service.getSermon(mockSermonId, mockChurchId);
+
+      expect(result.sermonId).toBe(mockSermonId);
+      expect(result.title).toBe('Walking in Faith');
+    });
+
+    it('should throw NotFoundException if sermon not found', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(service.getSermon('nonexistent', mockChurchId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updateSermon', () => {
+    it('should update sermon fields', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+      prisma.sermon.update.mockResolvedValue({ ...mockSermon, title: 'Updated Title' });
+
+      const result = await service.updateSermon(
+        mockSermonId,
+        { title: 'Updated Title' },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(result.title).toBe('Updated Title');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'UPDATE' }),
+      );
+    });
+
+    it('should throw NotFoundException if sermon not found', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateSermon('nonexistent', { title: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deleteSermon', () => {
+    it('should delete a sermon', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+      prisma.sermon.delete.mockResolvedValue(mockSermon);
+
+      await service.deleteSermon(mockSermonId, mockChurchId, mockUserId);
+
+      expect(prisma.sermon.delete).toHaveBeenCalledWith({ where: { id: mockSermonId } });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'DELETE' }),
+      );
+    });
+
+    it('should throw NotFoundException if sermon not found', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(service.deleteSermon('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('setAudioUrl', () => {
+    it('should set the audio URL on a sermon', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+      prisma.sermon.update.mockResolvedValue({
+        ...mockSermon,
+        audio_url: 'https://storage.example.com/audio.mp3',
+      });
+
+      const result = await service.setAudioUrl(
+        mockSermonId,
+        'https://storage.example.com/audio.mp3',
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(result.audioUrl).toBe('https://storage.example.com/audio.mp3');
+    });
+
+    it('should throw NotFoundException if sermon not found', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.setAudioUrl('nonexistent', 'url', mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+});

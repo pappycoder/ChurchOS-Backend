@@ -79,10 +79,13 @@ src/
 ├── giving/                 # Giving categories, transactions, receipts (Paystack + Flutterwave + PDFKit)
 ├── events/                 # Events, registrations, ticketing [PLANNED]
 ├── whatsapp/               # WhatsApp webhooks, commands, broadcasts [PLANNED]
-├── media/                  # File uploads, image optimization (Supabase Storage + sharp)
+├── media/                  # File uploads, image optimization (Supabase Storage + sharp), media library browsing
 ├── profile/                # Profile CRUD, photo upload, role management, soft-delete
 ├── church/                 # Church CRUD, config, staff invitation/management
 ├── branches/               # Branch CRUD, multi-tenant scoping
+├── events/                 # Events, registrations, ticketing
+├── sermons/                # Sermon archive, search, filtering
+├── whatsapp/               # WhatsApp webhooks, commands, broadcasts
 ├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
 ├── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
@@ -191,6 +194,47 @@ All notable changes to this project are documented below. Update this section wi
   - Added 7th seed category: Welfare/Mission. Updated seed transactions with `payment_gateway` field.
   - 38 GivingService + 14 FlutterwaveService unit tests (52 giving tests, 167 total).
   - Build clean, lint clean, all tests passing.
+
+- **2026-07-21** — Completed EventsModule, SermonsModule, MediaLibrary, WhatsAppModule (Phase 1).
+  - Created `src/events/` — EventsModule with EventsService, EventsController, and 6 DTOs.
+    - `POST /events` — Create event (church_admin, branch_pastor).
+    - `GET /events` — List events with type/status/date filters, pagination.
+    - `GET /events/:eventId` — Get single event.
+    - `PATCH /events/:eventId` — Update event (church_admin, branch_pastor).
+    - `DELETE /events/:eventId` — Delete event (church_admin).
+    - `POST /events/:eventId/register` — Register member for event (capacity + duplicate checks).
+    - `DELETE /events/:eventId/register/:memberId` — Cancel registration.
+  - Created `src/sermons/` — SermonsModule with SermonsService, SermonsController, and 4 DTOs.
+    - `POST /sermons` — Create sermon record (church_admin, branch_pastor).
+    - `GET /sermons` — List sermons with speaker/series/tag/search filters, date range, pagination.
+    - `GET /sermons/:sermonId` — Get single sermon.
+    - `PATCH /sermons/:sermonId` — Update sermon (church_admin, branch_pastor).
+    - `DELETE /sermons/:sermonId` — Delete sermon (church_admin).
+    - `setAudioUrl()` — Set audio URL after Supabase Storage upload.
+  - Extended `src/media/` — MediaAsset library browsing with folder/MIME/permission filtering.
+    - `GET /media/library` — List media assets with folder, MIME type, permission, search filters.
+    - `GET /media/library/folders` — Get unique folder names.
+    - `GET /media/library/:assetId` — Get single asset.
+    - `PATCH /media/library/:assetId/permissions` — Update permissions (church_admin).
+    - `DELETE /media/library/:assetId` — Delete asset from DB + Supabase Storage (church_admin).
+    - `MediaAsset` records now created on every upload (image and file).
+  - Created `src/whatsapp/` — WhatsAppModule with WhatsAppService, WhatsAppController, and 3 DTOs.
+    - `GET /whatsapp/webhook` — Webhook verification (360dialog challenge-response).
+    - `POST /whatsapp/webhook` — Inbound message + status update processing.
+    - `POST /whatsapp/send` — Send outbound message (authenticated).
+    - `GET /whatsapp/messages` — List messages with phone/direction filters, pagination.
+    - Command router with 6 handlers: HELP, CHECKIN, GIVE, PRAYER, EVENTS, STATUS.
+    - CHECKIN: finds today's service by `day_of_week`, prevents duplicate check-ins, records via Attendance model.
+    - GIVE: returns giving link from ChurchConfig or WEB_URL.
+    - PRAYER: logs prayer request via AuditLoggingService.
+    - EVENTS: lists next 5 upcoming events.
+    - STATUS: shows 30-day attendance count and giving total.
+    - Outbound messaging via 360dialog Cloud API (`WHATSAPP_API_KEY`, `WHATSAPP_PHONE_NUMBER_ID`).
+    - All messages logged to `Message` model with `MessageDirection` enum (inbound/outbound).
+  - Added Prisma `Sermon` and `MediaAsset` models with migration.
+  - Registered all new modules in `app.module.ts` (EventsModule, SermonsModule, WhatsAppModule).
+  - 20 EventsService + 12 SermonsService + 10 MediaService (library) + 15 WhatsAppService unit tests.
+  - Total: 227 tests passing across 12 suites. Build clean, lint clean.
 
 - **2026-07-19** — Fixed Prisma orderBy validation error in branch listing.
   - **Root cause:** `BranchesService.findAll()` passed `orderBy` as a single object (`{ is_headquarters: 'desc', name: 'asc' }`), but Prisma 7 expects an array (`BranchOrderByWithRelationInput[]`).
