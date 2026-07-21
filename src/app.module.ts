@@ -42,6 +42,8 @@ import { QueuesModule } from './queues/queues.module';
 import { FamilyModule } from './family/family.module';
 import { TemplatesModule } from './templates/templates.module';
 import { CommunicationModule } from './communication/communication.module';
+import { PastoralModule } from './pastoral/pastoral.module';
+import { AdminModule } from './admin/admin.module';
 
 /**
  * Root application module.
@@ -143,6 +145,12 @@ import { CommunicationModule } from './communication/communication.module';
 
     // Step 21: Import CommunicationModule for email (Resend) and SMS (Termii).
     CommunicationModule,
+
+    // Step 22: Import PastoralModule for pastoral notes with encrypted storage.
+    PastoralModule,
+
+    // Step 23: Import AdminModule for department and cell group management.
+    AdminModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

@@ -1,0 +1,279 @@
+/**
+ * @file pastoral.controller.ts
+ * @description HTTP endpoints for pastoral note management.
+ *
+ * Provides REST endpoints for pastoral notes CRUD with AES-256-GCM
+ * encrypted storage and confidentiality-based access control.
+ *
+ * All endpoints require JWT authentication. Write operations are
+ * restricted to pastors and admin roles.
+ *
+ * @module pastoral/pastoral.controller
+ * @since 1.0.0
+ */
+
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
+import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
+import { PastoralService } from './pastoral.service';
+import { CreatePastoralNoteDto } from './dto/create-pastoral-note.dto';
+import { UpdatePastoralNoteDto } from './dto/update-pastoral-note.dto';
+import { ListPastoralNotesDto } from './dto/list-pastoral-notes.dto';
+import { PastoralNoteResponseDto } from './dto/pastoral-note-response.dto';
+import { CreateLifeEventDto } from './dto/create-life-event.dto';
+import { ListLifeEventsDto } from './dto/list-life-events.dto';
+import { LifeEventResponseDto } from './dto/life-event-response.dto';
+
+@ApiTags('Pastoral')
+@ApiBearerAuth('supabase-auth')
+@UseGuards(JwtAuthGuard)
+@Controller('pastoral')
+export class PastoralController {
+  constructor(
+    // Step 1: Inject PastoralService for business logic delegation
+    private readonly pastoralService: PastoralService,
+  ) {}
+
+  /**
+   * Creates a new pastoral note with encrypted content.
+   *
+   * @param dto - Note creation data
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Created pastoral note
+   */
+  @Post('notes')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiOperation({ summary: 'Create a new pastoral note' })
+  async createNote(
+    @Body() dto: CreatePastoralNoteDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<PastoralNoteResponseDto> {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate note creation to the pastoral service
+    return this.pastoralService.createNote(dto, churchId, user.sub);
+  }
+
+  /**
+   * Lists pastoral notes with pagination and filters.
+   *
+   * Confidentiality levels are enforced based on user role.
+   *
+   * @param query - List/filter parameters
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Paginated list of pastoral notes
+   */
+  @Get('notes')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiPaginatedResponse(PastoralNoteResponseDto)
+  @ApiOperation({ summary: 'List pastoral notes with filters' })
+  async listNotes(
+    @Query() query: ListPastoralNotesDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ) {
+    // Step 1: Extract church ID and user role from the authenticated profile
+    const churchId = req.profile?.church_id || '';
+    const role = req.profile?.role || '';
+    // Step 2: Delegate the listing to the pastoral service with role-based filtering
+    return this.pastoralService.listNotes(query, churchId, role, user.sub);
+  }
+
+  /**
+   * Gets a single pastoral note by ID.
+   *
+   * @param noteId - Pastoral note ID
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Pastoral note with decrypted content
+   */
+  @Get('notes/:noteId')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'noteId', type: String })
+  @ApiOperation({ summary: 'Get a pastoral note by ID' })
+  async getNoteById(
+    @Param('noteId') noteId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<PastoralNoteResponseDto> {
+    // Step 1: Extract church ID and user role from the authenticated profile
+    const churchId = req.profile?.church_id || '';
+    const role = req.profile?.role || '';
+    // Step 2: Delegate the lookup to the pastoral service
+    return this.pastoralService.getNoteById(noteId, churchId, role, user.sub);
+  }
+
+  /**
+   * Updates a pastoral note. Only the author or admin can update.
+   *
+   * @param noteId - Pastoral note ID
+   * @param dto - Update data
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Updated pastoral note
+   */
+  @Patch('notes/:noteId')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'noteId', type: String })
+  @ApiOperation({ summary: 'Update a pastoral note' })
+  async updateNote(
+    @Param('noteId') noteId: string,
+    @Body() dto: UpdatePastoralNoteDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<PastoralNoteResponseDto> {
+    // Step 1: Extract church ID and user role from the authenticated profile
+    const churchId = req.profile?.church_id || '';
+    const role = req.profile?.role || '';
+    // Step 2: Delegate the update to the pastoral service with ownership check
+    return this.pastoralService.updateNote(noteId, dto, churchId, user.sub, role);
+  }
+
+  /**
+   * Deletes a pastoral note. Restricted notes require admin/senior pastor.
+   *
+   * @param noteId - Pastoral note ID
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   */
+  @Delete('notes/:noteId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @ApiParam({ name: 'noteId', type: String })
+  @ApiOperation({ summary: 'Delete a pastoral note' })
+  async deleteNote(
+    @Param('noteId') noteId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<void> {
+    // Step 1: Extract church ID and user role from the authenticated profile
+    const churchId = req.profile?.church_id || '';
+    const role = req.profile?.role || '';
+    // Step 2: Delegate the deletion to the pastoral service with authorization check
+    return this.pastoralService.deleteNote(noteId, churchId, user.sub, role);
+  }
+
+  // ─── Life Events ──────────────────────────────────────────
+
+  /**
+   * Creates a new life event record.
+   *
+   * @param dto - Life event creation data
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Created life event
+   */
+  @Post('life-events')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiOperation({ summary: 'Create a new life event' })
+  async createLifeEvent(
+    @Body() dto: CreateLifeEventDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<LifeEventResponseDto> {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate life event creation to the pastoral service
+    return this.pastoralService.createLifeEvent(dto, churchId, user.sub);
+  }
+
+  /**
+   * Lists life events with pagination and filters.
+   *
+   * @param query - List/filter parameters
+   * @param req - Authenticated request with profile
+   * @returns Paginated list of life events
+   */
+  @Get('life-events')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiPaginatedResponse(LifeEventResponseDto)
+  @ApiOperation({ summary: 'List life events with filters' })
+  async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: any) {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate the listing to the pastoral service
+    return this.pastoralService.listLifeEvents(query, churchId);
+  }
+
+  /**
+   * Gets upcoming life events for the next N days.
+   *
+   * @param daysAhead - Number of days to look ahead
+   * @param req - Authenticated request with profile
+   * @returns Upcoming life events
+   */
+  @Get('life-events/upcoming')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiOperation({ summary: 'Get upcoming life events' })
+  async getUpcomingLifeEvents(@Query('daysAhead') daysAhead: number, @Req() req: any) {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate the query to the pastoral service with default 30-day lookahead
+    return this.pastoralService.getUpcomingLifeEvents(churchId, daysAhead || 30);
+  }
+
+  /**
+   * Gets a single life event by ID.
+   *
+   * @param eventId - Life event ID
+   * @param req - Authenticated request with profile
+   * @returns Life event data
+   */
+  @Get('life-events/:eventId')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'eventId', type: String })
+  @ApiOperation({ summary: 'Get a life event by ID' })
+  async getLifeEventById(
+    @Param('eventId') eventId: string,
+    @Req() req: any,
+  ): Promise<LifeEventResponseDto> {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate the lookup to the pastoral service
+    return this.pastoralService.getLifeEventById(eventId, churchId);
+  }
+
+  /**
+   * Deletes a life event.
+   *
+   * @param eventId - Life event ID
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   */
+  @Delete('life-events/:eventId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireRoles('church_admin', 'senior_pastor')
+  @ApiParam({ name: 'eventId', type: String })
+  @ApiOperation({ summary: 'Delete a life event' })
+  async deleteLifeEvent(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: any,
+  ): Promise<void> {
+    // Step 1: Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Step 2: Delegate the deletion to the pastoral service
+    return this.pastoralService.deleteLifeEvent(eventId, churchId, user.sub);
+  }
+}

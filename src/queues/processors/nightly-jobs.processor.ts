@@ -4,9 +4,9 @@
  *
  * Handles jobs from the 'nightly-jobs' queue. Runs church-wide
  * maintenance tasks including:
- * - Processing pending recurring giving charges
  * - Recalculating member engagement scores
- * - Cleaning up expired sessions and stale data
+ * - Recalculating member risk scores
+ * - Identifying members needing pastoral attention
  * - Generating daily attendance/giving summaries
  *
  * @module queues/processors/nightly-jobs.processor
@@ -16,23 +16,58 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { ScoringService } from '../../pastoral/scoring.service';
 
 @Processor('nightly-jobs')
 export class NightlyJobsProcessor {
   private readonly logger = new Logger(NightlyJobsProcessor.name);
 
+  constructor(private readonly scoringService: ScoringService) {}
+
   /**
    * Runs scheduled nightly maintenance tasks for a church.
    *
-   * Processes pending recurring giving charges, recalculates member engagement
-   * scores, cleans up expired sessions, and generates daily summaries.
+   * Recalculates engagement and risk scores for all active members,
+   * then identifies members needing pastoral attention.
    *
    * @param job - BullMQ job containing church ID
-   * @returns Void — maintenance tasks executed
+   * @returns Job result with scoring summary
    */
   @Process('run')
-  async handleRun(job: Job<{ churchId: string }>): Promise<void> {
-    this.logger.log(`Running nightly jobs for church ${job.data.churchId}`);
-    // TODO: recurring giving charges, engagement recalculation, etc.
+  async handleRun(job: Job<{ churchId: string }>): Promise<{
+    engagementScored: number;
+    riskScored: number;
+    membersNeedingAttention: number;
+  }> {
+    const { churchId } = job.data;
+
+    // Step 1: Log the start of nightly maintenance for audit trail
+    this.logger.log(`Running nightly jobs for church ${churchId}`);
+
+    // Step 2: Calculate engagement scores for all active members
+    const engagementScored = await this.scoringService.calculateEngagementScores(churchId);
+    await job.updateProgress(33);
+
+    // Step 3: Calculate risk scores for all active members
+    const riskScored = await this.scoringService.calculateRiskScores(churchId);
+    await job.updateProgress(66);
+
+    // Step 4: Identify members needing pastoral attention (top 50)
+    const attention = await this.scoringService.getMembersNeedingAttention(churchId, 50);
+    await job.updateProgress(100);
+
+    // Step 5: Log completion summary for monitoring
+    this.logger.log(
+      `Nightly jobs complete for church ${churchId}: ` +
+        `${engagementScored} engagement, ${riskScored} risk, ` +
+        `${attention.length} needing attention`,
+    );
+
+    // Step 6: Return scoring summary as job result
+    return {
+      engagementScored,
+      riskScored,
+      membersNeedingAttention: attention.length,
+    };
   }
 }

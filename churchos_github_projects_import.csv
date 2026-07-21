@@ -66,12 +66,12 @@ SortOrder,Repo,Phase,Module,Title,Description,Priority,Labels,Status,Iteration,S
 58,ChurchOS-Backend,Phase 2,WhatsApp,Implement AI chatbot integration,Use OpenAI/Groq for FAQ and intent classification with RAG.,Medium,"whatsapp,ai,backend",Todo,Phase 2,2026-10-13,2026-10-23
 59,ChurchOS-Backend,Phase 2,Events,Implement paid event registration and ticketing,Generate QR tickets with HMAC and payment integration via Prisma.,High,"events,prisma,backend",Done,Phase 2,2026-10-13,2026-10-23
 60,ChurchOS-Backend,Phase 2,Events,Implement ticket validation endpoint,POST /events/:id/tickets/validate.,High,"events,backend",Done,Phase 2,2026-10-13,2026-10-23
-61,ChurchOS-Backend,Phase 3,Pastoral,Implement pastoral notes CRUD with encryption,"AES-256-GCM encryption for counseling notes, stored via Prisma.",High,"pastoral,prisma,backend",Todo,Phase 3,2026-11-02,2026-11-13
-62,ChurchOS-Backend,Phase 3,Pastoral,Implement risk score calculation,Nightly job calculates member risk scores via Prisma.,High,"pastoral,prisma,backend",Todo,Phase 3,2026-11-02,2026-11-13
-63,ChurchOS-Backend,Phase 3,Pastoral,Implement engagement score calculation,Nightly job calculates member engagement scores via Prisma.,High,"pastoral,prisma,backend",Todo,Phase 3,2026-11-02,2026-11-13
-64,ChurchOS-Backend,Phase 3,Pastoral,Implement life event tracking and workflows,"Detect birthdays, bereavements, trigger alerts via Prisma.",Medium,"pastoral,prisma,backend",Todo,Phase 3,2026-11-02,2026-11-13
-65,ChurchOS-Backend,Phase 3,Operations,Implement department management,Department CRUD and member assignments via Prisma.,Medium,"operations,prisma,backend",Todo,Phase 3,2026-11-17,2026-11-27
-66,ChurchOS-Backend,Phase 3,Operations,Implement cell group management,"Cell group CRUD, nearest group recommendation via Prisma.",Medium,"operations,prisma,backend",Todo,Phase 3,2026-11-17,2026-11-27
+61,ChurchOS-Backend,Phase 3,Pastoral,Implement pastoral notes CRUD with encryption,"AES-256-GCM encryption for counseling notes, stored via Prisma.",High,"pastoral,prisma,backend",Done,Phase 3,2026-11-02,2026-11-13
+62,ChurchOS-Backend,Phase 3,Pastoral,Implement risk score calculation,Nightly job calculates member risk scores via Prisma.,High,"pastoral,prisma,backend",Done,Phase 3,2026-11-02,2026-11-13
+63,ChurchOS-Backend,Phase 3,Pastoral,Implement engagement score calculation,Nightly job calculates member engagement scores via Prisma.,High,"pastoral,prisma,backend",Done,Phase 3,2026-11-02,2026-11-13
+64,ChurchOS-Backend,Phase 3,Pastoral,Implement life event tracking and workflows,"Detect birthdays, bereavements, trigger alerts via Prisma.",Medium,"pastoral,prisma,backend",Done,Phase 3,2026-11-02,2026-11-13
+65,ChurchOS-Backend,Phase 3,Operations,Implement department management,Department CRUD and member assignments via Prisma.,Medium,"operations,prisma,backend",Done,Phase 3,2026-11-17,2026-11-27
+66,ChurchOS-Backend,Phase 3,Operations,Implement cell group management,"Cell group CRUD, nearest group recommendation via Prisma.",Medium,"operations,prisma,backend",Done,Phase 3,2026-11-17,2026-11-27
 67,ChurchOS-Backend,Phase 3,Operations,Implement asset and inventory management,Asset register with QR codes and maintenance tracking via Prisma.,Low,"operations,prisma,backend",Todo,Phase 3,2026-11-17,2026-11-27
 68,ChurchOS-Backend,Phase 4,Sync,Implement offline sync push/pull endpoints,POST /sync/push and GET /sync/pull with conflict resolution via Prisma.,High,"sync,backend",Todo,Phase 4,2026-12-01,2026-12-11
 69,ChurchOS-Backend,Phase 4,Sync,Implement sync queue processing,Process sync jobs with idempotency and retry logic via Prisma.,High,"sync,backend",Todo,Phase 4,2026-12-01,2026-12-11

@@ -58,6 +58,12 @@ const envSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().default('media'),
   MAX_FILE_SIZE_MB: z.coerce.number().default(5),
 
+  // Step 1: AES-256-GCM key for encrypting pastoral note content at rest
+  PASTORAL_ENCRYPTION_KEY: z
+    .string()
+    .min(16, 'PASTORAL_ENCRYPTION_KEY must be at least 16 characters')
+    .default('dev-only-change-in-production-32b'),
+
   // ─── Monitoring (Optional) ────────────────────────────────
   SENTRY_DSN: z.string().optional(),
 });

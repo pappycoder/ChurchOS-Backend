@@ -87,8 +87,14 @@ src/
 ├── queues/                 # BullMQ queue infrastructure, 5 named queues, processors
 │   ├── queues.module.ts    # BullModule config, Redis connection, graceful shutdown
 │   └── processors/         # WhatsApp, Email, SMS, RecurringGiving, NightlyJobs processors
-├── pastoral/               # Pastoral notes, life events, risk scoring [PLANNED]
-└── admin/                  # RBAC, church config, reports, dashboard [PLANNED]
+├── pastoral/               # Pastoral notes (AES-256-GCM), life events, engagement & risk scoring
+│   ├── pastoral.service.ts # CRUD + encryption + confidentiality access control
+│   ├── scoring.service.ts  # Engagement & risk score calculation engines
+│   └── dto/                # CreatePastoralNote, LifeEvent, List DTOs
+├── admin/                  # Department CRUD, cell group CRUD, dashboard endpoints
+│   ├── admin.service.ts    # Department/CellGroup CRUD, Haversine nearest-group
+│   └── dto/                # CreateDepartment, CreateCellGroup, Response DTOs
+└── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
 ### Conventions
@@ -151,6 +157,14 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 4: Pastoral Care, Engagement Scoring, Admin Dashboard.
+  - **4A Pastoral Notes CRUD**: Created `src/pastoral/` module with AES-256-GCM encrypted content storage. Confidentiality-based access control (standard/confidential/restricted). Dual-authorization deletion for restricted notes. 5 endpoints.
+  - **4B Engagement & Risk Scoring**: Created `ScoringService` with weighted scoring engines. Engagement: attendance (30%), giving (25%), events (20%), communication (15%), consistency (10%). Risk: attendance decline (25%), no giving (20%), no communication (20%), inactive status (15%), recent inactivity (20%). Nightly recalculation via BullMQ `nightly-jobs` processor.
+  - **4C Life Event Tracking**: LifeEvent CRUD in PastoralService. Types: birthday, wedding, death, dedication, baptism, anniversary. Upcoming events endpoint for automated greetings. 5 endpoints.
+  - **4D Department & Cell Group Management**: Created `src/admin/` module. Department CRUD with hierarchical structure and member assignments. Cell Group CRUD with geolocation. Haversine nearest-group recommendation endpoint. 14 endpoints.
+  - **4E Admin Dashboard**: Dashboard endpoints: members needing attention, engagement distribution, rising stars, manual score recalculation.
+  - Wired `NightlyJobsProcessor` to `ScoringService`. Added `PASTORAL_ENCRYPTION_KEY` env var. Registered `PastoralModule` + `AdminModule` in `app.module.ts`. 34 new tests. Total: 261 tests across 15 suites.
 
 - **2026-07-21** — Completed Wave 3: Queue Integration, Paid Ticketing, DevOps Hardening.
   - **3E DevOps Hardening**: Fixed Redis URL (`host` → `url`, port 6379). Added `defaultJobOptions` (3 attempts, exponential backoff 5s, TTLs) to all 5 BullMQ queues. Enhanced health endpoint with per-queue metrics. Added graceful queue shutdown via `OnModuleDestroy`.
