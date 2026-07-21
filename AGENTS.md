@@ -95,6 +95,11 @@ src/
 ├── admin/                  # Department CRUD, cell group CRUD, dashboard endpoints
 │   ├── admin.service.ts    # Department/CellGroup CRUD, Haversine nearest-group
 │   └── dto/                # CreateDepartment, CreateCellGroup, Response DTOs
+├── assets/                 # Asset & inventory management
+│   ├── assets.module.ts    # AssetsModule
+│   ├── assets.service.ts   # Asset CRUD, maintenance, depreciation, loans, QR, scans
+│   ├── assets.controller.ts# 21 REST endpoints for asset management
+│   └── dto/                # Asset, category, maintenance, depreciation, loan, scan DTOs
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
@@ -159,6 +164,26 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 7: Asset & Inventory Management.
+  - **Schema**: Refactored `Asset` model with structured fields (asset_tag, category relation, serial_number, brand, model, department/branch/custodian relations, condition, status, purchase details, depreciation config). Added `AssetCategory`, `AssetMaintenance`, `AssetDepreciation`, `AssetLoan`, and `AssetScanLog` models. Added enums `AssetStatus`, `AssetCondition`, `DepreciationMethod`, `MaintenanceStatus`, `AssetLoanStatus`. Migration: `20260721165046_add_asset_inventory_management`.
+  - **Module**: Created `src/assets/` with `AssetsModule`, `AssetsService`, `AssetsController`, 17 DTOs, and barrel exports.
+  - **Endpoints** (21 total under `/api/v1/assets`):
+    - Categories: `POST /assets/categories`, `GET /assets/categories`, `PATCH /assets/categories/:categoryId`, `DELETE /assets/categories/:categoryId`
+    - Assets: `POST /assets`, `GET /assets`, `GET /assets/:assetId`, `PATCH /assets/:assetId`, `DELETE /assets/:assetId`
+    - Maintenance: `POST /assets/:assetId/maintenance`, `GET /assets/:assetId/maintenance`, `PATCH /assets/:assetId/maintenance/:maintenanceId`
+    - Depreciation: `POST /assets/:assetId/depreciation`, `GET /assets/:assetId/depreciation`, `GET /assets/:assetId/depreciation/summary`
+    - Loans: `POST /assets/:assetId/loans`, `GET /assets/:assetId/loans`, `PATCH /assets/:assetId/loans/:loanId/return`
+    - QR & Scan: `POST /assets/:assetId/qr`, `GET /assets/:assetId/qr`, `POST /assets/scan`
+  - **Features**:
+    - Asset register with multi-tenant scoping, unique asset tags per church, search by name/tag/serial/location.
+    - Maintenance scheduling with status tracking (scheduled, in_progress, completed, cancelled).
+    - Depreciation tracking with straight-line and reducing-balance methods; yearly snapshots.
+    - Loan tracking for members or external parties with return workflow.
+    - QR code generation using `CHURCHOS:ASSET:<id>` format.
+    - Scan workflow that logs scans and surfaces active loans/upcoming maintenance.
+  - **Security**: All write endpoints protected by `JwtAuthGuard` + `RolesGuard`; role restrictions per endpoint. All mutations logged via `AuditLoggingService`.
+  - **Tests**: Added `test/unit/assets/assets.service.spec.ts` with 20 tests. Total: **330 tests passing across 21 suites**. Build clean, lint clean (0 errors, 0 warnings).
 
 - **2026-07-21** — Completed Wave 6: WhatsApp Templates + Broadcasts.
   - **6A WhatsApp Templates**: Extended `Template` model with WhatsApp-specific fields (`category`, `variables`, `external_id`, `external_status`). Updated `TemplatesService` and DTOs to support these fields. Added `WhatsAppService.sendTemplateMessage()` using 360dialog Cloud API template message format with variable interpolation. Added `POST /whatsapp/send-template` endpoint. Template must be `published` and channel-matched before use in broadcasts.

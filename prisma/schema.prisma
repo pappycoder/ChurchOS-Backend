@@ -84,6 +84,40 @@ enum RegistrationPaymentStatus {
   refunded
 }
 
+enum AssetStatus {
+  active
+  maintenance
+  retired
+  lost
+  disposed
+}
+
+enum AssetCondition {
+  new
+  good
+  fair
+  poor
+  damaged
+}
+
+enum DepreciationMethod {
+  straight_line
+  reducing_balance
+}
+
+enum MaintenanceStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum AssetLoanStatus {
+  borrowed
+  returned
+  overdue
+}
+
 // ─── Core Models ─────────────────────────────────────────
 
 model Church {
@@ -112,6 +146,7 @@ model Church {
   messages          Message[]
   departments       Department[]
   cell_groups       CellGroup[]
+  asset_categories  AssetCategory[]
   assets            Asset[]
   audit_logs        AuditLog[]
   attendances       Attendance[]
@@ -143,6 +178,7 @@ model Branch {
   services        Service[]
   transactions    Transaction[]
   events          Event[]
+  assets          Asset[]
 
   @@index([church_id])
   @@map("branches")
@@ -207,6 +243,8 @@ model Member {
   pastoral_notes_from  PastoralNote[]      @relation("Author")
   pastoral_notes_about PastoralNote[]     @relation("Subject")
   department_members   DepartmentMember[]
+  custodian_assets    Asset[]
+  asset_loans         AssetLoan[]
 
   @@index([church_id, branch_id, status])
   @@index([phone])
@@ -650,6 +688,7 @@ model Department {
 
   church            Church            @relation(fields: [church_id], references: [id])
   department_members DepartmentMember[]
+  assets            Asset[]
 
   @@index([church_id])
   @@map("departments")
@@ -687,26 +726,141 @@ model CellGroup {
   @@map("cell_groups")
 }
 
-model Asset {
-  id               String    @id @default(uuid())
-  church_id        String
-  name             String
-  description      String?
-  category         String?
-  purchase_date    DateTime?
-  purchase_price   Float?
-  current_value    Float?
-  location         String?
-  status           String    @default("active") // active, maintenance, retired
-  qr_code          String?
-  maintenance_date DateTime?
-  created_at       DateTime  @default(now())
-  updated_at       DateTime  @updatedAt
+model AssetCategory {
+  id          String   @id @default(uuid())
+  church_id   String
+  name        String
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
   church Church @relation(fields: [church_id], references: [id])
+  assets Asset[]
 
   @@index([church_id])
+  @@unique([church_id, name])
+  @@map("asset_categories")
+}
+
+model Asset {
+  id                  String             @id @default(uuid())
+  church_id           String
+  asset_tag           String
+  name                String
+  description         String?
+  category_id         String?
+  serial_number       String?
+  brand               String?
+  model               String?
+  department_id       String?
+  branch_id           String?
+  custodian_id        String?
+  condition           AssetCondition     @default(good)
+  status              AssetStatus        @default(active)
+  purchase_date       DateTime?
+  purchase_price      Float?
+  salvage_value       Float              @default(0)
+  useful_life_years   Int?
+  depreciation_method DepreciationMethod @default(straight_line)
+  current_value       Float?
+  location            String?
+  qr_code             String?
+  notes               String?
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @updatedAt
+
+  church       Church              @relation(fields: [church_id], references: [id])
+  category     AssetCategory?      @relation(fields: [category_id], references: [id])
+  branch       Branch?             @relation(fields: [branch_id], references: [id])
+  department   Department?         @relation(fields: [department_id], references: [id])
+  custodian    Member?             @relation(fields: [custodian_id], references: [id])
+  maintenance  AssetMaintenance[]
+  depreciation AssetDepreciation[]
+  loans        AssetLoan[]
+  scan_logs    AssetScanLog[]
+
+  @@index([church_id])
+  @@index([church_id, status])
+  @@index([church_id, category_id])
+  @@index([church_id, asset_tag])
+  @@unique([church_id, asset_tag])
   @@map("assets")
+}
+
+model AssetMaintenance {
+  id              String            @id @default(uuid())
+  asset_id        String
+  type            String
+  description     String?
+  status          MaintenanceStatus @default(scheduled)
+  scheduled_date  DateTime
+  completed_date  DateTime?
+  cost            Float?
+  performed_by    String?
+  notes           String?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  asset Asset @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+
+  @@index([asset_id])
+  @@index([asset_id, status])
+  @@index([asset_id, scheduled_date])
+  @@map("asset_maintenance")
+}
+
+model AssetDepreciation {
+  id                  String   @id @default(uuid())
+  asset_id            String
+  year                Int
+  opening_value       Float
+  depreciation_amount Float
+  closing_value       Float
+  created_at          DateTime @default(now())
+
+  asset Asset @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+
+  @@index([asset_id])
+  @@unique([asset_id, year])
+  @@map("asset_depreciation")
+}
+
+model AssetLoan {
+  id                  String          @id @default(uuid())
+  asset_id            String
+  borrower_member_id  String?
+  borrowed_by_name    String?
+  loan_date           DateTime        @default(now())
+  expected_return_date DateTime
+  actual_return_date  DateTime?
+  status              AssetLoanStatus @default(borrowed)
+  condition_before    AssetCondition?
+  condition_after     AssetCondition?
+  notes               String?
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+
+  asset  Asset  @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  member Member? @relation(fields: [borrower_member_id], references: [id])
+
+  @@index([asset_id])
+  @@index([asset_id, status])
+  @@map("asset_loans")
+}
+
+model AssetScanLog {
+  id              String   @id @default(uuid())
+  asset_id        String
+  scanned_by_id   String?
+  scan_type       String   @default("check") // check, loan, return, maintenance
+  metadata        Json     @default("{}")
+  created_at      DateTime @default(now())
+
+  asset Asset @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+
+  @@index([asset_id])
+  @@index([asset_id, created_at])
+  @@map("asset_scan_logs")
 }
 
 // ─── Forms ───────────────────────────────────────────────

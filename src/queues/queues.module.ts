@@ -19,7 +19,7 @@
  * @since 1.0.0
  */
 
-import { Module, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Module, forwardRef, OnModuleDestroy, Logger } from '@nestjs/common';
 import { BullModule, InjectQueue } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
@@ -65,7 +65,7 @@ const DEFAULT_JOB_OPTIONS = {
     CommunicationModule,
     PastoralModule,
     GivingModule,
-    BroadcastModule,
+    forwardRef(() => BroadcastModule),
   ],
   providers: [
     WhatsAppOutboundProcessor,

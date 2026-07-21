@@ -72,7 +72,7 @@ SortOrder,Repo,Phase,Module,Title,Description,Priority,Labels,Status,Iteration,S
 64,ChurchOS-Backend,Phase 3,Pastoral,Implement life event tracking and workflows,"Detect birthdays, bereavements, trigger alerts via Prisma.",Medium,"pastoral,prisma,backend",Done,Phase 3,2026-11-02,2026-11-13
 65,ChurchOS-Backend,Phase 3,Operations,Implement department management,Department CRUD and member assignments via Prisma.,Medium,"operations,prisma,backend",Done,Phase 3,2026-11-17,2026-11-27
 66,ChurchOS-Backend,Phase 3,Operations,Implement cell group management,"Cell group CRUD, nearest group recommendation via Prisma.",Medium,"operations,prisma,backend",Done,Phase 3,2026-11-17,2026-11-27
-67,ChurchOS-Backend,Phase 3,Operations,Implement asset and inventory management,Asset register with QR codes and maintenance tracking via Prisma.,Low,"operations,prisma,backend",Todo,Phase 3,2026-11-17,2026-11-27
+67,ChurchOS-Backend,Phase 3,Operations,Implement asset and inventory management,Asset register with QR codes and maintenance tracking via Prisma.,Low,"operations,prisma,backend",Done,Phase 3,2026-11-17,2026-11-27
 68,ChurchOS-Backend,Phase 4,Sync,Implement offline sync push/pull endpoints,POST /sync/push and GET /sync/pull with conflict resolution via Prisma.,High,"sync,backend",Todo,Phase 4,2026-12-01,2026-12-11
 69,ChurchOS-Backend,Phase 4,Sync,Implement sync queue processing,Process sync jobs with idempotency and retry logic via Prisma.,High,"sync,backend",Todo,Phase 4,2026-12-01,2026-12-11
 70,ChurchOS-Backend,Phase 4,API,Create third-party developer API portal,"Public API documentation, API key management, rate limiting, developer onboarding.",Medium,"api,backend",Todo,Phase 4,2026-12-01,2026-12-11

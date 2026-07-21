@@ -9,13 +9,14 @@
  * @since 1.0.0
  */
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { QueuesModule } from '../queues/queues.module';
 import { BroadcastController } from './broadcast.controller';
 import { BroadcastService } from './broadcast.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, forwardRef(() => QueuesModule)],
   controllers: [BroadcastController],
   providers: [BroadcastService],
   exports: [BroadcastService],

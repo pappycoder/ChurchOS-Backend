@@ -45,6 +45,7 @@ import { BroadcastModule } from './broadcast/broadcast.module';
 import { CommunicationModule } from './communication/communication.module';
 import { PastoralModule } from './pastoral/pastoral.module';
 import { AdminModule } from './admin/admin.module';
+import { AssetsModule } from './assets/assets.module';
 
 /**
  * Root application module.
@@ -155,6 +156,9 @@ import { AdminModule } from './admin/admin.module';
 
     // Import AdminModule for department and cell group management.
     AdminModule,
+
+    // Import AssetsModule for asset and inventory management.
+    AssetsModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.
