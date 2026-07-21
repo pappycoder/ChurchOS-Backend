@@ -47,6 +47,7 @@ import { PastoralModule } from './pastoral/pastoral.module';
 import { AdminModule } from './admin/admin.module';
 import { AssetsModule } from './assets/assets.module';
 import { FormsModule } from './forms/forms.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 /**
  * Root application module.
@@ -163,6 +164,9 @@ import { FormsModule } from './forms/forms.module';
 
     // Import FormsModule for form and submission management.
     FormsModule,
+
+    // Import AnalyticsModule for cross-domain analytics and reporting.
+    AnalyticsModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

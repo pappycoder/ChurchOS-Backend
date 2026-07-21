@@ -171,12 +171,19 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
-- **2026-07-21** — Cleaned up seed data to use Prisma-generated UUIDs.
-  - Removed hardcoded zero-UUID IDs from `prisma/seed.ts` (Church, Branch) and `prisma/seeds/form-templates.seed.ts`.
-  - Seed scripts now use `findFirst` natural-key lookups and omit `id` fields, letting Prisma generate real UUIDs.
-  - Fixed `member_since` date bug in `prisma/seed.ts` (months now cycle 1–12 correctly).
+- **2026-07-21** — Completed Wave 9: Advanced Analytics & Reporting.
+  - **Module**: Created `src/analytics/` with `AnalyticsModule`, `AnalyticsService`, `AnalyticsController`, and DTOs.
+  - **Endpoints** (6 under `/api/v1/analytics`):
+    - `GET /analytics/dashboard` — Unified overview (members, attendance, giving, risk, events, forms, engagement)
+    - `GET /analytics/giving` — Totals, trends, category/branch/type breakdown, top donors, recurring summary
+    - `GET /analytics/attendance` — Check-ins, sources, branch/service breakdown, first-time vs returning visitors, trends
+    - `GET /analytics/members` — Demographics (status, gender, age groups), monthly growth
+    - `GET /analytics/events` — Events summary, registrations, capacity, revenue, tier breakdown
+    - `GET /analytics/communication` — Channel stats (sent/delivered/read/failed), broadcast summary
+  - **DTOs**: 11 response DTOs + 2 query DTOs (date range, trend grouping)
+  - **Tests**: Added `test/unit/analytics/analytics.service.spec.ts` with 7 tests. Total: **363 tests passing across 23 suites**. Build clean, lint clean (0 errors, 0 warnings).
 
-- **2026-07-21** — Completed Wave 8: Document & Form Management.
+- **2026-07-21** — Cleaned up seed data to use Prisma-generated UUIDs.
   - **Schema**: Extended `Form` with `is_template`, `is_public`, and `public_token`. Added `SubmissionStatus` enum. Extended `FormSubmission` with `church_id`, `status`, `approved_by_id`, `approved_at`, `rejection_reason`, and `attachments`. Migration: `add_form_submission_workflow`.
   - **Module**: Created `src/forms/` with `FormsModule`, `FormsService`, `FormsController`, `FormsPublicController`, and DTOs.
   - **Endpoints**: Authenticated CRUD for forms and submissions under `/api/v1/forms`, plus public submission endpoint `POST /forms/public/:publicToken/submit`.
