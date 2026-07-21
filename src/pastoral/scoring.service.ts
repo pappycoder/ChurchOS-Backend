@@ -51,11 +51,11 @@ const LOOKBACK_WEEKS = 12;
 
 @Injectable()
 export class ScoringService {
-  // Step 1: Initialize the logger for this service
+  // Initialize the logger for this service
   private readonly logger = new Logger(ScoringService.name);
 
   constructor(
-    // Step 1: Inject PrismaService for database access
+    // Inject PrismaService for database access
     private readonly prisma: PrismaService,
   ) {}
 
@@ -66,29 +66,29 @@ export class ScoringService {
    * @returns Number of members scored
    */
   async calculateEngagementScores(churchId: string): Promise<number> {
-    // Step 1: Compute the lookback cutoff date (12 weeks ago)
+    // Compute the lookback cutoff date (12 weeks ago)
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - LOOKBACK_WEEKS * 7);
 
-    // Step 2: Fetch all active members for the church
+    // Fetch all active members for the church
     const members = await this.prisma.member.findMany({
       where: { church_id: churchId, status: 'active' },
       select: { id: true, first_name: true, last_name: true },
     });
 
-    // Step 3: Initialize the scored counter
+    // Initialize the scored counter
     let scored = 0;
 
-    // Step 4: Iterate over each member to calculate their engagement score
+    // Iterate over each member to calculate their engagement score
     for (const member of members) {
       try {
-        // Step 5: Calculate individual engagement factor values for the member
+        // Calculate individual engagement factor values for the member
         const factors = await this.calculateEngagementFactors(member.id, churchId, cutoffDate);
 
-        // Step 6: Compute the weighted engagement score from factors
+        // Compute the weighted engagement score from factors
         const score = this.computeWeightedScore(factors, ENGAGEMENT_WEIGHTS);
 
-        // Step 7: Upsert the engagement score record (update or create)
+        // Upsert the engagement score record (update or create)
         await this.prisma.engagementScore.upsert({
           where: { member_id: member.id },
           update: {
@@ -104,15 +104,15 @@ export class ScoringService {
           },
         });
 
-        // Step 8: Increment the scored counter
+        // Increment the scored counter
         scored++;
       } catch (error) {
-        // Step 9: Log errors but continue processing other members
+        // Log errors but continue processing other members
         this.logger.error(`Failed to calculate engagement for ${member.id}: ${error}`);
       }
     }
 
-    // Step 10: Log the total number of members scored and return the count
+    // Log the total number of members scored and return the count
     this.logger.log(`Engagement scores calculated for ${scored} members in church ${churchId}`);
     return scored;
   }
@@ -124,23 +124,23 @@ export class ScoringService {
    * @returns Number of members scored
    */
   async calculateRiskScores(churchId: string): Promise<number> {
-    // Step 1: Compute the lookback cutoff date (12 weeks ago)
+    // Compute the lookback cutoff date (12 weeks ago)
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - LOOKBACK_WEEKS * 7);
 
-    // Step 2: Fetch all members for the church (including inactive)
+    // Fetch all members for the church (including inactive)
     const members = await this.prisma.member.findMany({
       where: { church_id: churchId },
       select: { id: true, status: true },
     });
 
-    // Step 3: Initialize the scored counter
+    // Initialize the scored counter
     let scored = 0;
 
-    // Step 4: Iterate over each member to calculate their risk score
+    // Iterate over each member to calculate their risk score
     for (const member of members) {
       try {
-        // Step 5: Calculate individual risk factor values for the member
+        // Calculate individual risk factor values for the member
         const factors = await this.calculateRiskFactors(
           member.id,
           churchId,
@@ -148,12 +148,12 @@ export class ScoringService {
           cutoffDate,
         );
 
-        // Step 6: Compute the weighted risk score from factors
+        // Compute the weighted risk score from factors
         const score = this.computeWeightedScore(factors, RISK_WEIGHTS);
-        // Step 7: Map the numeric score to a risk level label
+        // Map the numeric score to a risk level label
         const level = this.getRiskLevel(score);
 
-        // Step 8: Upsert the risk score record (update or create)
+        // Upsert the risk score record (update or create)
         await this.prisma.riskScore.upsert({
           where: { member_id: member.id },
           update: {
@@ -171,15 +171,15 @@ export class ScoringService {
           },
         });
 
-        // Step 9: Increment the scored counter
+        // Increment the scored counter
         scored++;
       } catch (error) {
-        // Step 10: Log errors but continue processing other members
+        // Log errors but continue processing other members
         this.logger.error(`Failed to calculate risk for ${member.id}: ${error}`);
       }
     }
 
-    // Step 11: Log the total number of members scored and return the count
+    // Log the total number of members scored and return the count
     this.logger.log(`Risk scores calculated for ${scored} members in church ${churchId}`);
     return scored;
   }
@@ -192,7 +192,7 @@ export class ScoringService {
    * @returns Members with risk scores
    */
   async getMembersNeedingAttention(churchId: string, limit = 20) {
-    // Step 1: Query risk scores filtered to high/critical levels, ordered by highest score first
+    // Query risk scores filtered to high/critical levels, ordered by highest score first
     return this.prisma.riskScore.findMany({
       where: {
         church_id: churchId,
@@ -227,7 +227,7 @@ export class ScoringService {
     low_engagement: number;
     disengaged: number;
   }> {
-    // Step 1: Count members in each engagement tier in parallel
+    // Count members in each engagement tier in parallel
     const [highlyEngaged, moderatelyEngaged, lowEngagement, disengaged] = await Promise.all([
       this.prisma.engagementScore.count({
         where: { church_id: churchId, score: { gte: 70 } },
@@ -243,7 +243,7 @@ export class ScoringService {
       }),
     ]);
 
-    // Step 2: Return the distribution as a structured object
+    // Return the distribution as a structured object
     return {
       highly_engaged: highlyEngaged,
       moderately_engaged: moderatelyEngaged,
@@ -260,7 +260,7 @@ export class ScoringService {
    * @returns Top engaging members
    */
   async getRisingStars(churchId: string, limit = 10) {
-    // Step 1: Query high-scoring engagement records ordered by score descending
+    // Query high-scoring engagement records ordered by score descending
     return this.prisma.engagementScore.findMany({
       where: {
         church_id: churchId,
@@ -296,7 +296,7 @@ export class ScoringService {
     _churchId: string,
     cutoffDate: Date,
   ): Promise<Record<string, number>> {
-    // Step 1: Fetch all raw activity data in parallel for the lookback period
+    // Fetch all raw activity data in parallel for the lookback period
     const [attendanceCount, givingCount, givingTotal, eventCount, messageCount] = await Promise.all(
       [
         this.prisma.attendance.count({
@@ -336,10 +336,10 @@ export class ScoringService {
       ],
     );
 
-    // Step 2: Compute the total number of weeks in the lookback window
+    // Compute the total number of weeks in the lookback window
     const totalWeeks = LOOKBACK_WEEKS;
 
-    // Step 3: Normalize each raw count to a 0-1 factor value
+    // Normalize each raw count to a 0-1 factor value
     return {
       // Attendance: check-ins per expected services (0.5 services/week × 12 weeks = 6)
       attendance: Math.min(attendanceCount / (totalWeeks * 0.5), 1),
@@ -371,7 +371,7 @@ export class ScoringService {
     memberStatus: string,
     cutoffDate: Date,
   ): Promise<Record<string, number>> {
-    // Step 1: Fetch raw activity data and last activity in parallel
+    // Fetch raw activity data and last activity in parallel
     const [recentAttendance, recentGiving, recentMessages, lastActivity] = await Promise.all([
       this.prisma.attendance.count({
         where: {
@@ -399,10 +399,10 @@ export class ScoringService {
       }),
     ]);
 
-    // Step 2: Compute the total number of weeks in the lookback window
+    // Compute the total number of weeks in the lookback window
     const totalWeeks = LOOKBACK_WEEKS;
 
-    // Step 3: Calculate weeks since last attendance, capped at totalWeeks
+    // Calculate weeks since last attendance, capped at totalWeeks
     const weeksSinceLastActivity = lastActivity
       ? Math.min(
           (Date.now() - lastActivity.checkin_at.getTime()) / (7 * 24 * 60 * 60 * 1000),
@@ -410,7 +410,7 @@ export class ScoringService {
         )
       : totalWeeks;
 
-    // Step 4: Compute risk factors (higher value = more risk)
+    // Compute risk factors (higher value = more risk)
     return {
       // Attendance decline: inverse of recent attendance ratio
       attendanceDecline: Math.max(1 - recentAttendance / (totalWeeks * 0.5), 0),
@@ -438,18 +438,18 @@ export class ScoringService {
     factors: Record<string, number>,
     weights: Record<string, number>,
   ): number {
-    // Step 1: Initialize accumulators for weighted sum and total weight
+    // Initialize accumulators for weighted sum and total weight
     let totalWeight = 0;
     let weightedSum = 0;
 
-    // Step 2: Iterate over each weight factor and accumulate weighted values
+    // Iterate over each weight factor and accumulate weighted values
     for (const [key, weight] of Object.entries(weights)) {
       const factor = factors[key] || 0;
       weightedSum += factor * weight;
       totalWeight += weight;
     }
 
-    // Step 3: Normalize by total weight and scale to 0-100, rounded to integer
+    // Normalize by total weight and scale to 0-100, rounded to integer
     return Math.round((weightedSum / totalWeight) * 100);
   }
 
@@ -460,7 +460,7 @@ export class ScoringService {
    * @returns Risk level
    */
   private getRiskLevel(score: number): 'low' | 'medium' | 'high' | 'critical' {
-    // Step 1: Map score ranges to discrete risk levels
+    // Map score ranges to discrete risk levels
     if (score >= 75) return 'critical';
     if (score >= 50) return 'high';
     if (score >= 25) return 'medium';

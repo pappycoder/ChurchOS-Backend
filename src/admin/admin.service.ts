@@ -26,13 +26,13 @@ import {
 
 @Injectable()
 export class AdminService {
-  // Step 1: Initialize logger for this service
+  // Initialize logger for this service
   private readonly logger = new Logger(AdminService.name);
 
   constructor(
-    // Step 1: Inject PrismaService for database access
+    // Inject PrismaService for database access
     private readonly prisma: PrismaService,
-    // Step 2: Inject AuditLoggingService for mutation audit trails
+    // Inject AuditLoggingService for mutation audit trails
     private readonly audit: AuditLoggingService,
   ) {}
 
@@ -51,7 +51,7 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<DepartmentResponseDto> {
-    // Step 1: Validate parent department exists within the same church if provided
+    // Validate parent department exists within the same church if provided
     if (dto.parentId) {
       const parent = await this.prisma.department.findFirst({
         where: { id: dto.parentId, church_id: churchId },
@@ -61,7 +61,7 @@ export class AdminService {
       }
     }
 
-    // Step 2: Create the department record in the database
+    // Create the department record in the database
     const department = await this.prisma.department.create({
       data: {
         church_id: churchId,
@@ -71,10 +71,10 @@ export class AdminService {
       },
     });
 
-    // Step 3: Log the creation for operational monitoring
+    // Log the creation for operational monitoring
     this.logger.log(`Department created: ${department.id} (${department.name})`);
 
-    // Step 4: Record the creation in the audit log
+    // Record the creation in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -84,7 +84,7 @@ export class AdminService {
       newValues: { name: department.name },
     });
 
-    // Step 5: Map the Prisma record to a response DTO and return
+    // Map the Prisma record to a response DTO and return
     return this.mapDepartmentToResponseDto(department, []);
   }
 
@@ -95,7 +95,7 @@ export class AdminService {
    * @returns List of departments with member counts
    */
   async listDepartments(churchId: string): Promise<DepartmentResponseDto[]> {
-    // Step 1: Query all departments for the church with their members
+    // Query all departments for the church with their members
     const departments = await this.prisma.department.findMany({
       where: { church_id: churchId },
       include: {
@@ -108,7 +108,7 @@ export class AdminService {
       orderBy: { name: 'asc' },
     });
 
-    // Step 2: Map each department to a response DTO with member info
+    // Map each department to a response DTO with member info
     return departments.map((d) => this.mapDepartmentToResponseDto(d, d.department_members));
   }
 
@@ -120,7 +120,7 @@ export class AdminService {
    * @returns Department with members
    */
   async getDepartmentById(departmentId: string, churchId: string): Promise<DepartmentResponseDto> {
-    // Step 1: Fetch the department by ID scoped to the church
+    // Fetch the department by ID scoped to the church
     const department = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
       include: {
@@ -132,12 +132,12 @@ export class AdminService {
       },
     });
 
-    // Step 2: Throw NotFoundException if department does not exist
+    // Throw NotFoundException if department does not exist
     if (!department) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // Step 3: Map and return the department with its members
+    // Map and return the department with its members
     return this.mapDepartmentToResponseDto(department, department.department_members);
   }
 
@@ -156,17 +156,17 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<DepartmentResponseDto> {
-    // Step 1: Verify the department exists within this church
+    // Verify the department exists within this church
     const existing = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if department does not exist
+    // Throw NotFoundException if department does not exist
     if (!existing) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // Step 3: Apply partial updates to the department record
+    // Apply partial updates to the department record
     const updated = await this.prisma.department.update({
       where: { id: departmentId },
       data: {
@@ -183,10 +183,10 @@ export class AdminService {
       },
     });
 
-    // Step 4: Log the update for operational monitoring
+    // Log the update for operational monitoring
     this.logger.log(`Department updated: ${departmentId}`);
 
-    // Step 5: Record the update in the audit log
+    // Record the update in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -200,7 +200,7 @@ export class AdminService {
       },
     });
 
-    // Step 6: Map and return the updated department
+    // Map and return the updated department
     return this.mapDepartmentToResponseDto(updated, updated.department_members);
   }
 
@@ -212,31 +212,31 @@ export class AdminService {
    * @param userId - User performing delete
    */
   async deleteDepartment(departmentId: string, churchId: string, userId: string): Promise<void> {
-    // Step 1: Fetch the department with member count
+    // Fetch the department with member count
     const existing = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
       include: { _count: { select: { department_members: true } } },
     });
 
-    // Step 2: Throw NotFoundException if department does not exist
+    // Throw NotFoundException if department does not exist
     if (!existing) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // Step 3: Block deletion if department has assigned members
+    // Block deletion if department has assigned members
     if (existing._count.department_members > 0) {
       throw new ConflictException(
         'Cannot delete department with assigned members. Remove all members first.',
       );
     }
 
-    // Step 4: Delete the department record
+    // Delete the department record
     await this.prisma.department.delete({ where: { id: departmentId } });
 
-    // Step 5: Log the deletion for operational monitoring
+    // Log the deletion for operational monitoring
     this.logger.log(`Department deleted: ${departmentId}`);
 
-    // Step 6: Record the deletion in the audit log
+    // Record the deletion in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -261,27 +261,27 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<void> {
-    // Step 1: Verify the department exists within this church
+    // Verify the department exists within this church
     const department = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if department does not exist
+    // Throw NotFoundException if department does not exist
     if (!department) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // Step 3: Check if the member is already assigned to this department
+    // Check if the member is already assigned to this department
     const existing = await this.prisma.departmentMember.findUnique({
       where: { department_id_member_id: { department_id: departmentId, member_id: dto.memberId } },
     });
 
-    // Step 4: Throw ConflictException if member is already in the department
+    // Throw ConflictException if member is already in the department
     if (existing) {
       throw new ConflictException(`Member ${dto.memberId} is already in this department`);
     }
 
-    // Step 5: Create the department-member assignment record
+    // Create the department-member assignment record
     await this.prisma.departmentMember.create({
       data: {
         department_id: departmentId,
@@ -290,10 +290,10 @@ export class AdminService {
       },
     });
 
-    // Step 6: Log the assignment for operational monitoring
+    // Log the assignment for operational monitoring
     this.logger.log(`Member ${dto.memberId} added to department ${departmentId}`);
 
-    // Step 7: Record the assignment in the audit log
+    // Record the assignment in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -318,25 +318,25 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<void> {
-    // Step 1: Verify the member is assigned to this department
+    // Verify the member is assigned to this department
     const existing = await this.prisma.departmentMember.findUnique({
       where: { department_id_member_id: { department_id: departmentId, member_id: memberId } },
     });
 
-    // Step 2: Throw NotFoundException if the membership record does not exist
+    // Throw NotFoundException if the membership record does not exist
     if (!existing) {
       throw new NotFoundException(`Member ${memberId} not found in department ${departmentId}`);
     }
 
-    // Step 3: Delete the department-member assignment record
+    // Delete the department-member assignment record
     await this.prisma.departmentMember.delete({
       where: { department_id_member_id: { department_id: departmentId, member_id: memberId } },
     });
 
-    // Step 4: Log the removal for operational monitoring
+    // Log the removal for operational monitoring
     this.logger.log(`Member ${memberId} removed from department ${departmentId}`);
 
-    // Step 5: Record the removal in the audit log
+    // Record the removal in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -362,7 +362,7 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<CellGroupResponseDto> {
-    // Step 1: Create the cell group record in the database
+    // Create the cell group record in the database
     const group = await this.prisma.cellGroup.create({
       data: {
         church_id: churchId,
@@ -375,10 +375,10 @@ export class AdminService {
       },
     });
 
-    // Step 2: Log the creation for operational monitoring
+    // Log the creation for operational monitoring
     this.logger.log(`Cell group created: ${group.id} (${group.name})`);
 
-    // Step 3: Record the creation in the audit log
+    // Record the creation in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -388,7 +388,7 @@ export class AdminService {
       newValues: { name: group.name },
     });
 
-    // Step 4: Map the Prisma record to a response DTO and return
+    // Map the Prisma record to a response DTO and return
     return this.mapCellGroupToResponseDto(group);
   }
 
@@ -399,13 +399,13 @@ export class AdminService {
    * @returns List of cell groups
    */
   async listCellGroups(churchId: string): Promise<CellGroupResponseDto[]> {
-    // Step 1: Query all cell groups for the church ordered by name
+    // Query all cell groups for the church ordered by name
     const groups = await this.prisma.cellGroup.findMany({
       where: { church_id: churchId },
       orderBy: { name: 'asc' },
     });
 
-    // Step 2: Map each group to a response DTO
+    // Map each group to a response DTO
     return groups.map((g) => this.mapCellGroupToResponseDto(g));
   }
 
@@ -417,17 +417,17 @@ export class AdminService {
    * @returns Cell group data
    */
   async getCellGroupById(groupId: string, churchId: string): Promise<CellGroupResponseDto> {
-    // Step 1: Fetch the cell group by ID scoped to the church
+    // Fetch the cell group by ID scoped to the church
     const group = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if group does not exist
+    // Throw NotFoundException if group does not exist
     if (!group) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // Step 3: Map and return the cell group
+    // Map and return the cell group
     return this.mapCellGroupToResponseDto(group);
   }
 
@@ -446,17 +446,17 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<CellGroupResponseDto> {
-    // Step 1: Verify the cell group exists within this church
+    // Verify the cell group exists within this church
     const existing = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if group does not exist
+    // Throw NotFoundException if group does not exist
     if (!existing) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // Step 3: Apply partial updates to the cell group record
+    // Apply partial updates to the cell group record
     const updated = await this.prisma.cellGroup.update({
       where: { id: groupId },
       data: {
@@ -469,10 +469,10 @@ export class AdminService {
       },
     });
 
-    // Step 4: Log the update for operational monitoring
+    // Log the update for operational monitoring
     this.logger.log(`Cell group updated: ${groupId}`);
 
-    // Step 5: Record the update in the audit log
+    // Record the update in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -486,7 +486,7 @@ export class AdminService {
       },
     });
 
-    // Step 6: Map and return the updated cell group
+    // Map and return the updated cell group
     return this.mapCellGroupToResponseDto(updated);
   }
 
@@ -498,23 +498,23 @@ export class AdminService {
    * @param userId - User performing delete
    */
   async deleteCellGroup(groupId: string, churchId: string, userId: string): Promise<void> {
-    // Step 1: Verify the cell group exists within this church
+    // Verify the cell group exists within this church
     const existing = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if group does not exist
+    // Throw NotFoundException if group does not exist
     if (!existing) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // Step 3: Delete the cell group record
+    // Delete the cell group record
     await this.prisma.cellGroup.delete({ where: { id: groupId } });
 
-    // Step 4: Log the deletion for operational monitoring
+    // Log the deletion for operational monitoring
     this.logger.log(`Cell group deleted: ${groupId}`);
 
-    // Step 5: Record the deletion in the audit log
+    // Record the deletion in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -541,7 +541,7 @@ export class AdminService {
     churchId: string,
     limit = 5,
   ): Promise<NearestGroupResponseDto[]> {
-    // Step 1: Fetch all cell groups with geolocation data for this church
+    // Fetch all cell groups with geolocation data for this church
     const groups = await this.prisma.cellGroup.findMany({
       where: {
         church_id: churchId,
@@ -550,7 +550,7 @@ export class AdminService {
       },
     });
 
-    // Step 2: Calculate distance from user to each group using Haversine formula
+    // Calculate distance from user to each group using Haversine formula
     const groupsWithDistance = groups
       .map((group) => {
         const distance = this.haversineDistance(
@@ -564,12 +564,12 @@ export class AdminService {
           distanceKm: Math.round(distance * 100) / 100,
         };
       })
-      // Step 3: Sort groups by distance (nearest first)
+      // Sort groups by distance (nearest first)
       .sort((a, b) => a.distanceKm - b.distanceKm)
-      // Step 4: Limit results to the requested number
+      // Limit results to the requested number
       .slice(0, limit);
 
-    // Step 5: Return the nearest groups with distances
+    // Return the nearest groups with distances
     return groupsWithDistance;
   }
 
@@ -585,21 +585,21 @@ export class AdminService {
    * @returns Distance in kilometers
    */
   private haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    // Step 1: Set Earth's radius in kilometers
+    // Set Earth's radius in kilometers
     const R = 6371; // Earth's radius in km
-    // Step 2: Convert latitude and longitude differences to radians
+    // Convert latitude and longitude differences to radians
     const dLat = this.toRad(lat2 - lat1);
     const dLon = this.toRad(lon2 - lon1);
-    // Step 3: Calculate the Haversine intermediate value (a)
+    // Calculate the Haversine intermediate value (a)
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(this.toRad(lat1)) *
         Math.cos(this.toRad(lat2)) *
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
-    // Step 4: Calculate the angular distance in radians (c)
+    // Calculate the angular distance in radians (c)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    // Step 5: Multiply by Earth's radius to get distance in km
+    // Multiply by Earth's radius to get distance in km
     return R * c;
   }
 
@@ -607,7 +607,7 @@ export class AdminService {
    * Converts degrees to radians.
    */
   private toRad(deg: number): number {
-    // Step 1: Convert degrees to radians using the standard formula
+    // Convert degrees to radians using the standard formula
     return (deg * Math.PI) / 180;
   }
 
@@ -632,14 +632,14 @@ export class AdminService {
       member?: { first_name: string; last_name: string } | null;
     }>,
   ): DepartmentResponseDto {
-    // Step 1: Map the department fields to camelCase DTO properties
+    // Map the department fields to camelCase DTO properties
     return {
       id: dept.id,
       churchId: dept.church_id,
       name: dept.name,
       description: dept.description || undefined,
       parentId: dept.parent_id || undefined,
-      // Step 2: Map each member record to a DepartmentMemberDto
+      // Map each member record to a DepartmentMemberDto
       members: members.map((m) => ({
         id: m.id,
         memberId: m.member_id,
@@ -648,9 +648,9 @@ export class AdminService {
         role: m.role,
         joinedAt: m.joined_at.toISOString(),
       })),
-      // Step 3: Set the total member count
+      // Set the total member count
       memberCount: members.length,
-      // Step 4: Convert timestamp fields to ISO strings
+      // Convert timestamp fields to ISO strings
       createdAt: dept.created_at.toISOString(),
       updatedAt: dept.updated_at.toISOString(),
     };
@@ -671,7 +671,7 @@ export class AdminService {
     created_at: Date;
     updated_at: Date;
   }): CellGroupResponseDto {
-    // Step 1: Map the cell group fields to camelCase DTO properties
+    // Map the cell group fields to camelCase DTO properties
     return {
       id: group.id,
       churchId: group.church_id,
@@ -681,7 +681,7 @@ export class AdminService {
       longitude: group.longitude || undefined,
       meetingDay: group.meeting_day || undefined,
       meetingTime: group.meeting_time || undefined,
-      // Step 2: Convert timestamp fields to ISO strings
+      // Convert timestamp fields to ISO strings
       createdAt: group.created_at.toISOString(),
       updatedAt: group.updated_at.toISOString(),
     };

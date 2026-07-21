@@ -14,7 +14,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsEnum, MaxLength } from 'class-validator';
 
 export class CreatePastoralNoteDto {
-  // Step 1: Require a valid member ID to associate the note with
+  // Require a valid member ID to associate the note with
   @ApiProperty({
     description: 'ID of the member this note is about',
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -22,7 +22,7 @@ export class CreatePastoralNoteDto {
   @IsString()
   memberId!: string;
 
-  // Step 2: Set default confidentiality level to standard
+  // Set default confidentiality level to standard
   @ApiProperty({
     description: 'Confidentiality level for this note',
     enum: ['standard', 'confidential', 'restricted'],
@@ -32,7 +32,7 @@ export class CreatePastoralNoteDto {
   @IsEnum(['standard', 'confidential', 'restricted'])
   confidentiality?: 'standard' | 'confidential' | 'restricted';
 
-  // Step 3: Require note content with a max length of 5000 characters
+  // Require note content with a max length of 5000 characters
   @ApiProperty({
     description: 'Content of the pastoral note (will be encrypted at rest)',
     example: 'Member expressed concerns about family health issues.',
@@ -41,7 +41,7 @@ export class CreatePastoralNoteDto {
   @MaxLength(5000)
   content!: string;
 
-  // Step 4: Allow optional tags for categorization
+  // Allow optional tags for categorization
   @ApiPropertyOptional({
     description: 'Tags for categorizing the note',
     example: ['prayer', 'follow-up', 'counseling'],

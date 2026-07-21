@@ -50,7 +50,7 @@ import { LifeEventResponseDto } from './dto/life-event-response.dto';
 @Controller('pastoral')
 export class PastoralController {
   constructor(
-    // Step 1: Inject PastoralService for business logic delegation
+    // Inject PastoralService for business logic delegation
     private readonly pastoralService: PastoralService,
   ) {}
 
@@ -71,9 +71,9 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate note creation to the pastoral service
+    // Delegate note creation to the pastoral service
     return this.pastoralService.createNote(dto, churchId, user.sub);
   }
 
@@ -96,10 +96,10 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ) {
-    // Step 1: Extract church ID and user role from the authenticated profile
+    // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
     const role = req.profile?.role || '';
-    // Step 2: Delegate the listing to the pastoral service with role-based filtering
+    // Delegate the listing to the pastoral service with role-based filtering
     return this.pastoralService.listNotes(query, churchId, role, user.sub);
   }
 
@@ -120,10 +120,10 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Extract church ID and user role from the authenticated profile
+    // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
     const role = req.profile?.role || '';
-    // Step 2: Delegate the lookup to the pastoral service
+    // Delegate the lookup to the pastoral service
     return this.pastoralService.getNoteById(noteId, churchId, role, user.sub);
   }
 
@@ -146,10 +146,10 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Extract church ID and user role from the authenticated profile
+    // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
     const role = req.profile?.role || '';
-    // Step 2: Delegate the update to the pastoral service with ownership check
+    // Delegate the update to the pastoral service with ownership check
     return this.pastoralService.updateNote(noteId, dto, churchId, user.sub, role);
   }
 
@@ -170,10 +170,10 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract church ID and user role from the authenticated profile
+    // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
     const role = req.profile?.role || '';
-    // Step 2: Delegate the deletion to the pastoral service with authorization check
+    // Delegate the deletion to the pastoral service with authorization check
     return this.pastoralService.deleteNote(noteId, churchId, user.sub, role);
   }
 
@@ -196,9 +196,9 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<LifeEventResponseDto> {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate life event creation to the pastoral service
+    // Delegate life event creation to the pastoral service
     return this.pastoralService.createLifeEvent(dto, churchId, user.sub);
   }
 
@@ -214,9 +214,9 @@ export class PastoralController {
   @ApiPaginatedResponse(LifeEventResponseDto)
   @ApiOperation({ summary: 'List life events with filters' })
   async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: AuthenticatedRequest) {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate the listing to the pastoral service
+    // Delegate the listing to the pastoral service
     return this.pastoralService.listLifeEvents(query, churchId);
   }
 
@@ -234,9 +234,9 @@ export class PastoralController {
     @Query('daysAhead') daysAhead: number,
     @Req() req: AuthenticatedRequest,
   ) {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate the query to the pastoral service with default 30-day lookahead
+    // Delegate the query to the pastoral service with default 30-day lookahead
     return this.pastoralService.getUpcomingLifeEvents(churchId, daysAhead || 30);
   }
 
@@ -255,9 +255,9 @@ export class PastoralController {
     @Param('eventId') eventId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<LifeEventResponseDto> {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate the lookup to the pastoral service
+    // Delegate the lookup to the pastoral service
     return this.pastoralService.getLifeEventById(eventId, churchId);
   }
 
@@ -278,9 +278,9 @@ export class PastoralController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract the church ID from the authenticated user's profile
+    // Extract the church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate the deletion to the pastoral service
+    // Delegate the deletion to the pastoral service
     return this.pastoralService.deleteLifeEvent(eventId, churchId, user.sub);
   }
 }

@@ -57,7 +57,7 @@ export class AuthService {
    */
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
     // TODO: Change Supabase rate limit back to 30/5mins after testing (currently set to 3000/5mins)
-    // Step 1: Create Supabase Auth user
+    // Create Supabase Auth user
     const { data: authData, error: authError } = await this.supabase.client.auth.signUp({
       email: dto.email,
       password: dto.password,
@@ -98,7 +98,7 @@ export class AuthService {
 
     const userId = authData.user.id;
 
-    // Step 2 & 3: Create Church + Profile in a transaction
+    // Create Church + Profile in a transaction
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         // Create church
@@ -334,7 +334,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
-    // Step 1: Verify current password
+    // Verify current password
     const { error: signInError } = await this.supabase.client.auth.signInWithPassword({
       email,
       password: currentPassword,
@@ -345,7 +345,7 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    // Step 2: Update to new password
+    // Update to new password
     const { error: updateError } = await this.supabase.client.auth.updateUser({
       password: newPassword,
     });
@@ -355,7 +355,7 @@ export class AuthService {
       throw new InternalServerErrorException('Failed to update password');
     }
 
-    // Step 3: Audit-log
+    // Audit-log
     await this.audit.log({
       userId,
       churchId: '',

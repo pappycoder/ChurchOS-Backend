@@ -12,26 +12,26 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PastoralNoteResponseDto {
-  // Step 1: Unique note identifier
+  // Unique note identifier
   @ApiProperty()
   id!: string;
 
-  // Step 2: Multi-tenant church scope
+  // Multi-tenant church scope
   @ApiProperty()
   churchId!: string;
 
-  // Step 3: Associated member reference
+  // Associated member reference
   @ApiProperty()
   memberId!: string;
 
-  // Step 4: Member name fields for display
+  // Member name fields for display
   @ApiProperty()
   memberFirstName!: string;
 
   @ApiProperty()
   memberLastName!: string;
 
-  // Step 5: Author (leader) who created the note
+  // Author (leader) who created the note
   @ApiProperty()
   authorId!: string;
 
@@ -41,21 +41,21 @@ export class PastoralNoteResponseDto {
   @ApiProperty()
   authorLastName!: string;
 
-  // Step 6: Decrypted content (never expose encrypted form)
+  // Decrypted content (never expose encrypted form)
   @ApiProperty({ description: 'Decrypted content of the pastoral note' })
   content!: string;
 
-  // Step 7: Confidentiality access level
+  // Confidentiality access level
   @ApiProperty({
     enum: ['standard', 'confidential', 'restricted'],
   })
   confidentiality!: string;
 
-  // Step 8: Categorization tags
+  // Categorization tags
   @ApiProperty({ type: [String] })
   tags!: string[];
 
-  // Step 9: Timestamps for audit trail
+  // Timestamps for audit trail
   @ApiProperty()
   createdAt!: string;
 

@@ -49,7 +49,7 @@ const AUTH_TAG_LENGTH = 16;
 
 @Injectable()
 export class PastoralService {
-  // Step 1: Initialize the logger for this service
+  // Initialize the logger for this service
   private readonly logger = new Logger(PastoralService.name);
 
   /**
@@ -59,14 +59,14 @@ export class PastoralService {
   private readonly encryptionKey: Buffer;
 
   constructor(
-    // Step 1: Inject PrismaService for database access
+    // Inject PrismaService for database access
     private readonly prisma: PrismaService,
-    // Step 2: Inject AuditLoggingService for mutation audit trails
+    // Inject AuditLoggingService for mutation audit trails
     private readonly audit: AuditLoggingService,
   ) {
-    // Step 3: Read the raw encryption key from environment or use a dev fallback
+    // Read the raw encryption key from environment or use a dev fallback
     const rawKey = process.env.PASTORAL_ENCRYPTION_KEY || 'dev-only-change-in-production-32b';
-    // Step 4: Derive a 32-byte AES-256 key using scrypt with a fixed salt
+    // Derive a 32-byte AES-256 key using scrypt with a fixed salt
     this.encryptionKey = crypto.scryptSync(rawKey, 'churchos-pastoral-salt', 32);
   }
 
@@ -83,10 +83,10 @@ export class PastoralService {
     churchId: string,
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Encrypt the plaintext content using AES-256-GCM
+    // Encrypt the plaintext content using AES-256-GCM
     const encryptedContent = this.encrypt(dto.content);
 
-    // Step 2: Create the pastoral note record in the database with encrypted content
+    // Create the pastoral note record in the database with encrypted content
     const note = await this.prisma.pastoralNote.create({
       data: {
         church_id: churchId,
@@ -102,10 +102,10 @@ export class PastoralService {
       },
     });
 
-    // Step 3: Log the creation event for audit trail
+    // Log the creation event for audit trail
     this.logger.log(`Pastoral note created: ${note.id} for member ${dto.memberId}`);
 
-    // Step 4: Record the mutation in the audit log table
+    // Record the mutation in the audit log table
     await this.audit.log({
       churchId,
       userId,
@@ -115,7 +115,7 @@ export class PastoralService {
       newValues: { memberId: dto.memberId, confidentiality: note.confidentiality },
     });
 
-    // Step 5: Map the Prisma record to a response DTO with decrypted content
+    // Map the Prisma record to a response DTO with decrypted content
     return this.mapToResponseDto(note, dto.content);
   }
 
@@ -144,36 +144,36 @@ export class PastoralService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    // Step 2: Build the base where clause scoped to the church
+    // Build the base where clause scoped to the church
     const where: Prisma.PastoralNoteWhereInput = { church_id: churchId };
 
-    // Step 3: Apply optional member filter
+    // Apply optional member filter
     if (query.memberId) {
       where.member_id = query.memberId;
     }
 
-    // Step 4: Apply optional author filter
+    // Apply optional author filter
     if (query.authorId) {
       where.author_id = query.authorId;
     }
 
-    // Step 5: Apply optional confidentiality filter
+    // Apply optional confidentiality filter
     if (query.confidentiality) {
       where.confidentiality = query.confidentiality;
     }
 
-    // Step 6: Apply optional tag filter using Prisma's hasSome
+    // Apply optional tag filter using Prisma's hasSome
     if (query.tags && query.tags.length > 0) {
       where.tags = { hasSome: query.tags };
     }
 
-    // Step 7: Apply confidentiality-based access control filter for the user's role
+    // Apply confidentiality-based access control filter for the user's role
     const confidentialityFilter = this.getConfidentialityFilter(userRole, userId);
     if (confidentialityFilter) {
       where.AND = confidentialityFilter;
     }
 
-    // Step 8: Execute paginated query and count total in parallel
+    // Execute paginated query and count total in parallel
     const [notes, total] = await Promise.all([
       this.prisma.pastoralNote.findMany({
         where,
@@ -190,13 +190,13 @@ export class PastoralService {
       this.prisma.pastoralNote.count({ where }),
     ]);
 
-    // Step 9: Decrypt content and map each note to a response DTO
+    // Decrypt content and map each note to a response DTO
     const data = notes.map((note) => {
       const decryptedContent = this.decrypt(note.content);
       return this.mapToResponseDto(note, decryptedContent);
     });
 
-    // Step 10: Return the paginated result with metadata
+    // Return the paginated result with metadata
     return {
       data,
       meta: {
@@ -225,7 +225,7 @@ export class PastoralService {
     userRole: string,
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Fetch the note by ID scoped to the church
+    // Fetch the note by ID scoped to the church
     const note = await this.prisma.pastoralNote.findFirst({
       where: { id: noteId, church_id: churchId },
       include: {
@@ -234,15 +234,15 @@ export class PastoralService {
       },
     });
 
-    // Step 2: Throw NotFoundException if the note does not exist
+    // Throw NotFoundException if the note does not exist
     if (!note) {
       throw new NotFoundException(`Pastoral note ${noteId} not found`);
     }
 
-    // Step 3: Verify the user has access based on the note's confidentiality level
+    // Verify the user has access based on the note's confidentiality level
     this.checkConfidentialityAccess(note, userRole, userId);
 
-    // Step 4: Decrypt the content and map to response DTO
+    // Decrypt the content and map to response DTO
     const decryptedContent = this.decrypt(note.content);
     return this.mapToResponseDto(note, decryptedContent);
   }
@@ -266,40 +266,40 @@ export class PastoralService {
     userId: string,
     userRole: string,
   ): Promise<PastoralNoteResponseDto> {
-    // Step 1: Fetch the existing note to verify it exists and check ownership
+    // Fetch the existing note to verify it exists and check ownership
     const existing = await this.prisma.pastoralNote.findFirst({
       where: { id: noteId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if the note does not exist
+    // Throw NotFoundException if the note does not exist
     if (!existing) {
       throw new NotFoundException(`Pastoral note ${noteId} not found`);
     }
 
-    // Step 3: Enforce that only the author or admin/pastor can update
+    // Enforce that only the author or admin/pastor can update
     if (existing.author_id !== userId && !['church_admin', 'senior_pastor'].includes(userRole)) {
       throw new ForbiddenException('Only the author or admin can update this note');
     }
 
-    // Step 4: Build the update payload with only provided fields
+    // Build the update payload with only provided fields
     const updateData: Prisma.PastoralNoteUpdateInput = {};
 
-    // Step 5: Encrypt new content if provided
+    // Encrypt new content if provided
     if (dto.content !== undefined) {
       updateData.content = this.encrypt(dto.content);
     }
 
-    // Step 6: Update confidentiality level if provided
+    // Update confidentiality level if provided
     if (dto.confidentiality !== undefined) {
       updateData.confidentiality = dto.confidentiality;
     }
 
-    // Step 7: Update tags if provided
+    // Update tags if provided
     if (dto.tags !== undefined) {
       updateData.tags = dto.tags;
     }
 
-    // Step 8: Apply the update to the database
+    // Apply the update to the database
     const updated = await this.prisma.pastoralNote.update({
       where: { id: noteId },
       data: updateData,
@@ -309,10 +309,10 @@ export class PastoralService {
       },
     });
 
-    // Step 9: Log the update event
+    // Log the update event
     this.logger.log(`Pastoral note updated: ${noteId}`);
 
-    // Step 10: Record the mutation in the audit log
+    // Record the mutation in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -322,7 +322,7 @@ export class PastoralService {
       newValues: { updatedFields: Object.keys(updateData) },
     });
 
-    // Step 11: Decrypt content (use original plaintext if content was updated)
+    // Decrypt content (use original plaintext if content was updated)
     const decryptedContent = dto.content || this.decrypt(updated.content);
     return this.mapToResponseDto(updated, decryptedContent);
   }
@@ -341,17 +341,17 @@ export class PastoralService {
     userId: string,
     userRole: string,
   ): Promise<void> {
-    // Step 1: Fetch the existing note to verify it exists and check confidentiality
+    // Fetch the existing note to verify it exists and check confidentiality
     const existing = await this.prisma.pastoralNote.findFirst({
       where: { id: noteId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if the note does not exist
+    // Throw NotFoundException if the note does not exist
     if (!existing) {
       throw new NotFoundException(`Pastoral note ${noteId} not found`);
     }
 
-    // Step 3: Enforce dual authorization for restricted notes (admin or senior pastor only)
+    // Enforce dual authorization for restricted notes (admin or senior pastor only)
     if (
       existing.confidentiality === 'restricted' &&
       !['church_admin', 'senior_pastor'].includes(userRole)
@@ -361,7 +361,7 @@ export class PastoralService {
       );
     }
 
-    // Step 4: For non-restricted notes, only the author or admin can delete
+    // For non-restricted notes, only the author or admin can delete
     if (
       existing.confidentiality !== 'restricted' &&
       existing.author_id !== userId &&
@@ -370,13 +370,13 @@ export class PastoralService {
       throw new ForbiddenException('Only the author or admin can delete this note');
     }
 
-    // Step 5: Delete the note from the database
+    // Delete the note from the database
     await this.prisma.pastoralNote.delete({ where: { id: noteId } });
 
-    // Step 6: Log the deletion event
+    // Log the deletion event
     this.logger.log(`Pastoral note deleted: ${noteId}`);
 
-    // Step 7: Record the deletion in the audit log
+    // Record the deletion in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -394,21 +394,21 @@ export class PastoralService {
    * @returns Encrypted string in format: iv:authTag:ciphertext (all hex-encoded)
    */
   encrypt(plaintext: string): string {
-    // Step 1: Generate a random initialization vector
+    // Generate a random initialization vector
     const iv = crypto.randomBytes(IV_LENGTH);
-    // Step 2: Create the AES-256-GCM cipher with the derived key and IV
+    // Create the AES-256-GCM cipher with the derived key and IV
     const cipher = crypto.createCipheriv(ALGORITHM, this.encryptionKey, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
 
-    // Step 3: Encrypt the plaintext in chunks and finalize
+    // Encrypt the plaintext in chunks and finalize
     let encrypted = cipher.update(plaintext, 'utf8', 'hex');
     encrypted += cipher.final('hex');
 
-    // Step 4: Extract the authentication tag for integrity verification
+    // Extract the authentication tag for integrity verification
     const authTag = cipher.getAuthTag();
 
-    // Step 5: Return the combined payload: iv:authTag:ciphertext (all hex)
+    // Return the combined payload: iv:authTag:ciphertext (all hex)
     return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
   }
 
@@ -420,35 +420,35 @@ export class PastoralService {
    * @throws Error if decryption fails (tampered data, wrong key)
    */
   decrypt(encryptedPayload: string): string {
-    // Step 1: Split the payload into iv, auth tag, and ciphertext components
+    // Split the payload into iv, auth tag, and ciphertext components
     const [ivHex, authTagHex, ciphertext] = encryptedPayload.split(':');
 
-    // Step 2: Validate the payload format has all three components
+    // Validate the payload format has all three components
     if (!ivHex || !authTagHex || !ciphertext) {
       this.logger.error('Invalid encrypted payload format');
       return '[Decryption failed: invalid format]';
     }
 
-    // Step 3: Attempt decryption within a try-catch for error handling
+    // Attempt decryption within a try-catch for error handling
     try {
-      // Step 4: Reconstruct the IV and auth tag from hex strings
+      // Reconstruct the IV and auth tag from hex strings
       const iv = Buffer.from(ivHex, 'hex');
       const authTag = Buffer.from(authTagHex, 'hex');
-      // Step 5: Create the decipher with the derived key and reconstructed IV
+      // Create the decipher with the derived key and reconstructed IV
       const decipher = crypto.createDecipheriv(ALGORITHM, this.encryptionKey, iv, {
         authTagLength: AUTH_TAG_LENGTH,
       });
 
-      // Step 6: Set the auth tag for GCM integrity verification
+      // Set the auth tag for GCM integrity verification
       decipher.setAuthTag(authTag);
 
-      // Step 7: Decrypt the ciphertext and finalize
+      // Decrypt the ciphertext and finalize
       let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
 
       return decrypted;
     } catch (error) {
-      // Step 8: Return a placeholder if decryption fails (wrong key, tampered data)
+      // Return a placeholder if decryption fails (wrong key, tampered data)
       this.logger.error(`Decryption failed: ${error}`);
       return '[Decryption failed]';
     }
@@ -465,11 +465,11 @@ export class PastoralService {
     userRole: string,
     userId: string,
   ): Prisma.PastoralNoteWhereInput | null {
-    // Step 1: Check if the user is an admin or pastor role
+    // Check if the user is an admin or pastor role
     const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
 
     if (isAdminOrPastor) {
-      // Step 2a: Admins/pastors see standard, confidential, and their own restricted notes
+      // Admins/pastors see standard, confidential, and their own restricted notes
       return {
         OR: [
           { confidentiality: { in: ['standard', 'confidential'] } },
@@ -478,7 +478,7 @@ export class PastoralService {
       };
     }
 
-    // Step 2b: Regular staff only see standard (non-confidential) notes
+    // Regular staff only see standard (non-confidential) notes
     return { confidentiality: 'standard' };
   }
 
@@ -495,26 +495,26 @@ export class PastoralService {
     userRole: string,
     userId: string,
   ): void {
-    // Step 1: Allow all staff to access standard notes
+    // Allow all staff to access standard notes
     if (note.confidentiality === 'standard') {
       return; // All staff can access
     }
 
-    // Step 2: Check if the user has elevated privileges
+    // Check if the user has elevated privileges
     const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
 
-    // Step 3: Allow pastors and admin to access confidential notes
+    // Allow pastors and admin to access confidential notes
     if (note.confidentiality === 'confidential' && isAdminOrPastor) {
       return; // Pastors and admin can access confidential
     }
 
-    // Step 4: For restricted notes, allow the author or senior pastor/admin
+    // For restricted notes, allow the author or senior pastor/admin
     if (note.confidentiality === 'restricted') {
       if (note.author_id === userId) return; // Author can always access
       if (userRole === 'church_admin' || userRole === 'senior_pastor') return;
     }
 
-    // Step 5: Deny access for all other cases
+    // Deny access for all other cases
     throw new ForbiddenException(
       `Access denied: ${note.confidentiality} note requires elevated permissions`,
     );
@@ -542,7 +542,7 @@ export class PastoralService {
     },
     decryptedContent: string,
   ): PastoralNoteResponseDto {
-    // Step 1: Transform the Prisma record snake_case fields to camelCase DTO format
+    // Transform the Prisma record snake_case fields to camelCase DTO format
     return {
       id: note.id,
       churchId: note.church_id,
@@ -575,7 +575,7 @@ export class PastoralService {
     churchId: string,
     userId: string,
   ): Promise<LifeEventResponseDto> {
-    // Step 1: Create the life event record in the database
+    // Create the life event record in the database
     const event = await this.prisma.lifeEvent.create({
       data: {
         church_id: churchId,
@@ -589,10 +589,10 @@ export class PastoralService {
       },
     });
 
-    // Step 2: Log the creation event
+    // Log the creation event
     this.logger.log(`Life event created: ${event.type} for member ${dto.memberId}`);
 
-    // Step 3: Record the mutation in the audit log
+    // Record the mutation in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -602,7 +602,7 @@ export class PastoralService {
       newValues: { type: event.type, memberId: dto.memberId },
     });
 
-    // Step 4: Map the Prisma record to a response DTO
+    // Map the Prisma record to a response DTO
     return this.mapLifeEventToResponseDto(event);
   }
 
@@ -624,25 +624,25 @@ export class PastoralService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    // Step 2: Build the base where clause scoped to the church
+    // Build the base where clause scoped to the church
     const where: Prisma.LifeEventWhereInput = { church_id: churchId };
 
-    // Step 3: Apply optional member filter
+    // Apply optional member filter
     if (query.memberId) {
       where.member_id = query.memberId;
     }
 
-    // Step 4: Apply optional life event type filter
+    // Apply optional life event type filter
     if (query.type) {
       where.type = query.type;
     }
 
-    // Step 5: If upcoming filter is set, only return events on or after today
+    // If upcoming filter is set, only return events on or after today
     if (query.upcoming === 'true') {
       where.date = { gte: new Date() };
     }
 
-    // Step 6: Execute paginated query and count total in parallel
+    // Execute paginated query and count total in parallel
     const [events, total] = await Promise.all([
       this.prisma.lifeEvent.findMany({
         where,
@@ -656,7 +656,7 @@ export class PastoralService {
       this.prisma.lifeEvent.count({ where }),
     ]);
 
-    // Step 7: Map each event to a response DTO and return with pagination metadata
+    // Map each event to a response DTO and return with pagination metadata
     return {
       data: events.map((e) => this.mapLifeEventToResponseDto(e)),
       meta: {
@@ -676,7 +676,7 @@ export class PastoralService {
    * @returns Life event data
    */
   async getLifeEventById(eventId: string, churchId: string): Promise<LifeEventResponseDto> {
-    // Step 1: Fetch the life event by ID scoped to the church
+    // Fetch the life event by ID scoped to the church
     const event = await this.prisma.lifeEvent.findFirst({
       where: { id: eventId, church_id: churchId },
       include: {
@@ -684,12 +684,12 @@ export class PastoralService {
       },
     });
 
-    // Step 2: Throw NotFoundException if the event does not exist
+    // Throw NotFoundException if the event does not exist
     if (!event) {
       throw new NotFoundException(`Life event ${eventId} not found`);
     }
 
-    // Step 3: Map to response DTO and return
+    // Map to response DTO and return
     return this.mapLifeEventToResponseDto(event);
   }
 
@@ -701,23 +701,23 @@ export class PastoralService {
    * @param userId - User performing the delete
    */
   async deleteLifeEvent(eventId: string, churchId: string, userId: string): Promise<void> {
-    // Step 1: Fetch the existing event to verify it exists
+    // Fetch the existing event to verify it exists
     const event = await this.prisma.lifeEvent.findFirst({
       where: { id: eventId, church_id: churchId },
     });
 
-    // Step 2: Throw NotFoundException if the event does not exist
+    // Throw NotFoundException if the event does not exist
     if (!event) {
       throw new NotFoundException(`Life event ${eventId} not found`);
     }
 
-    // Step 3: Delete the event from the database
+    // Delete the event from the database
     await this.prisma.lifeEvent.delete({ where: { id: eventId } });
 
-    // Step 4: Log the deletion event
+    // Log the deletion event
     this.logger.log(`Life event deleted: ${eventId}`);
 
-    // Step 5: Record the deletion in the audit log
+    // Record the deletion in the audit log
     await this.audit.log({
       churchId,
       userId,
@@ -737,12 +737,12 @@ export class PastoralService {
    * @returns Upcoming life events
    */
   async getUpcomingLifeEvents(churchId: string, daysAhead = 30): Promise<LifeEventResponseDto[]> {
-    // Step 1: Compute the date range (now to N days ahead)
+    // Compute the date range (now to N days ahead)
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysAhead);
 
-    // Step 2: Fetch un-notified events within the date range, including member contact info
+    // Fetch un-notified events within the date range, including member contact info
     const events = await this.prisma.lifeEvent.findMany({
       where: {
         church_id: churchId,
@@ -761,7 +761,7 @@ export class PastoralService {
       orderBy: { date: 'asc' },
     });
 
-    // Step 3: Map each event to a response DTO
+    // Map each event to a response DTO
     return events.map((e) => this.mapLifeEventToResponseDto(e));
   }
 
@@ -771,7 +771,7 @@ export class PastoralService {
    * @param eventId - Life event ID
    */
   async markLifeEventNotified(eventId: string): Promise<void> {
-    // Step 1: Update the notified flag to true for the given event
+    // Update the notified flag to true for the given event
     await this.prisma.lifeEvent.update({
       where: { id: eventId },
       data: { notified: true },
@@ -792,7 +792,7 @@ export class PastoralService {
     created_at: Date;
     member?: { first_name: string; last_name: string } | null;
   }): LifeEventResponseDto {
-    // Step 1: Transform the Prisma record to camelCase response format
+    // Transform the Prisma record to camelCase response format
     return {
       id: event.id,
       churchId: event.church_id,

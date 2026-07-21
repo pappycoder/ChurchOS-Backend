@@ -41,29 +41,29 @@ export class NightlyJobsProcessor {
   }> {
     const { churchId } = job.data;
 
-    // Step 1: Log the start of nightly maintenance for audit trail
+    // Log the start of nightly maintenance for audit trail
     this.logger.log(`Running nightly jobs for church ${churchId}`);
 
-    // Step 2: Calculate engagement scores for all active members
+    // Calculate engagement scores for all active members
     const engagementScored = await this.scoringService.calculateEngagementScores(churchId);
     await job.updateProgress(33);
 
-    // Step 3: Calculate risk scores for all active members
+    // Calculate risk scores for all active members
     const riskScored = await this.scoringService.calculateRiskScores(churchId);
     await job.updateProgress(66);
 
-    // Step 4: Identify members needing pastoral attention (top 50)
+    // Identify members needing pastoral attention (top 50)
     const attention = await this.scoringService.getMembersNeedingAttention(churchId, 50);
     await job.updateProgress(100);
 
-    // Step 5: Log completion summary for monitoring
+    // Log completion summary for monitoring
     this.logger.log(
       `Nightly jobs complete for church ${churchId}: ` +
         `${engagementScored} engagement, ${riskScored} risk, ` +
         `${attention.length} needing attention`,
     );
 
-    // Step 6: Return scoring summary as job result
+    // Return scoring summary as job result
     return {
       engagementScored,
       riskScored,

@@ -17,13 +17,13 @@ import { ScoringService } from './scoring.service';
 import { PastoralController } from './pastoral.controller';
 
 @Module({
-  // Step 1: Import AuthModule to access JWT guards and role decorators
+  // Import AuthModule to access JWT guards and role decorators
   imports: [AuthModule],
-  // Step 2: Register the PastoralController for HTTP endpoint routing
+  // Register the PastoralController for HTTP endpoint routing
   controllers: [PastoralController],
-  // Step 3: Register PastoralService and ScoringService as injectable providers
+  // Register PastoralService and ScoringService as injectable providers
   providers: [PastoralService, ScoringService],
-  // Step 4: Export services so other modules (e.g., BullMQ processors) can inject them
+  // Export services so other modules (e.g., BullMQ processors) can inject them
   exports: [PastoralService, ScoringService],
 })
 export class PastoralModule {}

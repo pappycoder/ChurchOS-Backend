@@ -10,14 +10,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsInt, Min, Max, IsIn } from 'class-validator';
 
 export class ListLifeEventsDto {
-  // Step 1: Default page number starting at 1
+  // Default page number starting at 1
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
-  // Step 2: Page size capped between 1 and 100
+  // Page size capped between 1 and 100
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @IsInt()
@@ -25,13 +25,13 @@ export class ListLifeEventsDto {
   @Max(100)
   limit?: number;
 
-  // Step 3: Optional member ID filter
+  // Optional member ID filter
   @ApiPropertyOptional({ description: 'Filter by member ID' })
   @IsOptional()
   @IsString()
   memberId?: string;
 
-  // Step 4: Optional event type filter
+  // Optional event type filter
   @ApiPropertyOptional({
     description: 'Filter by event type',
     enum: ['birthday', 'wedding', 'death', 'dedication', 'baptism', 'anniversary', 'other'],
@@ -40,7 +40,7 @@ export class ListLifeEventsDto {
   @IsString()
   type?: string;
 
-  // Step 5: Optional upcoming filter (date >= today)
+  // Optional upcoming filter (date >= today)
   @ApiPropertyOptional({
     description: 'Filter upcoming events (date >= today)',
   })
@@ -48,7 +48,7 @@ export class ListLifeEventsDto {
   @IsIn(['true', 'false'])
   upcoming?: string;
 
-  // Step 6: Sort field defaults to date
+  // Sort field defaults to date
   @ApiPropertyOptional({
     description: 'Sort by field',
     enum: ['date', 'created_at'],
@@ -58,7 +58,7 @@ export class ListLifeEventsDto {
   @IsString()
   sortBy?: string;
 
-  // Step 7: Sort direction defaults to ascending
+  // Sort direction defaults to ascending
   @ApiPropertyOptional({
     description: 'Sort direction',
     enum: ['asc', 'desc'],

@@ -13,14 +13,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsInt, Min, Max, IsEnum, IsArray } from 'class-validator';
 
 export class ListPastoralNotesDto {
-  // Step 1: Default page number starting at 1
+  // Default page number starting at 1
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
-  // Step 2: Page size capped between 1 and 100
+  // Page size capped between 1 and 100
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @IsInt()
@@ -28,19 +28,19 @@ export class ListPastoralNotesDto {
   @Max(100)
   limit?: number;
 
-  // Step 3: Optional member ID filter
+  // Optional member ID filter
   @ApiPropertyOptional({ description: 'Filter by member ID' })
   @IsOptional()
   @IsString()
   memberId?: string;
 
-  // Step 4: Optional author ID filter
+  // Optional author ID filter
   @ApiPropertyOptional({ description: 'Filter by author ID' })
   @IsOptional()
   @IsString()
   authorId?: string;
 
-  // Step 5: Optional confidentiality level filter
+  // Optional confidentiality level filter
   @ApiPropertyOptional({
     description: 'Filter by confidentiality level',
     enum: ['standard', 'confidential', 'restricted'],
@@ -49,7 +49,7 @@ export class ListPastoralNotesDto {
   @IsEnum(['standard', 'confidential', 'restricted'])
   confidentiality?: 'standard' | 'confidential' | 'restricted';
 
-  // Step 6: Optional tags filter (AND logic — all specified tags must be present)
+  // Optional tags filter (AND logic — all specified tags must be present)
   @ApiPropertyOptional({
     description: 'Filter by tags (notes must contain ALL specified tags)',
     example: ['prayer', 'counseling'],
@@ -60,7 +60,7 @@ export class ListPastoralNotesDto {
   @IsString({ each: true })
   tags?: string[];
 
-  // Step 7: Sort field defaults to created_at
+  // Sort field defaults to created_at
   @ApiPropertyOptional({
     description: 'Sort by field',
     enum: ['created_at', 'updated_at'],
@@ -70,7 +70,7 @@ export class ListPastoralNotesDto {
   @IsString()
   sortBy?: string;
 
-  // Step 8: Sort direction defaults to descending
+  // Sort direction defaults to descending
   @ApiPropertyOptional({
     description: 'Sort direction',
     enum: ['asc', 'desc'],

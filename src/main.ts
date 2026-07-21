@@ -46,7 +46,7 @@ import { SentryInterceptor } from './common/interceptors/sentry.interceptor';
  * @returns {Promise<void>}
  */
 async function bootstrap(): Promise<void> {
-  // Step 0: Initialize Sentry (only if SENTRY_DSN is set).
+  // Initialize Sentry (only if SENTRY_DSN is set).
   if (env.SENTRY_DSN) {
     Sentry.init({
       dsn: env.SENTRY_DSN,
@@ -57,25 +57,25 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  // Step 1: Create the NestJS application instance.
+  // Create the NestJS application instance.
   // NestFactory.create() initializes the IoC container, resolves all modules,
   // and creates the underlying HTTP adapter (Express by default).
   const app = await NestFactory.create(AppModule);
 
-  // Step 2: Set a global prefix for all routes.
+  // Set a global prefix for all routes.
   // Every controller route will be prefixed with `/api/v1`.
   // Example: @Get('members') on MembersController → GET /api/v1/members
   app.setGlobalPrefix('api/v1');
 
-  // Step 3: Enable security headers with Helmet.
+  // Enable security headers with Helmet.
   // Sets various HTTP headers to help protect the app from common web vulnerabilities.
   app.use(helmet());
 
-  // Step 4: Enable gzip compression.
+  // Enable gzip compression.
   // Compresses response bodies for faster transfer to clients.
   app.use(compression());
 
-  // Step 5: Configure global ValidationPipe.
+  // Configure global ValidationPipe.
   // This pipe automatically validates incoming request bodies, query params,
   // and path params against class-validator decorators on DTO classes.
   // - whitelist: true → strips properties not defined in the DTO
@@ -93,21 +93,21 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // Step 6: Register global exception filter.
+  // Register global exception filter.
   // Catches all unhandled exceptions and returns standardized JSON error responses.
   // Handles HttpException, ZodError, Prisma errors, and generic errors.
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Step 7: Register global logging interceptor.
+  // Register global logging interceptor.
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // Step 8: Register global response interceptor.
+  // Register global response interceptor.
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  // Step 9: Register global Sentry interceptor.
+  // Register global Sentry interceptor.
   app.useGlobalInterceptors(new SentryInterceptor());
 
-  // Step 10: Enable CORS (Cross-Origin Resource Sharing).
+  // Enable CORS (Cross-Origin Resource Sharing).
   // Allows the ChurchOS web frontend (Next.js) running on a different port/origin
   // to make API requests to this backend. Credentials are enabled to support
   // cookie-based authentication if needed.
@@ -116,7 +116,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  // Step 11: Configure Swagger/OpenAPI documentation.
+  // Configure Swagger/OpenAPI documentation.
   // The DocumentBuilder creates a configuration object that defines the API
   // metadata: title, description, version, authentication scheme (Bearer JWT),
   // and endpoint tags for grouping related controllers.
@@ -149,7 +149,7 @@ async function bootstrap(): Promise<void> {
     )
     .build();
 
-  // Step 12: Generate the Swagger document and serve it.
+  // Generate the Swagger document and serve it.
   // SwaggerModule.createDocument() scans all controllers and their decorators
   // (@ApiProperty, @ApiOperation, etc.) to build the OpenAPI 3.0 spec.
   // SwaggerModule.setup() serves the Swagger UI at the specified path.
@@ -167,12 +167,12 @@ async function bootstrap(): Promise<void> {
     customSiteTitle: 'ChurchOS API Documentation',
   });
 
-  // Step 13: Start the HTTP server.
+  // Start the HTTP server.
   // The PORT is read from validated environment variables.
   const port = env.PORT;
   await app.listen(port);
 
-  // Step 14: Enable graceful shutdown hooks.
+  // Enable graceful shutdown hooks.
   // Ensures Prisma, Redis, and other resources disconnect cleanly on SIGTERM/SIGINT.
   app.enableShutdownHooks();
 

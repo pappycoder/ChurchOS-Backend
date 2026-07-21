@@ -50,9 +50,9 @@ import {
 @Controller('admin')
 export class AdminController {
   constructor(
-    // Step 1: Inject AdminService for department and cell group operations
+    // Inject AdminService for department and cell group operations
     private readonly adminService: AdminService,
-    // Step 2: Inject ScoringService for dashboard analytics endpoints
+    // Inject ScoringService for dashboard analytics endpoints
     private readonly scoringService: ScoringService,
   ) {}
 
@@ -70,9 +70,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to create the department
+    // Delegate to AdminService to create the department
     return this.adminService.createDepartment(dto, churchId, user.sub);
   }
 
@@ -83,9 +83,9 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'List departments' })
   async listDepartments(@Req() req: AuthenticatedRequest): Promise<DepartmentResponseDto[]> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to list all departments
+    // Delegate to AdminService to list all departments
     return this.adminService.listDepartments(churchId);
   }
 
@@ -100,9 +100,9 @@ export class AdminController {
     @Param('departmentId') departmentId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to fetch the department by ID
+    // Delegate to AdminService to fetch the department by ID
     return this.adminService.getDepartmentById(departmentId, churchId);
   }
 
@@ -119,9 +119,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to update the department
+    // Delegate to AdminService to update the department
     return this.adminService.updateDepartment(departmentId, dto, churchId, user.sub);
   }
 
@@ -138,9 +138,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to delete the department
+    // Delegate to AdminService to delete the department
     return this.adminService.deleteDepartment(departmentId, churchId, user.sub);
   }
 
@@ -158,9 +158,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to add the member to the department
+    // Delegate to AdminService to add the member to the department
     return this.adminService.addDepartmentMember(departmentId, dto, churchId, user.sub);
   }
 
@@ -179,9 +179,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to remove the member from the department
+    // Delegate to AdminService to remove the member from the department
     return this.adminService.removeDepartmentMember(departmentId, memberId, churchId, user.sub);
   }
 
@@ -199,9 +199,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to create the cell group
+    // Delegate to AdminService to create the cell group
     return this.adminService.createCellGroup(dto, churchId, user.sub);
   }
 
@@ -212,9 +212,9 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'List cell groups' })
   async listCellGroups(@Req() req: AuthenticatedRequest): Promise<CellGroupResponseDto[]> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to list all cell groups
+    // Delegate to AdminService to list all cell groups
     return this.adminService.listCellGroups(churchId);
   }
 
@@ -230,9 +230,9 @@ export class AdminController {
     @Query('limit') limit: number,
     @Req() req: AuthenticatedRequest,
   ): Promise<NearestGroupResponseDto[]> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to find nearest groups, default limit 5
+    // Delegate to AdminService to find nearest groups, default limit 5
     return this.adminService.findNearestGroups(latitude, longitude, churchId, limit || 5);
   }
 
@@ -247,9 +247,9 @@ export class AdminController {
     @Param('groupId') groupId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to fetch the cell group by ID
+    // Delegate to AdminService to fetch the cell group by ID
     return this.adminService.getCellGroupById(groupId, churchId);
   }
 
@@ -266,9 +266,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to update the cell group
+    // Delegate to AdminService to update the cell group
     return this.adminService.updateCellGroup(groupId, dto, churchId, user.sub);
   }
 
@@ -285,9 +285,9 @@ export class AdminController {
     @CurrentUser() user: SupabaseUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to AdminService to delete the cell group
+    // Delegate to AdminService to delete the cell group
     return this.adminService.deleteCellGroup(groupId, churchId, user.sub);
   }
 
@@ -303,9 +303,9 @@ export class AdminController {
     @Query('limit') limit: number,
     @Req() req: AuthenticatedRequest,
   ) {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to ScoringService to get high-risk members, default limit 20
+    // Delegate to ScoringService to get high-risk members, default limit 20
     return this.scoringService.getMembersNeedingAttention(churchId, limit || 20);
   }
 
@@ -316,9 +316,9 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get engagement score distribution' })
   async getEngagementDistribution(@Req() req: AuthenticatedRequest) {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to ScoringService to get engagement distribution
+    // Delegate to ScoringService to get engagement distribution
     return this.scoringService.getEngagementDistribution(churchId);
   }
 
@@ -329,9 +329,9 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get rising star members' })
   async getRisingStars(@Query('limit') limit: number, @Req() req: AuthenticatedRequest) {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Delegate to ScoringService to get rising stars, default limit 10
+    // Delegate to ScoringService to get rising stars, default limit 10
     return this.scoringService.getRisingStars(churchId, limit || 10);
   }
 
@@ -343,14 +343,14 @@ export class AdminController {
   @RequireRoles('church_admin')
   @ApiOperation({ summary: 'Trigger manual score recalculation' })
   async recalculateScores(@Req() req: AuthenticatedRequest) {
-    // Step 1: Extract church ID from the authenticated user's profile
+    // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Step 2: Run engagement and risk score calculations in parallel
+    // Run engagement and risk score calculations in parallel
     const [engagementScored, riskScored] = await Promise.all([
       this.scoringService.calculateEngagementScores(churchId),
       this.scoringService.calculateRiskScores(churchId),
     ]);
-    // Step 3: Return the counts of members scored in each category
+    // Return the counts of members scored in each category
     return { engagementScored, riskScored };
   }
 }

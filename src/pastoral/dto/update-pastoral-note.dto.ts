@@ -13,7 +13,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsEnum, MaxLength } from 'class-validator';
 
 export class UpdatePastoralNoteDto {
-  // Step 1: Allow optional content update (will be re-encrypted)
+  // Allow optional content update (will be re-encrypted)
   @ApiPropertyOptional({
     description: 'Updated content of the pastoral note',
     example: 'Follow-up visit completed. Member doing well.',
@@ -23,7 +23,7 @@ export class UpdatePastoralNoteDto {
   @MaxLength(5000)
   content?: string;
 
-  // Step 2: Allow optional confidentiality level change
+  // Allow optional confidentiality level change
   @ApiPropertyOptional({
     description: 'Updated confidentiality level',
     enum: ['standard', 'confidential', 'restricted'],
@@ -32,7 +32,7 @@ export class UpdatePastoralNoteDto {
   @IsEnum(['standard', 'confidential', 'restricted'])
   confidentiality?: 'standard' | 'confidential' | 'restricted';
 
-  // Step 3: Allow optional tags replacement
+  // Allow optional tags replacement
   @ApiPropertyOptional({
     description: 'Updated tags for categorizing the note',
     example: ['prayer', 'follow-up'],
