@@ -152,6 +152,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-07-21** — Fixed Swagger `$ref` resolution errors for paginated response DTOs.
+  - **Root cause:** `ApiPaginatedResponse` used `getSchemaPath(itemClass)` to generate `$ref` strings but never registered the DTO class as an OpenAPI schema via `ApiExtraModels`.
+  - Added `ApiExtraModels(itemClass)` to the decorator in `src/common/decorators/api-paginated.decorator.ts`. This registers each DTO in `components.schemas`, making all `$ref` paths resolve correctly.
+  - Fixes: `BranchResponseDto`, `EventResponseDto`, `MemberResponseDto`, `SermonResponseDto`, `MediaAssetResponseDto`.
+
 - **2026-07-20** — Completed ProfileModule (Phase 1).
   - Created `src/profile/` — ProfileModule with ProfileService, ProfileController, and 4 DTOs.
     - `GET /profiles/me` — Get current user's full profile with church and branch details.
