@@ -34,7 +34,11 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
-import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
+import {
+  AuthenticatedRequest,
+  CurrentUser,
+  SupabaseUser,
+} from '../common/decorators/current-user.decorator';
 import {
   ApiCreateEndpoint,
   ApiGetEndpoint,
@@ -100,11 +104,12 @@ export class MediaController {
   async uploadImage(
     @UploadedFile() file: MulterFile,
     @Body() dto: UploadMediaDto,
+    @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadImage(file, folder, churchId);
+    return this.mediaService.uploadImage(file, folder, churchId, user.sub);
   }
 
   @Post('upload')
@@ -139,11 +144,12 @@ export class MediaController {
   async uploadFile(
     @UploadedFile() file: MulterFile,
     @Body() dto: UploadMediaDto,
+    @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadFile(file, folder, churchId);
+    return this.mediaService.uploadFile(file, folder, churchId, user.sub);
   }
 
   /**
@@ -202,10 +208,11 @@ export class MediaController {
   async updatePermissions(
     @Param('assetId') assetId: string,
     @Body('permissions') permissions: string,
+    @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaAssetResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.mediaService.updatePermissions(assetId, permissions, churchId);
+    return this.mediaService.updatePermissions(assetId, permissions, churchId, user.sub);
   }
 
   /**
@@ -219,10 +226,11 @@ export class MediaController {
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
   async deleteAsset(
     @Param('assetId') assetId: string,
+    @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.mediaService.deleteAsset(assetId, churchId);
+    await this.mediaService.deleteAsset(assetId, churchId, user.sub);
     return { success: true };
   }
 

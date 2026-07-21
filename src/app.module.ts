@@ -21,6 +21,7 @@
 
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { SupabaseModule } from './supabase/supabase.module';
@@ -37,6 +38,9 @@ import { SermonsModule } from './sermons/sermons.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
+import { QueuesModule } from './queues/queues.module';
+import { FamilyModule } from './family/family.module';
+import { TemplatesModule } from './templates/templates.module';
 
 /**
  * Root application module.
@@ -61,6 +65,20 @@ import { HealthModule } from './health/health.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+
+    // Step 1b: Configure structured JSON logging with nestjs-pino.
+    // Replaces the default NestJS logger with pino for structured JSON output.
+    // In development, uses pino-pretty for human-readable logs.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { singleLine: true } }
+            : undefined,
+        level: process.env.LOG_LEVEL || 'info',
+        autoLogging: false,
+      },
     }),
 
     // Step 2: Import the PrismaModule for database access.
@@ -112,6 +130,15 @@ import { HealthModule } from './health/health.module';
 
     // Step 17: Import HealthModule for health check endpoint.
     HealthModule,
+
+    // Step 18: Import QueuesModule for BullMQ background job queues.
+    QueuesModule,
+
+    // Step 19: Import FamilyModule for family management.
+    FamilyModule,
+
+    // Step 20: Import TemplatesModule for message templates.
+    TemplatesModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

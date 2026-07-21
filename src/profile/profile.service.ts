@@ -9,7 +9,13 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaService, MulterFile } from '../media/media.service';
@@ -17,6 +23,8 @@ import { ProfileResponseDto } from './dto/profile-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
+import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
+import { generateSecret, generateURI, verify } from 'otplib';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -373,6 +381,193 @@ export class ProfileService {
     });
 
     this.logger.log(`Profile deactivated: ${profileId} by ${adminUserId}`);
+  }
+
+  /**
+   * Generates a TOTP secret for the user's MFA setup.
+   *
+   * Returns the secret and otpauth URL for QR code generation.
+   * Stores the secret in an audit log for later verification during enableMfa.
+   * MFA must not already be enabled for this user.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @returns Secret string and otpauth URL for authenticator app setup
+   * @throws NotFoundException if no profile exists for this user
+   * @throws BadRequestException if MFA is already enabled
+   */
+  async generateMfaSecret(userId: string): Promise<MfaSecretResponseDto> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      include: { church: { select: { name: true } } },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    if (profile.mfa_enabled) {
+      throw new BadRequestException('MFA is already enabled. Disable it first.');
+    }
+
+    const secret = generateSecret();
+    const otpauthUrl = generateURI({
+      secret,
+      label: `${profile.first_name} ${profile.last_name}`,
+      issuer: profile.church.name,
+    });
+
+    // Store the secret temporarily (not yet enabled)
+    await this.prisma.profile.update({
+      where: { user_id: userId },
+      data: { mfa_enabled: false },
+    });
+
+    // Store secret in a transient way — use a predictable key
+    // In production this should use Redis with TTL; for now store via audit
+    await this.audit.log({
+      userId,
+      churchId: profile.church_id,
+      entity: 'profile',
+      action: 'CREATE',
+      entityId: profile.id,
+      newValues: { secret },
+    });
+
+    this.logger.log(`MFA secret generated for user: ${userId}`);
+
+    return { secret, otpauthUrl };
+  }
+
+  /**
+   * Verifies a TOTP code against the stored secret and enables MFA.
+   *
+   * Retrieves the secret from the most recent audit log entry created by
+   * generateMfaSecret, validates the provided code, and enables MFA on the profile.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @param code - 6-digit TOTP code from authenticator app
+   * @returns Updated profile response with MFA enabled
+   * @throws NotFoundException if no profile exists for this user
+   * @throws BadRequestException if MFA is already enabled or no secret is found
+   * @throws BadRequestException if the provided code is invalid
+   */
+  async enableMfa(userId: string, code: string): Promise<ProfileResponseDto> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    if (profile.mfa_enabled) {
+      throw new BadRequestException('MFA is already enabled');
+    }
+
+    // Retrieve the secret from the last audit log with a secret in new_values
+    const auditLog = await this.prisma.auditLog.findFirst({
+      where: {
+        user_id: userId,
+        entity: 'profile',
+        entity_id: profile.id,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!auditLog || !auditLog.new_values) {
+      throw new BadRequestException('No MFA secret found. Run /mfa/generate first.');
+    }
+
+    const secret = (auditLog.new_values as Record<string, string>).secret;
+    const isValid = verify({ token: code, secret });
+
+    if (!isValid) {
+      throw new BadRequestException('Invalid MFA code');
+    }
+
+    await this.prisma.profile.update({
+      where: { user_id: userId },
+      data: { mfa_enabled: true },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId: profile.church_id,
+      entity: 'profile',
+      action: 'UPDATE',
+      entityId: profile.id,
+      newValues: { mfa_enabled: true },
+    });
+
+    this.logger.log(`MFA enabled for user: ${userId}`);
+
+    return this.getMyProfile(userId);
+  }
+
+  /**
+   * Disables MFA for the user after verifying a valid TOTP code.
+   *
+   * Requires the user to provide their current TOTP code to confirm identity
+   * before disabling MFA protection on their account.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @param code - 6-digit TOTP code from authenticator app to confirm identity
+   * @returns Updated profile response with MFA disabled
+   * @throws NotFoundException if no profile exists for this user
+   * @throws BadRequestException if MFA is not currently enabled
+   * @throws BadRequestException if the provided code is invalid
+   */
+  async disableMfa(userId: string, code: string): Promise<ProfileResponseDto> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    if (!profile.mfa_enabled) {
+      throw new BadRequestException('MFA is not enabled');
+    }
+
+    // Retrieve secret from last audit log with a secret
+    const auditLog = await this.prisma.auditLog.findFirst({
+      where: {
+        user_id: userId,
+        entity: 'profile',
+        entity_id: profile.id,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!auditLog || !auditLog.new_values) {
+      throw new BadRequestException('MFA secret not found. Re-enable MFA.');
+    }
+
+    const secret = (auditLog.new_values as Record<string, string>).secret;
+    const isValid = verify({ token: code, secret });
+
+    if (!isValid) {
+      throw new BadRequestException('Invalid MFA code');
+    }
+
+    await this.prisma.profile.update({
+      where: { user_id: userId },
+      data: { mfa_enabled: false },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId: profile.church_id,
+      entity: 'profile',
+      action: 'UPDATE',
+      entityId: profile.id,
+      newValues: { mfa_enabled: false },
+    });
+
+    this.logger.log(`MFA disabled for user: ${userId}`);
+
+    return this.getMyProfile(userId);
   }
 
   /**

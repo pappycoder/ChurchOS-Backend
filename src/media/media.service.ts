@@ -17,6 +17,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaResponseDto } from './dto/media-response.dto';
 import { ListLibraryDto } from './dto/list-library.dto';
 import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
@@ -73,6 +74,7 @@ export class MediaService {
     private readonly supabase: SupabaseService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly audit: AuditLoggingService,
   ) {
     this.bucket = this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'media');
   }
@@ -87,7 +89,12 @@ export class MediaService {
    * @throws BadRequestException if file is invalid or too large
    * @throws InternalServerErrorException if upload fails
    */
-  async uploadImage(file: MulterFile, folder: string, churchId: string): Promise<MediaResponseDto> {
+  async uploadImage(
+    file: MulterFile,
+    folder: string,
+    churchId: string,
+    userId?: string,
+  ): Promise<MediaResponseDto> {
     this.validateFile(file, true);
 
     const optimized = await this.optimizeImage(file.buffer);
@@ -123,6 +130,17 @@ export class MediaService {
       },
     });
 
+    if (userId) {
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'media_asset',
+        action: 'CREATE',
+        entityId: filename,
+        newValues: { filename, folder, mime_type: 'image/webp', size: optimized.buffer.length },
+      });
+    }
+
     return {
       url: urlData.publicUrl,
       path,
@@ -143,7 +161,12 @@ export class MediaService {
    * @throws BadRequestException if file is invalid or too large
    * @throws InternalServerErrorException if upload fails
    */
-  async uploadFile(file: MulterFile, folder: string, churchId: string): Promise<MediaResponseDto> {
+  async uploadFile(
+    file: MulterFile,
+    folder: string,
+    churchId: string,
+    userId?: string,
+  ): Promise<MediaResponseDto> {
     this.validateFile(file, false);
 
     const ext = file.originalname.split('.').pop() || 'bin';
@@ -175,6 +198,17 @@ export class MediaService {
         permissions: 'members',
       },
     });
+
+    if (userId) {
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'media_asset',
+        action: 'CREATE',
+        entityId: filename,
+        newValues: { filename, folder, mime_type: file.mimetype, size: file.buffer.length },
+      });
+    }
 
     return {
       url: urlData.publicUrl,
@@ -295,7 +329,7 @@ export class MediaService {
   /**
    * Deletes a media asset from both the database and Supabase Storage.
    */
-  async deleteAsset(assetId: string, churchId: string): Promise<void> {
+  async deleteAsset(assetId: string, churchId: string, userId?: string): Promise<void> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
@@ -312,6 +346,17 @@ export class MediaService {
 
     await this.prisma.mediaAsset.delete({ where: { id: assetId } });
 
+    if (userId) {
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'media_asset',
+        action: 'DELETE',
+        entityId: assetId,
+        oldValues: { filename: asset.filename, folder: asset.folder },
+      });
+    }
+
     this.logger.log(`Media asset deleted: ${assetId}`);
   }
 
@@ -322,6 +367,7 @@ export class MediaService {
     assetId: string,
     permissions: string,
     churchId: string,
+    userId?: string,
   ): Promise<MediaAssetResponseDto> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
@@ -335,6 +381,18 @@ export class MediaService {
       where: { id: assetId },
       data: { permissions },
     });
+
+    if (userId) {
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'media_asset',
+        action: 'UPDATE',
+        entityId: assetId,
+        oldValues: { permissions: asset.permissions },
+        newValues: { permissions },
+      });
+    }
 
     return this.mapAssetToDto(updated);
   }

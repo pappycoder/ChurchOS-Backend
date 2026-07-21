@@ -54,6 +54,8 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
+import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
 import { MulterFile } from '../media/media.service';
 
 /**
@@ -133,6 +135,54 @@ export class ProfileController {
   ): Promise<ProfileResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.profileService.uploadProfilePhoto(user.sub, file, churchId);
+  }
+
+  /**
+   * Generate a TOTP secret for MFA setup.
+   */
+  @Post('me/mfa/generate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Generate MFA secret',
+    description: 'Generates a TOTP secret and returns an otpauth:// URI for QR code scanning.',
+  })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async generateMfa(@CurrentUser() user: SupabaseUser): Promise<MfaSecretResponseDto> {
+    return this.profileService.generateMfaSecret(user.sub);
+  }
+
+  /**
+   * Enable MFA after verifying the TOTP code.
+   */
+  @Post('me/mfa/enable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Enable MFA',
+    description: 'Verifies the TOTP code and enables MFA on the account.',
+  })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async enableMfa(
+    @CurrentUser() user: SupabaseUser,
+    @Body() dto: VerifyMfaDto,
+  ): Promise<ProfileResponseDto> {
+    return this.profileService.enableMfa(user.sub, dto.code);
+  }
+
+  /**
+   * Disable MFA after verifying the TOTP code.
+   */
+  @Post('me/mfa/disable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Disable MFA',
+    description: 'Verifies the current TOTP code and disables MFA on the account.',
+  })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async disableMfa(
+    @CurrentUser() user: SupabaseUser,
+    @Body() dto: VerifyMfaDto,
+  ): Promise<ProfileResponseDto> {
+    return this.profileService.disableMfa(user.sub, dto.code);
   }
 
   /**

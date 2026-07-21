@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MediaService } from '../../../src/media/media.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
@@ -43,6 +44,7 @@ describe('MediaService', () => {
         { provide: SupabaseService, useValue: { client: { storage: { from: storageFrom } } } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('media') } },
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditLoggingService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 

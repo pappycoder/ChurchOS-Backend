@@ -15,6 +15,14 @@ import { AuditLoggingService } from '../../../src/common/services/audit-logging.
 import { MediaService, MulterFile } from '../../../src/media/media.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
+jest.mock('otplib', () => ({
+  generateSecret: jest.fn().mockReturnValue('JBSWY3DPEHPK3PXP'),
+  generateURI: jest
+    .fn()
+    .mockReturnValue('otpauth://totp/test:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=test'),
+  verify: jest.fn().mockReturnValue(true),
+}));
+
 describe('ProfileService', () => {
   let service: ProfileService;
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
