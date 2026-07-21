@@ -32,10 +32,16 @@ export class TermiiService {
    * @param to - Recipient phone number (with country code, e.g. +234...)
    * @param message - SMS text content
    * @param churchId - Church ID for tenant scoping and message logging
+   * @param parentMessageId - Optional ID of the original message this SMS is a fallback for
    * @returns The created Message record ID
    * @throws InternalServerErrorException if Termii API is not configured or send fails
    */
-  async sendSms(to: string, message: string, churchId: string): Promise<string> {
+  async sendSms(
+    to: string,
+    message: string,
+    churchId: string,
+    parentMessageId?: string,
+  ): Promise<string> {
     const apiKey = this.config.get<string>('TERMII_API_KEY');
     const from = this.config.get<string>('TERMII_FROM', 'ChurchOS');
 
@@ -73,6 +79,8 @@ export class TermiiService {
           phone: to,
           direction: 'outbound' as never,
           channel: 'sms',
+          fallback_channel: 'sms',
+          parent_message_id: parentMessageId ?? null,
           content: message,
           status: 'sent',
           metadata: { termii_request_id: result.request_id } as Prisma.InputJsonValue,

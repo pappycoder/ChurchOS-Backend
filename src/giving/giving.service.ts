@@ -32,6 +32,9 @@ import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { RecordCashDto } from './dto/record-cash.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
 import { ListTransactionsDto } from './dto/list-transactions.dto';
+import { CreateRecurringGivingDto } from './dto/create-recurring-giving.dto';
+import { RecurringGivingResponseDto } from './dto/recurring-giving-response.dto';
+import { ListRecurringGivingDto } from './dto/list-recurring-giving.dto';
 import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 
@@ -501,6 +504,16 @@ export class GivingService {
       `Webhook processed (${gatewayName}): ${event.event} → ${status} (${event.reference})`,
     );
 
+    // Capture authorization_code for recurring giving (Paystack charge.success)
+    if (status === 'success' && event.authorizationCode && transaction.member_id) {
+      await this.captureAuthorizationCode(
+        transaction.church_id,
+        transaction.member_id,
+        transaction.category_id,
+        event.authorizationCode,
+      );
+    }
+
     return { processed: true, event: event.event };
   }
 
@@ -635,6 +648,362 @@ export class GivingService {
     return this.mapTransactionToDto(transaction);
   }
 
+  // ─── RECURRING GIVING ───────────────────────────────────────────
+
+  /**
+   * Creates a recurring giving schedule.
+   *
+   * The category must have is_recurring enabled. The authorization code
+   * is captured from the first successful payment via webhook.
+   */
+  async createRecurringGiving(
+    dto: CreateRecurringGivingDto,
+    churchId: string,
+    userId: string,
+  ): Promise<RecurringGivingResponseDto> {
+    const category = await this.prisma.givingCategory.findUnique({
+      where: { id: dto.categoryId },
+    });
+
+    if (!category || category.church_id !== churchId) {
+      throw new NotFoundException('Giving category not found');
+    }
+
+    if (!category.is_active) {
+      throw new BadRequestException('This giving category is no longer active');
+    }
+
+    if (!category.is_recurring) {
+      throw new BadRequestException(
+        'This category does not support recurring giving. Enable recurring in the category settings.',
+      );
+    }
+
+    // Check for existing active recurring giving for this member+category
+    if (dto.memberId) {
+      const existing = await this.prisma.recurringGiving.findFirst({
+        where: {
+          church_id: churchId,
+          member_id: dto.memberId,
+          category_id: dto.categoryId,
+          is_active: true,
+        },
+      });
+
+      if (existing) {
+        throw new ConflictException(
+          'An active recurring giving already exists for this member and category',
+        );
+      }
+    }
+
+    const nextChargeDate = this.calculateNextChargeDate(dto.frequency);
+
+    const recurring = await this.prisma.recurringGiving.create({
+      data: {
+        church_id: churchId,
+        member_id: dto.memberId || userId,
+        category_id: dto.categoryId,
+        amount: dto.amount,
+        currency: 'NGN',
+        frequency: dto.frequency,
+        is_active: true,
+        next_charge_date: nextChargeDate,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'recurring_giving',
+      action: 'CREATE',
+      entityId: recurring.id,
+      newValues: {
+        categoryId: dto.categoryId,
+        amount: dto.amount,
+        frequency: dto.frequency,
+      },
+    });
+
+    this.logger.log(`Recurring giving created: ${recurring.id} (${dto.frequency})`);
+
+    return this.mapRecurringGivingToDto(recurring, category.name);
+  }
+
+  /**
+   * Lists recurring giving schedules for a church.
+   */
+  async listRecurringGiving(
+    churchId: string,
+    query: ListRecurringGivingDto,
+  ): Promise<{ data: RecurringGivingResponseDto[]; total: number }> {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.RecurringGivingWhereInput = { church_id: churchId };
+    if (query.isActive !== undefined) {
+      where.is_active = query.isActive;
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.recurringGiving.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.recurringGiving.count({ where }),
+    ]);
+
+    // Batch-fetch category names
+    const categoryIds = [...new Set(items.map((r) => r.category_id))];
+    const categories = await this.prisma.givingCategory.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true, name: true },
+    });
+    const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
+    return {
+      data: items.map((r) => this.mapRecurringGivingToDto(r, categoryMap.get(r.category_id) || '')),
+      total,
+    };
+  }
+
+  /**
+   * Gets a single recurring giving by ID.
+   */
+  async getRecurringGivingById(id: string, churchId: string): Promise<RecurringGivingResponseDto> {
+    const recurring = await this.prisma.recurringGiving.findUnique({
+      where: { id },
+    });
+
+    if (!recurring || recurring.church_id !== churchId) {
+      throw new NotFoundException('Recurring giving not found');
+    }
+
+    const category = await this.prisma.givingCategory.findUnique({
+      where: { id: recurring.category_id },
+      select: { name: true },
+    });
+
+    return this.mapRecurringGivingToDto(recurring, category?.name || '');
+  }
+
+  /**
+   * Cancels a recurring giving schedule (soft-cancel).
+   */
+  async cancelRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+    const recurring = await this.prisma.recurringGiving.findUnique({
+      where: { id },
+    });
+
+    if (!recurring || recurring.church_id !== churchId) {
+      throw new NotFoundException('Recurring giving not found');
+    }
+
+    if (!recurring.is_active) {
+      throw new BadRequestException('Recurring giving is already cancelled');
+    }
+
+    await this.prisma.recurringGiving.update({
+      where: { id },
+      data: { is_active: false },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'recurring_giving',
+      action: 'UPDATE',
+      entityId: id,
+      oldValues: { isActive: true },
+      newValues: { isActive: false },
+    });
+
+    this.logger.log(`Recurring giving cancelled: ${id}`);
+  }
+
+  /**
+   * Processes a recurring giving charge.
+   *
+   * Charges the member's saved authorization via the configured gateway,
+   * creates a Transaction record, and updates the schedule.
+   *
+   * @returns Whether the charge was successful
+   */
+  async processRecurringCharge(recurringGivingId: string, churchId: string): Promise<boolean> {
+    const recurring = await this.prisma.recurringGiving.findUnique({
+      where: { id: recurringGivingId },
+    });
+
+    if (!recurring || recurring.church_id !== churchId) {
+      this.logger.warn(`Recurring giving not found: ${recurringGivingId}`);
+      return false;
+    }
+
+    if (!recurring.is_active) {
+      this.logger.log(`Recurring giving ${recurringGivingId} is inactive, skipping`);
+      return false;
+    }
+
+    if (!recurring.authorization_code) {
+      this.logger.warn(`Recurring giving ${recurringGivingId} has no authorization code, skipping`);
+      return false;
+    }
+
+    // Resolve gateway (default to paystack for recurring)
+    const provider = this.gatewayRegistry.get('paystack');
+    if (!provider || !provider.isConfigured() || !provider.chargeAuthorization) {
+      this.logger.error('Paystack gateway not available for recurring charge');
+      return false;
+    }
+
+    try {
+      const result = await provider.chargeAuthorization(
+        recurring.authorization_code,
+        recurring.amount,
+        recurring.currency,
+        {
+          recurring_giving_id: recurring.id,
+          church_id: churchId,
+          category_id: recurring.category_id,
+        },
+      );
+
+      // Create transaction record
+      const receiptNumber = await this.generateReceiptNumber('Recurring', churchId);
+
+      await this.prisma.transaction.create({
+        data: {
+          church_id: churchId,
+          member_id: recurring.member_id,
+          category_id: recurring.category_id,
+          amount: recurring.amount,
+          currency: recurring.currency,
+          type: 'digital',
+          status: result.success ? 'success' : 'failed',
+          payment_reference: result.reference,
+          payment_gateway: 'paystack',
+          payment_method: 'card',
+          receipt_number: receiptNumber,
+          metadata: {
+            recurring_giving_id: recurring.id,
+            is_recurring_charge: true,
+          },
+        },
+      });
+
+      // Update recurring schedule
+      const nextChargeDate = this.calculateNextChargeDate(
+        recurring.frequency as 'weekly' | 'monthly' | 'quarterly',
+      );
+
+      await this.prisma.recurringGiving.update({
+        where: { id: recurringGivingId },
+        data: {
+          last_charge_date: new Date(),
+          next_charge_date: result.success ? nextChargeDate : recurring.next_charge_date,
+          failed_attempt_count: result.success ? 0 : recurring.failed_attempt_count + 1,
+          is_active: result.success || recurring.failed_attempt_count + 1 < 3,
+        },
+      });
+
+      await this.audit.log({
+        userId: 'system',
+        churchId,
+        entity: 'recurring_giving',
+        action: 'UPDATE',
+        entityId: recurringGivingId,
+        newValues: {
+          chargeSuccess: result.success,
+          reference: result.reference,
+          nextChargeDate: result.success ? nextChargeDate : undefined,
+        },
+      });
+
+      this.logger.log(
+        `Recurring charge ${result.success ? 'succeeded' : 'failed'}: ${recurringGivingId} (${result.reference})`,
+      );
+
+      return result.success;
+    } catch (error) {
+      this.logger.error(
+        `Recurring charge error for ${recurringGivingId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      // Increment failed attempt count
+      const newFailedCount = recurring.failed_attempt_count + 1;
+      await this.prisma.recurringGiving.update({
+        where: { id: recurringGivingId },
+        data: {
+          failed_attempt_count: newFailedCount,
+          is_active: newFailedCount < 3,
+        },
+      });
+
+      return false;
+    }
+  }
+
+  /**
+   * Calculates the next charge date based on frequency.
+   */
+  private calculateNextChargeDate(frequency: 'weekly' | 'monthly' | 'quarterly'): Date {
+    const now = new Date();
+    switch (frequency) {
+      case 'weekly':
+        now.setDate(now.getDate() + 7);
+        break;
+      case 'monthly':
+        now.setMonth(now.getMonth() + 1);
+        break;
+      case 'quarterly':
+        now.setMonth(now.getMonth() + 3);
+        break;
+    }
+    return now;
+  }
+
+  /**
+   * Maps a Prisma RecurringGiving to the response DTO.
+   */
+  private mapRecurringGivingToDto(
+    recurring: {
+      id: string;
+      church_id: string;
+      member_id: string;
+      category_id: string;
+      amount: number;
+      currency: string;
+      frequency: string;
+      is_active: boolean;
+      next_charge_date: Date | null;
+      last_charge_date: Date | null;
+      failed_attempt_count: number;
+      created_at: Date;
+      updated_at: Date;
+    },
+    categoryName: string,
+  ): RecurringGivingResponseDto {
+    return {
+      id: recurring.id,
+      churchId: recurring.church_id,
+      memberId: recurring.member_id,
+      categoryId: recurring.category_id,
+      categoryName,
+      amount: recurring.amount,
+      currency: recurring.currency,
+      frequency: recurring.frequency,
+      isActive: recurring.is_active,
+      nextChargeDate: recurring.next_charge_date?.toISOString(),
+      lastChargeDate: recurring.last_charge_date?.toISOString(),
+      failedAttemptCount: recurring.failed_attempt_count,
+      createdAt: recurring.created_at.toISOString(),
+      updatedAt: recurring.updated_at.toISOString(),
+    };
+  }
+
   // ─── RECEIPTS ─────────────────────────────────────────────────────
 
   /**
@@ -698,6 +1067,42 @@ export class GivingService {
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────
+
+  /**
+   * Captures an authorization code from a successful payment and stores it
+   * on the matching RecurringGiving record for future automated charges.
+   */
+  private async captureAuthorizationCode(
+    churchId: string,
+    memberId: string,
+    categoryId: string | null,
+    authorizationCode: string,
+  ): Promise<void> {
+    if (!categoryId) return;
+
+    try {
+      const existing = await this.prisma.recurringGiving.findFirst({
+        where: {
+          church_id: churchId,
+          member_id: memberId,
+          category_id: categoryId,
+          is_active: true,
+        },
+      });
+
+      if (existing) {
+        await this.prisma.recurringGiving.update({
+          where: { id: existing.id },
+          data: { authorization_code: authorizationCode },
+        });
+        this.logger.log(`Authorization code captured for recurring giving ${existing.id}`);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to capture authorization code: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   /**
    * Generates a unique payment reference.

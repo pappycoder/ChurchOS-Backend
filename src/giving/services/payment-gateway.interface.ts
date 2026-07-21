@@ -35,6 +35,31 @@ export interface PaymentVerifyResult {
   channel: string;
   /** Payer email */
   customerEmail: string;
+  /** Gateway authorization details for recurring charges (Paystack only) */
+  authorization?: {
+    authorization_code: string;
+    card_type: string;
+    last4: string;
+    exp_month: string;
+    exp_year: string;
+    bank: string;
+  };
+}
+
+/**
+ * Result of charging a saved authorization (recurring giving).
+ */
+export interface ChargeAuthorizationResult {
+  /** Whether the charge was successful */
+  success: boolean;
+  /** Gateway transaction reference */
+  reference: string;
+  /** Amount charged in Naira */
+  amount: number;
+  /** ISO timestamp of when the charge was completed */
+  paidAt?: string;
+  /** Payment channel used */
+  channel?: string;
 }
 
 /**
@@ -51,6 +76,8 @@ export interface WebhookEvent {
   channel?: string;
   /** Payer email */
   customerEmail?: string;
+  /** Authorization code for recurring charges (Paystack charge.success only) */
+  authorizationCode?: string;
   /** Raw event data for gateway-specific processing */
   rawData: Record<string, unknown>;
 }
@@ -91,6 +118,14 @@ export interface PaymentGatewayProvider {
 
   /** Map a gateway payment channel to an internal payment method string */
   mapChannelToPaymentMethod(channel: string): string;
+
+  /** Charge a saved payment authorization for recurring giving */
+  chargeAuthorization?(
+    authorizationCode: string,
+    amount: number,
+    currency: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<ChargeAuthorizationResult>;
 }
 
 /**

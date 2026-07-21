@@ -140,6 +140,7 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 | `360DIALOG_API_KEY` | No | WhatsApp Business API |
 | `RESEND_API_KEY` | No | Email delivery |
 | `TERMII_API_KEY` | No | SMS fallback |
+| `ENABLE_SMS_FALLBACK` | No (default: `false`) | Enable SMS fallback when WhatsApp delivery fails |
 | `OPENAI_API_KEY` | No | AI chatbot features |
 | `SUPABASE_STORAGE_BUCKET` | No (default: media) | Supabase Storage bucket name for file uploads |
 | `MAX_FILE_SIZE_MB` | No (default: 5) | Maximum upload file size in megabytes |
@@ -157,6 +158,27 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 5: Recurring Giving + SMS Fallback.
+  - **5A Recurring Giving (Automated Charges)**:
+    - Extended `PaymentGatewayProvider` interface with `ChargeAuthorizationResult` and optional `chargeAuthorization()` method.
+    - Implemented `PaystackService.chargeAuthorization()` calling Paystack `POST /transaction/charge_authorization` (Naira→Kobo conversion).
+    - Extended `WebhookEvent` and `PaymentVerifyResult` to expose Paystack `authorization_code`.
+    - Updated `GivingService.handleWebhook()` to capture `authorization_code` from `charge.success` events and store it on matching active `RecurringGiving` records.
+    - Added recurring giving DTOs: `CreateRecurringGivingDto`, `RecurringGivingResponseDto`, `ListRecurringGivingDto`.
+    - Added `GivingService` recurring methods: `createRecurringGiving()`, `listRecurringGiving()`, `getRecurringGivingById()`, `cancelRecurringGiving()`, `processRecurringCharge()`.
+    - Added 4 controller endpoints: `POST /giving/recurring`, `GET /giving/recurring`, `GET /giving/recurring/:id`, `PATCH /giving/recurring/:id/cancel`.
+    - Implemented `RecurringGivingProcessor` stub to delegate charges to `GivingService`.
+    - Extended `NightlyJobsProcessor` to dispatch due recurring charges to the `recurring-giving` queue (query `is_active=true`, `authorization_code IS NOT NULL`, `next_charge_date <= now()`).
+    - Wired `GivingModule` into `QueuesModule` imports (no circular dependencies).
+    - Added 22 unit tests: `test/unit/giving/recurring-giving.service.spec.ts` (16) + `test/unit/queues/recurring-giving.processor.spec.ts` (2).
+  - **5B SMS Fallback**:
+    - Added `fallback_channel` and `parent_message_id` columns to `Message` model; created migration `20260721153657_add_sms_fallback_fields`.
+    - Added `ENABLE_SMS_FALLBACK` env var (default `false`) to `env.validation.ts` and `.env.example`.
+    - Extended `TermiiService.sendSms()` with optional `parentMessageId` parameter; fallback SMS messages are logged with `fallback_channel: 'sms'` and linked to the original WhatsApp message.
+    - Updated `WhatsAppOutboundProcessor` to store the original WhatsApp message ID in job data on success, and trigger SMS fallback via `TermiiService` after all WhatsApp retries are exhausted (only when `ENABLE_SMS_FALLBACK=true`).
+    - Added 5 unit tests: `test/unit/queues/whatsapp-outbound.processor.spec.ts`.
+  - Prisma client regenerated, database migrated. Total: **288 tests passing across 18 suites**. Build clean, lint clean (0 errors, 0 warnings).
 
 - **2026-07-21** — Removed step-number prefixes from all inline comments across 24 source files (422 occurrences). Comments now read as plain descriptions instead of numbered steps.
 

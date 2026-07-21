@@ -26,6 +26,7 @@ import { Queue } from 'bullmq';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CommunicationModule } from '../communication/communication.module';
 import { PastoralModule } from '../pastoral/pastoral.module';
+import { GivingModule } from '../giving/giving.module';
 import { WhatsAppOutboundProcessor } from './processors/whatsapp-outbound.processor';
 import { EmailOutboundProcessor } from './processors/email-outbound.processor';
 import { SmsOutboundProcessor } from './processors/sms-outbound.processor';
@@ -60,6 +61,7 @@ const DEFAULT_JOB_OPTIONS = {
     WhatsAppModule,
     CommunicationModule,
     PastoralModule,
+    GivingModule,
   ],
   providers: [
     WhatsAppOutboundProcessor,

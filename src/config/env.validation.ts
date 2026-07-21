@@ -50,6 +50,7 @@ const envSchema = z.object({
   // ─── SMS (Termii) ─────────────────────────────────────────
   TERMII_API_KEY: z.string().optional(),
   TERMII_FROM: z.string().default('ChurchOS'),
+  ENABLE_SMS_FALLBACK: z.coerce.boolean().default(false),
 
   // ─── AI (Optional) ────────────────────────────────────────
   OPENAI_API_KEY: z.string().optional(),

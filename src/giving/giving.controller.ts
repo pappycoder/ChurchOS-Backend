@@ -49,6 +49,9 @@ import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { RecordCashDto } from './dto/record-cash.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
 import { ListTransactionsDto } from './dto/list-transactions.dto';
+import { CreateRecurringGivingDto } from './dto/create-recurring-giving.dto';
+import { RecurringGivingResponseDto } from './dto/recurring-giving-response.dto';
+import { ListRecurringGivingDto } from './dto/list-recurring-giving.dto';
 
 /**
  * Controller for giving operations.
@@ -242,6 +245,83 @@ export class GivingController {
   ): Promise<TransactionResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.givingService.recordCashGiving(dto, churchId, user.sub);
+  }
+
+  // ─── RECURRING GIVING ────────────────────────────────────────────
+
+  /**
+   * Create a recurring giving schedule.
+   */
+  @Post('recurring')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiCreateEndpoint(
+    'Create recurring giving',
+    'Sets up an automated recurring charge schedule for a giving category.',
+  )
+  async createRecurringGiving(
+    @Body() dto: CreateRecurringGivingDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<RecurringGivingResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.createRecurringGiving(dto, churchId, user.sub);
+  }
+
+  /**
+   * List recurring giving schedules.
+   */
+  @Get('recurring')
+  @ApiPaginatedResponse(RecurringGivingResponseDto)
+  @ApiOperation({
+    summary: 'List recurring givings',
+    description: 'Retrieves paginated recurring giving schedules for the church.',
+  })
+  async listRecurringGiving(
+    @Query() query: ListRecurringGivingDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    const result = await this.givingService.listRecurringGiving(churchId, query);
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: query.page || 1,
+        limit: query.limit || 20,
+        totalPages: Math.ceil(result.total / (query.limit || 20)),
+      },
+    };
+  }
+
+  /**
+   * Get a single recurring giving by ID.
+   */
+  @Get('recurring/:id')
+  @ApiGetEndpoint('Get recurring giving', 'Retrieves a single recurring giving schedule by ID.')
+  async getRecurringGiving(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<RecurringGivingResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.getRecurringGivingById(id, churchId);
+  }
+
+  /**
+   * Cancel a recurring giving schedule.
+   */
+  @Patch('recurring/:id/cancel')
+  @ApiOperation({
+    summary: 'Cancel recurring giving',
+    description: 'Soft-cancels a recurring giving schedule. No further charges will be made.',
+  })
+  async cancelRecurringGiving(
+    @Param('id') id: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    await this.givingService.cancelRecurringGiving(id, churchId, user.sub);
+    return { success: true };
   }
 
   // ─── TRANSACTIONS ────────────────────────────────────────────────

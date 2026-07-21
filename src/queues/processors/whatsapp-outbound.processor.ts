@@ -5,6 +5,8 @@
  * Handles jobs from the 'whatsapp-outbound' queue. Each job contains
  * a recipient phone number, message content, and church ID for tenant scoping.
  * Delegates to WhatsAppService to send via the 360dialog Cloud API.
+ * If WhatsApp delivery fails after all retries and ENABLE_SMS_FALLBACK is true,
+ * the processor falls back to SMS delivery via TermiiService.
  *
  * Retry policy: 3 attempts with exponential backoff (5s base).
  * Failed jobs are retained for 7 days for debugging.
@@ -15,20 +17,27 @@
 
 import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
+import { TermiiService } from '../../communication/termii.service';
 
 @Processor('whatsapp-outbound')
 export class WhatsAppOutboundProcessor {
   private readonly logger = new Logger(WhatsAppOutboundProcessor.name);
 
-  constructor(private readonly whatsappService: WhatsAppService) {}
+  constructor(
+    private readonly whatsappService: WhatsAppService,
+    private readonly config: ConfigService,
+    private readonly termiiService: TermiiService,
+  ) {}
 
   /**
    * Processes a single outbound WhatsApp message job.
    *
    * Delegates to WhatsAppService.sendMessage() which handles 360dialog API
    * communication and persists the outbound message to the Message table.
+   * On success, stores the created message ID in the job data for fallback linking.
    *
    * @param job - BullMQ job containing recipient phone, message content, and church ID
    * @returns Void — message sent via WhatsAppService (360dialog API)
@@ -36,12 +45,23 @@ export class WhatsAppOutboundProcessor {
    */
   @Process('send')
   async handleSend(
-    job: Job<{ to: string; message: string; churchId: string; memberId?: string }>,
+    job: Job<{
+      to: string;
+      message: string;
+      churchId: string;
+      memberId?: string;
+      messageId?: string;
+    }>,
   ): Promise<void> {
     const { to, message, churchId, memberId } = job.data;
     this.logger.log(`Processing WhatsApp message to ${to} (job ${job.id})`);
 
-    await this.whatsappService.sendMessage(to, message, churchId, memberId);
+    const result = await this.whatsappService.sendMessage(to, message, churchId, memberId);
+
+    // Store original WhatsApp message ID for fallback linking
+    if (result.messageId) {
+      await job.updateData({ ...job.data, messageId: result.messageId });
+    }
 
     this.logger.log(`WhatsApp message sent to ${to} (job ${job.id})`);
   }
@@ -57,18 +77,45 @@ export class WhatsAppOutboundProcessor {
   }
 
   /**
-   * Handles job failure with attempt tracking.
+   * Handles job failure with attempt tracking and optional SMS fallback.
    *
-   * Logs the failure reason and current attempt number. After 3 failed attempts
-   * the job moves to the failed set for manual inspection.
+   * Logs the failure reason and current attempt number. After 3 failed attempts,
+   * if ENABLE_SMS_FALLBACK is enabled, the message is retried via Termii SMS.
    *
    * @param job - The failed BullMQ job
    * @param error - The error that caused the failure
    */
   @OnQueueFailed()
-  onFailed(job: Job, error: Error): void {
+  async onFailed(
+    job: Job<{
+      to: string;
+      message: string;
+      churchId: string;
+      memberId?: string;
+      messageId?: string;
+    }>,
+    error: Error,
+  ): Promise<void> {
     this.logger.error(
       `WhatsApp job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,
     );
+
+    const maxAttempts = job.opts.attempts ?? 1;
+    const isFinalAttempt = job.attemptsMade >= maxAttempts;
+    const fallbackEnabled = this.config.get<boolean>('ENABLE_SMS_FALLBACK', false);
+
+    if (isFinalAttempt && fallbackEnabled) {
+      const { to, message, churchId, messageId } = job.data;
+      this.logger.log(`Falling back to SMS for WhatsApp job ${job.id} → ${to}`);
+
+      try {
+        await this.termiiService.sendSms(to, message, churchId, messageId);
+        this.logger.log(`SMS fallback sent for WhatsApp job ${job.id} → ${to}`);
+      } catch (smsError) {
+        this.logger.error(
+          `SMS fallback failed for WhatsApp job ${job.id}: ${smsError instanceof Error ? smsError.message : String(smsError)}`,
+        );
+      }
+    }
   }
 }

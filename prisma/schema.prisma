@@ -445,21 +445,24 @@ model EventTicketTier {
 // ─── Communication ───────────────────────────────────────
 
 model Message {
-  id          String           @id @default(uuid())
-  church_id   String
-  member_id   String?
-  phone       String
-  direction   MessageDirection
-  channel     String           // whatsapp, sms, email
-  content     String?
-  media_url   String?
-  status      String           @default("sent") // sent, delivered, read, failed
-  metadata    Json             @default("{}")
-  created_at  DateTime         @default(now())
+  id                 String           @id @default(uuid())
+  church_id          String
+  member_id          String?
+  phone              String
+  direction          MessageDirection
+  channel            String           // whatsapp, sms, email
+  fallback_channel   String?          // sms, email, etc.
+  parent_message_id  String?          // ID of original message when this is a fallback
+  content            String?
+  media_url          String?
+  status             String           @default("sent") // sent, delivered, read, failed
+  metadata           Json             @default("{}")
+  created_at         DateTime         @default(now())
 
   church  Church  @relation(fields: [church_id], references: [id])
 
   @@index([church_id, channel, created_at])
+  @@index([parent_message_id])
   @@map("messages")
 }
 

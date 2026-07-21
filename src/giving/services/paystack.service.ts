@@ -11,11 +11,12 @@
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, timingSafeEqual, randomBytes } from 'crypto';
 import {
   PaymentGatewayProvider,
   PaymentInitializeResult,
   PaymentVerifyResult,
+  ChargeAuthorizationResult,
   WebhookEvent,
 } from './payment-gateway.interface';
 
@@ -53,6 +54,14 @@ interface PaystackVerifyResponse {
     customer: {
       id: number;
       email: string;
+    };
+    authorization?: {
+      authorization_code: string;
+      card_type: string;
+      last4: string;
+      exp_month: string;
+      exp_year: string;
+      bank: string;
     };
   };
 }
@@ -168,6 +177,7 @@ export class PaystackService implements PaymentGatewayProvider {
       paidAt: result.data.paid_at,
       channel: result.data.channel,
       customerEmail: result.data.customer.email,
+      authorization: result.data.authorization,
     };
   }
 
@@ -211,6 +221,7 @@ export class PaystackService implements PaymentGatewayProvider {
       }
 
       const data = parsed.data as Record<string, unknown>;
+      const authorization = data.authorization as Record<string, unknown> | undefined;
 
       return {
         event: parsed.event as string,
@@ -218,6 +229,7 @@ export class PaystackService implements PaymentGatewayProvider {
         amount: data.amount as number | undefined,
         channel: data.channel as string | undefined,
         customerEmail: (data.customer as Record<string, unknown>)?.email as string | undefined,
+        authorizationCode: authorization?.authorization_code as string | undefined,
         rawData: parsed,
       };
     } catch (e) {
@@ -265,5 +277,74 @@ export class PaystackService implements PaymentGatewayProvider {
       default:
         return 'digital';
     }
+  }
+
+  /**
+   * Charges a saved payment authorization for recurring giving.
+   *
+   * @param authorizationCode - Paystack authorization code from a previous successful charge
+   * @param amount - Amount in Naira (converted to Kobo internally)
+   * @param currency - Currency code (e.g. 'NGN')
+   * @param metadata - Additional metadata to attach to the transaction
+   * @returns Charge result with reference and status
+   * @throws BadRequestException if Paystack is not configured or API call fails
+   */
+  async chargeAuthorization(
+    authorizationCode: string,
+    amount: number,
+    currency: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<ChargeAuthorizationResult> {
+    if (!this.isConfigured()) {
+      throw new BadRequestException('Paystack is not configured. Set PAYSTACK_SECRET_KEY.');
+    }
+
+    const amountInKobo = Math.round(amount * 100);
+    const reference = `RCHG${Date.now()}${randomBytes(4).toString('hex')}`;
+
+    const body: Record<string, unknown> = {
+      authorization_code: authorizationCode,
+      amount: amountInKobo,
+      currency,
+      reference,
+    };
+
+    if (metadata) {
+      body.metadata = metadata;
+    }
+
+    const response = await fetch(`${this.baseUrl}/transaction/charge_authorization`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const result = (await response.json()) as {
+      status: boolean;
+      message: string;
+      data: {
+        reference: string;
+        amount: number;
+        status: string;
+        paid_at?: string;
+        channel?: string;
+      };
+    };
+
+    if (!result.status) {
+      this.logger.error(`Paystack charge authorization failed: ${result.message}`);
+      throw new BadRequestException(`Recurring charge failed: ${result.message}`);
+    }
+
+    return {
+      success: result.data.status === 'success',
+      reference: result.data.reference,
+      amount: result.data.amount / 100,
+      paidAt: result.data.paid_at,
+      channel: result.data.channel,
+    };
   }
 }
