@@ -100,6 +100,12 @@ src/
 │   ├── assets.service.ts   # Asset CRUD, maintenance, depreciation, loans, QR, scans
 │   ├── assets.controller.ts# 21 REST endpoints for asset management
 │   └── dto/                # Asset, category, maintenance, depreciation, loan, scan DTOs
+├── forms/                  # Form & submission management
+│   ├── forms.module.ts     # FormsModule
+│   ├── forms.service.ts    # Form CRUD, submissions, validation, approvals, cloning
+│   ├── forms.controller.ts # Authenticated form endpoints
+│   ├── forms-public.controller.ts # Public submission endpoint
+│   └── dto/                # Form, field, submission, approval DTOs
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
@@ -164,6 +170,14 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-07-21** — Completed Wave 8: Document & Form Management.
+  - **Schema**: Extended `Form` with `is_template`, `is_public`, and `public_token`. Added `SubmissionStatus` enum. Extended `FormSubmission` with `church_id`, `status`, `approved_by_id`, `approved_at`, `rejection_reason`, and `attachments`. Migration: `add_form_submission_workflow`.
+  - **Module**: Created `src/forms/` with `FormsModule`, `FormsService`, `FormsController`, `FormsPublicController`, and DTOs.
+  - **Endpoints**: Authenticated CRUD for forms and submissions under `/api/v1/forms`, plus public submission endpoint `POST /forms/public/:publicToken/submit`.
+  - **Features**: Field-definition form builder, submission validation, file attachments via `MediaAsset`, `pending → approved/rejected` workflow, template cloning, public anonymous submissions.
+  - **Templates**: Added `prisma/seeds/form-templates.seed.ts` with 5 default templates and wired it into `prisma/seed.ts`.
+  - **Tests**: Added `test/unit/forms/forms.service.spec.ts` with 26 tests. Total: **356 tests passing across 22 suites**. Build clean, lint clean (0 errors, 0 warnings).
 
 - **2026-07-21** — Completed Wave 7: Asset & Inventory Management.
   - **Schema**: Refactored `Asset` model with structured fields (asset_tag, category relation, serial_number, brand, model, department/branch/custodian relations, condition, status, purchase details, depreciation config). Added `AssetCategory`, `AssetMaintenance`, `AssetDepreciation`, `AssetLoan`, and `AssetScanLog` models. Added enums `AssetStatus`, `AssetCondition`, `DepreciationMethod`, `MaintenanceStatus`, `AssetLoanStatus`. Migration: `20260721165046_add_asset_inventory_management`.

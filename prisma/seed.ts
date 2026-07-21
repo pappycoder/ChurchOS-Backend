@@ -24,6 +24,7 @@ import {
   TransactionType,
   TransactionStatus,
 } from '@prisma/client';
+import { seedFormTemplates } from './seeds/form-templates.seed';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 const adapter = new PrismaPg({
@@ -481,6 +482,9 @@ async function main(): Promise<void> {
     console.log(`  ✅ Family: ${family.name} (${fam.members.length} members)`);
   }
 
+  // ─── 12. Create Default Form Templates ───────────────────
+  await seedFormTemplates(prisma, church.id);
+
   // ─── Summary ─────────────────────────────────────────────
   console.log('\n🎉 Seed completed successfully!\n');
   console.log('Summary:');
@@ -494,6 +498,7 @@ async function main(): Promise<void> {
   console.log(`  • Roles: ${createdRoles.length}`);
   console.log(`  • Permissions: ${createdPermissions.length}`);
   console.log(`  • Families: ${familyData.length}`);
+  console.log(`  • Form Templates: 5`);
   console.log(
     '\n📌 Note: Admin user ID is a placeholder. Connect to Supabase Auth for real users.\n',
   );

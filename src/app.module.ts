@@ -46,6 +46,7 @@ import { CommunicationModule } from './communication/communication.module';
 import { PastoralModule } from './pastoral/pastoral.module';
 import { AdminModule } from './admin/admin.module';
 import { AssetsModule } from './assets/assets.module';
+import { FormsModule } from './forms/forms.module';
 
 /**
  * Root application module.
@@ -159,6 +160,9 @@ import { AssetsModule } from './assets/assets.module';
 
     // Import AssetsModule for asset and inventory management.
     AssetsModule,
+
+    // Import FormsModule for form and submission management.
+    FormsModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.

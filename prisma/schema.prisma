@@ -70,6 +70,12 @@ enum FormStatus {
   closed
 }
 
+enum SubmissionStatus {
+  pending
+  approved
+  rejected
+}
+
 enum TicketStatus {
   reserved
   paid
@@ -866,31 +872,44 @@ model AssetScanLog {
 // ─── Forms ───────────────────────────────────────────────
 
 model Form {
-  id          String     @id @default(uuid())
-  church_id   String
-  title       String
-  description String?
-  fields      Json       @default("[]") // Array of field definitions
-  status      FormStatus @default(draft)
-  created_at  DateTime   @default(now())
-  updated_at  DateTime   @updatedAt
+  id           String     @id @default(uuid())
+  church_id    String
+  title        String
+  description  String?
+  fields       Json       @default("[]") // Array of field definitions
+  status       FormStatus @default(draft)
+  is_template  Boolean    @default(false)
+  is_public    Boolean    @default(false)
+  public_token String?    @unique
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
 
   submissions FormSubmission[]
 
   @@index([church_id])
+  @@index([church_id, status])
+  @@index([church_id, is_template])
   @@map("forms")
 }
 
 model FormSubmission {
-  id         String   @id @default(uuid())
-  form_id    String
-  data       Json
-  submitted_by String?
-  created_at DateTime @default(now())
+  id                String           @id @default(uuid())
+  form_id           String
+  church_id         String
+  data              Json
+  submitted_by      String?
+  status            SubmissionStatus @default(pending)
+  approved_by_id    String?
+  approved_at       DateTime?
+  rejection_reason  String?
+  attachments       Json             @default("[]")
+  created_at        DateTime         @default(now())
 
   form Form @relation(fields: [form_id], references: [id])
 
   @@index([form_id])
+  @@index([church_id])
+  @@index([church_id, status])
   @@map("form_submissions")
 }
 
