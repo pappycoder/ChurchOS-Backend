@@ -28,7 +28,6 @@ interface FormFieldSeed {
 }
 
 interface FormTemplateSeed {
-  id: string;
   title: string;
   description?: string;
   fields: FormFieldSeed[];
@@ -37,7 +36,6 @@ interface FormTemplateSeed {
 
 const templates: FormTemplateSeed[] = [
   {
-    id: '00000000-0000-0000-0000-000000000100',
     title: 'Membership Application',
     description: 'Application form for new members joining the church.',
     is_public: true,
@@ -65,7 +63,6 @@ const templates: FormTemplateSeed[] = [
     ],
   },
   {
-    id: '00000000-0000-0000-0000-000000000101',
     title: 'Baptism Registration',
     description: 'Register for water baptism.',
     is_public: true,
@@ -91,7 +88,6 @@ const templates: FormTemplateSeed[] = [
     ],
   },
   {
-    id: '00000000-0000-0000-0000-000000000102',
     title: 'Wedding Application',
     description: 'Application for church wedding solemnization.',
     is_public: false,
@@ -107,7 +103,6 @@ const templates: FormTemplateSeed[] = [
     ],
   },
   {
-    id: '00000000-0000-0000-0000-000000000103',
     title: 'Event Request',
     description: 'Request approval for a church event or activity.',
     is_public: false,
@@ -122,7 +117,6 @@ const templates: FormTemplateSeed[] = [
     ],
   },
   {
-    id: '00000000-0000-0000-0000-000000000104',
     title: 'Expense Reimbursement',
     description: 'Request reimbursement for an approved church expense.',
     is_public: false,
@@ -147,21 +141,34 @@ export async function seedFormTemplates(prisma: PrismaClient, churchId: string):
   console.log('📦 Creating default form templates...');
 
   for (const template of templates) {
-    await prisma.form.upsert({
-      where: { id: template.id },
-      update: {},
-      create: {
-        id: template.id,
-        church_id: churchId,
-        title: template.title,
-        description: template.description,
-        fields: template.fields as unknown as Prisma.InputJsonValue,
-        status: 'published',
-        is_template: true,
-        is_public: template.is_public,
-        public_token: template.is_public ? crypto.randomUUID() : null,
-      },
+    const existing = await prisma.form.findFirst({
+      where: { church_id: churchId, title: template.title },
     });
+
+    if (existing) {
+      await prisma.form.update({
+        where: { id: existing.id },
+        data: {
+          description: template.description,
+          fields: template.fields as unknown as Prisma.InputJsonValue,
+          is_public: template.is_public,
+        },
+      });
+    } else {
+      await prisma.form.create({
+        data: {
+          church_id: churchId,
+          title: template.title,
+          description: template.description,
+          fields: template.fields as unknown as Prisma.InputJsonValue,
+          status: 'published',
+          is_template: true,
+          is_public: template.is_public,
+          public_token: template.is_public ? crypto.randomUUID() : null,
+        },
+      });
+    }
+
     console.log(`  ✅ Form Template: ${template.title}`);
   }
 }

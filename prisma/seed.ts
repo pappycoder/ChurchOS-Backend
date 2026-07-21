@@ -45,48 +45,52 @@ async function main(): Promise<void> {
 
   // ─── 1. Create Church ────────────────────────────────────
   console.log('📦 Creating church...');
-  const church = await prisma.church.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000001',
-      name: 'Grace Community Church',
-      denomination: 'Pentecostal',
-      address: '12 Allen Avenue, Ikeja',
-      city: 'Lagos',
-      state: 'Lagos',
-      country: 'Nigeria',
-      phone: '+234 801 234 5678',
-      email: 'info@gracecommunity.ng',
-      website: 'https://gracecommunity.ng',
-      config: JSON.stringify({
-        timezone: 'Africa/Lagos',
-        currency: 'NGN',
-        default_language: 'en',
-        whatsapp_enabled: true,
-        attendance_enabled: true,
-      }),
-    },
+  let church = await prisma.church.findFirst({
+    where: { name: 'Grace Community Church', city: 'Lagos' },
   });
+  if (!church) {
+    church = await prisma.church.create({
+      data: {
+        name: 'Grace Community Church',
+        denomination: 'Pentecostal',
+        address: '12 Allen Avenue, Ikeja',
+        city: 'Lagos',
+        state: 'Lagos',
+        country: 'Nigeria',
+        phone: '+234 801 234 5678',
+        email: 'info@gracecommunity.ng',
+        website: 'https://gracecommunity.ng',
+        config: JSON.stringify({
+          timezone: 'Africa/Lagos',
+          currency: 'NGN',
+          default_language: 'en',
+          whatsapp_enabled: true,
+          attendance_enabled: true,
+        }),
+      },
+    });
+  }
   console.log(`  ✅ Church: ${church.name} (${church.id})`);
 
   // ─── 2. Create Branch ────────────────────────────────────
   console.log('📦 Creating headquarters branch...');
-  const branch = await prisma.branch.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000010' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000010',
-      church_id: church.id,
-      name: 'Headquarters',
-      is_headquarters: true,
-      address: '12 Allen Avenue, Ikeja',
-      city: 'Lagos',
-      state: 'Lagos',
-      phone: '+234 801 234 5678',
-      email: 'hq@gracecommunity.ng',
-    },
+  let branch = await prisma.branch.findFirst({
+    where: { church_id: church.id, name: 'Headquarters' },
   });
+  if (!branch) {
+    branch = await prisma.branch.create({
+      data: {
+        church_id: church.id,
+        name: 'Headquarters',
+        is_headquarters: true,
+        address: '12 Allen Avenue, Ikeja',
+        city: 'Lagos',
+        state: 'Lagos',
+        phone: '+234 801 234 5678',
+        email: 'hq@gracecommunity.ng',
+      },
+    });
+  }
   console.log(`  ✅ Branch: ${branch.name} (${branch.id})`);
 
   // ─── 3. Create Giving Categories ─────────────────────────
@@ -290,7 +294,7 @@ async function main(): Promise<void> {
         gender: memberData.gender,
         date_of_birth: memberData.date_of_birth,
         status: MemberStatus.active,
-        member_since: new Date(`2024-0${(i % 9) + 1}-01`),
+        member_since: new Date(2024, i % 12, 1),
       },
     });
     createdMembers.push(member);
