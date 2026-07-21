@@ -20,7 +20,6 @@ import {
   Query,
   UseGuards,
   Request,
-  Headers,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -79,8 +78,7 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.createEvent(dto, churchId, user.sub);
-  }
-
+}
   /**
    * Lists events with pagination and filters.
    *
@@ -280,47 +278,4 @@ export class EventsController {
     return this.eventsService.validateTicket(code, eventId, churchId);
   }
 
-  // ─── PAYMENT WEBHOOK ───────────────────────────────────────────
-
-  /**
-   * Paystack webhook handler for event ticket payments.
-   *
-   * Receives payment confirmation from Paystack, verifies the signature,
-   * and confirms the ticket payment.
-   *
-   * @param eventId - Event UUID (from URL)
-   * @param payload - Raw webhook body
-   * @param signature - Paystack HMAC-SHA512 signature
-   * @returns 200 OK
-   */
-  @Post(':eventId/webhook/paystack')
-  @UseGuards()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Paystack webhook',
-    description: 'Receives Paystack payment confirmation for event tickets.',
-  })
-  @ApiParam({ name: 'eventId', description: 'Event UUID' })
-  async handlePaystackWebhook(
-    @Param('eventId') _eventId: string,
-    @Body() payload: Record<string, unknown>,
-    @Headers('x-paystack-signature') _signature: string,
-  ): Promise<{ received: boolean }> {
-    // TODO: Validate webhook signature with PaystackService
-    // For now, extract reference directly
-    const reference = (payload.data as Record<string, unknown>)?.reference as string;
-
-    if (reference) {
-      try {
-        // Church ID will be resolved from the event in confirmTicketPayment
-        // We need to find the event first to get the churchId
-        await this.eventsService.confirmTicketPayment(reference, '');
-      } catch (err) {
-        // Log but don't fail the webhook — Paystack retries on non-200
-        console.error('Webhook processing error:', err);
-      }
-    }
-
-    return { received: true };
-  }
 }

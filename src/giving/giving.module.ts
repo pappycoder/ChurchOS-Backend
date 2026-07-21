@@ -47,6 +47,6 @@ import {
       inject: [PaystackService, FlutterwaveService],
     },
   ],
-  exports: [GivingService, PAYMENT_GATEWAY_REGISTRY],
+  exports: [GivingService, PaystackService, PAYMENT_GATEWAY_REGISTRY],
 })
 export class GivingModule {}

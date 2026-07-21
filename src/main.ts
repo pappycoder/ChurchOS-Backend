@@ -60,7 +60,9 @@ async function bootstrap(): Promise<void> {
   // Create the NestJS application instance.
   // NestFactory.create() initializes the IoC container, resolves all modules,
   // and creates the underlying HTTP adapter (Express by default).
-  const app = await NestFactory.create(AppModule);
+  // Keep the exact HTTP payload for signed payment webhooks. Providers sign
+  // the raw bytes, so re-serializing a parsed JSON body is not safe.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Set a global prefix for all routes.
   // Every controller route will be prefixed with `/api/v1`.

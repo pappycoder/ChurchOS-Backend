@@ -40,6 +40,7 @@ import { LoginResponseDto, RefreshResponseDto } from './dto/session-response.dto
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
+import { RateLimit, RateLimitGuard, RATE_LIMITS } from '../common/guards/rate-limit.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -53,6 +54,8 @@ export class AuthController {
    * This is a public endpoint — no authentication required.
    */
   @Post('register')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Register a new church admin',
@@ -72,6 +75,8 @@ export class AuthController {
    * Returns JWT tokens and user profile. This is a public endpoint.
    */
   @Post('login')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Login with email and password',
@@ -113,6 +118,8 @@ export class AuthController {
    * The email is sent via Supabase Auth with a reset link.
    */
   @Post('forgot-password')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Request password reset',
@@ -132,6 +139,8 @@ export class AuthController {
    * The token is obtained from the password reset email link.
    */
   @Patch('reset-password')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Reset password with recovery token',
@@ -180,7 +189,8 @@ export class AuthController {
    * Returns new access and refresh tokens.
    */
   @Post('refresh')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
   @ApiBearerAuth('supabase-auth')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -191,9 +201,6 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })
   async refreshSession(@Request() req: AuthenticatedRequest): Promise<RefreshResponseDto> {
     const refreshToken = req.body?.refreshToken;
-    if (!refreshToken) {
-      return this.authService.refreshSession(refreshToken);
-    }
     return this.authService.refreshSession(refreshToken);
   }
 }

@@ -25,7 +25,11 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  Req,
 } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
+import { RawBodyRequest } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -198,10 +202,10 @@ export class GivingController {
     description: 'Receives and processes Paystack webhook events.',
   })
   async handlePaystackWebhook(
-    @Body() payload: Record<string, unknown>,
     @Headers('x-paystack-signature') signature: string,
+    @Req() request: RawBodyRequest<ExpressRequest>,
   ) {
-    const rawBody = JSON.stringify(payload);
+    const rawBody = this.getRawBody(request);
     return this.givingService.handleWebhook(rawBody, signature || '', 'paystack');
   }
 
@@ -218,11 +222,19 @@ export class GivingController {
     description: 'Receives and processes Flutterwave webhook events.',
   })
   async handleFlutterwaveWebhook(
-    @Body() payload: Record<string, unknown>,
     @Headers('verif-hash') signature: string,
+    @Req() request: RawBodyRequest<ExpressRequest>,
   ) {
-    const rawBody = JSON.stringify(payload);
+    const rawBody = this.getRawBody(request);
     return this.givingService.handleWebhook(rawBody, signature || '', 'flutterwave');
+  }
+
+  /** Returns the exact provider-signed payload captured by Nest's Express adapter. */
+  private getRawBody(request: RawBodyRequest<ExpressRequest>): string {
+    if (!request.rawBody) {
+      throw new BadRequestException('Missing raw webhook payload');
+    }
+    return request.rawBody.toString('utf8');
   }
 
   // ─── CASH/BANK GIVING ────────────────────────────────────────────

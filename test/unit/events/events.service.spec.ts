@@ -355,4 +355,67 @@ describe('EventsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('confirmTicketPayment', () => {
+    const paymentReference = 'EVT-REF-001';
+    const paidRegistration = {
+      ...mockRegistration,
+      payment_reference: paymentReference,
+      transaction_id: 'transaction-1',
+      event: mockEvent,
+    };
+    const paidTicket = {
+      id: 'ticket-1',
+      code: 'EVT-20260721-A1B2C3',
+      registration_id: mockRegistration.id,
+      tier_name: 'General',
+      status: 'paid',
+    };
+
+    beforeEach(() => {
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction.mockImplementation(
+        async (callback: (client: typeof prisma) => unknown) => callback(prisma),
+      );
+    });
+
+    it('should atomically settle a pending registration and issue one ticket', async () => {
+      prisma.eventRegistration.findFirst.mockResolvedValue(paidRegistration);
+      prisma.eventRegistration.updateMany.mockResolvedValue({ count: 1 });
+      prisma.eventTicketTier.findUnique.mockResolvedValue(null);
+      prisma.transaction.findUnique.mockResolvedValue({ amount: 5000 });
+      prisma.ticket.create.mockResolvedValue(paidTicket);
+      prisma.eventRegistration.update.mockResolvedValue({
+        ...paidRegistration,
+        ticket_id: paidTicket.id,
+      });
+      prisma.transaction.update.mockResolvedValue({});
+
+      const result = await service.confirmTicketPayment(paymentReference);
+
+      expect(prisma.eventRegistration.updateMany).toHaveBeenCalledWith({
+        where: { id: mockRegistration.id, payment_status: 'pending' },
+        data: { payment_status: 'paid' },
+      });
+      expect(prisma.ticket.create).toHaveBeenCalledTimes(1);
+      expect(result.paymentStatus).toBe('paid');
+      expect(result.ticketCode).toBe(paidTicket.code);
+    });
+
+    it('should return the existing ticket when a concurrent delivery already settled it', async () => {
+      prisma.eventRegistration.findFirst.mockResolvedValue(paidRegistration);
+      prisma.eventRegistration.updateMany.mockResolvedValue({ count: 0 });
+      prisma.eventRegistration.findUnique.mockResolvedValue({
+        ...paidRegistration,
+        payment_status: 'paid',
+      });
+      prisma.ticket.findFirst.mockResolvedValue(paidTicket);
+
+      const result = await service.confirmTicketPayment(paymentReference);
+
+      expect(prisma.ticket.create).not.toHaveBeenCalled();
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+      expect(result.paymentStatus).toBe('paid');
+      expect(result.ticketCode).toBe(paidTicket.code);
+    });
+  });
 });

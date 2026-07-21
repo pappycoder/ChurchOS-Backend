@@ -606,10 +606,7 @@ export class EventsService {
    * @throws NotFoundException if registration with this reference doesn't exist
    * @throws BadRequestException if registration is not in pending state
    */
-  async confirmTicketPayment(
-    reference: string,
-    churchId: string,
-  ): Promise<RegistrationResponseDto> {
+  async confirmTicketPayment(reference: string): Promise<RegistrationResponseDto> {
     const registration = await this.prisma.eventRegistration.findFirst({
       where: { payment_reference: reference },
       include: { event: true },
@@ -617,10 +614,6 @@ export class EventsService {
 
     if (!registration) {
       throw new NotFoundException('Registration not found for this payment reference');
-    }
-
-    if (registration.event.church_id !== churchId) {
-      throw new NotFoundException('Registration not found');
     }
 
     if (registration.payment_status === 'paid') {
@@ -639,63 +632,90 @@ export class EventsService {
       throw new BadRequestException(`Registration is in "${registration.payment_status}" state`);
     }
 
-    // Generate ticket
-    const ticketCode = this.generateTicketCode();
-    const tier = registration.tier_id
-      ? await this.prisma.eventTicketTier.findUnique({ where: { id: registration.tier_id } })
-      : null;
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Atomically claim the pending registration. A concurrent webhook sees a
+      // zero count and returns the ticket created by the request that won.
+      const claim = await tx.eventRegistration.updateMany({
+        where: { id: registration.id, payment_status: 'pending' },
+        data: { payment_status: 'paid' },
+      });
 
-    const transaction = registration.transaction_id
-      ? await this.prisma.transaction.findUnique({ where: { id: registration.transaction_id } })
-      : null;
+      if (claim.count === 0) {
+        const settled = await tx.eventRegistration.findUnique({ where: { id: registration.id } });
+        const existingTicket = await tx.ticket.findFirst({
+          where: { registration_id: registration.id },
+        });
 
-    const ticket = await this.prisma.ticket.create({
-      data: {
-        event_id: registration.event_id,
-        code: ticketCode,
-        member_id: registration.member_id,
-        registration_id: registration.id,
-        status: 'paid',
-        tier_name: tier?.name ?? 'General',
-        price_paid: transaction?.amount ?? 0,
-        transaction_id: registration.transaction_id,
-        payment_reference: reference,
-      },
+        if (settled?.payment_status === 'paid' && existingTicket) {
+          return { ticket: existingTicket, alreadySettled: true };
+        }
+
+        throw new BadRequestException('Registration payment could not be settled');
+      }
+
+      const tier = registration.tier_id
+        ? await tx.eventTicketTier.findUnique({ where: { id: registration.tier_id } })
+        : null;
+      const transaction = registration.transaction_id
+        ? await tx.transaction.findUnique({ where: { id: registration.transaction_id } })
+        : null;
+      const ticketCode = this.generateTicketCode();
+      const ticket = await tx.ticket.create({
+        data: {
+          event_id: registration.event_id,
+          code: ticketCode,
+          member_id: registration.member_id,
+          registration_id: registration.id,
+          status: 'paid',
+          tier_name: tier?.name ?? 'General',
+          price_paid: transaction?.amount ?? 0,
+          transaction_id: registration.transaction_id,
+          payment_reference: reference,
+        },
+      });
+
+      await tx.eventRegistration.update({
+        where: { id: registration.id },
+        data: { ticket_id: ticket.id },
+      });
+
+      if (registration.transaction_id) {
+        await tx.transaction.update({
+          where: { id: registration.transaction_id },
+          data: { status: 'success' },
+        });
+      }
+
+      return { ticket, alreadySettled: false, tierName: tier?.name };
     });
 
-    await this.prisma.eventRegistration.update({
-      where: { id: registration.id },
-      data: {
+    if (result.alreadySettled) {
+      return this.mapRegistrationToDto({
+        ...registration,
         payment_status: 'paid',
-        ticket_id: ticket.id,
-      },
-    });
-
-    // Update transaction status
-    if (registration.transaction_id) {
-      await this.prisma.transaction.update({
-        where: { id: registration.transaction_id },
-        data: { status: 'success' },
+        ticket_id: result.ticket.id,
+        ticket_code: result.ticket.code,
+        tier_name: result.ticket.tier_name,
       });
     }
 
     await this.audit.log({
       userId: registration.member_id,
-      churchId,
+      churchId: registration.event.church_id,
       entity: 'event_registration',
       action: 'UPDATE',
       entityId: registration.id,
-      newValues: { payment_status: 'paid', ticket_code: ticketCode },
+      newValues: { payment_status: 'paid', ticket_code: result.ticket.code },
     });
 
-    this.logger.log(`Ticket payment confirmed: ${reference} → ticket ${ticketCode}`);
+    this.logger.log(`Ticket payment confirmed: ${reference} → ticket ${result.ticket.code}`);
 
     return this.mapRegistrationToDto({
       ...registration,
       payment_status: 'paid',
-      ticket_id: ticket.id,
-      ticket_code: ticketCode,
-      tier_name: tier?.name,
+      ticket_id: result.ticket.id,
+      ticket_code: result.ticket.code,
+      tier_name: result.tierName,
     });
   }
 

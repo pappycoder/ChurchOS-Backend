@@ -13,6 +13,7 @@ import { JwksService } from './services/jwks.service';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { SupabaseModule } from '../supabase/supabase.module';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 /**
  * Auth module providing authentication infrastructure.
@@ -33,7 +34,7 @@ import { SupabaseModule } from '../supabase/supabase.module';
 @Module({
   imports: [SupabaseModule],
   controllers: [AuthController],
-  providers: [JwksService, JwtAuthGuard, AuthService],
+  providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService],
   exports: [AuthService, JwtAuthGuard, JwksService],
 })
 export class AuthModule {}

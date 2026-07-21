@@ -12,6 +12,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { GivingModule } from '../giving/giving.module';
 import { EventsController } from './events.controller';
+import { EventWebhooksController } from './event-webhooks.controller';
 import { EventsService } from './events.service';
 
 /**
@@ -20,7 +21,7 @@ import { EventsService } from './events.service';
  */
 @Module({
   imports: [AuthModule, GivingModule],
-  controllers: [EventsController],
+  controllers: [EventsController, EventWebhooksController],
   providers: [EventsService],
   exports: [EventsService],
 })
