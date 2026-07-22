@@ -225,7 +225,7 @@ export class UsersService {
     }
 
     if (data.branchId !== undefined) {
-      updateData.branch_id = data.branchId || null;
+      updateData.branch = data.branchId ? { connect: { id: data.branchId } } : { disconnect: true };
     }
 
     const updated = await this.prisma.profile.update({

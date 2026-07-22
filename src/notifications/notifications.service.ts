@@ -259,8 +259,6 @@ export class NotificationsService {
 
     const memberIds = members.map((m) => m.id);
 
-    if (memberIds.length === 0) return;
-
     if (this.resendService) {
       try {
         await this.resendService.sendEmail(email, subject, body, churchId, {
@@ -271,6 +269,8 @@ export class NotificationsService {
         this.logger.warn(`Email delivery failed: ${(err as Error).message}`);
       }
     }
+
+    if (memberIds.length === 0) return;
 
     const profiles = await this.prisma.profile.findMany({
       where: { church_id: churchId, member_id: { in: memberIds } },

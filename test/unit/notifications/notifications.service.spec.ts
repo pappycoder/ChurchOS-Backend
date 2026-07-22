@@ -192,6 +192,30 @@ describe('NotificationsService', () => {
         }),
       );
     });
+
+    it('should still attempt delivery when no matching member exists', async () => {
+      model('member').findMany.mockResolvedValue([]);
+
+      await service.sendEmailWithAttachment(
+        'norecord@example.com',
+        'Receipt',
+        'Body',
+        Buffer.from('pdf'),
+        'receipt.pdf',
+        mockChurchId,
+      );
+
+      expect(resendService.sendEmail).toHaveBeenCalledWith(
+        'norecord@example.com',
+        'Receipt',
+        'Body',
+        mockChurchId,
+        expect.objectContaining({
+          filename: 'receipt.pdf',
+          content: expect.any(Buffer),
+        }),
+      );
+    });
   });
 
   describe('sendWhatsAppWithDocument', () => {

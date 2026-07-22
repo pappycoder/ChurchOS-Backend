@@ -199,6 +199,48 @@ describe('UsersService', () => {
         ),
       ).rejects.toThrow('already exists');
     });
+
+    it('should reject empty email or names', async () => {
+      await expect(
+        service.inviteUser(
+          {
+            email: '   ',
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'member',
+          },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow('Email is required');
+
+      await expect(
+        service.inviteUser(
+          {
+            email: 'john@church.com',
+            firstName: '   ',
+            lastName: 'Doe',
+            role: 'member',
+          },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow('First name and last name are required');
+    });
+  });
+
+  describe('updateUser', () => {
+    it('should reject empty first or last name', async () => {
+      model('profile').findFirst.mockResolvedValue(mockProfile);
+
+      await expect(
+        service.updateUser(mockProfileId, mockChurchId, mockUserId, { firstName: '   ' }),
+      ).rejects.toThrow('First name cannot be empty');
+
+      await expect(
+        service.updateUser(mockProfileId, mockChurchId, mockUserId, { lastName: '   ' }),
+      ).rejects.toThrow('Last name cannot be empty');
+    });
   });
 
   describe('deactivateUser', () => {
