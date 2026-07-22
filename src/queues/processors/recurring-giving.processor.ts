@@ -11,7 +11,7 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
+import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { GivingService } from '../../giving/giving.service';
@@ -53,6 +53,13 @@ export class RecurringGivingProcessor {
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `Recurring giving job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,
+    );
+  }
+
+  @OnQueueCompleted()
+  onCompleted(job: Job, result: boolean): void {
+    this.logger.log(
+      `Recurring giving job ${job.id} completed: ${result ? 'success' : 'charge returned false'}`,
     );
   }
 }

@@ -85,9 +85,9 @@ src/
 ├── family/                 # Family CRUD, member associations, head-of-family tracking
 ├── templates/              # Message template CRUD, channel/status/search filters (WhatsApp/SMS/Email)
 ├── broadcast/              # Broadcast campaigns with audience filtering and queue dispatch
-├── queues/                 # BullMQ queue infrastructure, 6 named queues, processors
+├── queues/                 # BullMQ queue infrastructure, 7 named queues, processors
 │   ├── queues.module.ts    # BullModule config, Redis connection, graceful shutdown
-│   └── processors/         # WhatsApp, Email, SMS, RecurringGiving, NightlyJobs processors
+│   └── processors/         # WhatsApp, Email, SMS, RecurringGiving, NightlyJobs, WebhookDelivery, DeadLetter
 ├── pastoral/               # Pastoral notes (AES-256-GCM), life events, engagement & risk scoring
 │   ├── pastoral.service.ts # CRUD + encryption + confidentiality access control
 │   ├── scoring.service.ts  # Engagement & risk score calculation engines
@@ -121,6 +121,20 @@ src/
 │   ├── sync.service.ts     # Push/pull sync, idempotency, conflict resolution
 │   ├── sync.controller.ts  # 3 endpoints for sync
 │   └── dto/                # SyncPushDto, SyncChangeDto
+├── reports/                # Church report generation (financial, attendance, members)
+│   ├── reports.module.ts   # ReportsModule
+│   ├── reports.service.ts  # Aggregation queries scoped by church_id + date ranges
+│   ├── reports.controller.ts # 4 endpoints for reports
+│   └── dto/                # ReportQueryDto, FinancialReportDto, AttendanceReportDto, MemberReportDto
+├── webhooks/               # Outbound webhook subscriptions + delivery
+│   ├── webhooks.module.ts  # WebhooksModule
+│   ├── webhooks.service.ts # Subscription CRUD, notifySubscribers(), BullMQ dispatch
+│   ├── webhooks.controller.ts # 5 endpoints for webhook management
+│   ├── webhook-delivery.processor.ts # HMAC-SHA256 signed delivery, 3 retries
+│   └── dto/                # CreateWebhookSubscriptionDto, WebhookResponseDto
+├── health/                 # Health check endpoint (DB, Redis, all 8 queues)
+│   ├── health.module.ts    # Imports QueuesModule + WebhooksModule
+│   └── health.controller.ts# GET /health — per-queue job count metrics
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
@@ -234,6 +248,16 @@ All notable changes to this project are documented below. Update this section wi
     - Conflict resolution: last-write-wins based on clientTimestamp.
   - **Prisma Models**: Added `Notification`, `WebhookSubscription`, `WebhookDelivery` models. Migration `20260722090000_add_notifications_webhook_models`.
   - **Tests**: 8 NotificationsService + 7 SyncService tests. Total: **429 tests across 30 suites**. Build clean, lint clean.
+
+- **2026-07-22** — Role Guards, Reports, Webhooks, Queue Hardening (Sprint Day 4).
+  - **Phase 1 — Role Guards Fixed**: Added `RolesGuard` to `admin.controller.ts` (18 endpoints), `pastoral.controller.ts` (11 endpoints), `analytics.controller.ts` (6 endpoints). Added `@RequireRoles()` to all 6 mutating endpoints in `members.controller.ts`. All role-based access control now enforced at controller level.
+  - **Phase 2 — ReportsModule**: Created `src/reports/` with `ReportsModule`, `ReportsService`, `ReportsController`, DTOs. 4 endpoints: `GET /reports/financial` (totals, category breakdown, monthly trends), `GET /reports/attendance` (total, per-service, monthly trends), `GET /reports/members` (status/gender breakdown, monthly growth), `POST /reports/export` (CSV). All queries use Prisma aggregations scoped by `church_id`. Registered in `app.module.ts`.
+  - **Phase 3 — WebhooksModule**: Created `src/webhooks/` with `WebhooksModule`, `WebhooksService`, `WebhooksController`, `WebhookDeliveryProcessor`, DTOs. 5 endpoints: `POST /webhooks` (create subscription), `GET /webhooks` (list), `DELETE /webhooks/:id` (deactivate), `GET /webhooks/:id/deliveries` (history), `POST /webhooks/:id/test` (fire test). `notifySubscribers()` internal method for event dispatching. BullMQ `WebhookDeliveryProcessor` handles HMAC-SHA256 signed delivery with 3 retries, exponential backoff. Registered in `app.module.ts`.
+  - **Phase 4 — Swagger Cleanup**: Eliminated 64 bare `@ApiProperty()` calls across 6 DTO files (`admin-response.dto.ts`, `broadcast-response.dto.ts`, `pastoral-note-response.dto.ts`, `life-event-response.dto.ts`, `family-response.dto.ts`, `template-response.dto.ts`). All now have proper `description` properties.
+  - **Phase 5 — Queue Hardening**: Added `@OnQueueFailed` handler to `NightlyJobsProcessor`. Added `@OnQueueCompleted` handler to `RecurringGivingProcessor`. Created `DeadLetterProcessor` with `dead-letter` queue. Registered in `QueuesModule` with 7-day retention, graceful shutdown.
+  - **Phase 6 — Lint Cleanup**: Fixed 8 `any` types in `scripts/delete-data.ts` — replaced with `Record<string, unknown>`, `{ id: string }[]`, and `PrismaClient` casts. ESLint disable directives for necessary dynamic Prisma model access.
+  - **Phase 7 — Tests**: Added 7 `ReportsService` tests, 10 `WebhooksService` tests, 3 `DeadLetterProcessor` tests. Total: **436 tests across 31 suites**. Build clean, lint clean (0 errors, 0 warnings). All `@ApiProperty()` calls now have descriptions.
+  - **Phase 9 — Wiring Fixes**: Added `dead-letter` and `webhook-delivery` queues to health check endpoint (all 8 queues now monitored). Imported `WebhooksModule` in `HealthModule`. Implemented `OnModuleDestroy` in `WebhooksModule` for graceful `webhook-delivery` queue shutdown on SIGTERM/SIGINT.
 
 - **2026-07-21** — Completed Wave 9: Advanced Analytics & Reporting.
   - **Module**: Created `src/analytics/` with `AnalyticsModule`, `AnalyticsService`, `AnalyticsController`, and DTOs.

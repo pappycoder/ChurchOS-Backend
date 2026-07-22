@@ -486,14 +486,16 @@ export class EventsService {
         where: { church_id: churchId, role: { in: ['church_admin', 'branch_pastor'] } },
       });
       for (const admin of adminProfiles) {
-        await this.notifications.createNotification(
-          churchId,
-          admin.id,
-          'event',
-          'Event Registration',
-          `${member.first_name} ${member.last_name} registered for "${event.title}".`,
-          { eventId, memberId, eventName: event.title },
-        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+        await this.notifications
+          .createNotification(
+            churchId,
+            admin.id,
+            'event',
+            'Event Registration',
+            `${member.first_name} ${member.last_name} registered for "${event.title}".`,
+            { eventId, memberId, eventName: event.title },
+          )
+          .catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
       }
 
       return this.mapRegistrationToDto({

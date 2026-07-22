@@ -12,53 +12,45 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PastoralNoteResponseDto {
-  // Unique note identifier
-  @ApiProperty()
+  @ApiProperty({ description: 'Unique identifier for the pastoral note' })
   id!: string;
 
-  // Multi-tenant church scope
-  @ApiProperty()
+  @ApiProperty({ description: 'Multi-tenant church scope identifier' })
   churchId!: string;
 
-  // Associated member reference
-  @ApiProperty()
+  @ApiProperty({ description: 'Associated member reference ID' })
   memberId!: string;
 
-  // Member name fields for display
-  @ApiProperty()
+  @ApiProperty({ description: 'First name of the associated member' })
   memberFirstName!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last name of the associated member' })
   memberLastName!: string;
 
-  // Author (leader) who created the note
-  @ApiProperty()
+  @ApiProperty({ description: 'Author (leader) who created the note' })
   authorId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'First name of the author' })
   authorFirstName!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last name of the author' })
   authorLastName!: string;
 
-  // Decrypted content (never expose encrypted form)
   @ApiProperty({ description: 'Decrypted content of the pastoral note' })
   content!: string;
 
-  // Confidentiality access level
   @ApiProperty({
+    description: 'Confidentiality access level',
     enum: ['standard', 'confidential', 'restricted'],
   })
   confidentiality!: string;
 
-  // Categorization tags
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ description: 'Categorization tags', type: [String] })
   tags!: string[];
 
-  // Timestamps for audit trail
-  @ApiProperty()
+  @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last update timestamp' })
   updatedAt!: string;
 }

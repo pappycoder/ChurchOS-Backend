@@ -100,14 +100,16 @@ export class MembersService {
       where: { church_id: churchId, role: { in: ['church_admin', 'secretary'] } },
     });
     for (const admin of adminProfiles) {
-      await this.notifications.createNotification(
-        churchId,
-        admin.id,
-        'member',
-        'New Member',
-        `${member.first_name} ${member.last_name} has been added to the church.`,
-        { memberId: member.id },
-      ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+      await this.notifications
+        .createNotification(
+          churchId,
+          admin.id,
+          'member',
+          'New Member',
+          `${member.first_name} ${member.last_name} has been added to the church.`,
+          { memberId: member.id },
+        )
+        .catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
     }
 
     return this.mapToResponseDto(member);

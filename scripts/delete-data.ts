@@ -161,8 +161,12 @@ if (supabaseUrl && supabaseServiceKey) {
   });
 }
 
-function prismaModel(name: string): any {
-  const model = (prisma as any)[name[0].toLowerCase() + name.slice(1)];
+function prismaModel(
+  name: string,
+): Record<string, (args: Record<string, unknown>) => Promise<unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+  const model = (prisma as Record<string, unknown>)[name[0].toLowerCase() + name.slice(1)] as
+    Record<string, (args: Record<string, unknown>) => Promise<unknown>> | undefined;
   if (!model) {
     throw new Error(`Model ${name} not found on PrismaClient`);
   }
@@ -266,7 +270,7 @@ async function promptNumber(message: string, max: number, min: number = 1): Prom
   }
 }
 
-function printPreview(rows: any[], columns: string[]): void {
+function printPreview(rows: Record<string, unknown>[], columns: string[]): void {
   if (rows.length === 0) return;
   const colWidths = columns.map((col) => {
     const header = col.length;
@@ -305,7 +309,11 @@ async function countRecords(modelName: string): Promise<number> {
   return model.count();
 }
 
-async function findRecords(modelName: string, field: string, value: string): Promise<any[]> {
+async function findRecords(
+  modelName: string,
+  field: string,
+  value: string,
+): Promise<Record<string, unknown>[]> {
   const model = prismaModel(modelName);
   const columnType = getColumnType(modelName, field);
   const isString = columnType === 'String';
@@ -361,7 +369,7 @@ async function countRecordsWhere(modelName: string, field: string, value: string
   return model.count({ where: { [field]: val } });
 }
 
-async function findById(modelName: string, id: string): Promise<any> {
+async function findById(modelName: string, id: string): Promise<Record<string, unknown> | null> {
   const model = prismaModel(modelName);
   return model.findUnique({ where: { id } });
 }
@@ -394,11 +402,11 @@ async function deleteRecordsWhere(
   else val = value;
 
   if (isString && val !== '') {
-    const matching = await model.findMany({
+    const matching = (await model.findMany({
       where: { [field]: { contains: val, mode: 'insensitive' } },
       select: { id: true },
-    });
-    const ids = matching.map((m: any) => m.id);
+    })) as { id: string }[];
+    const ids = matching.map((m) => m.id);
     if (ids.length === 0) return 0;
     const result = await model.deleteMany({ where: { id: { in: ids } } });
     return result.count;
@@ -426,17 +434,17 @@ async function softDeleteRecordsWhere(
 
   let ids: string[] = [];
   if (isString && val !== '') {
-    const recs = await model.findMany({
+    const recs = (await model.findMany({
       where: { [field]: { contains: val, mode: 'insensitive' } },
       select: { id: true },
-    });
-    ids = recs.map((r: any) => r.id);
+    })) as { id: string }[];
+    ids = recs.map((r) => r.id);
   } else {
-    const recs = await model.findMany({
+    const recs = (await model.findMany({
       where: { [field]: val },
       select: { id: true },
-    });
-    ids = recs.map((r: any) => r.id);
+    })) as { id: string }[];
+    ids = recs.map((r) => r.id);
   }
 
   if (ids.length === 0) return 0;

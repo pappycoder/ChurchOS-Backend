@@ -105,10 +105,7 @@ export class NotificationsService {
   /**
    * Mark all notifications as read for a profile.
    */
-  async markAllAsRead(
-    churchId: string,
-    profileId: string,
-  ): Promise<{ updated: number }> {
+  async markAllAsRead(churchId: string, profileId: string): Promise<{ updated: number }> {
     const result = await this.prisma.notification.updateMany({
       where: {
         church_id: churchId,
@@ -179,11 +176,15 @@ export class NotificationsService {
         });
         sent++;
       } catch (err) {
-        this.logger.warn(`Failed to send notification to profile ${profile.id}: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to send notification to profile ${profile.id}: ${(err as Error).message}`,
+        );
       }
     }
 
-    this.logger.log(`Broadcast notification to ${sent}/${profiles.length} profiles in church ${churchId}`);
+    this.logger.log(
+      `Broadcast notification to ${sent}/${profiles.length} profiles in church ${churchId}`,
+    );
 
     return { sent };
   }
@@ -199,9 +200,7 @@ export class NotificationsService {
       title: notification.title as string,
       body: notification.body as string,
       data: (notification.data as Record<string, unknown>) || undefined,
-      readAt: notification.read_at
-        ? (notification.read_at as Date).toISOString()
-        : undefined,
+      readAt: notification.read_at ? (notification.read_at as Date).toISOString() : undefined,
       createdAt: notification.created_at.toISOString(),
     };
   }

@@ -9,42 +9,51 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TemplateResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Unique identifier for the message template' })
   templateId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Identifier of the church that owns this template' })
   churchId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Name or title of the template' })
   name!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Body content of the message template, may include variable placeholders',
+  })
   content!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Delivery channel the template is designed for (e.g. whatsapp, sms, email)',
+  })
   channel!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Language code the template is written in' })
   language!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Current status of the template (e.g. draft, published)' })
   status!: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional category used to group related templates' })
   category?: string;
 
-  @ApiPropertyOptional({ example: ['name', 'church'] })
+  @ApiPropertyOptional({
+    example: ['name', 'church'],
+    description: 'List of placeholder variable names supported by the template',
+  })
   variables?: string[];
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'External provider identifier when the template is synced externally',
+  })
   externalId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Approval or sync status reported by the external provider' })
   externalStatus?: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO 8601 timestamp when the template was created' })
   createdAt!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO 8601 timestamp when the template was last updated' })
   updatedAt!: string;
 }

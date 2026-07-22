@@ -18,7 +18,13 @@ describe('ScoringService', () => {
       providers: [
         ScoringService,
         { provide: PrismaService, useValue: prisma },
-        { provide: NotificationsService, useValue: { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } },
+        {
+          provide: NotificationsService,
+          useValue: {
+            createNotification: jest.fn().mockResolvedValue({}),
+            broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
+          },
+        },
       ],
     }).compile();
 
@@ -71,7 +77,11 @@ describe('ScoringService', () => {
         level: 'high',
       });
       prisma.riskScore.findMany.mockResolvedValue([
-        { member_id: mockMemberId, level: 'high', member: { id: mockMemberId, first_name: 'John', last_name: 'Doe' } },
+        {
+          member_id: mockMemberId,
+          level: 'high',
+          member: { id: mockMemberId, first_name: 'John', last_name: 'Doe' },
+        },
       ]);
       prisma.profile.findMany.mockResolvedValue([]);
 

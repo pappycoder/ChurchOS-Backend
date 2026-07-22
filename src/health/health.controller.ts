@@ -62,6 +62,8 @@ export class HealthController {
     @InjectQueue('recurring-giving') private readonly recurringGivingQueue: Queue,
     @InjectQueue('nightly-jobs') private readonly nightlyJobsQueue: Queue,
     @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
+    @InjectQueue('dead-letter') private readonly deadLetterQueue: Queue,
+    @InjectQueue('webhook-delivery') private readonly webhookDeliveryQueue: Queue,
   ) {}
 
   @Get()
@@ -96,6 +98,8 @@ export class HealthController {
       ['recurring-giving', this.recurringGivingQueue],
       ['nightly-jobs', this.nightlyJobsQueue],
       ['broadcast', this.broadcastQueue],
+      ['dead-letter', this.deadLetterQueue],
+      ['webhook-delivery', this.webhookDeliveryQueue],
     ];
 
     for (const [name, queue] of queueEntries) {

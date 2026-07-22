@@ -308,13 +308,15 @@ export class BroadcastService {
       data: { status: 'sent', sent_at: new Date() },
     });
 
-    await this.notifications.broadcastToChurch(
-      churchId,
-      'broadcast',
-      'Broadcast Sent',
-      `A ${broadcast.channel} broadcast has been sent to ${recipients.length} recipients.`,
-      { broadcastId, channel: broadcast.channel, recipientCount: recipients.length },
-    ).catch((err) => this.logger.warn(`Broadcast notification failed: ${(err as Error).message}`));
+    await this.notifications
+      .broadcastToChurch(
+        churchId,
+        'broadcast',
+        'Broadcast Sent',
+        `A ${broadcast.channel} broadcast has been sent to ${recipients.length} recipients.`,
+        { broadcastId, channel: broadcast.channel, recipientCount: recipients.length },
+      )
+      .catch((err) => this.logger.warn(`Broadcast notification failed: ${(err as Error).message}`));
 
     this.logger.log(`Broadcast processed: ${broadcastId}`);
   }

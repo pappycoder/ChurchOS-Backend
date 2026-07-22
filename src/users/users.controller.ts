@@ -56,7 +56,7 @@ export class UsersController {
   @ApiPaginatedResponse(UserResponseDto)
   @ApiOperation({
     summary: 'List church users',
-    description: 'Lists all staff/users for the authenticated user\'s church.',
+    description: "Lists all staff/users for the authenticated user's church.",
   })
   async listUsers(
     @Query() query: ListUsersDto,
@@ -110,7 +110,7 @@ export class UsersController {
    */
   @Patch(':userId')
   @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
-  @ApiUpdateEndpoint('Update user details', 'Updates a user\'s profile information.')
+  @ApiUpdateEndpoint('Update user details', "Updates a user's profile information.")
   async updateUser(
     @Param('userId') userId: string,
     @Body()
@@ -133,7 +133,7 @@ export class UsersController {
   @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
   @ApiCreateEndpoint(
     'Deactivate user',
-    'Disables the user\'s Supabase Auth account and marks the profile as inactive.',
+    "Disables the user's Supabase Auth account and marks the profile as inactive.",
   )
   async deactivateUser(
     @Param('userId') userId: string,
@@ -150,7 +150,7 @@ export class UsersController {
   @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
   @ApiCreateEndpoint(
     'Reset user password',
-    'Generates and sends a password reset link to the user\'s email.',
+    "Generates and sends a password reset link to the user's email.",
   )
   async resetPassword(
     @Param('userId') userId: string,

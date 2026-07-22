@@ -6,21 +6,16 @@
  * @since 1.0.0
  */
 
-import {
-  Controller,
-  Get,
-  Patch,
-  Param,
-  Query,
-  UseGuards,
-  Request,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SupabaseJwtPayload } from '../auth/strategies/jwt.strategy';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
-import { ApiGetEndpoint, ApiUpdateEndpoint } from '../common/decorators/api-standard-responses.decorator';
+import {
+  ApiGetEndpoint,
+  ApiUpdateEndpoint,
+} from '../common/decorators/api-standard-responses.decorator';
 import { NotificationsService } from './notifications.service';
 import { NotificationResponseDto } from './dto/notification-response.dto';
 
@@ -64,7 +59,10 @@ export class NotificationsController {
    * Get unread notification count.
    */
   @Get('unread-count')
-  @ApiGetEndpoint('Get unread count', 'Returns the count of unread notifications for the current user.')
+  @ApiGetEndpoint(
+    'Get unread count',
+    'Returns the count of unread notifications for the current user.',
+  )
   @ApiOperation({
     summary: 'Get unread count',
     description: 'Returns the number of unread notifications.',
@@ -74,10 +72,7 @@ export class NotificationsController {
     @Request() req: Record<string, unknown>,
   ): Promise<{ count: number }> {
     const profile = this.getProfile(req);
-    const count = await this.notificationsService.getUnreadCount(
-      profile.church_id,
-      user.sub,
-    );
+    const count = await this.notificationsService.getUnreadCount(profile.church_id, user.sub);
     return { count };
   }
 
@@ -92,11 +87,7 @@ export class NotificationsController {
     @Request() req: Record<string, unknown>,
   ): Promise<NotificationResponseDto> {
     const profile = this.getProfile(req);
-    return this.notificationsService.markAsRead(
-      notificationId,
-      profile.church_id,
-      user.sub,
-    );
+    return this.notificationsService.markAsRead(notificationId, profile.church_id, user.sub);
   }
 
   /**
@@ -109,9 +100,6 @@ export class NotificationsController {
     @Request() req: Record<string, unknown>,
   ): Promise<{ updated: number }> {
     const profile = this.getProfile(req);
-    return this.notificationsService.markAllAsRead(
-      profile.church_id,
-      user.sub,
-    );
+    return this.notificationsService.markAllAsRead(profile.church_id, user.sub);
   }
 }

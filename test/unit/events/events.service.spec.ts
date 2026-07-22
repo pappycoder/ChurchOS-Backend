@@ -68,7 +68,10 @@ describe('EventsService', () => {
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
       gatewayRegistry as never,
-      { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } as never,
+      {
+        createNotification: jest.fn().mockResolvedValue({}),
+        broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
+      } as never,
     );
   });
 
@@ -231,7 +234,11 @@ describe('EventsService', () => {
         ticket_tiers: [],
       });
       prisma.eventRegistration.findUnique.mockResolvedValue(null);
-      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, first_name: 'John', last_name: 'Doe' });
+      prisma.member.findFirst.mockResolvedValue({
+        id: mockMemberId,
+        first_name: 'John',
+        last_name: 'Doe',
+      });
       prisma.eventRegistration.create.mockResolvedValue({
         ...mockRegistration,
         payment_status: 'paid',

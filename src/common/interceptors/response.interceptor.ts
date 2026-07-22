@@ -65,8 +65,7 @@ export class ResponseInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const path = request.url;
     const requestId = (request as unknown as Record<string, unknown>)['requestId'] as
-      | string
-      | undefined;
+      string | undefined;
 
     return next.handle().pipe(
       map((data) => {

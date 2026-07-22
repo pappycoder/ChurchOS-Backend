@@ -80,7 +80,10 @@ describe('BroadcastService', () => {
     service = new BroadcastService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
-      { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } as never,
+      {
+        createNotification: jest.fn().mockResolvedValue({}),
+        broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
+      } as never,
       queues.broadcast as never,
       queues.whatsapp as never,
       queues.sms as never,

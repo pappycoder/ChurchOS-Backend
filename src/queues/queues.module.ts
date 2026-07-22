@@ -35,6 +35,7 @@ import { SmsOutboundProcessor } from './processors/sms-outbound.processor';
 import { RecurringGivingProcessor } from './processors/recurring-giving.processor';
 import { NightlyJobsProcessor } from './processors/nightly-jobs.processor';
 import { BroadcastProcessor } from './processors/broadcast.processor';
+import { DeadLetterProcessor } from './processors/dead-letter.processor';
 import { NightlyScheduler } from './nightly.scheduler';
 
 const DEFAULT_JOB_OPTIONS = {
@@ -63,6 +64,10 @@ const DEFAULT_JOB_OPTIONS = {
       { name: 'recurring-giving', defaultJobOptions: DEFAULT_JOB_OPTIONS },
       { name: 'nightly-jobs', defaultJobOptions: DEFAULT_JOB_OPTIONS },
       { name: 'broadcast', defaultJobOptions: DEFAULT_JOB_OPTIONS },
+      {
+        name: 'dead-letter',
+        defaultJobOptions: { removeOnComplete: { age: 604800 }, removeOnFail: { age: 2592000 } },
+      },
     ),
     WhatsAppModule,
     CommunicationModule,
@@ -77,6 +82,7 @@ const DEFAULT_JOB_OPTIONS = {
     RecurringGivingProcessor,
     NightlyJobsProcessor,
     BroadcastProcessor,
+    DeadLetterProcessor,
     NightlyScheduler,
   ],
   exports: [BullModule],
@@ -91,6 +97,7 @@ export class QueuesModule implements OnModuleDestroy {
     @InjectQueue('recurring-giving') private readonly recurringQueue: Queue,
     @InjectQueue('nightly-jobs') private readonly nightlyQueue: Queue,
     @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
+    @InjectQueue('dead-letter') private readonly deadLetterQueue: Queue,
   ) {}
 
   async onModuleDestroy(): Promise<void> {
@@ -102,6 +109,7 @@ export class QueuesModule implements OnModuleDestroy {
       this.recurringQueue.close(),
       this.nightlyQueue.close(),
       this.broadcastQueue.close(),
+      this.deadLetterQueue.close(),
     ]);
     this.logger.log('All BullMQ queue connections closed');
   }

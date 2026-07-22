@@ -9,42 +9,33 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class LifeEventResponseDto {
-  // Unique event identifier
-  @ApiProperty()
+  @ApiProperty({ description: 'Unique event identifier' })
   id!: string;
 
-  // Multi-tenant church scope
-  @ApiProperty()
+  @ApiProperty({ description: 'Multi-tenant church scope' })
   churchId!: string;
 
-  // Associated member reference
-  @ApiProperty()
+  @ApiProperty({ description: 'Associated member reference' })
   memberId!: string;
 
-  // Member name fields for display
-  @ApiProperty()
+  @ApiProperty({ description: 'Member first name for display' })
   memberFirstName!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Member last name for display' })
   memberLastName!: string;
 
-  // Recognized life event type
-  @ApiProperty()
+  @ApiProperty({ description: 'Recognized life event type' })
   type!: string;
 
-  // ISO date of the event
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO date of the event' })
   date!: string;
 
-  // Optional structured details
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional structured details for the life event' })
   details?: Record<string, unknown>;
 
-  // Whether a greeting notification was sent
-  @ApiProperty()
+  @ApiProperty({ description: 'Whether a greeting notification was sent' })
   notified!: boolean;
 
-  // Record creation timestamp
-  @ApiProperty()
+  @ApiProperty({ description: 'Record creation timestamp' })
   createdAt!: string;
 }

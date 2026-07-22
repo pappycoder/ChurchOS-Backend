@@ -6,44 +6,44 @@
  * @since 1.0.0
  */
 
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 class FamilyMemberDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Unique identifier for the family member' })
   id!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ID of the associated member record' })
   memberId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'First name of the family member' })
   firstName!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last name of the family member' })
   lastName!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Relationship of this member to the family head' })
   relationship!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Whether this member is the head of the family' })
   isHead!: boolean;
 }
 
 export class FamilyResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Unique identifier for the family' })
   familyId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ID of the church the family belongs to' })
   churchId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Family name' })
   name!: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ description: 'ID of the family head', nullable: true })
   headId?: string;
 
   @ApiProperty({ type: [FamilyMemberDto] })
   members!: FamilyMemberDto[];
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Timestamp when the family record was created' })
   createdAt!: string;
 }

@@ -34,6 +34,8 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 import { MemberResponseDto } from './dto/member-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -47,7 +49,7 @@ import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorat
 
 @ApiTags('Members')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('members')
 export class MembersController {
   constructor(private readonly membersService: MembersService) {}
@@ -56,6 +58,7 @@ export class MembersController {
    * Create a new church member.
    */
   @Post()
+  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
   @ApiCreateEndpoint(
     'Create a new member',
     'Creates a new church member with the provided details.',
@@ -109,6 +112,7 @@ export class MembersController {
    * Update a member's details (partial update).
    */
   @Patch(':memberId')
+  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
   @ApiUpdateEndpoint(
     'Update member details',
     'Updates a member with partial data. Only provided fields are updated.',
@@ -127,6 +131,7 @@ export class MembersController {
    * Soft-delete a member (set status to inactive).
    */
   @Delete(':memberId')
+  @RequireRoles('church_admin', 'senior_pastor')
   @ApiDeleteEndpoint(
     'Delete a member',
     'Soft-deletes a member by setting their status to inactive.',
@@ -145,6 +150,7 @@ export class MembersController {
    * Restore a soft-deleted member (set status back to active).
    */
   @Post(':memberId/restore')
+  @RequireRoles('church_admin', 'senior_pastor')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restore a member',
@@ -234,6 +240,7 @@ export class MembersController {
    * Bulk import members from CSV/JSON data.
    */
   @Post('bulk-import')
+  @RequireRoles('church_admin', 'senior_pastor')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Bulk import members',
@@ -319,6 +326,7 @@ export class MembersController {
    * Add an admin note to a member.
    */
   @Post(':memberId/notes')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Add admin note',

@@ -145,11 +145,7 @@ export class SyncService {
    * Pull pending server-side changes for a mobile client.
    * Returns unsynced changes from the sync queue.
    */
-  async pullChanges(
-    churchId: string,
-    limit = 100,
-    cursor?: string,
-  ): Promise<PullResult> {
+  async pullChanges(churchId: string, limit = 100, cursor?: string): Promise<PullResult> {
     const where: Prisma.SyncQueueWhereInput = {
       church_id: churchId,
       synced: false,
@@ -183,10 +179,7 @@ export class SyncService {
   /**
    * Mark sync queue items as processed.
    */
-  async markSynced(
-    churchId: string,
-    entityIds: string[],
-  ): Promise<{ marked: number }> {
+  async markSynced(churchId: string, entityIds: string[]): Promise<{ marked: number }> {
     const result = await this.prisma.syncQueue.updateMany({
       where: {
         church_id: churchId,

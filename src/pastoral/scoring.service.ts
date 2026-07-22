@@ -195,14 +195,16 @@ export class ScoringService {
         where: { church_id: churchId, role: { in: ['church_admin', 'senior_pastor'] } },
       });
       for (const admin of adminProfiles) {
-        await this.notifications.createNotification(
-          churchId,
-          admin.id,
-          'risk',
-          'Pastoral Attention Needed',
-          `${highRiskMembers.length} member(s) have been flagged as high risk and may need pastoral follow-up.`,
-          { highRiskCount: highRiskMembers.length },
-        ).catch((err) => this.logger.warn(`Risk notification failed: ${(err as Error).message}`));
+        await this.notifications
+          .createNotification(
+            churchId,
+            admin.id,
+            'risk',
+            'Pastoral Attention Needed',
+            `${highRiskMembers.length} member(s) have been flagged as high risk and may need pastoral follow-up.`,
+            { highRiskCount: highRiskMembers.length },
+          )
+          .catch((err) => this.logger.warn(`Risk notification failed: ${(err as Error).message}`));
       }
     }
 

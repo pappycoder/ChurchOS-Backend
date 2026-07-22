@@ -405,14 +405,16 @@ export class GivingService {
           });
           if (memberProfile) {
             const categoryName = transaction.category?.name ?? 'Offering';
-            await this.notifications.createNotification(
-              churchId,
-              memberProfile.id,
-              'giving',
-              'Giving Confirmed',
-              `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${receiptNumber}`,
-              { transactionId: transaction.id, receiptNumber },
-            ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+            await this.notifications
+              .createNotification(
+                churchId,
+                memberProfile.id,
+                'giving',
+                'Giving Confirmed',
+                `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${receiptNumber}`,
+                { transactionId: transaction.id, receiptNumber },
+              )
+              .catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
           }
         }
 
@@ -529,14 +531,16 @@ export class GivingService {
       });
       if (memberProfile) {
         const categoryName = transaction.category?.name ?? 'Offering';
-        await this.notifications.createNotification(
-          transaction.church_id,
-          memberProfile.id,
-          'giving',
-          'Giving Confirmed',
-          `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${updateData.receipt_number || ''}`,
-          { transactionId: transaction.id, receiptNumber: updateData.receipt_number },
-        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+        await this.notifications
+          .createNotification(
+            transaction.church_id,
+            memberProfile.id,
+            'giving',
+            'Giving Confirmed',
+            `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${updateData.receipt_number || ''}`,
+            { transactionId: transaction.id, receiptNumber: updateData.receipt_number },
+          )
+          .catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
       }
     }
 
@@ -616,14 +620,16 @@ export class GivingService {
       });
       if (memberProfile) {
         const categoryName = category.name ?? 'Offering';
-        await this.notifications.createNotification(
-          churchId,
-          memberProfile.id,
-          'giving',
-          'Giving Recorded',
-          `Your ${categoryName} of ${dto.currency || 'NGN'} ${dto.amount.toLocaleString()} has been recorded. Receipt: ${receiptNumber}`,
-          { transactionId: transaction.id, receiptNumber },
-        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+        await this.notifications
+          .createNotification(
+            churchId,
+            memberProfile.id,
+            'giving',
+            'Giving Recorded',
+            `Your ${categoryName} of ${dto.currency || 'NGN'} ${dto.amount.toLocaleString()} has been recorded. Receipt: ${receiptNumber}`,
+            { transactionId: transaction.id, receiptNumber },
+          )
+          .catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
       }
     }
 

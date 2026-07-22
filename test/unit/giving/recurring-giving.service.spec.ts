@@ -119,7 +119,10 @@ describe('GivingService - Recurring Giving', () => {
       audit as unknown as AuditLoggingService,
       gatewayRegistry,
       receipt as unknown as ReceiptService,
-      { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } as never,
+      {
+        createNotification: jest.fn().mockResolvedValue({}),
+        broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
+      } as never,
     );
   });
 

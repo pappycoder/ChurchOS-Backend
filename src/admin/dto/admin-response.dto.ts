@@ -10,124 +10,99 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // Define DTO for a department member's summary data
 class DepartmentMemberDto {
-  // Membership record ID
-  @ApiProperty()
+  @ApiProperty({ description: 'Membership record ID' })
   id!: string;
 
-  // Reference to the member record
-  @ApiProperty()
+  @ApiProperty({ description: 'Reference to the member record' })
   memberId!: string;
 
-  // Member's first name
-  @ApiProperty()
+  @ApiProperty({ description: "Member's first name" })
   firstName!: string;
 
-  // Member's last name
-  @ApiProperty()
+  @ApiProperty({ description: "Member's last name" })
   lastName!: string;
 
-  // Role within the department (e.g. 'member', 'leader')
-  @ApiProperty()
+  @ApiProperty({ description: "Role within the department (e.g. 'member', 'leader')" })
   role!: string;
 
-  // ISO timestamp of when the member joined
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of when the member joined' })
   joinedAt!: string;
 }
 
 // Define response DTO for a department
 export class DepartmentResponseDto {
-  // Department unique identifier
-  @ApiProperty()
+  @ApiProperty({ description: 'Department unique identifier' })
   id!: string;
 
-  // Church this department belongs to
-  @ApiProperty()
+  @ApiProperty({ description: 'Church this department belongs to' })
   churchId!: string;
 
-  // Department name
-  @ApiProperty()
+  @ApiProperty({ description: 'Department name' })
   name!: string;
 
-  // Optional department description
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional department description' })
   description?: string;
 
-  // Optional parent department ID for hierarchy
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional parent department ID for hierarchy' })
   parentId?: string;
 
-  // List of members assigned to this department
-  @ApiProperty({ type: [DepartmentMemberDto] })
+  @ApiProperty({
+    type: [DepartmentMemberDto],
+    description: 'List of members assigned to this department',
+  })
   members!: DepartmentMemberDto[];
 
-  // Total count of members in the department
-  @ApiProperty()
+  @ApiProperty({ description: 'Total count of members in the department' })
   memberCount!: number;
 
-  // ISO timestamp of when the department was created
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of when the department was created' })
   createdAt!: string;
 
-  // ISO timestamp of the last update
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of the last update' })
   updatedAt!: string;
 }
 
 // Define response DTO for a cell group
 export class CellGroupResponseDto {
-  // Cell group unique identifier
-  @ApiProperty()
+  @ApiProperty({ description: 'Cell group unique identifier' })
   id!: string;
 
-  // Church this cell group belongs to
-  @ApiProperty()
+  @ApiProperty({ description: 'Church this cell group belongs to' })
   churchId!: string;
 
-  // Cell group name
-  @ApiProperty()
+  @ApiProperty({ description: 'Cell group name' })
   name!: string;
 
-  // Optional leader member ID
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional leader member ID' })
   leaderId?: string;
 
-  // Optional leader's first name
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Optional leader's first name" })
   leaderFirstName?: string;
 
-  // Optional leader's last name
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Optional leader's last name" })
   leaderLastName?: string;
 
-  // Optional latitude for geolocation matching
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional latitude for geolocation matching' })
   latitude?: number;
 
-  // Optional longitude for geolocation matching
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional longitude for geolocation matching' })
   longitude?: number;
 
-  // Optional meeting day of the week
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional meeting day of the week' })
   meetingDay?: string;
 
-  // Optional meeting time in HH:MM format
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Optional meeting time in HH:MM format' })
   meetingTime?: string;
 
-  // ISO timestamp of when the cell group was created
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of when the cell group was created' })
   createdAt!: string;
 
-  // ISO timestamp of the last update
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of the last update' })
   updatedAt!: string;
 }
 
 // Extend CellGroupResponseDto with distance for nearest-group results
 export class NearestGroupResponseDto extends CellGroupResponseDto {
-  // Distance from the user in kilometers
   @ApiProperty({ description: 'Distance in kilometers' })
   distanceKm!: number;
 }

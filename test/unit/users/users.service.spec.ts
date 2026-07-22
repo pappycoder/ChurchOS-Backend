@@ -29,10 +29,10 @@ function createPrismaMock() {
       return models[prop];
     },
   };
-  return new Proxy({ $transaction: $transactionMock } as Record<string, unknown>, handler) as Record<
-    string,
-    unknown
-  > & { $transaction: jest.Mock };
+  return new Proxy(
+    { $transaction: $transactionMock } as Record<string, unknown>,
+    handler,
+  ) as Record<string, unknown> & { $transaction: jest.Mock };
 }
 
 function model(name: string): Record<string, jest.Mock> {
@@ -132,7 +132,9 @@ describe('UsersService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ first_name: expect.objectContaining({ contains: 'John' }) }),
+              expect.objectContaining({
+                first_name: expect.objectContaining({ contains: 'John' }),
+              }),
             ]),
           }),
         }),
@@ -153,9 +155,7 @@ describe('UsersService', () => {
     it('should throw NotFoundException for unknown user', async () => {
       model('profile').findFirst.mockResolvedValue(null);
 
-      await expect(service.getUserById('unknown', mockChurchId)).rejects.toThrow(
-        'User not found',
-      );
+      await expect(service.getUserById('unknown', mockChurchId)).rejects.toThrow('User not found');
     });
   });
 
@@ -217,17 +217,17 @@ describe('UsersService', () => {
     it('should throw for super_admin', async () => {
       model('profile').findFirst.mockResolvedValue({ ...mockProfile, role: 'super_admin' });
 
-      await expect(
-        service.deactivateUser(mockProfileId, mockChurchId, mockUserId),
-      ).rejects.toThrow('Cannot deactivate');
+      await expect(service.deactivateUser(mockProfileId, mockChurchId, mockUserId)).rejects.toThrow(
+        'Cannot deactivate',
+      );
     });
 
     it('should throw NotFoundException for unknown user', async () => {
       model('profile').findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.deactivateUser('unknown', mockChurchId, mockUserId),
-      ).rejects.toThrow('User not found');
+      await expect(service.deactivateUser('unknown', mockChurchId, mockUserId)).rejects.toThrow(
+        'User not found',
+      );
     });
   });
 

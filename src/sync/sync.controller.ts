@@ -6,20 +6,15 @@
  * @since 1.0.0
  */
 
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  UseGuards,
-  Request,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SupabaseJwtPayload } from '../auth/strategies/jwt.strategy';
-import { ApiCreateEndpoint, ApiGetEndpoint } from '../common/decorators/api-standard-responses.decorator';
+import {
+  ApiCreateEndpoint,
+  ApiGetEndpoint,
+} from '../common/decorators/api-standard-responses.decorator';
 import { SyncService } from './sync.service';
 import { SyncPushDto } from './dto/sync-push.dto';
 

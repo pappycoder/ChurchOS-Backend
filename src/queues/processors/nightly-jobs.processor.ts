@@ -13,7 +13,7 @@
  * @since 1.0.0
  */
 
-import { Processor, Process } from '@nestjs/bull';
+import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import { InjectQueue } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
@@ -114,5 +114,12 @@ export class NightlyJobsProcessor {
     }
 
     return dueCharges.length;
+  }
+
+  @OnQueueFailed()
+  onFailed(job: Job, error: Error): void {
+    this.logger.error(
+      `Nightly jobs job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,
+    );
   }
 }

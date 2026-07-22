@@ -30,10 +30,10 @@ function createPrismaMock() {
       return models[prop];
     },
   };
-  return new Proxy({ $transaction: $transactionMock } as Record<string, unknown>, handler) as Record<
-    string,
-    unknown
-  > & { $transaction: jest.Mock };
+  return new Proxy(
+    { $transaction: $transactionMock } as Record<string, unknown>,
+    handler,
+  ) as Record<string, unknown> & { $transaction: jest.Mock };
 }
 
 function model(name: string): Record<string, jest.Mock> {
@@ -95,8 +95,8 @@ describe('SyncService', () => {
 
     it('should reject older client timestamps (conflict)', async () => {
       // Pending change with a newer timestamp
-      model('syncQueue').findFirst
-        .mockResolvedValueOnce(null) // idempotency check
+      model('syncQueue')
+        .findFirst.mockResolvedValueOnce(null) // idempotency check
         .mockResolvedValueOnce({
           id: 'pending',
           created_at: new Date('2026-07-22T12:00:00Z'),
@@ -117,9 +117,9 @@ describe('SyncService', () => {
     });
 
     it('should throw BadRequestException for empty changes', async () => {
-      await expect(
-        service.pushChanges(mockChurchId, mockUserId, []),
-      ).rejects.toThrow('No changes provided');
+      await expect(service.pushChanges(mockChurchId, mockUserId, [])).rejects.toThrow(
+        'No changes provided',
+      );
     });
   });
 

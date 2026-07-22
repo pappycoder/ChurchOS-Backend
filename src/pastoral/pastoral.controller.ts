@@ -28,6 +28,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
 import {
   CurrentUser,
@@ -46,7 +47,7 @@ import { LifeEventResponseDto } from './dto/life-event-response.dto';
 
 @ApiTags('Pastoral')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('pastoral')
 export class PastoralController {
   constructor(

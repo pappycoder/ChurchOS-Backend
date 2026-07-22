@@ -53,6 +53,8 @@ import { VisitorsModule } from './visitors/visitors.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SyncModule } from './sync/sync.module';
+import { ReportsModule } from './reports/reports.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
 /**
@@ -188,6 +190,12 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
     // Import SyncModule for offline data synchronization.
     SyncModule,
+
+    // Import ReportsModule for church report generation.
+    ReportsModule,
+
+    // Import WebhooksModule for outbound webhook management.
+    WebhooksModule,
   ],
   controllers: [],
   providers: [

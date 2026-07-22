@@ -30,10 +30,10 @@ function createPrismaMock() {
       return models[prop];
     },
   };
-  return new Proxy({ $transaction: $transactionMock } as Record<string, unknown>, handler) as Record<
-    string,
-    unknown
-  > & { $transaction: jest.Mock };
+  return new Proxy(
+    { $transaction: $transactionMock } as Record<string, unknown>,
+    handler,
+  ) as Record<string, unknown> & { $transaction: jest.Mock };
 }
 
 function model(name: string): Record<string, jest.Mock> {
@@ -70,8 +70,8 @@ describe('NotificationsService', () => {
   describe('listNotifications', () => {
     it('should return paginated notifications with unread count', async () => {
       model('notification').findMany.mockResolvedValue([mockNotification]);
-      model('notification').count
-        .mockResolvedValueOnce(1) // total
+      model('notification')
+        .count.mockResolvedValueOnce(1) // total
         .mockResolvedValueOnce(1); // unreadCount
 
       const result = await service.listNotifications(mockChurchId, mockProfileId, 1, 20);
@@ -127,9 +127,9 @@ describe('NotificationsService', () => {
     it('should throw NotFoundException for unknown notification', async () => {
       model('notification').findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.markAsRead('unknown', mockChurchId, mockProfileId),
-      ).rejects.toThrow('Notification not found');
+      await expect(service.markAsRead('unknown', mockChurchId, mockProfileId)).rejects.toThrow(
+        'Notification not found',
+      );
     });
   });
 
