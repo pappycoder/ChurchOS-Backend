@@ -225,6 +225,141 @@ export class SermonsService {
     this.logger.log(`Sermon deleted: ${sermonId}`);
   }
 
+  // ─── BOOKMARKS ──────────────────────────────────────────────────
+
+  /**
+   * Resolves a member ID from a user's Supabase Auth ID.
+   *
+   * Looks up the user's profile to find the linked member record.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @returns The member ID linked to the user's profile
+   * @throws NotFoundException if the user has no linked member record
+   */
+  private async resolveMemberId(userId: string): Promise<string> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: { member_id: true },
+    });
+
+    if (!profile?.member_id) {
+      throw new NotFoundException('User profile is not linked to a member record');
+    }
+
+    return profile.member_id;
+  }
+
+  /**
+   * Adds a sermon bookmark for the current user.
+   *
+   * @param sermonId - Sermon ID to bookmark
+   * @param userId - Current user's Supabase Auth ID
+   * @param churchId - Church ID for tenant scoping
+   * @throws NotFoundException if sermon not found or user has no member link
+   */
+  async addBookmark(
+    sermonId: string,
+    userId: string,
+    churchId: string,
+  ): Promise<{ bookmarked: boolean }> {
+    const sermon = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!sermon) {
+      throw new NotFoundException('Sermon not found');
+    }
+
+    const memberId = await this.resolveMemberId(userId);
+
+    // Check if already bookmarked
+    const existing = await this.prisma.sermonBookmark.findUnique({
+      where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },
+    });
+
+    if (existing) {
+      return { bookmarked: true };
+    }
+
+    await this.prisma.sermonBookmark.create({
+      data: {
+        member_id: memberId,
+        sermon_id: sermonId,
+      },
+    });
+
+    this.logger.log(`Sermon ${sermonId} bookmarked by member ${memberId}`);
+    return { bookmarked: true };
+  }
+
+  /**
+   * Removes a sermon bookmark for the current user.
+   *
+   * @param sermonId - Sermon ID to unbookmark
+   * @param userId - Current user's Supabase Auth ID
+   */
+  async removeBookmark(sermonId: string, userId: string): Promise<{ bookmarked: boolean }> {
+    const memberId = await this.resolveMemberId(userId);
+
+    const existing = await this.prisma.sermonBookmark.findUnique({
+      where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },
+    });
+
+    if (!existing) {
+      return { bookmarked: false };
+    }
+
+    await this.prisma.sermonBookmark.delete({
+      where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },
+    });
+
+    this.logger.log(`Sermon ${sermonId} unbookmarked by member ${memberId}`);
+    return { bookmarked: false };
+  }
+
+  /**
+   * Lists bookmarked sermons for the current user.
+   *
+   * @param userId - Current user's Supabase Auth ID
+   * @param churchId - Church ID for tenant scoping
+   * @returns List of bookmarked sermons
+   */
+  async listBookmarks(userId: string, churchId: string): Promise<SermonResponseDto[]> {
+    const memberId = await this.resolveMemberId(userId);
+
+    const bookmarks = await this.prisma.sermonBookmark.findMany({
+      where: {
+        member_id: memberId,
+        sermon: { church_id: churchId },
+      },
+      include: {
+        sermon: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return bookmarks.map((b) => {
+      return this.mapSermonToDto(b.sermon);
+    });
+  }
+
+  /**
+   * Checks if a sermon is bookmarked by the current user.
+   *
+   * @param sermonId - Sermon ID
+   * @param userId - Current user's Supabase Auth ID
+   * @returns Whether the sermon is bookmarked
+   */
+  async isBookmarked(sermonId: string, userId: string): Promise<{ bookmarked: boolean }> {
+    const memberId = await this.resolveMemberId(userId);
+
+    const bookmark = await this.prisma.sermonBookmark.findUnique({
+      where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },
+    });
+
+    return { bookmarked: !!bookmark };
+  }
+
   /**
    * Sets the audio URL for a sermon (called after Supabase Storage upload).
    */

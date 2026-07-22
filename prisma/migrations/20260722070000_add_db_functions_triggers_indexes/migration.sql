@@ -139,7 +139,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_unread
 -- Active assets
 CREATE INDEX IF NOT EXISTS idx_assets_active
   ON assets (church_id, status)
-  WHERE status IN ('available', 'in_use', 'reserved');
+  WHERE status = 'active';
 
 -- Scheduled maintenance
 CREATE INDEX IF NOT EXISTS idx_asset_maintenance_scheduled

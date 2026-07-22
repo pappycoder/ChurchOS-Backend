@@ -257,6 +257,9 @@ model Member {
   custodian_assets    Asset[]
   asset_loans         AssetLoan[]
   converted_visitors  Visitor[]
+  sermon_bookmarks    SermonBookmark[]
+  cell_group_members  CellGroupMember[]
+  cell_group_attendance CellGroupAttendance[]
 
   @@index([church_id, branch_id, status])
   @@index([phone])
@@ -600,8 +603,25 @@ model Sermon {
 
   church Church @relation(fields: [church_id], references: [id])
 
+  bookmarks SermonBookmark[]
+
   @@index([church_id, sermon_date])
   @@map("sermons")
+}
+
+model SermonBookmark {
+  id         String   @id @default(uuid())
+  member_id  String
+  sermon_id  String
+  created_at DateTime @default(now())
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  sermon Sermon @relation(fields: [sermon_id], references: [id], onDelete: Cascade)
+
+  @@unique([member_id, sermon_id])
+  @@index([member_id])
+  @@index([sermon_id])
+  @@map("sermon_bookmarks")
 }
 
 model MediaAsset {
@@ -735,8 +755,45 @@ model CellGroup {
 
   church Church @relation(fields: [church_id], references: [id])
 
+  members   CellGroupMember[]
+  attendance CellGroupAttendance[]
+
   @@index([church_id])
   @@map("cell_groups")
+}
+
+model CellGroupMember {
+  id           String   @id @default(uuid())
+  cell_group_id String
+  member_id    String
+  role         String   @default("member") // member, leader, assistant
+  joined_at    DateTime @default(now())
+
+  cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
+  member     Member    @relation(fields: [member_id], references: [id])
+
+  @@unique([cell_group_id, member_id])
+  @@index([cell_group_id])
+  @@index([member_id])
+  @@map("cell_group_members")
+}
+
+model CellGroupAttendance {
+  id           String   @id @default(uuid())
+  cell_group_id String
+  member_id    String
+  meeting_date DateTime @default(now())
+  status       String   @default("present") // present, absent, excused
+  notes        String?
+  created_at   DateTime @default(now())
+
+  cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
+  member     Member    @relation(fields: [member_id], references: [id])
+
+  @@unique([cell_group_id, member_id, meeting_date])
+  @@index([cell_group_id])
+  @@index([cell_group_id, meeting_date])
+  @@map("cell_group_attendance")
 }
 
 model AssetCategory {

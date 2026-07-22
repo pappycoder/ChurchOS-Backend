@@ -56,3 +56,50 @@ export class UpdateDepartmentMemberDto {
   @IsString()
   role!: string;
 }
+
+// Define DTO for adding a member to a cell group
+export class AddCellGroupMemberDto {
+  // Member UUID to add to the cell group (required)
+  @ApiProperty({ description: 'Member UUID to add' })
+  @IsString()
+  memberId!: string;
+
+  // Optional role within the cell group (defaults to 'member')
+  @ApiPropertyOptional({
+    description: 'Role in the cell group',
+    example: 'leader',
+    default: 'member',
+  })
+  @IsOptional()
+  @IsString()
+  role?: string;
+}
+
+// Define DTO for recording cell group attendance
+export class RecordCellGroupAttendanceDto {
+  // Member UUID attending (required)
+  @ApiProperty({ description: 'Member UUID attending' })
+  @IsString()
+  memberId!: string;
+
+  // Meeting date (required, ISO string)
+  @ApiProperty({ description: 'Meeting date (ISO string)', example: '2026-07-22T10:00:00.000Z' })
+  @IsString()
+  meetingDate!: string;
+
+  // Attendance status (optional, defaults to 'present')
+  @ApiPropertyOptional({
+    description: 'Attendance status',
+    example: 'present',
+    default: 'present',
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  // Optional notes about the attendance
+  @ApiPropertyOptional({ description: 'Optional notes' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

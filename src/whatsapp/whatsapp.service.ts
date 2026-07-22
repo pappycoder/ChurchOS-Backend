@@ -685,7 +685,7 @@ export class WhatsAppService {
         '🙌 *Share Your Testimony*',
         '',
         'Type TESTIMONY followed by your testimony:',
-        'TESTIMONY God healed me during last week\'s service!',
+        "TESTIMONY God healed me during last week's service!",
       ].join('\n');
     }
 
@@ -727,7 +727,7 @@ export class WhatsAppService {
       return [
         '🎂 *Birthday Update*',
         '',
-        'We don\'t have your birthday on file yet.',
+        "We don't have your birthday on file yet.",
         'Please update your profile at the church reception to add your birthday.',
       ].join('\n');
     }
@@ -741,7 +741,7 @@ export class WhatsAppService {
       return [
         '🎂 *Birthday Update*',
         '',
-        'We don\'t have your birthday on file yet.',
+        "We don't have your birthday on file yet.",
         'Please update your profile at the church reception to add your birthday.',
       ].join('\n');
     }
@@ -755,9 +755,7 @@ export class WhatsAppService {
       birthday.setFullYear(thisYear + 1);
     }
 
-    const daysUntil = Math.ceil(
-      (birthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    );
+    const daysUntil = Math.ceil((birthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
     return [
       `🎂 *Birthday Info for ${profile.first_name || 'Member'}*`,

@@ -5,5 +5,9 @@ export function ApiChurchId() {
 }
 
 export function ApiBranchId() {
-  return ApiQuery({ name: 'branchId', required: false, description: 'Branch ID (UUID), filters by branch' });
+  return ApiQuery({
+    name: 'branchId',
+    required: false,
+    description: 'Branch ID (UUID), filters by branch',
+  });
 }

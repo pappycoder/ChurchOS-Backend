@@ -342,7 +342,8 @@ export class GivingController {
   @Patch('recurring/:id/pause')
   @ApiOperation({
     summary: 'Pause recurring giving',
-    description: 'Temporarily pauses a recurring giving schedule. No further charges will be made until resumed.',
+    description:
+      'Temporarily pauses a recurring giving schedule. No further charges will be made until resumed.',
   })
   async pauseRecurringGiving(
     @Param('id') id: string,

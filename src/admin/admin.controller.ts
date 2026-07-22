@@ -37,7 +37,12 @@ import {
 } from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
 import { ScoringService } from '../pastoral/scoring.service';
-import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
+import {
+  CreateDepartmentDto,
+  AddDepartmentMemberDto,
+  AddCellGroupMemberDto,
+  RecordCellGroupAttendanceDto,
+} from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
 import {
   DepartmentResponseDto,
@@ -292,6 +297,122 @@ export class AdminController {
     return this.adminService.deleteCellGroup(groupId, churchId, user.sub);
   }
 
+  // ─── Cell Group Members ───────────────────────────────────
+
+  /**
+   * Adds a member to a cell group.
+   */
+  @Post('cell-groups/:groupId/members')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'Add a member to a cell group' })
+  async addCellGroupMember(
+    @Param('groupId') groupId: string,
+    @Body() dto: AddCellGroupMemberDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    await this.adminService.addCellGroupMember(
+      groupId,
+      dto.memberId,
+      dto.role || 'member',
+      churchId,
+      user.sub,
+    );
+  }
+
+  /**
+   * Removes a member from a cell group.
+   */
+  @Delete('cell-groups/:groupId/members/:memberId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiParam({ name: 'memberId', type: String })
+  @ApiOperation({ summary: 'Remove a member from a cell group' })
+  async removeCellGroupMember(
+    @Param('groupId') groupId: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    await this.adminService.removeCellGroupMember(groupId, memberId, churchId, user.sub);
+  }
+
+  /**
+   * Lists members of a cell group.
+   */
+  @Get('cell-groups/:groupId/members')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'List cell group members' })
+  async listCellGroupMembers(@Param('groupId') groupId: string, @Req() req: AuthenticatedRequest) {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.listCellGroupMembers(groupId, churchId);
+  }
+
+  // ─── Cell Group Attendance ────────────────────────────────
+
+  /**
+   * Records attendance for a cell group meeting.
+   */
+  @Post('cell-groups/:groupId/attendance')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'Record cell group attendance' })
+  async recordCellGroupAttendance(
+    @Param('groupId') groupId: string,
+    @Body() dto: RecordCellGroupAttendanceDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    await this.adminService.recordCellGroupAttendance(
+      groupId,
+      dto.memberId,
+      dto.meetingDate,
+      dto.status || 'present',
+      dto.notes,
+      churchId,
+      user.sub,
+    );
+  }
+
+  /**
+   * Lists attendance records for a cell group.
+   */
+  @Get('cell-groups/:groupId/attendance')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'List cell group attendance' })
+  async listCellGroupAttendance(
+    @Param('groupId') groupId: string,
+    @Query('meetingDate') meetingDate: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.listCellGroupAttendance(groupId, churchId, meetingDate);
+  }
+
+  /**
+   * Gets attendance summary for a cell group.
+   */
+  @Get('cell-groups/:groupId/attendance/summary')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'Get cell group attendance summary' })
+  async getCellGroupAttendanceSummary(
+    @Param('groupId') groupId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.getCellGroupAttendanceSummary(groupId, churchId);
+  }
+
   // ─── Dashboard ────────────────────────────────────────────
 
   /**
@@ -334,6 +455,41 @@ export class AdminController {
     const churchId = req.profile?.church_id || '';
     // Delegate to ScoringService to get rising stars, default limit 10
     return this.scoringService.getRisingStars(churchId, limit || 10);
+  }
+
+  /**
+   * Gets follow-up suggestions for a specific member.
+   */
+  @Get('dashboard/follow-up/:memberId')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiParam({ name: 'memberId', type: String })
+  @ApiOperation({
+    summary: 'Get follow-up suggestions for a member',
+    description:
+      "Analyzes a member's risk factors and returns actionable follow-up suggestions for pastoral staff.",
+  })
+  async getMemberFollowUp(@Param('memberId') memberId: string, @Req() req: AuthenticatedRequest) {
+    // Extract church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate to ScoringService to analyze risk factors and generate suggestions
+    return this.scoringService.getFollowUpSuggestions(memberId, churchId);
+  }
+
+  /**
+   * Gets follow-up suggestions for all high/critical risk members.
+   */
+  @Get('dashboard/follow-up')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @ApiOperation({
+    summary: 'Get batch follow-up suggestions',
+    description:
+      'Returns follow-up suggestions for all members currently flagged as high or critical risk.',
+  })
+  async getBatchFollowUp(@Query('limit') limit: number, @Req() req: AuthenticatedRequest) {
+    // Extract church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate to ScoringService to get suggestions for all at-risk members, default limit 20
+    return this.scoringService.getBatchFollowUpSuggestions(churchId, limit || 20);
   }
 
   /**

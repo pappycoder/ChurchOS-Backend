@@ -19,6 +19,8 @@ import {
   Query,
   UseGuards,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -63,6 +65,22 @@ export class SermonsController {
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.sermonsService.createSermon(dto, churchId, user.sub);
+  }
+
+  /**
+   * List bookmarked sermons (defined before :sermonId to avoid route conflicts).
+   */
+  @Get('bookmarks/me')
+  @ApiOperation({
+    summary: 'List my bookmarked sermons',
+    description: 'Returns all sermons bookmarked by the authenticated member.',
+  })
+  async listMyBookmarks(
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<SermonResponseDto[]> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.listBookmarks(user.sub, churchId);
   }
 
   /**
@@ -129,5 +147,59 @@ export class SermonsController {
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
     return this.sermonsService.deleteSermon(sermonId, churchId, user.sub);
+  }
+
+  // ─── BOOKMARKS ──────────────────────────────────────────────────
+
+  /**
+   * Bookmark a sermon.
+   */
+  @Post(':sermonId/bookmark')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
+  @ApiOperation({
+    summary: 'Bookmark a sermon',
+    description: 'Adds a bookmark for the authenticated member.',
+  })
+  async addBookmark(
+    @Param('sermonId') sermonId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ bookmarked: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.addBookmark(sermonId, user.sub, churchId);
+  }
+
+  /**
+   * Remove a sermon bookmark.
+   */
+  @Delete(':sermonId/bookmark')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
+  @ApiOperation({
+    summary: 'Remove sermon bookmark',
+    description: 'Removes a bookmark for the authenticated member.',
+  })
+  async removeBookmark(
+    @Param('sermonId') sermonId: string,
+    @CurrentUser() user: SupabaseUser,
+  ): Promise<{ bookmarked: boolean }> {
+    return this.sermonsService.removeBookmark(sermonId, user.sub);
+  }
+
+  /**
+   * Check if a sermon is bookmarked.
+   */
+  @Get(':sermonId/bookmark')
+  @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
+  @ApiOperation({
+    summary: 'Check if sermon is bookmarked',
+    description: 'Returns whether the authenticated member has bookmarked this sermon.',
+  })
+  async checkBookmark(
+    @Param('sermonId') sermonId: string,
+    @CurrentUser() user: SupabaseUser,
+  ): Promise<{ bookmarked: boolean }> {
+    return this.sermonsService.isBookmarked(sermonId, user.sub);
   }
 }

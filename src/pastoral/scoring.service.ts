@@ -481,6 +481,143 @@ export class ScoringService {
   }
 
   /**
+   * Generates actionable follow-up suggestions for a member based on
+   * their risk score factors.
+   *
+   * Analyzes the detailed risk factors to produce human-readable
+   * suggestions that pastoral staff can act on.
+   *
+   * @param memberId - Member ID
+   * @param churchId - Church ID
+   * @returns Array of suggestion strings or empty array if member not found
+   */
+  async getFollowUpSuggestions(
+    memberId: string,
+    churchId: string,
+  ): Promise<{ riskScore: number; riskLevel: string; suggestions: string[] }> {
+    const riskScore = await this.prisma.riskScore.findUnique({
+      where: { member_id: memberId },
+    });
+
+    if (!riskScore || riskScore.church_id !== churchId) {
+      return { riskScore: 0, riskLevel: 'unknown', suggestions: [] };
+    }
+
+    const factors = riskScore.factors as Record<string, number>;
+    const suggestions: string[] = [];
+
+    // Analyze attendance decline
+    if (factors.attendanceDecline && factors.attendanceDecline > 0.5) {
+      if (factors.attendanceDecline > 0.8) {
+        suggestions.push(
+          '🔴 Severe attendance decline — member has missed most services in recent weeks. Schedule a personal check-in call or visit.',
+        );
+      } else {
+        suggestions.push(
+          '🟡 Irregular attendance — member has missed several services. Send a friendly WhatsApp check-in message.',
+        );
+      }
+    }
+
+    // Analyze giving
+    if (factors.noGiving && factors.noGiving > 0) {
+      suggestions.push(
+        '💰 No recent giving activity — gently remind about giving options and check if there are any financial concerns.',
+      );
+    }
+
+    // Analyze communication
+    if (factors.noCommunication && factors.noCommunication > 0) {
+      suggestions.push(
+        '📱 No recent communication engagement — consider reaching out via phone call or personalized message.',
+      );
+    }
+
+    // Analyze membership status
+    if (factors.inactiveStatus && factors.inactiveStatus > 0) {
+      suggestions.push(
+        '📋 Member status is inactive — discuss re-engagement and update membership status if needed.',
+      );
+    }
+
+    // Analyze recent inactivity
+    if (factors.recentInactivity && factors.recentInactivity > 0.4) {
+      if (factors.recentInactivity > 0.7) {
+        suggestions.push(
+          '⏰ Member has been absent for an extended period — assign a follow-up team member for personal outreach.',
+        );
+      } else {
+        suggestions.push(
+          "👋 Member hasn't attended recently — send an invitation to the next upcoming service or event.",
+        );
+      }
+    }
+
+    // Add escalation suggestion for high/critical risk
+    if (riskScore.level === 'high' || riskScore.level === 'critical') {
+      suggestions.push(
+        '🚨 Escalate to senior pastor for personal pastoral visit. This member requires immediate attention.',
+      );
+    }
+
+    // If no specific suggestions, provide a general positive note
+    if (suggestions.length === 0) {
+      suggestions.push(
+        '✅ No immediate concerns. Continue regular check-ins and maintain connection.',
+      );
+    }
+
+    return {
+      riskScore: riskScore.score,
+      riskLevel: riskScore.level,
+      suggestions,
+    };
+  }
+
+  /**
+   * Gets follow-up suggestions for all high/critical risk members.
+   *
+   * @param churchId - Church ID
+   * @param limit - Max members to return
+   * @returns Members with their risk scores and suggestions
+   */
+  async getBatchFollowUpSuggestions(
+    churchId: string,
+    limit = 20,
+  ): Promise<
+    {
+      memberId: string;
+      memberName: string;
+      riskScore: number;
+      riskLevel: string;
+      suggestions: string[];
+    }[]
+  > {
+    const atRiskMembers = await this.getMembersNeedingAttention(churchId, limit);
+
+    const results: {
+      memberId: string;
+      memberName: string;
+      riskScore: number;
+      riskLevel: string;
+      suggestions: string[];
+    }[] = [];
+
+    for (const risk of atRiskMembers) {
+      const suggestions = await this.getFollowUpSuggestions(risk.member.id, churchId);
+      results.push({
+        memberId: risk.member.id,
+        memberName: `${risk.member.first_name} ${risk.member.last_name}`,
+        riskScore: risk.score,
+        riskLevel: risk.level,
+        suggestions: suggestions.suggestions,
+      });
+    }
+
+    return results;
+  }
+
+  /**
    * Maps a numeric risk score to a RiskLevel enum value.
    *
    * @param score - Risk score (0-100)

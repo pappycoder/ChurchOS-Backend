@@ -16,6 +16,7 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { Prisma } from '@prisma/client';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
 import {
@@ -523,6 +524,304 @@ export class AdminService {
       entityId: groupId,
       newValues: { name: existing.name },
     });
+  }
+
+  // ─── Cell Group Members ─────────────────────────────────────
+
+  /**
+   * Adds a member to a cell group.
+   */
+  async addCellGroupMember(
+    groupId: string,
+    memberId: string,
+    role: string,
+    churchId: string,
+    userId: string,
+  ): Promise<void> {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    const existing = await this.prisma.cellGroupMember.findUnique({
+      where: {
+        cell_group_id_member_id: { cell_group_id: groupId, member_id: memberId },
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException(`Member ${memberId} is already in this cell group`);
+    }
+
+    await this.prisma.cellGroupMember.create({
+      data: {
+        cell_group_id: groupId,
+        member_id: memberId,
+        role: role || 'member',
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      action: 'CREATE',
+      entity: 'cell_group_member',
+      entityId: groupId,
+      newValues: { memberId, role: role || 'member' },
+    });
+
+    this.logger.log(`Member ${memberId} added to cell group ${groupId}`);
+  }
+
+  /**
+   * Removes a member from a cell group.
+   */
+  async removeCellGroupMember(
+    groupId: string,
+    memberId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<void> {
+    const existing = await this.prisma.cellGroupMember.findUnique({
+      where: {
+        cell_group_id_member_id: { cell_group_id: groupId, member_id: memberId },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Member ${memberId} not found in cell group ${groupId}`);
+    }
+
+    await this.prisma.cellGroupMember.delete({
+      where: {
+        cell_group_id_member_id: { cell_group_id: groupId, member_id: memberId },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      action: 'DELETE',
+      entity: 'cell_group_member',
+      entityId: groupId,
+      newValues: { memberId },
+    });
+
+    this.logger.log(`Member ${memberId} removed from cell group ${groupId}`);
+  }
+
+  /**
+   * Lists members of a cell group.
+   */
+  async listCellGroupMembers(
+    groupId: string,
+    churchId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      memberId: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      joinedAt: string;
+    }>
+  > {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    const members = await this.prisma.cellGroupMember.findMany({
+      where: { cell_group_id: groupId },
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+      },
+      orderBy: { joined_at: 'desc' },
+    });
+
+    return members.map((m) => ({
+      id: m.id,
+      memberId: m.member_id,
+      firstName: m.member?.first_name || '',
+      lastName: m.member?.last_name || '',
+      role: m.role,
+      joinedAt: m.joined_at.toISOString(),
+    }));
+  }
+
+  // ─── Cell Group Attendance ─────────────────────────────────
+
+  /**
+   * Records attendance for a cell group meeting.
+   */
+  async recordCellGroupAttendance(
+    groupId: string,
+    memberId: string,
+    meetingDate: string,
+    status: string,
+    notes: string | undefined,
+    churchId: string,
+    userId: string,
+  ): Promise<void> {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    const meetingDateObj = new Date(meetingDate);
+
+    const existing = await this.prisma.cellGroupAttendance.findUnique({
+      where: {
+        cell_group_id_member_id_meeting_date: {
+          cell_group_id: groupId,
+          member_id: memberId,
+          meeting_date: meetingDateObj,
+        },
+      },
+    });
+
+    if (existing) {
+      // Update existing attendance record
+      await this.prisma.cellGroupAttendance.update({
+        where: {
+          cell_group_id_member_id_meeting_date: {
+            cell_group_id: groupId,
+            member_id: memberId,
+            meeting_date: meetingDateObj,
+          },
+        },
+        data: {
+          status: status || 'present',
+          notes: notes ?? null,
+        },
+      });
+
+      this.logger.log(`Cell group attendance updated: ${groupId} member ${memberId}`);
+    } else {
+      await this.prisma.cellGroupAttendance.create({
+        data: {
+          cell_group_id: groupId,
+          member_id: memberId,
+          meeting_date: meetingDateObj,
+          status: status || 'present',
+          notes: notes ?? null,
+        },
+      });
+
+      this.logger.log(`Cell group attendance recorded: ${groupId} member ${memberId}`);
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      action: 'CREATE',
+      entity: 'cell_group_attendance',
+      newValues: { groupId, memberId, meetingDate, status },
+    });
+  }
+
+  /**
+   * Lists attendance records for a cell group.
+   */
+  async listCellGroupAttendance(
+    groupId: string,
+    churchId: string,
+    meetingDate?: string,
+  ): Promise<
+    Array<{
+      id: string;
+      memberId: string;
+      firstName: string;
+      lastName: string;
+      status: string;
+      notes: string | null;
+      meetingDate: string;
+    }>
+  > {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    const where: Prisma.CellGroupAttendanceWhereInput = {
+      cell_group_id: groupId,
+    };
+
+    if (meetingDate) {
+      where.meeting_date = new Date(meetingDate);
+    }
+
+    const records = await this.prisma.cellGroupAttendance.findMany({
+      where,
+      include: {
+        member: { select: { id: true, first_name: true, last_name: true } },
+      },
+      orderBy: [{ meeting_date: 'desc' }, { created_at: 'desc' }],
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      memberId: r.member_id,
+      firstName: r.member?.first_name || '',
+      lastName: r.member?.last_name || '',
+      status: r.status,
+      notes: r.notes,
+      meetingDate: r.meeting_date.toISOString(),
+    }));
+  }
+
+  /**
+   * Gets attendance summary for a cell group.
+   */
+  async getCellGroupAttendanceSummary(
+    groupId: string,
+    churchId: string,
+  ): Promise<{
+    totalMeetings: number;
+    averageAttendance: number;
+    memberCount: number;
+  }> {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    const memberCount = await this.prisma.cellGroupMember.count({
+      where: { cell_group_id: groupId },
+    });
+
+    const dates = await this.prisma.cellGroupAttendance.findMany({
+      where: { cell_group_id: groupId },
+      select: { meeting_date: true },
+      distinct: ['meeting_date'],
+    });
+
+    const totalMeetings = dates.length;
+
+    let averageAttendance = 0;
+    if (totalMeetings > 0) {
+      const totalRecords = await this.prisma.cellGroupAttendance.count({
+        where: { cell_group_id: groupId },
+      });
+      averageAttendance = Math.round(totalRecords / totalMeetings);
+    }
+
+    return { totalMeetings, averageAttendance, memberCount };
   }
 
   /**
