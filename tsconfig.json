@@ -28,5 +28,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "exclude": ["prisma", "dist", "node_modules"]
+  "exclude": ["prisma", "scripts", "dist", "node_modules"]
 }

@@ -10,7 +10,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,test,scripts,prisma}/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -22,6 +22,8 @@
     "prisma:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
     "delete-data": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts",
     "delete-data:dry": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts --dry-run",
+    "seed-super-admin": "ts-node -P tsconfig.scripts.json scripts/seed-super-admin.ts",
+    "update-project-board": "bash scripts/update-project-board.sh",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

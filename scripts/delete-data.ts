@@ -21,7 +21,7 @@
 
 import 'dotenv/config';
 import * as readline from 'readline';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -84,14 +84,26 @@ interface ModelGroup {
 }
 
 const MODEL_GROUPS: ModelGroup[] = [
-  { name: 'System', models: ['AuditLog', 'ChurchConfig', 'Role', 'Permission', 'RolePermission', 'SyncQueue'] },
-  { name: 'Administration & People', models: ['Church', 'Branch', 'Profile', 'Member', 'Family', 'FamilyMember'] },
+  {
+    name: 'System',
+    models: ['AuditLog', 'ChurchConfig', 'Role', 'Permission', 'RolePermission', 'SyncQueue'],
+  },
+  {
+    name: 'Administration & People',
+    models: ['Church', 'Branch', 'Profile', 'Member', 'Family', 'FamilyMember'],
+  },
   { name: 'Giving & Finance', models: ['GivingCategory', 'Transaction', 'RecurringGiving'] },
   { name: 'Attendance & Services', models: ['Service', 'Attendance'] },
-  { name: 'Pastoral & Care', models: ['PastoralNote', 'LifeEvent', 'RiskScore', 'EngagementScore'] },
+  {
+    name: 'Pastoral & Care',
+    models: ['PastoralNote', 'LifeEvent', 'RiskScore', 'EngagementScore'],
+  },
   { name: 'Events', models: ['Event', 'EventRegistration', 'Ticket'] },
   { name: 'Communication', models: ['Message', 'Template', 'Form', 'FormSubmission'] },
-  { name: 'Assets & Organisations', models: ['Asset', 'Department', 'DepartmentMember', 'CellGroup'] },
+  {
+    name: 'Assets & Organisations',
+    models: ['Asset', 'Department', 'DepartmentMember', 'CellGroup'],
+  },
 ];
 
 // Models that support soft-delete
@@ -107,15 +119,25 @@ const CYAN = `\x1b[36m`;
 const BOLD = `\x1b[1m`;
 const RESET = `\x1b[0m`;
 
-function red(s: string): string { return `${RED}${s}${RESET}`; }
+function red(s: string): string {
+  return `${RED}${s}${RESET}`;
+}
 
-function green(s: string): string { return `${GREEN}${s}${RESET}`; }
+function green(s: string): string {
+  return `${GREEN}${s}${RESET}`;
+}
 
-function yellow(s: string): string { return `${YELLOW}${s}${RESET}`; }
+function yellow(s: string): string {
+  return `${YELLOW}${s}${RESET}`;
+}
 
-function cyan(s: string): string { return `${CYAN}${s}${RESET}`; }
+function cyan(s: string): string {
+  return `${CYAN}${s}${RESET}`;
+}
 
-function bold(s: string): string { return `${BOLD}${s}${RESET}`; }
+function bold(s: string): string {
+  return `${BOLD}${s}${RESET}`;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -152,21 +174,15 @@ function prismaModel(name: string): any {
 // ─────────────────────────────────────────────────────────────
 
 function getColumns(modelName: string): string[] {
-  const PrismaModule = require('@prisma/client');
-  const dmmf = PrismaModule.Prisma.dmmf;
-  const model = dmmf.datamodel.models.find((m: any) => m.name === modelName);
+  const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
   if (!model) return [];
-  return model.fields
-    .filter((f: any) => !f.isRelation)
-    .map((f: any) => f.name);
+  return model.fields.filter((f) => f.kind !== 'object').map((f) => f.name);
 }
 
 function getColumnType(modelName: string, column: string): string | undefined {
-  const PrismaModule = require('@prisma/client');
-  const dmmf = PrismaModule.Prisma.dmmf;
-  const model = dmmf.datamodel.models.find((m: any) => m.name === modelName);
+  const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
   if (!model) return undefined;
-  const field = model.fields.find((f: any) => f.name === column);
+  const field = model.fields.find((f) => f.name === column);
   if (!field) return undefined;
   return field.type;
 }
@@ -180,7 +196,10 @@ async function prompt(message: string): Promise<string> {
   return question(q);
 }
 
-async function confirmAction(description: string, requireTyping: boolean = false): Promise<boolean> {
+async function confirmAction(
+  description: string,
+  requireTyping: boolean = false,
+): Promise<boolean> {
   if (IS_DRY_RUN) {
     console.log(`${SPARKLE} Dry-run mode, skipping confirmation...`);
     return true;
@@ -261,13 +280,15 @@ function printPreview(rows: any[], columns: string[]): void {
   console.log(` ${headerRow}`);
   console.log(` ${line}`);
   for (const row of rows.slice(0, 10)) {
-    const cell = columns.map((col, i) => {
-      const val = row[col] !== null && row[col] !== undefined ? String(row[col]) : '';
-      if (val.length > 25) {
-        return val.substring(0, 22) + '...';
-      }
-      return val.padEnd(colWidths[i]);
-    }).join(' | ');
+    const cell = columns
+      .map((col, i) => {
+        const val = row[col] !== null && row[col] !== undefined ? String(row[col]) : '';
+        if (val.length > 25) {
+          return val.substring(0, 22) + '...';
+        }
+        return val.padEnd(colWidths[i]);
+      })
+      .join(' | ');
     console.log(` ${cell}`);
   }
   if (rows.length > 10) {
@@ -356,7 +377,11 @@ async function deleteAllRecordsInModel(modelName: string): Promise<number> {
 }
 
 // Hard delete records for a model by condition
-async function deleteRecordsWhere(modelName: string, field: string, value: string): Promise<number> {
+async function deleteRecordsWhere(
+  modelName: string,
+  field: string,
+  value: string,
+): Promise<number> {
   if (IS_DRY_RUN) return 0;
   const model = prismaModel(modelName);
   const columnType = getColumnType(modelName, field);
@@ -382,7 +407,11 @@ async function deleteRecordsWhere(modelName: string, field: string, value: strin
   return result.count;
 }
 
-async function softDeleteRecordsWhere(modelName: string, field: string, value: string): Promise<number> {
+async function softDeleteRecordsWhere(
+  modelName: string,
+  field: string,
+  value: string,
+): Promise<number> {
   if (IS_DRY_RUN) return 0;
   const model = prismaModel(modelName);
   const config = SOFT_DELETE_MODELS[modelName];
@@ -468,7 +497,9 @@ async function modeDeleteById(): Promise<void> {
 
       if (wantSoft && softDeleteAvailable) {
         await softDeleteRecordsWhere(table, 'id', id.trim());
-        console.log(green(`\u2713 Record soft-deleted (set to ${SOFT_DELETE_MODELS[table].inactiveValue}).`));
+        console.log(
+          green(`\u2713 Record soft-deleted (set to ${SOFT_DELETE_MODELS[table].inactiveValue}).`),
+        );
       } else {
         await deleteRecordsWhere(table, 'id', id.trim());
         console.log(green(`\u2713 Record permanently deleted.`));
@@ -514,10 +545,15 @@ async function modeDeleteFiltered(): Promise<void> {
   console.log('\nAvailable columns:');
   for (let i = 0; i < columns.length; i++) {
     const colType = getColumnType(table, columns[i]);
-    console.log(`  ${(i + 1).toString().padEnd(3)} ${columns[i].padEnd(25)} ${cyan(colType || '')}`);
+    console.log(
+      `  ${(i + 1).toString().padEnd(3)} ${columns[i].padEnd(25)} ${cyan(colType || '')}`,
+    );
   }
 
-  const chosenCol = await promptNumber(`\nSelect a column by number (1-${columns.length}): `, columns.length);
+  const chosenCol = await promptNumber(
+    `\nSelect a column by number (1-${columns.length}): `,
+    columns.length,
+  );
   const col = columns[chosenCol - 1];
   console.log(`Selected column: ${cyan(col)}`);
 
@@ -543,7 +579,8 @@ async function modeDeleteFiltered(): Promise<void> {
   }
 
   const action = doSoftDelete ? 'soft-delete' : 'delete';
-  if (!(await confirmAction(`This will ${action} ${count} records from the ${table} table!`))) return;
+  if (!(await confirmAction(`This will ${action} ${count} records from the ${table} table!`)))
+    return;
 
   let deleted = 0;
   if (doSoftDelete && softAvailable) {
@@ -588,7 +625,13 @@ async function modeDeleteAllFromTable(): Promise<void> {
   }
 
   const action = doSoftDelete ? 'soft-delete' : 'permanently delete';
-  if (!(await confirmAction(`This will ${action} ALL ${count} records from the ${table} table!`, true))) return;
+  if (
+    !(await confirmAction(
+      `This will ${action} ALL ${count} records from the ${table} table!`,
+      true,
+    ))
+  )
+    return;
 
   let deleted = 0;
   if (doSoftDelete && softAvailable) {
@@ -617,7 +660,11 @@ async function modeDeleteAllFromTable(): Promise<void> {
   if (IS_DRY_RUN) {
     console.log(yellow(`  DRY RUN — Would have ${action}d ${deleted} records from ${table}`));
   } else {
-    console.log(green(`\u2713 ${action === 'soft-delete' ? 'Soft-deleted' : 'Permanently deleted'} ${deleted} records.`));
+    console.log(
+      green(
+        `\u2713 ${action === 'soft-delete' ? 'Soft-deleted' : 'Permanently deleted'} ${deleted} records.`,
+      ),
+    );
   }
   await sleep(1000);
 }
@@ -766,13 +813,19 @@ async function selectTable(): Promise<string> {
   }
 
   while (true) {
-    const choice = await promptNumber(`\nSelect a table (1-${allIndex}, or ${allIndex} for all): `, allIndex);
+    const choice = await promptNumber(
+      `\nSelect a table (1-${allIndex}, or ${allIndex} for all): `,
+      allIndex,
+    );
     if (choice === allIndex) {
       // Show all tables
       for (let i = 0; i < ALL_MODELS_IN_ORDER.length; i++) {
         console.log(`  ${(i + 1).toString().padEnd(3)} ${ALL_MODELS_IN_ORDER[i]}`);
       }
-      const sub = await promptNumber(`Select table (1-${ALL_MODELS_IN_ORDER.length}): `, ALL_MODELS_IN_ORDER.length);
+      const sub = await promptNumber(
+        `Select table (1-${ALL_MODELS_IN_ORDER.length}): `,
+        ALL_MODELS_IN_ORDER.length,
+      );
       return ALL_MODELS_IN_ORDER[sub - 1];
     }
     return indexToModel[choice];

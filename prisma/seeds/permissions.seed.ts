@@ -91,49 +91,108 @@ export function generateAllPermissions(): { name: string; resource: string; acti
 export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   senior_pastor: [
     // Members — full access
-    'members:create', 'members:read', 'members:update', 'members:delete',
+    'members:create',
+    'members:read',
+    'members:update',
+    'members:delete',
     // Attendance — full access
-    'attendance:create', 'attendance:read', 'attendance:update', 'attendance:delete',
+    'attendance:create',
+    'attendance:read',
+    'attendance:update',
+    'attendance:delete',
     // Giving — full access
-    'giving:create', 'giving:read', 'giving:update', 'giving:delete',
+    'giving:create',
+    'giving:read',
+    'giving:update',
+    'giving:delete',
     // Events — full access
-    'events:create', 'events:read', 'events:update', 'events:delete',
+    'events:create',
+    'events:read',
+    'events:update',
+    'events:delete',
     // Sermons — full access
-    'sermons:create', 'sermons:read', 'sermons:update', 'sermons:delete',
+    'sermons:create',
+    'sermons:read',
+    'sermons:update',
+    'sermons:delete',
     // Media — full access
-    'media:create', 'media:read', 'media:update', 'media:delete',
+    'media:create',
+    'media:read',
+    'media:update',
+    'media:delete',
     // Church — read + update
-    'church:read', 'church:update',
+    'church:read',
+    'church:update',
     // Branches — full access
-    'branches:create', 'branches:read', 'branches:update', 'branches:delete',
+    'branches:create',
+    'branches:read',
+    'branches:update',
+    'branches:delete',
     // Profiles — full access
-    'profiles:create', 'profiles:read', 'profiles:update', 'profiles:delete',
+    'profiles:create',
+    'profiles:read',
+    'profiles:update',
+    'profiles:delete',
     // WhatsApp — full access
-    'whatsapp:create', 'whatsapp:read', 'whatsapp:update', 'whatsapp:delete',
+    'whatsapp:create',
+    'whatsapp:read',
+    'whatsapp:update',
+    'whatsapp:delete',
     // Reports — full access
-    'reports:create', 'reports:read', 'reports:update', 'reports:delete',
+    'reports:create',
+    'reports:read',
+    'reports:update',
+    'reports:delete',
     // Forms — full access
-    'forms:create', 'forms:read', 'forms:update', 'forms:delete',
+    'forms:create',
+    'forms:read',
+    'forms:update',
+    'forms:delete',
     // Pastoral — full access
-    'pastoral:create', 'pastoral:read', 'pastoral:update', 'pastoral:delete',
+    'pastoral:create',
+    'pastoral:read',
+    'pastoral:update',
+    'pastoral:delete',
     // Departments — full access
-    'departments:create', 'departments:read', 'departments:update', 'departments:delete',
+    'departments:create',
+    'departments:read',
+    'departments:update',
+    'departments:delete',
     // Cell Groups — full access
-    'cell_groups:create', 'cell_groups:read', 'cell_groups:update', 'cell_groups:delete',
+    'cell_groups:create',
+    'cell_groups:read',
+    'cell_groups:update',
+    'cell_groups:delete',
     // Assets — full access
-    'assets:create', 'assets:read', 'assets:update', 'assets:delete',
+    'assets:create',
+    'assets:read',
+    'assets:update',
+    'assets:delete',
     // Families — full access
-    'families:create', 'families:read', 'families:update', 'families:delete',
+    'families:create',
+    'families:read',
+    'families:update',
+    'families:delete',
     // Templates — full access
-    'templates:create', 'templates:read', 'templates:update', 'templates:delete',
+    'templates:create',
+    'templates:read',
+    'templates:update',
+    'templates:delete',
     // Broadcasts — full access
-    'broadcasts:create', 'broadcasts:read', 'broadcasts:update', 'broadcasts:delete',
+    'broadcasts:create',
+    'broadcasts:read',
+    'broadcasts:update',
+    'broadcasts:delete',
     // Analytics — read
     'analytics:read',
     // Church Settings — read + update
-    'church_settings:read', 'church_settings:update',
+    'church_settings:read',
+    'church_settings:update',
     // Visitors — full access
-    'visitors:create', 'visitors:read', 'visitors:update', 'visitors:delete',
+    'visitors:create',
+    'visitors:read',
+    'visitors:update',
+    'visitors:delete',
   ],
 
   church_admin: [
@@ -143,15 +202,22 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 
   branch_pastor: [
     // Members — read + update
-    'members:read', 'members:update',
+    'members:read',
+    'members:update',
     // Attendance — create + read + update
-    'attendance:create', 'attendance:read', 'attendance:update',
+    'attendance:create',
+    'attendance:read',
+    'attendance:update',
     // Giving — read
     'giving:read',
     // Events — create + read + update
-    'events:create', 'events:read', 'events:update',
+    'events:create',
+    'events:read',
+    'events:update',
     // Sermons — create + read + update
-    'sermons:create', 'sermons:read', 'sermons:update',
+    'sermons:create',
+    'sermons:read',
+    'sermons:update',
     // Media — read
     'media:read',
     // Church — read
@@ -167,30 +233,41 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Forms — read
     'forms:read',
     // Pastoral — create + read + update
-    'pastoral:create', 'pastoral:read', 'pastoral:update',
+    'pastoral:create',
+    'pastoral:read',
+    'pastoral:update',
     // Departments — read
     'departments:read',
     // Cell Groups — create + read + update
-    'cell_groups:create', 'cell_groups:read', 'cell_groups:update',
+    'cell_groups:create',
+    'cell_groups:read',
+    'cell_groups:update',
     // Assets — read
     'assets:read',
     // Families — create + read + update
-    'families:create', 'families:read', 'families:update',
+    'families:create',
+    'families:read',
+    'families:update',
     // Templates — create + read
-    'templates:create', 'templates:read',
+    'templates:create',
+    'templates:read',
     // Broadcasts — create + read
-    'broadcasts:create', 'broadcasts:read',
+    'broadcasts:create',
+    'broadcasts:read',
     // Analytics — read
     'analytics:read',
     // Visitors — create + read + update
-    'visitors:create', 'visitors:read', 'visitors:update',
+    'visitors:create',
+    'visitors:read',
+    'visitors:update',
   ],
 
   department_head: [
     // Members — read
     'members:read',
     // Attendance — create + read
-    'attendance:create', 'attendance:read',
+    'attendance:create',
+    'attendance:read',
     // Giving — read
     'giving:read',
     // Events — read
@@ -207,36 +284,53 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 
   secretary: [
     // Members — create + read + update
-    'members:create', 'members:read', 'members:update',
+    'members:create',
+    'members:read',
+    'members:update',
     // Attendance — create + read + update
-    'attendance:create', 'attendance:read', 'attendance:update',
+    'attendance:create',
+    'attendance:read',
+    'attendance:update',
     // Giving — read
     'giving:read',
     // Events — create + read + update
-    'events:create', 'events:read', 'events:update',
+    'events:create',
+    'events:read',
+    'events:update',
     // Church — read
     'church:read',
     // Profiles — read
     'profiles:read',
     // Forms — create + read + update
-    'forms:create', 'forms:read', 'forms:update',
+    'forms:create',
+    'forms:read',
+    'forms:update',
     // Families — create + read + update
-    'families:create', 'families:read', 'families:update',
+    'families:create',
+    'families:read',
+    'families:update',
     // Templates — create + read
-    'templates:create', 'templates:read',
+    'templates:create',
+    'templates:read',
     // Visitors — create + read + update
-    'visitors:create', 'visitors:read', 'visitors:update',
+    'visitors:create',
+    'visitors:read',
+    'visitors:update',
     // Pastoral — read
     'pastoral:read',
   ],
 
   treasurer: [
     // Giving — create + read + update
-    'giving:create', 'giving:read', 'giving:update',
+    'giving:create',
+    'giving:read',
+    'giving:update',
     // Reports — read
     'reports:read',
     // Assets — create + read + update
-    'assets:create', 'assets:read', 'assets:update',
+    'assets:create',
+    'assets:read',
+    'assets:update',
     // Church Settings — read
     'church_settings:read',
     // Members — read
@@ -306,7 +400,9 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
     });
     createdPermissions.push(created);
   }
-  console.log(`    ✅ Permissions: ${createdPermissions.length} (${RESOURCES.length} resources × ${ACTIONS.length} actions)`);
+  console.log(
+    `    ✅ Permissions: ${createdPermissions.length} (${RESOURCES.length} resources × ${ACTIONS.length} actions)`,
+  );
 
   // ─── 3. Assign Default Permissions to Roles ──────────────
   console.log('  📦 Assigning default permissions to roles...');
@@ -321,7 +417,9 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
         create: { role_id: superAdminRole.id, permission_id: perm.id },
       });
     }
-    console.log(`    ✅ Assigned ${createdPermissions.length} permissions to super_admin (ALL — locked)`);
+    console.log(
+      `    ✅ Assigned ${createdPermissions.length} permissions to super_admin (ALL — locked)`,
+    );
   }
 
   // Other roles get permissions from the matrix
@@ -354,5 +452,7 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
 
   // ─── Summary ─────────────────────────────────────────────
   const totalRolePermissions = await prisma.rolePermission.count();
-  console.log(`\n  🎉 Permissions seed complete: ${createdRoles.length} roles, ${createdPermissions.length} permissions, ${totalRolePermissions} role-permission mappings`);
+  console.log(
+    `\n  🎉 Permissions seed complete: ${createdRoles.length} roles, ${createdPermissions.length} permissions, ${totalRolePermissions} role-permission mappings`,
+  );
 }

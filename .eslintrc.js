@@ -17,7 +17,7 @@ module.exports = {
   parserOptions: {
     // Point to the tsconfig.json so the parser can resolve types and
     // understand the project's TypeScript configuration.
-    project: 'tsconfig.json',
+    project: 'tsconfig.eslint.json',
     tsconfigRootDir: __dirname,
     // Parse files as ES modules (required for import/export syntax).
     sourceType: 'module',
