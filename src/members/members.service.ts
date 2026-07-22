@@ -123,7 +123,11 @@ export class MembersService {
    * @returns Member details
    * @throws NotFoundException if member not found or belongs to another church
    */
-  async getMemberById(id: string, churchId: string): Promise<MemberResponseDto> {
+  async getMemberById(
+    id: string,
+    churchId: string,
+    viewerPermissions: string[] = [],
+  ): Promise<MemberResponseDto> {
     const member = await this.prisma.member.findUnique({
       where: { id },
     });
@@ -132,7 +136,7 @@ export class MembersService {
       throw new NotFoundException('Member not found');
     }
 
-    return this.mapToResponseDto(member);
+    return this.mapToResponseDto(member, viewerPermissions);
   }
 
   /**
@@ -145,6 +149,7 @@ export class MembersService {
   async listMembers(
     churchId: string,
     query: ListMembersDto,
+    viewerPermissions: string[] = [],
   ): Promise<{ data: MemberResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -194,7 +199,7 @@ export class MembersService {
     ]);
 
     return {
-      data: members.map((m) => this.mapToResponseDto(m)),
+      data: members.map((m) => this.mapToResponseDto(m, viewerPermissions)),
       total,
     };
   }
@@ -921,42 +926,51 @@ export class MembersService {
    * @param member - Raw Prisma member record
    * @returns Formatted MemberResponseDto
    */
-  private mapToResponseDto(member: {
-    id: string;
-    church_id: string;
-    branch_id: string | null;
-    first_name: string;
-    last_name: string;
-    email: string | null;
-    phone: string | null;
-    whatsapp_number: string | null;
-    date_of_birth: Date | null;
-    gender: string | null;
-    address: string | null;
-    city: string | null;
-    state: string | null;
-    status: string;
-    member_since: Date;
-    photo_url: string | null;
-    custom_fields: Prisma.JsonValue;
-    notes: string | null;
-    created_at: Date;
-    updated_at: Date;
-  }): MemberResponseDto {
+  private mapToResponseDto(
+    member: {
+      id: string;
+      church_id: string;
+      branch_id: string | null;
+      first_name: string;
+      last_name: string;
+      email: string | null;
+      phone: string | null;
+      whatsapp_number: string | null;
+      date_of_birth: Date | null;
+      gender: string | null;
+      address: string | null;
+      city: string | null;
+      state: string | null;
+      status: string;
+      member_since: Date;
+      photo_url: string | null;
+      custom_fields: Prisma.JsonValue;
+      notes: string | null;
+      created_at: Date;
+      updated_at: Date;
+    },
+    viewerPermissions: string[] = [],
+  ): MemberResponseDto {
+    const hasSensitiveAccess = viewerPermissions.some((permission) =>
+      ['members:update', 'members:delete'].includes(permission),
+    );
+
     return {
       memberId: member.id,
       churchId: member.church_id,
       branchId: member.branch_id || undefined,
       firstName: member.first_name,
       lastName: member.last_name,
-      email: member.email || undefined,
-      phone: member.phone || undefined,
-      whatsappNumber: member.whatsapp_number || undefined,
-      dateOfBirth: member.date_of_birth?.toISOString() || undefined,
-      gender: member.gender || undefined,
-      address: member.address || undefined,
-      city: member.city || undefined,
-      state: member.state || undefined,
+      email: hasSensitiveAccess ? member.email || undefined : undefined,
+      phone: hasSensitiveAccess ? member.phone || undefined : undefined,
+      whatsappNumber: hasSensitiveAccess ? member.whatsapp_number || undefined : undefined,
+      dateOfBirth: hasSensitiveAccess
+        ? member.date_of_birth?.toISOString() || undefined
+        : undefined,
+      gender: hasSensitiveAccess ? member.gender || undefined : undefined,
+      address: hasSensitiveAccess ? member.address || undefined : undefined,
+      city: hasSensitiveAccess ? member.city || undefined : undefined,
+      state: hasSensitiveAccess ? member.state || undefined : undefined,
       status: member.status,
       memberSince: member.member_since.toISOString(),
       photoUrl: member.photo_url || undefined,
@@ -964,7 +978,7 @@ export class MembersService {
         member.custom_fields && typeof member.custom_fields === 'object'
           ? (member.custom_fields as Record<string, unknown>)
           : undefined,
-      notes: member.notes || undefined,
+      notes: hasSensitiveAccess ? member.notes || undefined : undefined,
       createdAt: member.created_at.toISOString(),
       updatedAt: member.updated_at.toISOString(),
     };

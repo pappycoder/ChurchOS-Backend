@@ -83,7 +83,11 @@ export class MembersController {
   )
   async findAll(@Query() query: ListMembersDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.membersService.listMembers(churchId, query);
+    const result = await this.membersService.listMembers(
+      churchId,
+      query,
+      req.profile?.permissions || [],
+    );
     return {
       data: result.data,
       meta: {
@@ -105,7 +109,7 @@ export class MembersController {
     @Request() req: AuthenticatedRequest,
   ): Promise<MemberResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.getMemberById(memberId, churchId);
+    return this.membersService.getMemberById(memberId, churchId, req.profile?.permissions || []);
   }
 
   /**
