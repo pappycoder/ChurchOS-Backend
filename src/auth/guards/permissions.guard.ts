@@ -54,8 +54,11 @@ export class PermissionsGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
+    // If JWT auth hasn't run yet (PermissionsGuard is global and runs before
+    // controller-level JwtAuthGuard), silently pass — JwtAuthGuard will reject
+    // unauthenticated requests. Once user is set, enforce permissions.
     if (!user?.sub) {
-      throw new ForbiddenException('No authenticated user');
+      return true;
     }
 
     // Fetch the user's profile to get role and church_id

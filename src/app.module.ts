@@ -56,6 +56,8 @@ import { SyncModule } from './sync/sync.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { PermissionsGuard } from './auth/guards/permissions.guard';
+import { PermissionsModule } from './auth/permissions.module';
 
 /**
  * Root application module.
@@ -196,12 +198,19 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
     // Import WebhooksModule for outbound webhook management.
     WebhooksModule,
+
+    // Import PermissionsModule for role-based permission resolution
+    PermissionsModule,
   ],
   controllers: [],
   providers: [
     {
       provide: 'APP_GUARD',
       useClass: RateLimitGuard,
+    },
+    {
+      provide: 'APP_GUARD',
+      useClass: PermissionsGuard,
     },
   ],
 })

@@ -11,9 +11,11 @@
  */
 
 import { Module, Global, MiddlewareConsumer, NestModule } from '@nestjs/common';
+
 import { AuditLoggingService } from './services/audit-logging.service';
 import { RequestContextService } from './services/request-context.service';
 import { RequestContextMiddleware } from './middleware/request-context.middleware';
+import { CacheInterceptor } from './interceptors/cache.interceptor';
 
 /**
  * Global module providing shared services and middleware.
@@ -27,8 +29,14 @@ import { RequestContextMiddleware } from './middleware/request-context.middlewar
  */
 @Global()
 @Module({
-  providers: [AuditLoggingService, RequestContextService],
-  exports: [AuditLoggingService, RequestContextService],
+  providers: [
+    AuditLoggingService,
+    RequestContextService,
+    // CacheInterceptor is available for injection but not global by default.
+    // Controllers opt in via @UseInterceptors(CacheInterceptor) + @CacheTTL().
+    // This pattern avoids caching all GET responses indiscriminately.
+  ],
+  exports: [AuditLoggingService, RequestContextService, CacheInterceptor],
 })
 export class CommonModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

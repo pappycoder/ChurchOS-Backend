@@ -36,6 +36,7 @@ import { MemberResponseDto } from './dto/member-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -59,6 +60,7 @@ export class MembersController {
    */
   @Post()
   @RequireRoles('church_admin', 'senior_pastor', 'secretary')
+  @RequirePermissions('members:create')
   @ApiCreateEndpoint(
     'Create a new member',
     'Creates a new church member with the provided details.',
@@ -136,6 +138,7 @@ export class MembersController {
    */
   @Delete(':memberId')
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:delete')
   @ApiDeleteEndpoint(
     'Delete a member',
     'Soft-deletes a member by setting their status to inactive.',
@@ -155,6 +158,7 @@ export class MembersController {
    */
   @Post(':memberId/restore')
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restore a member',
@@ -260,6 +264,7 @@ export class MembersController {
    */
   @Post('bulk-import')
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Bulk import members',

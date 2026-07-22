@@ -955,6 +955,135 @@ export class AdminService {
     };
   }
 
+  // ─── Multi-Church Federation (Super Admin) ────────────────
+
+  /**
+   * Lists all churches for super_admin users.
+   * Returns summary data for each church including member counts
+   * and basic admin info.
+   */
+  async listAllChurches(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      denomination: string | null;
+      city: string | null;
+      state: string | null;
+      memberCount: number;
+      activeMemberCount: number;
+      branchCount: number;
+      monthlyGivingTotal: number;
+      adminName: string;
+      adminEmail: string;
+      createdAt: string;
+    }>
+  > {
+    const churches = await this.prisma.church.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        denomination: true,
+        city: true,
+        state: true,
+        created_at: true,
+        _count: { select: { members: true, branches: true } },
+      },
+    });
+
+    const results = [];
+    for (const church of churches) {
+      const activeMemberCount = await this.prisma.member.count({
+        where: { church_id: church.id, status: 'active' },
+      });
+
+      // Monthly giving total
+      const firstOfMonth = new Date();
+      firstOfMonth.setDate(1);
+      firstOfMonth.setHours(0, 0, 0, 0);
+
+      const givingAgg = await this.prisma.transaction.aggregate({
+        where: {
+          church_id: church.id,
+          status: 'success',
+          created_at: { gte: firstOfMonth },
+        },
+        _sum: { amount: true },
+      });
+
+      // Get the first admin profile for contact info
+      const adminProfile = await this.prisma.profile.findFirst({
+        where: { church_id: church.id, role: { in: ['church_admin', 'senior_pastor'] } },
+        select: { first_name: true, last_name: true },
+      });
+
+      results.push({
+        id: church.id,
+        name: church.name,
+        denomination: church.denomination,
+        city: church.city,
+        state: church.state,
+        memberCount: church._count.members,
+        activeMemberCount,
+        branchCount: church._count.branches,
+        monthlyGivingTotal: givingAgg._sum.amount || 0,
+        adminName: adminProfile ? `${adminProfile.first_name} ${adminProfile.last_name}` : 'N/A',
+        adminEmail: '',
+        createdAt: church.created_at.toISOString(),
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Gets cross-church analytics for super_admin.
+   * Aggregates key metrics across all churches.
+   */
+  async getCrossChurchAnalytics(): Promise<{
+    totalChurches: number;
+    totalMembers: number;
+    totalActiveMembers: number;
+    totalBranches: number;
+    totalMonthlyGiving: number;
+    averageMembersPerChurch: number;
+    averageGivingPerChurch: number;
+    churches: Array<{
+      id: string;
+      name: string;
+      denomination: string | null;
+      city: string | null;
+      state: string | null;
+      memberCount: number;
+      activeMemberCount: number;
+      branchCount: number;
+      monthlyGivingTotal: number;
+      adminName: string;
+      adminEmail: string;
+      createdAt: string;
+    }>;
+  }> {
+    const churches = await this.listAllChurches();
+
+    const totalMembers = churches.reduce((sum, c) => sum + c.memberCount, 0);
+    const totalActiveMembers = churches.reduce((sum, c) => sum + c.activeMemberCount, 0);
+    const totalBranches = churches.reduce((sum, c) => sum + c.branchCount, 0);
+    const totalMonthlyGiving = churches.reduce((sum, c) => sum + c.monthlyGivingTotal, 0);
+    const totalChurches = churches.length;
+
+    return {
+      totalChurches,
+      totalMembers,
+      totalActiveMembers,
+      totalBranches,
+      totalMonthlyGiving,
+      averageMembersPerChurch: totalChurches > 0 ? Math.round(totalMembers / totalChurches) : 0,
+      averageGivingPerChurch:
+        totalChurches > 0 ? Math.round(totalMonthlyGiving / totalChurches) : 0,
+      churches,
+    };
+  }
+
   /**
    * Maps a Prisma CellGroup record to a response DTO.
    */

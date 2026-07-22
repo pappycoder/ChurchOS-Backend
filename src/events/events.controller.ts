@@ -27,6 +27,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -70,6 +71,7 @@ export class EventsController {
   @Post()
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:create')
   @ApiCreateEndpoint('Create a new event', 'Creates a new church event.')
   async createEvent(
     @Body() dto: CreateEventDto,
@@ -152,6 +154,7 @@ export class EventsController {
   @Delete(':eventId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('events:delete')
   @ApiDeleteEndpoint('Delete an event')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
   async deleteEvent(

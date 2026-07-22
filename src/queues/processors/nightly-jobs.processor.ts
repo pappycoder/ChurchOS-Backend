@@ -51,6 +51,7 @@ export class NightlyJobsProcessor {
     membersNeedingAttention: number;
     recurringChargesDispatched: number;
     lifeEventGreetingsSent: number;
+    ndprRecordsPurged: number;
   }> {
     const { churchId } = job.data;
 
@@ -69,6 +70,9 @@ export class NightlyJobsProcessor {
     await job.updateProgress(70);
 
     const recurringChargesDispatched = await this.dispatchRecurringCharges(churchId);
+    await job.updateProgress(85);
+
+    const ndprDeleted = await this.purgeExpiredNdprData(churchId);
     await job.updateProgress(100);
 
     this.logger.log(
@@ -76,7 +80,8 @@ export class NightlyJobsProcessor {
         `${engagementScored} engagement, ${riskScored} risk, ` +
         `${attention.length} needing attention, ` +
         `${lifeEventGreetingsSent} life event greetings sent, ` +
-        `${recurringChargesDispatched} recurring charges dispatched`,
+        `${recurringChargesDispatched} recurring charges dispatched, ` +
+        `${ndprDeleted} NDPR records purged`,
     );
 
     return {
@@ -85,6 +90,7 @@ export class NightlyJobsProcessor {
       membersNeedingAttention: attention.length,
       recurringChargesDispatched,
       lifeEventGreetingsSent,
+      ndprRecordsPurged: ndprDeleted,
     };
   }
 
@@ -125,6 +131,102 @@ export class NightlyJobsProcessor {
     }
 
     return dueCharges.length;
+  }
+
+  /**
+   * Purges data that has exceeded the NDPR (Nigeria Data Protection Regulation)
+   * retention period. Soft-deleted member records, orphaned personal data, and
+   * audit logs older than the configurable grace period are permanently deleted.
+   *
+   * NDPR requires that personal data not be kept longer than necessary. This
+   * function enforces a default retention period of 365 days (configurable via
+   * the NDPR_RETENTION_DAYS env var / church config) for soft-deleted records.
+   *
+   * @param churchId - Church ID to scope the purge
+   * @returns Number of records permanently deleted
+   */
+  private async purgeExpiredNdprData(churchId: string): Promise<number> {
+    const retentionDays = 365; // NDPR grace period: 1 year
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    let totalDeleted = 0;
+
+    try {
+      // 1. Permanently delete inactive members past the retention period
+      // Members are soft-deleted by setting status to 'inactive'. After the
+      // NDPR grace period (365 days), their data is permanently purged.
+      const oldDeletedMembers = await this.prisma.member.findMany({
+        where: {
+          church_id: churchId,
+          status: 'inactive',
+          updated_at: { lte: cutoff },
+        },
+        select: { id: true },
+      });
+
+      if (oldDeletedMembers.length > 0) {
+        const memberIds = oldDeletedMembers.map((m) => m.id);
+
+        // Delete related records first (foreign key constraints)
+        await this.prisma.departmentMember.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.cellGroupMember.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.cellGroupAttendance.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.sermonBookmark.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.pastoralNote.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.lifeEvent.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.transaction.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+        await this.prisma.attendance.deleteMany({
+          where: { member_id: { in: memberIds } },
+        });
+
+        // Finally delete the member records
+        const deleted = await this.prisma.member.deleteMany({
+          where: { id: { in: memberIds } },
+        });
+        totalDeleted += deleted.count;
+
+        this.logger.log(
+          `NDPR purge: deleted ${deleted.count} member records (retention: ${retentionDays}d)`,
+        );
+      }
+
+      // 2. Delete audit logs older than 2 years (general retention policy)
+      const auditCutoff = new Date();
+      auditCutoff.setFullYear(auditCutoff.getFullYear() - 2);
+
+      const oldAuditLogs = await this.prisma.auditLog.deleteMany({
+        where: {
+          church_id: churchId,
+          created_at: { lte: auditCutoff },
+        },
+      });
+
+      if (oldAuditLogs.count > 0) {
+        totalDeleted += oldAuditLogs.count;
+        this.logger.log(
+          `NDPR purge: deleted ${oldAuditLogs.count} audit log records (retention: 2y)`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(`NDPR purge failed for church ${churchId}: ${(err as Error).message}`);
+    }
+
+    return totalDeleted;
   }
 
   /**

@@ -10,12 +10,13 @@
  * @since 1.0.0
  */
 
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto } from './dto/analytics-date-range.dto';
 import {
@@ -36,8 +37,11 @@ export class AnalyticsController {
 
   /**
    * Returns a unified dashboard overview.
+   * Cached for 3 minutes since it aggregates data across multiple tables.
    */
   @Get('dashboard')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(180)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get unified dashboard overview' })
   @ApiOkResponse({ description: 'Dashboard data retrieved', type: DashboardResponseDto })
@@ -51,8 +55,11 @@ export class AnalyticsController {
 
   /**
    * Returns giving analytics.
+   * Cached for 5 minutes since giving data changes less frequently.
    */
   @Get('giving')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'treasurer')
   @ApiOperation({ summary: 'Get giving analytics' })
   @ApiOkResponse({ description: 'Giving analytics retrieved', type: GivingAnalyticsResponseDto })
@@ -66,8 +73,11 @@ export class AnalyticsController {
 
   /**
    * Returns attendance analytics.
+   * Cached for 3 minutes.
    */
   @Get('attendance')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(180)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get attendance analytics' })
   @ApiOkResponse({
@@ -84,8 +94,11 @@ export class AnalyticsController {
 
   /**
    * Returns member demographics and growth analytics.
+   * Cached for 10 minutes since member data changes infrequently.
    */
   @Get('members')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(600)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get member analytics' })
   @ApiOkResponse({ description: 'Member analytics retrieved', type: MemberAnalyticsResponseDto })
@@ -96,8 +109,11 @@ export class AnalyticsController {
 
   /**
    * Returns event analytics.
+   * Cached for 3 minutes.
    */
   @Get('events')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(180)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get event analytics' })
   @ApiOkResponse({ description: 'Event analytics retrieved', type: EventAnalyticsResponseDto })
@@ -111,8 +127,11 @@ export class AnalyticsController {
 
   /**
    * Returns communication analytics.
+   * Cached for 5 minutes.
    */
   @Get('communication')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get communication analytics' })
   @ApiOkResponse({

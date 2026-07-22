@@ -24,6 +24,7 @@ import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
   SupabaseUser,
@@ -78,6 +79,7 @@ export class ChurchController {
 
   @Patch()
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church:update')
   @ApiUpdateEndpoint(
     'Update church details',
     'Updates church details. Only church_admin and super_admin can update.',
@@ -139,6 +141,7 @@ export class ChurchController {
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin')
+  @RequirePermissions('church:manage_staff')
   @ApiCreateEndpoint(
     'Invite staff member',
     'Sends a Supabase Auth invitation email and creates a Profile record for the new staff member.',
@@ -217,6 +220,7 @@ export class ChurchController {
 
   @Delete('staff/:profileId')
   @RequireRoles('church_admin')
+  @RequirePermissions('church:manage_staff')
   @ApiDeleteEndpoint(
     'Remove staff member',
     'Soft-deletes a staff member by setting their role to "removed".',

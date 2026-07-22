@@ -6,12 +6,22 @@
  * @since 1.0.0
  */
 
-import { Controller, Get, Post, Body, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  Req,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { ReportsService } from './reports.service';
 import { ReportQueryDto, ExportReportDto } from './dto/reports-query.dto';
 import {
@@ -31,6 +41,8 @@ export class ReportsController {
    * Generate a financial report.
    */
   @Get('financial')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
   @ApiOperation({
     summary: 'Financial report',
@@ -53,6 +65,8 @@ export class ReportsController {
    * Generate an attendance report.
    */
   @Get('attendance')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({
     summary: 'Attendance report',
@@ -75,6 +89,8 @@ export class ReportsController {
    * Generate a member report.
    */
   @Get('members')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(600)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
   @ApiOperation({
     summary: 'Member report',

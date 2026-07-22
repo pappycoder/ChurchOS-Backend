@@ -30,6 +30,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
   SupabaseUser,
@@ -509,5 +510,36 @@ export class AdminController {
     ]);
     // Return the counts of members scored in each category
     return { engagementScored, riskScored };
+  }
+
+  // ─── Multi-Church Federation (Super Admin) ───────────────
+
+  /**
+   * Lists all churches (super_admin only).
+   */
+  @Get('churches')
+  @RequireRoles('super_admin')
+  @RequirePermissions('church:read')
+  @ApiOperation({
+    summary: 'List all churches',
+    description:
+      'Returns a summary of all churches. Only accessible by super_admin users for multi-church management.',
+  })
+  async listAllChurches() {
+    return this.adminService.listAllChurches();
+  }
+
+  /**
+   * Gets cross-church analytics (super_admin only).
+   */
+  @Get('analytics/cross-church')
+  @RequireRoles('super_admin')
+  @RequirePermissions('analytics:read')
+  @ApiOperation({
+    summary: 'Cross-church analytics',
+    description: 'Aggregates key metrics across all churches for super_admin oversight.',
+  })
+  async getCrossChurchAnalytics() {
+    return this.adminService.getCrossChurchAnalytics();
   }
 }

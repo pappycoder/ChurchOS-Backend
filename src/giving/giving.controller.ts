@@ -35,6 +35,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -77,6 +78,7 @@ export class GivingController {
   @Post('categories')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('giving:create')
   @ApiCreateEndpoint('Create a giving category', 'Creates a new giving category for the church.')
   async createCategory(
     @Body() dto: CreateCategoryDto,
@@ -249,6 +251,7 @@ export class GivingController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'secretary', 'treasurer')
+  @RequirePermissions('giving:create')
   @ApiCreateEndpoint(
     'Record cash/bank giving',
     'Records an offline cash or bank transfer giving transaction with auto-generated receipt number.',
