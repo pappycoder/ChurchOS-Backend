@@ -13,13 +13,12 @@ import { IsIn, IsNotEmpty, IsString } from 'class-validator';
  */
 const VALID_ROLES = [
   'super_admin',
+  'senior_pastor',
   'church_admin',
   'branch_pastor',
+  'department_head',
   'secretary',
   'treasurer',
-  'cell_leader',
-  'usher',
-  'worship_leader',
   'member',
 ] as const;
 

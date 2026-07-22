@@ -25,6 +25,7 @@ import {
   TransactionStatus,
 } from '@prisma/client';
 import { seedFormTemplates } from './seeds/form-templates.seed';
+import { seedPermissions } from './seeds/permissions.seed';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 const adapter = new PrismaPg({
@@ -357,107 +358,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // ─── 8. Create Roles ──────────────────────────────────────
-  console.log('\n📦 Creating roles...');
-  const roleNames = [
-    'super_admin',
-    'church_admin',
-    'branch_pastor',
-    'department_head',
-    'secretary',
-    'treasurer',
-    'member',
-  ] as const;
+  // ─── 8. Create Roles, Permissions & Default Mappings ──────
+  await seedPermissions(prisma);
 
-  const createdRoles: { id: string; name: string }[] = [];
-  for (const roleName of roleNames) {
-    const role = await prisma.role.upsert({
-      where: { name: roleName },
-      update: {},
-      create: { name: roleName },
-    });
-    createdRoles.push(role);
-    console.log(`  ✅ Role: ${role.name}`);
-  }
-
-  // ─── 9. Create Permissions ────────────────────────────────
-  console.log('📦 Creating permissions...');
-  const resources = ['members', 'attendance', 'giving', 'events', 'sermons', 'media', 'church', 'branches', 'profiles', 'whatsapp', 'reports', 'forms'];
-  const actions = ['create', 'read', 'update', 'delete'] as const;
-
-  const permissionMatrix: Record<string, string[]> = {
-    super_admin: resources.flatMap((r) => actions.map((a) => `${r}:${a}`)),
-    church_admin: resources.flatMap((r) => actions.map((a) => `${r}:${a}`)),
-    branch_pastor: [
-      'members:read', 'members:update',
-      'attendance:create', 'attendance:read',
-      'events:create', 'events:read', 'events:update',
-      'sermons:create', 'sermons:read', 'sermons:update',
-      'media:read',
-      'profiles:read',
-      'reports:read',
-    ],
-    department_head: [
-      'members:read',
-      'attendance:create', 'attendance:read',
-      'events:read',
-      'media:read',
-    ],
-    secretary: [
-      'members:create', 'members:read', 'members:update',
-      'attendance:create', 'attendance:read',
-      'events:create', 'events:read', 'events:update',
-      'profiles:read',
-    ],
-    treasurer: [
-      'giving:create', 'giving:read', 'giving:update',
-      'reports:read',
-    ],
-    member: [
-      'members:read',
-      'events:read',
-      'sermons:read',
-      'media:read',
-      'profiles:read',
-    ],
-  };
-
-  const createdPermissions: { id: string; name: string }[] = [];
-  for (const resource of resources) {
-    for (const action of actions) {
-      const permName = `${resource}:${action}`;
-      const perm = await prisma.permission.upsert({
-        where: { name: permName },
-        update: {},
-        create: {
-          name: permName,
-          resource,
-          action,
-        },
-      });
-      createdPermissions.push(perm);
-    }
-  }
-  console.log(`  ✅ Permissions: ${createdPermissions.length}`);
-
-  // ─── 10. Assign Permissions to Roles ─────────────────────
-  console.log('📦 Assigning permissions to roles...');
-  for (const role of createdRoles) {
-    const allowed = permissionMatrix[role.name] || [];
-    for (const permName of allowed) {
-      const perm = createdPermissions.find((p) => p.name === permName);
-      if (perm) {
-        await prisma.rolePermission.upsert({
-          where: { role_id_permission_id: { role_id: role.id, permission_id: perm.id } },
-          update: {},
-          create: { role_id: role.id, permission_id: perm.id },
-        });
-      }
-    }
-    console.log(`  ✅ Assigned ${allowed.length} permissions to ${role.name}`);
-  }
-
-  // ─── 11. Create Families ──────────────────────────────────
+  // ─── 9. Create Families ──────────────────────────────────
   console.log('📦 Creating families...');
   const familyData = [
     { name: 'Ogundimu Family', headIndex: 0, members: [{ idx: 0, rel: 'head' }, { idx: 1, rel: 'spouse' }] },
@@ -486,7 +390,7 @@ async function main(): Promise<void> {
     console.log(`  ✅ Family: ${family.name} (${fam.members.length} members)`);
   }
 
-  // ─── 12. Create Default Form Templates ───────────────────
+  // ─── 10. Create Default Form Templates ───────────────────
   await seedFormTemplates(prisma, church.id);
 
   // ─── Summary ─────────────────────────────────────────────
@@ -499,8 +403,7 @@ async function main(): Promise<void> {
   console.log(`  • Members: ${createdMembers.length}`);
   console.log(`  • Admin: ${adminProfile.first_name} ${adminProfile.last_name}`);
   console.log(`  • Transactions: 3`);
-  console.log(`  • Roles: ${createdRoles.length}`);
-  console.log(`  • Permissions: ${createdPermissions.length}`);
+  console.log(`  • Roles, Permissions & Mappings: See permissions.seed.ts output above`);
   console.log(`  • Families: ${familyData.length}`);
   console.log(`  • Form Templates: 5`);
   console.log(

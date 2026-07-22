@@ -160,6 +160,9 @@ model Church {
   sermons           Sermon[]
   media_assets      MediaAsset[]
   broadcasts        Broadcast[]
+  church_role_permissions ChurchRolePermission[]
+  custom_field_definitions CustomFieldDefinition[]
+  visitors          Visitor[]
 
   @@map("churches")
 }
@@ -209,6 +212,8 @@ model Profile {
   branch  Branch? @relation(fields: [branch_id], references: [id])
   member  Member? @relation(fields: [member_id], references: [id])
 
+  assigned_visitors Visitor[] @relation("AssignedTo")
+
   @@index([church_id])
   @@index([user_id])
   @@map("profiles")
@@ -251,6 +256,7 @@ model Member {
   department_members   DepartmentMember[]
   custodian_assets    Asset[]
   asset_loans         AssetLoan[]
+  converted_visitors  Visitor[]
 
   @@index([church_id, branch_id, status])
   @@index([phone])
@@ -949,24 +955,72 @@ model ChurchConfig {
   @@map("church_configs")
 }
 
+// ─── Visitors & Custom Fields ──────────────────────────────
+
+model Visitor {
+  id                String   @id @default(uuid())
+  church_id         String
+  first_name        String
+  last_name         String?
+  phone             String?
+  whatsapp_number   String?
+  email             String?
+  first_visit_date  DateTime @default(now())
+  follow_up_status  String   @default("new") // new, contacted, follow_up_scheduled, interested, converted, dropped_off
+  assigned_to_id    String?  // Profile ID of follow-up team member
+  notes             String?
+  converted_member_id String? // Member ID if converted
+  converted_at      DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  church         Church   @relation(fields: [church_id], references: [id])
+  assigned_to    Profile? @relation("AssignedTo", fields: [assigned_to_id], references: [id])
+  converted_member Member? @relation(fields: [converted_member_id], references: [id])
+
+  @@index([church_id, follow_up_status])
+  @@index([church_id, assigned_to_id])
+  @@map("visitors")
+}
+
+model CustomFieldDefinition {
+  id            String   @id @default(uuid())
+  church_id     String
+  name          String
+  field_type    String   // text, number, date, dropdown, checkbox, textarea
+  options       Json     @default("[]") // dropdown options or validation config
+  is_required   Boolean  @default(false)
+  display_order Int      @default(0)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  church Church @relation(fields: [church_id], references: [id])
+
+  @@unique([church_id, name])
+  @@index([church_id])
+  @@map("custom_field_definitions")
+}
+
 model Role {
-  id          String       @id @default(uuid())
-  name        String       @unique
+  id          String           @id @default(uuid())
+  name        String           @unique
   description String?
   permissions RolePermission[]
-  created_at  DateTime     @default(now())
+  created_at  DateTime         @default(now())
 
   @@map("roles")
 }
 
 model Permission {
-  id          String       @id @default(uuid())
-  name        String       @unique
+  id          String           @id @default(uuid())
+  name        String           @unique
   description String?
   resource    String
-  action      String       // create, read, update, delete
+  action      String           // create, read, update, delete
   roles       RolePermission[]
-  created_at  DateTime     @default(now())
+  church_overrides ChurchRolePermission[]
+  created_at  DateTime         @default(now())
 
   @@map("permissions")
 }
@@ -981,6 +1035,22 @@ model RolePermission {
 
   @@unique([role_id, permission_id])
   @@map("role_permissions")
+}
+
+model ChurchRolePermission {
+  id            String   @id @default(uuid())
+  church_id     String
+  role_name     String   // matches Profile.role string (e.g., "secretary")
+  permission_id String
+
+  church     Church     @relation(fields: [church_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  created_at DateTime @default(now())
+
+  @@unique([church_id, role_name, permission_id])
+  @@index([church_id, role_name])
+  @@map("church_role_permissions")
 }
 
 model SyncQueue {

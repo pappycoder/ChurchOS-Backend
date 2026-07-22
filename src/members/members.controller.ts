@@ -142,6 +142,24 @@ export class MembersController {
   }
 
   /**
+   * Restore a soft-deleted member (set status back to active).
+   */
+  @Post(':memberId/restore')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restore a member',
+    description: 'Restores a soft-deleted member by setting their status back to active.',
+  })
+  async restore(
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.restoreMember(memberId, churchId, user.id);
+  }
+
+  /**
    * Search members by name, email, or phone.
    */
   @Get('search')

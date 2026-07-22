@@ -314,6 +314,47 @@ export class MembersService {
   }
 
   /**
+   * Restores a soft-deleted member by setting their status back to active.
+   *
+   * @param id - Member UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the restore (for audit)
+   * @throws NotFoundException if member not found
+   */
+  async restoreMember(id: string, churchId: string, userId: string): Promise<MemberResponseDto> {
+    const existing = await this.prisma.member.findUnique({
+      where: { id },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (existing.status !== 'inactive') {
+      return this.mapToResponseDto(existing);
+    }
+
+    const member = await this.prisma.member.update({
+      where: { id },
+      data: { status: 'active' },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'member',
+      action: 'UPDATE',
+      entityId: id,
+      oldValues: { status: 'inactive' },
+      newValues: { status: 'active' },
+    });
+
+    this.logger.log(`Member restored: ${id}`);
+
+    return this.mapToResponseDto(member);
+  }
+
+  /**
    * Performs full-text search on members using PostgreSQL.
    *
    * Falls back to ILIKE search for simplicity and portability.

@@ -10,3 +10,6 @@ export * from './dto/forgot-password.dto';
 export * from './dto/reset-password.dto';
 export * from './dto/change-password.dto';
 export * from './dto/session-response.dto';
+export * from './dto/permissions.dto';
+export * from './permissions.module';
+export * from './services/permissions.service';

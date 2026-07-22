@@ -6,6 +6,9 @@
  * by the @RequireRoles() decorator. The user's role is fetched from their
  * Profile record.
  *
+ * Also populates `request.user.profile.permissions` for downstream use
+ * by PermissionsGuard and service-level permission checks.
+ *
  * @module auth/guards/roles.guard
  * @since 1.0.0
  */
@@ -13,6 +16,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PermissionsService } from '../services/permissions.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedRequest } from '../../common/decorators/current-user.decorator';
 
@@ -34,6 +38,7 @@ export class RolesGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -42,11 +47,6 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    // No roles required — allow access
-    if (!requiredRoles || requiredRoles.length === 0) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
@@ -54,16 +54,33 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('No authenticated user');
     }
 
-    // Fetch the user's profile to get their role
+    // Fetch the user's profile to get their role and church context
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: user.sub },
-      select: { role: true },
+      select: { role: true, church_id: true },
     });
 
     if (!profile) {
       throw new ForbiddenException('User profile not found');
     }
 
+    // Populate permissions on the request for downstream use
+    // This is cached in Redis by PermissionsService (15-min TTL)
+    const userPermissions = await this.permissionsService.getUserPermissions(
+      profile.church_id,
+      profile.role,
+    );
+
+    if (request.profile) {
+      request.profile.permissions = userPermissions;
+    }
+
+    // If no roles are required, just populate permissions and allow
+    if (!requiredRoles || requiredRoles.length === 0) {
+      return true;
+    }
+
+    // Check if user has at least one of the required roles
     if (!requiredRoles.includes(profile.role)) {
       throw new ForbiddenException(
         `Access denied. Required roles: ${requiredRoles.join(', ')}. Your role: ${profile.role}`,

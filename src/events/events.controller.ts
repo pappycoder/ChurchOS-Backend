@@ -78,7 +78,7 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.createEvent(dto, churchId, user.sub);
-}
+  }
   /**
    * Lists events with pagination and filters.
    *
@@ -277,5 +277,4 @@ export class EventsController {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.validateTicket(code, eventId, churchId);
   }
-
 }

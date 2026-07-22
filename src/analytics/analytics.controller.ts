@@ -37,7 +37,7 @@ export class AnalyticsController {
    * Returns a unified dashboard overview.
    */
   @Get('dashboard')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get unified dashboard overview' })
   @ApiOkResponse({ description: 'Dashboard data retrieved', type: DashboardResponseDto })
   async getDashboard(
@@ -52,7 +52,7 @@ export class AnalyticsController {
    * Returns giving analytics.
    */
   @Get('giving')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin', 'treasurer')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'treasurer')
   @ApiOperation({ summary: 'Get giving analytics' })
   @ApiOkResponse({ description: 'Giving analytics retrieved', type: GivingAnalyticsResponseDto })
   async getGivingAnalytics(
@@ -67,7 +67,7 @@ export class AnalyticsController {
    * Returns attendance analytics.
    */
   @Get('attendance')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get attendance analytics' })
   @ApiOkResponse({
     description: 'Attendance analytics retrieved',
@@ -85,7 +85,7 @@ export class AnalyticsController {
    * Returns member demographics and growth analytics.
    */
   @Get('members')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get member analytics' })
   @ApiOkResponse({ description: 'Member analytics retrieved', type: MemberAnalyticsResponseDto })
   async getMemberAnalytics(@Req() req: AuthenticatedRequest): Promise<MemberAnalyticsResponseDto> {
@@ -97,7 +97,7 @@ export class AnalyticsController {
    * Returns event analytics.
    */
   @Get('events')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get event analytics' })
   @ApiOkResponse({ description: 'Event analytics retrieved', type: EventAnalyticsResponseDto })
   async getEventAnalytics(
@@ -112,7 +112,7 @@ export class AnalyticsController {
    * Returns communication analytics.
    */
   @Get('communication')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'admin')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @ApiOperation({ summary: 'Get communication analytics' })
   @ApiOkResponse({
     description: 'Communication analytics retrieved',

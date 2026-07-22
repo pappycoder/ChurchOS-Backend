@@ -48,6 +48,8 @@ import { AdminModule } from './admin/admin.module';
 import { AssetsModule } from './assets/assets.module';
 import { FormsModule } from './forms/forms.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { VisitorsModule } from './visitors/visitors.module';
 
 /**
  * Root application module.
@@ -167,6 +169,12 @@ import { AnalyticsModule } from './analytics/analytics.module';
 
     // Import AnalyticsModule for cross-domain analytics and reporting.
     AnalyticsModule,
+
+    // Import CustomFieldsModule for church-specific custom field definitions.
+    CustomFieldsModule,
+
+    // Import VisitorsModule for visitor tracking and conversion funnel.
+    VisitorsModule,
   ],
   controllers: [], // Feature controllers will be registered here as they are built.
   providers: [], // App-level providers will be registered here if needed.
