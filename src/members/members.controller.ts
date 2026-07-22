@@ -190,7 +190,12 @@ export class MembersController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: MemberResponseDto[] }> {
     const churchId = req.profile?.church_id || '';
-    const data = await this.membersService.searchMembers(churchId, searchTerm, limit || 20);
+    const data = await this.membersService.searchMembers(
+      churchId,
+      searchTerm,
+      limit || 20,
+      req.profile?.permissions || [],
+    );
     return { data };
   }
 
@@ -213,7 +218,12 @@ export class MembersController {
     @Res() res: Response,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    const csv = await this.membersService.exportMembersCsv(churchId, status, branchId);
+    const csv = await this.membersService.exportMembersCsv(
+      churchId,
+      status,
+      branchId,
+      req.profile?.permissions || [],
+    );
     res.send(csv);
   }
 
@@ -236,7 +246,12 @@ export class MembersController {
     @Res() res: Response,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    const buffer = await this.membersService.exportMembersXlsx(churchId, status, branchId);
+    const buffer = await this.membersService.exportMembersXlsx(
+      churchId,
+      status,
+      branchId,
+      req.profile?.permissions || [],
+    );
     res.send(buffer);
   }
 

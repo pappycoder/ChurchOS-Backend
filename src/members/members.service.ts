@@ -392,6 +392,7 @@ export class MembersService {
     churchId: string,
     searchTerm: string,
     limit = 20,
+    viewerPermissions: string[] = [],
   ): Promise<MemberResponseDto[]> {
     const term = searchTerm.trim();
 
@@ -413,7 +414,7 @@ export class MembersService {
       orderBy: { created_at: 'desc' },
     });
 
-    return members.map((m) => this.mapToResponseDto(m));
+    return members.map((m) => this.mapToResponseDto(m, viewerPermissions));
   }
 
   /**
@@ -537,7 +538,12 @@ export class MembersService {
    * @param branchId - Optional branch filter
    * @returns CSV string
    */
-  async exportMembersCsv(churchId: string, status?: string, branchId?: string): Promise<string> {
+  async exportMembersCsv(
+    churchId: string,
+    status?: string,
+    branchId?: string,
+    viewerPermissions: string[] = [],
+  ): Promise<string> {
     const where: Prisma.MemberWhereInput = { church_id: churchId };
 
     if (status) {
@@ -589,21 +595,25 @@ export class MembersService {
       'Created At',
     ];
 
+    const hasSensitiveAccess = viewerPermissions.some((permission) =>
+      ['members:update', 'members:delete'].includes(permission),
+    );
+
     const rows = members.map((m) => [
       m.id,
       m.first_name,
       m.last_name,
-      m.email || '',
-      m.phone || '',
-      m.whatsapp_number || '',
-      m.date_of_birth?.toISOString().split('T')[0] || '',
-      m.gender || '',
-      m.address || '',
-      m.city || '',
-      m.state || '',
+      hasSensitiveAccess ? m.email || '' : '',
+      hasSensitiveAccess ? m.phone || '' : '',
+      hasSensitiveAccess ? m.whatsapp_number || '' : '',
+      hasSensitiveAccess ? m.date_of_birth?.toISOString().split('T')[0] || '' : '',
+      hasSensitiveAccess ? m.gender || '' : '',
+      hasSensitiveAccess ? m.address || '' : '',
+      hasSensitiveAccess ? m.city || '' : '',
+      hasSensitiveAccess ? m.state || '' : '',
       m.status,
       m.member_since.toISOString().split('T')[0],
-      m.notes || '',
+      hasSensitiveAccess ? m.notes || '' : '',
       m.created_at.toISOString(),
     ]);
 
@@ -630,7 +640,12 @@ export class MembersService {
    * @param branchId - Optional branch filter
    * @returns XLSX buffer
    */
-  async exportMembersXlsx(churchId: string, status?: string, branchId?: string): Promise<Buffer> {
+  async exportMembersXlsx(
+    churchId: string,
+    status?: string,
+    branchId?: string,
+    viewerPermissions: string[] = [],
+  ): Promise<Buffer> {
     const ExcelJS = await import('exceljs');
 
     const where: Prisma.MemberWhereInput = { church_id: churchId };
@@ -673,6 +688,10 @@ export class MembersService {
       properties: { defaultColWidth: 18 },
     });
 
+    const hasSensitiveAccess = viewerPermissions.some((permission) =>
+      ['members:update', 'members:delete'].includes(permission),
+    );
+
     // Add headers
     sheet.columns = [
       { header: 'ID', key: 'id', width: 36 },
@@ -708,17 +727,17 @@ export class MembersService {
         id: m.id,
         firstName: m.first_name,
         lastName: m.last_name,
-        email: m.email || '',
-        phone: m.phone || '',
-        whatsappNumber: m.whatsapp_number || '',
-        dateOfBirth: m.date_of_birth?.toISOString().split('T')[0] || '',
-        gender: m.gender || '',
-        address: m.address || '',
-        city: m.city || '',
-        state: m.state || '',
+        email: hasSensitiveAccess ? m.email || '' : '',
+        phone: hasSensitiveAccess ? m.phone || '' : '',
+        whatsappNumber: hasSensitiveAccess ? m.whatsapp_number || '' : '',
+        dateOfBirth: hasSensitiveAccess ? m.date_of_birth?.toISOString().split('T')[0] || '' : '',
+        gender: hasSensitiveAccess ? m.gender || '' : '',
+        address: hasSensitiveAccess ? m.address || '' : '',
+        city: hasSensitiveAccess ? m.city || '' : '',
+        state: hasSensitiveAccess ? m.state || '' : '',
         status: m.status,
         memberSince: m.member_since.toISOString().split('T')[0],
-        notes: m.notes || '',
+        notes: hasSensitiveAccess ? m.notes || '' : '',
         createdAt: m.created_at.toISOString(),
       });
     });

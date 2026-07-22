@@ -114,6 +114,14 @@ export class UsersService {
     churchId: string,
     invitedByUserId: string,
   ): Promise<UserResponseDto> {
+    if (!dto.email?.trim()) {
+      throw new BadRequestException('Email is required');
+    }
+
+    if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
+      throw new BadRequestException('First name and last name are required');
+    }
+
     const supabase = this.supabase.client;
 
     // Check for existing profile with this email pattern (by phone or name)
@@ -192,14 +200,37 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    const updateData: Prisma.ProfileUpdateInput = {};
+
+    if (data.firstName !== undefined) {
+      const firstName = data.firstName?.trim();
+      if (firstName) {
+        updateData.first_name = firstName;
+      } else {
+        throw new BadRequestException('First name cannot be empty');
+      }
+    }
+
+    if (data.lastName !== undefined) {
+      const lastName = data.lastName?.trim();
+      if (lastName) {
+        updateData.last_name = lastName;
+      } else {
+        throw new BadRequestException('Last name cannot be empty');
+      }
+    }
+
+    if (data.phone !== undefined) {
+      updateData.phone = data.phone?.trim() || null;
+    }
+
+    if (data.branchId !== undefined) {
+      updateData.branch_id = data.branchId || null;
+    }
+
     const updated = await this.prisma.profile.update({
       where: { id: profileId },
-      data: {
-        ...(data.firstName !== undefined && { first_name: data.firstName }),
-        ...(data.lastName !== undefined && { last_name: data.lastName }),
-        ...(data.phone !== undefined && { phone: data.phone }),
-        ...(data.branchId !== undefined && { branch_id: data.branchId }),
-      },
+      data: updateData,
     });
 
     await this.audit.log({
