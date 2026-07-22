@@ -21,6 +21,7 @@
 
 import { Module, forwardRef, OnModuleDestroy, Logger } from '@nestjs/common';
 import { BullModule, InjectQueue } from '@nestjs/bull';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
@@ -34,6 +35,7 @@ import { SmsOutboundProcessor } from './processors/sms-outbound.processor';
 import { RecurringGivingProcessor } from './processors/recurring-giving.processor';
 import { NightlyJobsProcessor } from './processors/nightly-jobs.processor';
 import { BroadcastProcessor } from './processors/broadcast.processor';
+import { NightlyScheduler } from './nightly.scheduler';
 
 const DEFAULT_JOB_OPTIONS = {
   attempts: 3,
@@ -44,6 +46,7 @@ const DEFAULT_JOB_OPTIONS = {
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -74,6 +77,7 @@ const DEFAULT_JOB_OPTIONS = {
     RecurringGivingProcessor,
     NightlyJobsProcessor,
     BroadcastProcessor,
+    NightlyScheduler,
   ],
   exports: [BullModule],
 })

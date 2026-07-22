@@ -11,10 +11,12 @@
 
 import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { FormsService } from './forms.service';
 import { CreateFormSubmissionDto, FormSubmissionResponseDto } from './dto';
 
 @ApiTags('Forms')
+@SkipRateLimit()
 @Controller('forms/public')
 export class FormsPublicController {
   constructor(private readonly formsService: FormsService) {}

@@ -15,6 +15,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateBroadcastDto } from './dto/create-broadcast.dto';
 import { ListBroadcastsDto } from './dto/list-broadcasts.dto';
 import { BroadcastResponseDto } from './dto/broadcast-response.dto';
@@ -37,6 +38,7 @@ export class BroadcastService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly notifications: NotificationsService,
     @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
     @InjectQueue('whatsapp-outbound') private readonly whatsappQueue: Queue,
     @InjectQueue('sms-outbound') private readonly smsQueue: Queue,
@@ -305,6 +307,14 @@ export class BroadcastService {
       where: { id: broadcastId },
       data: { status: 'sent', sent_at: new Date() },
     });
+
+    await this.notifications.broadcastToChurch(
+      churchId,
+      'broadcast',
+      'Broadcast Sent',
+      `A ${broadcast.channel} broadcast has been sent to ${recipients.length} recipients.`,
+      { broadcastId, channel: broadcast.channel, recipientCount: recipients.length },
+    ).catch((err) => this.logger.warn(`Broadcast notification failed: ${(err as Error).message}`));
 
     this.logger.log(`Broadcast processed: ${broadcastId}`);
   }

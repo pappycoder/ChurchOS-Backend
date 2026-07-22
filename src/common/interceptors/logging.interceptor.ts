@@ -42,7 +42,9 @@ export class LoggingInterceptor implements NestInterceptor {
     const userAgent = request.get('user-agent') || '';
     const requestId = randomUUID();
 
-    // Attach request ID to response header for tracing
+    // Attach request ID to request and response header for tracing
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    (request as unknown as Record<string, unknown>)['requestId'] = requestId;
     response.setHeader('X-Request-Id', requestId);
 
     const startTime = Date.now();

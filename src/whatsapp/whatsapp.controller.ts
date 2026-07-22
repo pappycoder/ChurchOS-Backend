@@ -20,9 +20,11 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { ApiCreateEndpoint } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
@@ -31,6 +33,7 @@ import { WebhookBodyDto } from './dto/webhook.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SendTemplateMessageDto } from './dto/send-template-message.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
  * Controller for WhatsApp Business API integration.
@@ -47,6 +50,7 @@ export class WhatsAppController {
    * 360dialog sends a GET request to verify the webhook URL.
    */
   @Get('webhook')
+  @SkipRateLimit()
   @ApiOperation({
     summary: 'Verify WhatsApp webhook',
     description: 'Handles webhook verification from 360dialog. Returns the challenge token.',
@@ -73,8 +77,10 @@ export class WhatsAppController {
   /**
    * Process inbound WhatsApp messages (POST).
    * Receives webhook events from 360dialog for inbound messages and status updates.
+   * Verifies HMAC-SHA256 signature using the webhook secret.
    */
   @Post('webhook')
+  @SkipRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Process WhatsApp webhook',
@@ -82,9 +88,50 @@ export class WhatsAppController {
   })
   async processWebhook(
     @Body() body: WebhookBodyDto,
+    @Request() req: AuthenticatedRequest & { rawBody?: Buffer },
   ): Promise<{ success: boolean; processed: number }> {
+    const webhookSecret = process.env['360DIALOG_WEBHOOK_SECRET'];
+    if (webhookSecret && req.rawBody) {
+      const signature = req.headers['x-hub-signature-256'] as string | undefined;
+      this.verifyWebhookSignature(req.rawBody, signature, webhookSecret);
+    }
+
     const result = await this.whatsappService.processWebhook(body);
     return { success: true, processed: result.processed };
+  }
+
+  /**
+   * Verifies the HMAC-SHA256 signature of an incoming webhook payload.
+   * Uses timing-safe comparison to prevent timing attacks.
+   *
+   * @throws UnauthorizedException if signature is missing or invalid
+   */
+  private verifyWebhookSignature(
+    rawBody: Buffer,
+    signature: string | undefined,
+    secret: string,
+  ): void {
+    if (!signature) {
+      this.logger.warn('WhatsApp webhook: missing signature header');
+      throw new UnauthorizedException('Missing webhook signature');
+    }
+
+    const expectedPrefix = 'sha256=';
+    if (!signature.startsWith(expectedPrefix)) {
+      this.logger.warn('WhatsApp webhook: invalid signature format');
+      throw new UnauthorizedException('Invalid webhook signature format');
+    }
+
+    const expectedHash = createHmac('sha256', secret).update(rawBody).digest('hex');
+    const receivedHash = signature.slice(expectedPrefix.length);
+
+    const a = Buffer.from(expectedHash, 'hex');
+    const b = Buffer.from(receivedHash, 'hex');
+
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      this.logger.warn('WhatsApp webhook: signature mismatch');
+      throw new UnauthorizedException('Invalid webhook signature');
+    }
   }
 
   /**

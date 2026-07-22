@@ -89,6 +89,7 @@ describe('MembersService', () => {
     service = new MembersService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
+      { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } as never,
     );
   });
 
@@ -103,6 +104,7 @@ describe('MembersService', () => {
 
       model('member').findFirst.mockResolvedValue(null); // No duplicate phone
       model('member').create.mockResolvedValue(mockMember);
+      model('profile').findMany.mockResolvedValue([]);
 
       const result = await service.createMember(dto, mockChurchId, mockUserId);
 
@@ -143,6 +145,7 @@ describe('MembersService', () => {
         ...mockMember,
         phone: null,
       });
+      model('profile').findMany.mockResolvedValue([]);
 
       const result = await service.createMember(dto, mockChurchId, mockUserId);
 

@@ -21,6 +21,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 
 /**
  * Per-queue health metrics including job count breakdown.
@@ -48,7 +49,8 @@ interface HealthStatus {
   queues: Record<string, QueueMetrics>;
 }
 
-@ApiTags('health')
+@ApiTags('Health')
+@SkipRateLimit()
 @Controller('health')
 export class HealthController {
   constructor(
@@ -59,6 +61,7 @@ export class HealthController {
     @InjectQueue('sms-outbound') private readonly smsQueue: Queue,
     @InjectQueue('recurring-giving') private readonly recurringGivingQueue: Queue,
     @InjectQueue('nightly-jobs') private readonly nightlyJobsQueue: Queue,
+    @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
   ) {}
 
   @Get()
@@ -92,6 +95,7 @@ export class HealthController {
       ['sms-outbound', this.smsQueue],
       ['recurring-giving', this.recurringGivingQueue],
       ['nightly-jobs', this.nightlyJobsQueue],
+      ['broadcast', this.broadcastQueue],
     ];
 
     for (const [name, queue] of queueEntries) {

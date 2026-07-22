@@ -26,6 +26,7 @@ export interface ApiResponse<T> {
   meta: {
     timestamp: string;
     path: string;
+    requestId?: string;
     total?: number;
     page?: number;
     limit?: number;
@@ -63,6 +64,9 @@ export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
     const path = request.url;
+    const requestId = (request as unknown as Record<string, unknown>)['requestId'] as
+      | string
+      | undefined;
 
     return next.handle().pipe(
       map((data) => {
@@ -74,6 +78,7 @@ export class ResponseInterceptor implements NestInterceptor {
             meta: {
               timestamp: new Date().toISOString(),
               path,
+              requestId,
             },
           };
         }
@@ -86,6 +91,7 @@ export class ResponseInterceptor implements NestInterceptor {
             meta: {
               timestamp: new Date().toISOString(),
               path,
+              requestId,
               total: data.total,
               page: data.page,
               limit: data.limit,
@@ -101,6 +107,7 @@ export class ResponseInterceptor implements NestInterceptor {
           meta: {
             timestamp: new Date().toISOString(),
             path,
+            requestId,
           },
         };
       }),

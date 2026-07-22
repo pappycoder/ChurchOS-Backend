@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ScoringService } from '../../../src/pastoral/scoring.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { NotificationsService } from '../../../src/notifications/notifications.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('ScoringService', () => {
@@ -14,7 +15,11 @@ describe('ScoringService', () => {
     prisma = createPrismaMock();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ScoringService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ScoringService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: NotificationsService, useValue: { createNotification: jest.fn().mockResolvedValue({}), broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }) } },
+      ],
     }).compile();
 
     service = module.get<ScoringService>(ScoringService);
@@ -65,6 +70,10 @@ describe('ScoringService', () => {
         score: 75,
         level: 'high',
       });
+      prisma.riskScore.findMany.mockResolvedValue([
+        { member_id: mockMemberId, level: 'high', member: { id: mockMemberId, first_name: 'John', last_name: 'Doe' } },
+      ]);
+      prisma.profile.findMany.mockResolvedValue([]);
 
       const result = await service.calculateRiskScores(mockChurchId);
 

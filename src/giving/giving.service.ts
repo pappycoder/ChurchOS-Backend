@@ -20,6 +20,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   PaymentGatewayProvider,
   PAYMENT_GATEWAY_REGISTRY,
@@ -56,6 +57,7 @@ export class GivingService {
     @Inject(PAYMENT_GATEWAY_REGISTRY)
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly receipt: ReceiptService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -397,6 +399,23 @@ export class GivingService {
           include: { category: true },
         });
 
+        if (transaction.member_id) {
+          const memberProfile = await this.prisma.profile.findFirst({
+            where: { member_id: transaction.member_id, church_id: churchId },
+          });
+          if (memberProfile) {
+            const categoryName = transaction.category?.name ?? 'Offering';
+            await this.notifications.createNotification(
+              churchId,
+              memberProfile.id,
+              'giving',
+              'Giving Confirmed',
+              `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${receiptNumber}`,
+              { transactionId: transaction.id, receiptNumber },
+            ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+          }
+        }
+
         return this.mapTransactionToDto(updated);
       }
     } catch (error) {
@@ -504,6 +523,23 @@ export class GivingService {
       `Webhook processed (${gatewayName}): ${event.event} → ${status} (${event.reference})`,
     );
 
+    if (status === 'success' && transaction.member_id) {
+      const memberProfile = await this.prisma.profile.findFirst({
+        where: { member_id: transaction.member_id, church_id: transaction.church_id },
+      });
+      if (memberProfile) {
+        const categoryName = transaction.category?.name ?? 'Offering';
+        await this.notifications.createNotification(
+          transaction.church_id,
+          memberProfile.id,
+          'giving',
+          'Giving Confirmed',
+          `Your ${categoryName} of ${transaction.currency} ${transaction.amount.toLocaleString()} has been received. Receipt: ${updateData.receipt_number || ''}`,
+          { transactionId: transaction.id, receiptNumber: updateData.receipt_number },
+        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+      }
+    }
+
     // Capture authorization_code for recurring giving (Paystack charge.success)
     if (status === 'success' && event.authorizationCode && transaction.member_id) {
       await this.captureAuthorizationCode(
@@ -573,6 +609,23 @@ export class GivingService {
     });
 
     this.logger.log(`Cash giving recorded: ${receiptNumber} for NGN ${dto.amount}`);
+
+    if (dto.memberId) {
+      const memberProfile = await this.prisma.profile.findFirst({
+        where: { member_id: dto.memberId, church_id: churchId },
+      });
+      if (memberProfile) {
+        const categoryName = category.name ?? 'Offering';
+        await this.notifications.createNotification(
+          churchId,
+          memberProfile.id,
+          'giving',
+          'Giving Recorded',
+          `Your ${categoryName} of ${dto.currency || 'NGN'} ${dto.amount.toLocaleString()} has been recorded. Receipt: ${receiptNumber}`,
+          { transactionId: transaction.id, receiptNumber },
+        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+      }
+    }
 
     return this.mapTransactionToDto(transaction);
   }

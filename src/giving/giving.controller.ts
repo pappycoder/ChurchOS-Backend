@@ -35,6 +35,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -195,6 +196,7 @@ export class GivingController {
    * This endpoint is NOT authenticated — it verifies the Paystack signature.
    */
   @Post('webhook/paystack')
+  @SkipRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiHeader({ name: 'x-paystack-signature', description: 'Paystack webhook signature' })
   @ApiOperation({
@@ -215,6 +217,7 @@ export class GivingController {
    * This endpoint is NOT authenticated — it verifies the Flutterwave signature.
    */
   @Post('webhook/flutterwave')
+  @SkipRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiHeader({ name: 'verif-hash', description: 'Flutterwave webhook signature' })
   @ApiOperation({

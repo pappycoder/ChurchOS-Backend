@@ -21,6 +21,7 @@ import { RawBodyRequest } from '@nestjs/common';
 import { Request } from 'express';
 import { PaystackService } from '../giving/services/paystack.service';
 import { EventsService } from './events.service';
+import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 
 @ApiTags('Events')
 @Controller('events')
@@ -33,6 +34,7 @@ export class EventWebhooksController {
   ) {}
 
   @Post(':eventId/webhook/paystack')
+  @SkipRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiHeader({ name: 'x-paystack-signature', description: 'Paystack HMAC-SHA512 signature' })
   @ApiOperation({

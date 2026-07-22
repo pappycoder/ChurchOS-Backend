@@ -19,6 +19,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -57,6 +58,8 @@ export class ScoringService {
   constructor(
     // Inject PrismaService for database access
     private readonly prisma: PrismaService,
+    // Inject NotificationsService for risk alerts
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -181,6 +184,28 @@ export class ScoringService {
 
     // Log the total number of members scored and return the count
     this.logger.log(`Risk scores calculated for ${scored} members in church ${churchId}`);
+
+    const highRiskMembers = await this.prisma.riskScore.findMany({
+      where: { church_id: churchId, level: { in: ['high', 'critical'] } },
+      include: { member: { select: { id: true, first_name: true, last_name: true } } },
+    });
+
+    if (highRiskMembers.length > 0) {
+      const adminProfiles = await this.prisma.profile.findMany({
+        where: { church_id: churchId, role: { in: ['church_admin', 'senior_pastor'] } },
+      });
+      for (const admin of adminProfiles) {
+        await this.notifications.createNotification(
+          churchId,
+          admin.id,
+          'risk',
+          'Pastoral Attention Needed',
+          `${highRiskMembers.length} member(s) have been flagged as high risk and may need pastoral follow-up.`,
+          { highRiskCount: highRiskMembers.length },
+        ).catch((err) => this.logger.warn(`Risk notification failed: ${(err as Error).message}`));
+      }
+    }
+
     return scored;
   }
 

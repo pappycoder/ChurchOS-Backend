@@ -19,6 +19,7 @@ export const mockSupabaseUser = {
 };
 
 export const mockSupabaseJwtPayload: SupabaseJwtPayload = {
+  id: mockSupabaseUserId,
   sub: mockSupabaseUserId,
   email: 'admin@gracecommunity.ng',
   phone: '+2348034567890',

@@ -50,6 +50,10 @@ import { FormsModule } from './forms/forms.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 import { VisitorsModule } from './visitors/visitors.module';
+import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SyncModule } from './sync/sync.module';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
 /**
  * Root application module.
@@ -175,8 +179,22 @@ import { VisitorsModule } from './visitors/visitors.module';
 
     // Import VisitorsModule for visitor tracking and conversion funnel.
     VisitorsModule,
+
+    // Import UsersModule for user management (staff accounts).
+    UsersModule,
+
+    // Import NotificationsModule for in-app notification management.
+    NotificationsModule,
+
+    // Import SyncModule for offline data synchronization.
+    SyncModule,
   ],
-  controllers: [], // Feature controllers will be registered here as they are built.
-  providers: [], // App-level providers will be registered here if needed.
+  controllers: [],
+  providers: [
+    {
+      provide: 'APP_GUARD',
+      useClass: RateLimitGuard,
+    },
+  ],
 })
 export class AppModule {}

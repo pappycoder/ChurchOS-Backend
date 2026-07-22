@@ -1067,3 +1067,48 @@ model SyncQueue {
   @@index([synced, created_at])
   @@map("sync_queue")
 }
+
+model Notification {
+  id          String   @id @default(uuid())
+  church_id   String
+  profile_id  String
+  type        String   // system, attendance, giving, event, pastoral, broadcast
+  title       String
+  body        String
+  data        Json?
+  read_at     DateTime?
+  created_at  DateTime @default(now())
+
+  @@index([church_id, profile_id, read_at])
+  @@map("notifications")
+}
+
+model WebhookSubscription {
+  id          String   @id @default(uuid())
+  church_id   String
+  url         String
+  events      String[] // e.g. ["member.created", "transaction.completed"]
+  secret      String
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([church_id, is_active])
+  @@map("webhook_subscriptions")
+}
+
+model WebhookDelivery {
+  id               String   @id @default(uuid())
+  subscription_id  String
+  event            String
+  payload          Json
+  status           String   @default("pending") // pending, success, failed
+  response_status  Int?
+  response_body    String?
+  attempts         Int      @default(0)
+  next_retry_at    DateTime?
+  created_at       DateTime @default(now())
+
+  @@index([subscription_id, status])
+  @@map("webhook_deliveries")
+}

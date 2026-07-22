@@ -60,6 +60,7 @@ export const RESOURCES = [
   'analytics',
   'church_settings',
   'visitors',
+  'users',
 ] as const;
 
 export type Resource = (typeof RESOURCES)[number];
@@ -193,6 +194,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:read',
     'visitors:update',
     'visitors:delete',
+    // Users — full access
+    'users:create',
+    'users:read',
+    'users:update',
+    'users:delete',
   ],
 
   church_admin: [
@@ -260,11 +266,15 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:create',
     'visitors:read',
     'visitors:update',
+    // Users — read
+    'users:read',
   ],
 
   department_head: [
     // Members — read
     'members:read',
+    // Users — read
+    'users:read',
     // Attendance — create + read
     'attendance:create',
     'attendance:read',
@@ -318,6 +328,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:update',
     // Pastoral — read
     'pastoral:read',
+    // Users — read
+    'users:read',
   ],
 
   treasurer: [
@@ -337,6 +349,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'members:read',
     // Analytics — read
     'analytics:read',
+    // Users — read
+    'users:read',
   ],
 
   member: [

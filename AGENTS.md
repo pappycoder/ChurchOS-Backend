@@ -106,6 +106,21 @@ src/
 │   ├── forms.controller.ts # Authenticated form endpoints
 │   ├── forms-public.controller.ts # Public submission endpoint
 │   └── dto/                # Form, field, submission, approval DTOs
+├── users/                  # User/staff management (Supabase Auth admin)
+│   ├── users.module.ts     # UsersModule
+│   ├── users.service.ts    # User CRUD, invite, deactivate, reset password, force sign-out
+│   ├── users.controller.ts # 7 endpoints for user management
+│   └── dto/                # UserResponse, InviteUser, ListUsers DTOs
+├── notifications/          # In-app notification management
+│   ├── notifications.module.ts  # NotificationsModule
+│   ├── notifications.service.ts # Notification CRUD, unread count, broadcast
+│   ├── notifications.controller.ts # 4 endpoints for notifications
+│   └── dto/                # NotificationResponseDto
+├── sync/                   # Offline data synchronization
+│   ├── sync.module.ts      # SyncModule
+│   ├── sync.service.ts     # Push/pull sync, idempotency, conflict resolution
+│   ├── sync.controller.ts  # 3 endpoints for sync
+│   └── dto/                # SyncPushDto, SyncChangeDto
 └── supabase/               # Supabase client (Auth + Storage only) [PLANNED]
 ```
 
@@ -182,6 +197,43 @@ All notable changes to this project are documented below. Update this section wi
   - **Partial Index**: `idx_risk_scores_high_risk` on `risk_scores(church_id, member_id, score) WHERE level IN ('high', 'critical')` — optimizes pastoral attention queries.
   - **ESLint Config**: Added `test/` to `tsconfig.eslint.json` include — fixes 33 parse errors for test files.
   - **Tests**: Build clean, lint clean (0 errors), **402 tests passing across 27 suites**.
+
+- **2026-07-22** — Security Hardening + Quick Fixes (Day 1 Sprint).
+  - **WhatsApp Webhook Security**: Added HMAC-SHA256 signature verification to `WhatsAppController.verifyWebhookSignature()` using `360DIALOG_WEBHOOK_SECRET`. Timing-safe comparison via `crypto.timingSafeEqual()`. Checks `x-hub-signature-256` header.
+  - **Rate Limiting Overhaul**: Rewrote `RateLimitGuard` as global `APP_GUARD` in `app.module.ts`. Added `@SkipRateLimit()` decorator, `@RateLimit(config)` per-route decorator. `Ratelimit` instances cached in Map. Added `webhook` tier (500 req/min). Skipped on: WhatsApp webhook, Paystack/Flutterwave webhooks, Event webhooks, Health check, Forms public controller.
+  - **RequestId in API Responses**: `LoggingInterceptor` generates UUID, stores on request. `ResponseInterceptor` reads it and includes `requestId` in `meta` field.
+  - **Nightly Scheduler**: Created `NightlyScheduler` with `@nestjs/schedule` `Cron` decorator. Triggers at 2:00 AM Africa/Lagos daily, dispatches `run` job for each church.
+  - **Health Check**: Fixed tag to `'Health'`, added broadcast queue to health check entries.
+  - **Tests**: Build clean, lint clean. **414 tests passing across 28 suites**.
+
+- **2026-07-22** — UsersModule (Day 2 Sprint).
+  - **Module**: Created `src/users/` with `UsersModule`, `UsersController`, `UsersService`, DTOs.
+  - **Endpoints** (7 under `/api/v1/users`):
+    - `GET /users` — List church users with search/filter/sort
+    - `GET /users/:userId` — Get single user details
+    - `POST /users/invite` — Invite new user via Supabase Auth
+    - `PATCH /users/:userId` — Update user profile
+    - `POST /users/:userId/deactivate` — Deactivate user account
+    - `POST /users/:userId/reset-password` — Send password reset link
+    - `POST /users/:userId/force-signout` — Force sign-out via Supabase Auth
+  - **Permissions**: Added `users` resource to RESOURCES array. `super_admin`/`senior_pastor`/`church_admin` get full access. `branch_pastor`/`secretary`/`treasurer`/`department_head` get read-only.
+  - **Tests**: 12 unit tests passing. Total: **426 tests across 29 suites**.
+
+- **2026-07-22** — NotificationsModule + SyncModule (Day 3 Sprint).
+  - **NotificationsModule**: Created `src/notifications/` with controller, service, DTOs.
+    - `GET /notifications` — List notifications with pagination
+    - `GET /notifications/unread-count` — Get unread notification count
+    - `PATCH /notifications/:notificationId/read` — Mark notification as read
+    - `PATCH /notifications/read-all` — Mark all notifications as read
+    - `createNotification()` / `broadcastToChurch()` — Internal service methods for other modules.
+  - **SyncModule**: Created `src/sync/` with controller, service, DTOs.
+    - `POST /sync/push` — Submit offline changes from mobile clients
+    - `GET /sync/pull` — Get pending server changes with cursor pagination
+    - `POST /sync/mark-synced` — Mark items as processed
+    - Idempotency: checks entity_id + action before inserting.
+    - Conflict resolution: last-write-wins based on clientTimestamp.
+  - **Prisma Models**: Added `Notification`, `WebhookSubscription`, `WebhookDelivery` models. Migration `20260722090000_add_notifications_webhook_models`.
+  - **Tests**: 8 NotificationsService + 7 SyncService tests. Total: **429 tests across 30 suites**. Build clean, lint clean.
 
 - **2026-07-21** — Completed Wave 9: Advanced Analytics & Reporting.
   - **Module**: Created `src/analytics/` with `AnalyticsModule`, `AnalyticsService`, `AnalyticsController`, and DTOs.

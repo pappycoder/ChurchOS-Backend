@@ -13,6 +13,7 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
@@ -26,6 +27,7 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -93,6 +95,20 @@ export class MembersService {
     });
 
     this.logger.log(`Member created: ${member.first_name} ${member.last_name} (${member.id})`);
+
+    const adminProfiles = await this.prisma.profile.findMany({
+      where: { church_id: churchId, role: { in: ['church_admin', 'secretary'] } },
+    });
+    for (const admin of adminProfiles) {
+      await this.notifications.createNotification(
+        churchId,
+        admin.id,
+        'member',
+        'New Member',
+        `${member.first_name} ${member.last_name} has been added to the church.`,
+        { memberId: member.id },
+      ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+    }
 
     return this.mapToResponseDto(member);
   }

@@ -4,6 +4,9 @@
  *
  * Uses sliding window rate limiting to prevent API abuse.
  * Different limits can be applied per-route using @RateLimit() decorator.
+ * Apply @SkipRateLimit() to exempt specific routes (webhooks, health checks).
+ *
+ * Ratelimit instances are cached per config key to avoid recreating on every request.
  *
  * @module common/guards/rate-limit.guard
  * @since 1.0.0
@@ -16,6 +19,7 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -24,6 +28,7 @@ import { Redis } from '@upstash/redis';
 import { Request } from 'express';
 
 export const RATE_LIMIT_KEY = 'rate_limit';
+export const SKIP_RATE_LIMIT_KEY = 'skip_rate_limit';
 
 /**
  * Rate limit configuration.
@@ -45,6 +50,8 @@ export const RATE_LIMITS = {
   auth: { limit: 10, windowSeconds: 60 },
   /** Sensitive operations: 5 requests per minute */
   sensitive: { limit: 5, windowSeconds: 60 },
+  /** Webhook endpoints: 500 requests per minute */
+  webhook: { limit: 500, windowSeconds: 60 },
 } as const;
 
 /**
@@ -67,10 +74,24 @@ export const RateLimit =
   };
 
 /**
+ * Decorator to skip rate limiting on specific routes.
+ * Use for public endpoints like webhooks and health checks.
+ *
+ * @example
+ * ```typescript
+ * @Post('webhook')
+ * @SkipRateLimit()
+ * processWebhook() { ... }
+ * ```
+ */
+export const SkipRateLimit = () => SetMetadata(SKIP_RATE_LIMIT_KEY, true);
+
+/**
  * Guard that enforces rate limiting per IP address.
  *
  * Uses Upstash Redis sliding window algorithm for accurate rate limiting.
  * Falls through (allows request) if Redis is unavailable.
+ * Registered globally via APP_GUARD in AppModule.
  *
  * @example
  * ```typescript
@@ -82,7 +103,7 @@ export const RateLimit =
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private readonly logger = new Logger(RateLimitGuard.name);
-  private readonly ratelimit: Ratelimit | null = null;
+  private readonly limiterCache = new Map<string, Ratelimit>();
 
   constructor(
     private readonly reflector: Reflector,
@@ -90,21 +111,22 @@ export class RateLimitGuard implements CanActivate {
   ) {
     if (!this.redis.isUpstash) {
       this.logger.warn('Rate limiting disabled: requires Upstash Redis (local dev uses ioredis)');
-      return;
-    }
-    try {
-      this.ratelimit = new Ratelimit({
-        redis: this.redis.client as unknown as Redis,
-        limiter: Ratelimit.slidingWindow(100, '60 s'),
-        analytics: true,
-      });
-    } catch {
-      this.logger.warn('Rate limiting disabled: Redis not available');
     }
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    if (!this.ratelimit) {
+    if (!this.redis.isUpstash) {
+      return true;
+    }
+
+    // Check if route is explicitly exempt from rate limiting
+    const handler = context.getHandler();
+    const classRef = context.getClass();
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_RATE_LIMIT_KEY, [
+      handler,
+      classRef,
+    ]);
+    if (skip) {
       return true;
     }
 
@@ -112,7 +134,6 @@ export class RateLimitGuard implements CanActivate {
     const ip = request.ip || request.socket.remoteAddress || 'unknown';
 
     // Check for custom rate limit on the handler
-    const handler = context.getHandler();
     const customConfig = this.reflector.getAllAndOverride<RateLimitConfig>(RATE_LIMIT_KEY, [
       handler,
     ]);
@@ -120,14 +141,20 @@ export class RateLimitGuard implements CanActivate {
     const config = customConfig || RATE_LIMITS.default;
 
     try {
+      // Get or create cached Ratelimit instance for this config
+      const cacheKey = `${config.limit}:${config.windowSeconds}`;
+      let limiter = this.limiterCache.get(cacheKey);
+      if (!limiter) {
+        limiter = new Ratelimit({
+          redis: this.redis.client as unknown as Redis,
+          limiter: Ratelimit.slidingWindow(config.limit, `${config.windowSeconds} s`),
+          analytics: true,
+        });
+        this.limiterCache.set(cacheKey, limiter);
+      }
+
       // Create a unique key for this IP + endpoint
       const key = `${ip}:${request.route?.path || request.url}`;
-
-      // Create a new ratelimit instance with custom config if needed
-      const limiter = new Ratelimit({
-        redis: this.redis.client as unknown as Redis,
-        limiter: Ratelimit.slidingWindow(config.limit, `${config.windowSeconds} s`),
-      });
 
       const { success, limit, remaining, reset } = await limiter.limit(key);
 

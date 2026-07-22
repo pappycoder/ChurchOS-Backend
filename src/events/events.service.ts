@@ -26,6 +26,7 @@ import {
 import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   PaymentGatewayProvider,
   PAYMENT_GATEWAY_REGISTRY,
@@ -52,6 +53,7 @@ export class EventsService {
     private readonly audit: AuditLoggingService,
     @Inject(PAYMENT_GATEWAY_REGISTRY)
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── EVENT CRUD ────────────────────────────────────────────────
@@ -479,6 +481,21 @@ export class EventsService {
       });
 
       this.logger.log(`Free registration: member ${memberId} → event ${eventId}`);
+
+      const adminProfiles = await this.prisma.profile.findMany({
+        where: { church_id: churchId, role: { in: ['church_admin', 'branch_pastor'] } },
+      });
+      for (const admin of adminProfiles) {
+        await this.notifications.createNotification(
+          churchId,
+          admin.id,
+          'event',
+          'Event Registration',
+          `${member.first_name} ${member.last_name} registered for "${event.title}".`,
+          { eventId, memberId, eventName: event.title },
+        ).catch((err) => this.logger.warn(`Notification failed: ${(err as Error).message}`));
+      }
+
       return this.mapRegistrationToDto({
         ...registration,
         ticket_code: ticketCode,
