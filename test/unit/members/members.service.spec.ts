@@ -124,6 +124,32 @@ describe('MembersService', () => {
       );
     });
 
+    it('should trim whitespace and normalize string values', async () => {
+      const dto: CreateMemberDto = {
+        firstName: '  Chioma  ',
+        lastName: '  Eze  ',
+        email: '  chioma.eze@example.com  ',
+        phone: '  +234 803 456 7890  ',
+      };
+
+      model('member').findFirst.mockResolvedValue(null);
+      model('member').create.mockResolvedValue(mockMember);
+      model('profile').findMany.mockResolvedValue([]);
+
+      await service.createMember(dto, mockChurchId, mockUserId);
+
+      expect(model('member').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            first_name: 'Chioma',
+            last_name: 'Eze',
+            email: 'chioma.eze@example.com',
+            phone: '+234 803 456 7890',
+          }),
+        }),
+      );
+    });
+
     it('should throw ConflictException for duplicate phone', async () => {
       const dto: CreateMemberDto = {
         firstName: 'Chioma',

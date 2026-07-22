@@ -60,22 +60,32 @@ export class MembersService {
       }
     }
 
+    const normalizedFirstName = dto.firstName?.trim();
+    const normalizedLastName = dto.lastName?.trim();
+    const normalizedEmail = dto.email?.trim() || null;
+    const normalizedPhone = dto.phone?.trim() || null;
+    const normalizedWhatsAppNumber = dto.whatsappNumber?.trim() || null;
+    const normalizedAddress = dto.address?.trim() || null;
+    const normalizedCity = dto.city?.trim() || null;
+    const normalizedState = dto.state?.trim() || null;
+    const normalizedNotes = dto.notes?.trim() || null;
+
     const member = await this.prisma.member.create({
       data: {
         church_id: churchId,
         branch_id: dto.branchId || null,
-        first_name: dto.firstName,
-        last_name: dto.lastName,
-        email: dto.email || null,
-        phone: dto.phone || null,
-        whatsapp_number: dto.whatsappNumber || null,
+        first_name: normalizedFirstName,
+        last_name: normalizedLastName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        whatsapp_number: normalizedWhatsAppNumber,
         date_of_birth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-        gender: dto.gender || null,
-        address: dto.address || null,
-        city: dto.city || null,
-        state: dto.state || null,
+        gender: dto.gender?.trim() || null,
+        address: normalizedAddress,
+        city: normalizedCity,
+        state: normalizedState,
         custom_fields: (dto.customFields as Prisma.InputJsonValue) || Prisma.JsonNull,
-        notes: dto.notes || null,
+        notes: normalizedNotes,
       },
     });
 

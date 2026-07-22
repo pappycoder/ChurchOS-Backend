@@ -96,16 +96,16 @@ export class ChurchService {
     }
 
     const updateData: Prisma.ChurchUpdateInput = {};
-    if (dto.name !== undefined) updateData.name = dto.name;
-    if (dto.denomination !== undefined) updateData.denomination = dto.denomination || null;
-    if (dto.address !== undefined) updateData.address = dto.address || null;
-    if (dto.city !== undefined) updateData.city = dto.city || null;
-    if (dto.state !== undefined) updateData.state = dto.state || null;
-    if (dto.country !== undefined) updateData.country = dto.country;
-    if (dto.phone !== undefined) updateData.phone = dto.phone || null;
-    if (dto.email !== undefined) updateData.email = dto.email || null;
-    if (dto.website !== undefined) updateData.website = dto.website || null;
-    if (dto.logoUrl !== undefined) updateData.logo_url = dto.logoUrl || null;
+    if (dto.name !== undefined) updateData.name = dto.name?.trim() || '';
+    if (dto.denomination !== undefined) updateData.denomination = dto.denomination?.trim() || '';
+    if (dto.address !== undefined) updateData.address = dto.address?.trim() || '';
+    if (dto.city !== undefined) updateData.city = dto.city?.trim() || '';
+    if (dto.state !== undefined) updateData.state = dto.state?.trim() || '';
+    if (dto.country !== undefined) updateData.country = dto.country?.trim() || '';
+    if (dto.phone !== undefined) updateData.phone = dto.phone?.trim() || '';
+    if (dto.email !== undefined) updateData.email = dto.email?.trim() || '';
+    if (dto.website !== undefined) updateData.website = dto.website?.trim() || '';
+    if (dto.logoUrl !== undefined) updateData.logo_url = dto.logoUrl || '';
 
     if (Object.keys(updateData).length === 0) {
       return this.getChurch(churchId);
@@ -239,13 +239,23 @@ export class ChurchService {
       }
     }
 
+    const normalizedEmail = dto.email?.trim().toLowerCase();
+    const normalizedFirstName = dto.firstName?.trim();
+    const normalizedLastName = dto.lastName?.trim();
+    const normalizedRole = dto.role?.trim();
+    const normalizedPhone = dto.phone?.trim() || null;
+
+    if (!normalizedEmail) {
+      throw new InternalServerErrorException('Email is required');
+    }
+
     const { data: inviteData, error: inviteError } =
-      await this.supabase.client.auth.admin.inviteUserByEmail(dto.email, {
+      await this.supabase.client.auth.admin.inviteUserByEmail(normalizedEmail, {
         data: {
-          first_name: dto.firstName,
-          last_name: dto.lastName,
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName,
           church_id: churchId,
-          role: dto.role,
+          role: normalizedRole,
         },
         redirectTo: `${process.env['WEB_URL'] || 'http://localhost:3000'}/auth/callback`,
       });
@@ -266,10 +276,10 @@ export class ChurchService {
         user_id: inviteData.user.id,
         church_id: churchId,
         branch_id: dto.branchId || null,
-        role: dto.role,
-        first_name: dto.firstName,
-        last_name: dto.lastName,
-        phone: dto.phone,
+        role: normalizedRole,
+        first_name: normalizedFirstName,
+        last_name: normalizedLastName,
+        phone: normalizedPhone,
       },
     });
 
@@ -289,19 +299,19 @@ export class ChurchService {
       action: 'CREATE',
       entityId: profile.id,
       newValues: {
-        email: dto.email,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        role: dto.role,
+        email: normalizedEmail,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName,
+        role: normalizedRole,
       },
     });
 
-    this.logger.log(`Staff invited: ${dto.email} → ${dto.role} (${churchId})`);
+    this.logger.log(`Staff invited: ${normalizedEmail} → ${normalizedRole} (${churchId})`);
 
     return {
       profileId: profile.id,
       userId: profile.user_id,
-      email: dto.email,
+      email: normalizedEmail,
       firstName: profile.first_name,
       lastName: profile.last_name,
       phone: profile.phone || undefined,

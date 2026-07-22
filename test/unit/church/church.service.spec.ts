@@ -90,6 +90,26 @@ describe('ChurchService', () => {
       expect(auditLog).toHaveBeenCalled();
     });
 
+    it('should trim whitespace in church update fields', async () => {
+      prisma.church.findUnique.mockResolvedValue(mockChurch);
+      prisma.church.update.mockResolvedValue({ ...mockChurch, name: 'Grace Community Church' });
+
+      await service.updateChurch(
+        'church-1',
+        { name: '  Grace Community Church  ', email: '  info@grace.org  ' },
+        'user-1',
+      );
+
+      expect(prisma.church.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'Grace Community Church',
+            email: 'info@grace.org',
+          }),
+        }),
+      );
+    });
+
     it('should delete old logo when updating logoUrl', async () => {
       const churchWithLogo = { ...mockChurch, logo_url: 'https://old-logo.jpg' };
       prisma.church.findUnique.mockResolvedValue(churchWithLogo);
@@ -163,6 +183,53 @@ describe('ChurchService', () => {
       expect(result.email).toBe('james@church.org');
       expect(result.role).toBe('branch_pastor');
       expect(auditLog).toHaveBeenCalled();
+    });
+
+    it('should normalize invitation values before creating the profile', async () => {
+      prisma.profile.findFirst.mockResolvedValue(null);
+      supabaseClient.auth.admin.inviteUserByEmail.mockResolvedValue({
+        data: { user: { id: 'auth-user-1' } },
+        error: null,
+      });
+      prisma.profile.create.mockResolvedValue({
+        id: 'profile-1',
+        user_id: 'auth-user-1',
+        church_id: 'church-1',
+        branch_id: null,
+        role: 'branch_pastor',
+        first_name: 'James',
+        last_name: 'Adeyemi',
+        phone: null,
+        created_at: new Date(),
+      });
+      prisma.branch.findUnique.mockResolvedValue(null);
+
+      await service.inviteStaff(
+        'church-1',
+        {
+          email: '  JAMES@CHURCH.ORG  ',
+          firstName: '  James  ',
+          lastName: '  Adeyemi  ',
+          role: '  branch_pastor  ',
+          phone: '  +2348012345678  ',
+        },
+        'user-1',
+      );
+
+      expect(supabaseClient.auth.admin.inviteUserByEmail).toHaveBeenCalledWith(
+        'james@church.org',
+        expect.any(Object),
+      );
+      expect(prisma.profile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            role: 'branch_pastor',
+            first_name: 'James',
+            last_name: 'Adeyemi',
+            phone: '+2348012345678',
+          }),
+        }),
+      );
     });
 
     it('should throw ConflictException if email already exists', async () => {
