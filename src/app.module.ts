@@ -55,7 +55,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SyncModule } from './sync/sync.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
-import { DocModule } from './doc/doc.module';
+import { DeveloperGuideModule } from './developer-guide/developer-guide.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { PermissionsModule } from './auth/permissions.module';
@@ -203,8 +203,8 @@ import { PermissionsModule } from './auth/permissions.module';
     // Import PermissionsModule for role-based permission resolution
     PermissionsModule,
 
-    // Import DocModule for the API documentation page.
-    DocModule,
+    // Import DeveloperGuideModule for the developer integration guide.
+    DeveloperGuideModule,
   ],
   controllers: [],
   providers: [
