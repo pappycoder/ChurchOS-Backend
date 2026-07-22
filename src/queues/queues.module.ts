@@ -9,6 +9,7 @@
  * - sms-outbound: Outbound SMS (Termii)
  * - recurring-giving: Automated recurring giving charges
  * - nightly-jobs: Scheduled maintenance tasks (engagement recalc, etc.)
+ * - webhook-delivery: Outbound webhook event delivery
  *
  * Each queue has a dedicated processor that handles its respective jobs.
  * All queues share a default retry policy: 3 attempts with exponential
@@ -68,6 +69,7 @@ const DEFAULT_JOB_OPTIONS = {
         name: 'dead-letter',
         defaultJobOptions: { removeOnComplete: { age: 604800 }, removeOnFail: { age: 2592000 } },
       },
+      { name: 'webhook-delivery', defaultJobOptions: DEFAULT_JOB_OPTIONS },
     ),
     WhatsAppModule,
     CommunicationModule,
@@ -98,6 +100,7 @@ export class QueuesModule implements OnModuleDestroy {
     @InjectQueue('nightly-jobs') private readonly nightlyQueue: Queue,
     @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
     @InjectQueue('dead-letter') private readonly deadLetterQueue: Queue,
+    @InjectQueue('webhook-delivery') private readonly webhookDeliveryQueue: Queue,
   ) {}
 
   async onModuleDestroy(): Promise<void> {
@@ -110,6 +113,7 @@ export class QueuesModule implements OnModuleDestroy {
       this.nightlyQueue.close(),
       this.broadcastQueue.close(),
       this.deadLetterQueue.close(),
+      this.webhookDeliveryQueue.close(),
     ]);
     this.logger.log('All BullMQ queue connections closed');
   }

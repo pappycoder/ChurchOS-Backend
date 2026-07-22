@@ -32,6 +32,7 @@ import { CacheInterceptor } from './interceptors/cache.interceptor';
   providers: [
     AuditLoggingService,
     RequestContextService,
+    CacheInterceptor,
     // CacheInterceptor is available for injection but not global by default.
     // Controllers opt in via @UseInterceptors(CacheInterceptor) + @CacheTTL().
     // This pattern avoids caching all GET responses indiscriminately.
