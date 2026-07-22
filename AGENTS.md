@@ -171,6 +171,18 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-07-22** — Backend Infrastructure Hardening (Tasks 1-5).
+  - **Module Fix**: Added `AuthModule` import to `CustomFieldsModule` and `VisitorsModule` — fixes runtime crash where `JwtAuthGuard` couldn't resolve `JwksService` dependency.
+  - **Connection Pooling**: Updated `PrismaService` to accept pool config via env vars (`DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECT_TIMEOUT_MS`). Uses `pg.PoolConfig` instead of raw connection string. Defaults: 10 max connections, 10s idle timeout.
+  - **Migration CI/CD**: Added `deploy` job to `.github/workflows/ci.yml` — runs `npx prisma migrate deploy` on push to `main` after tests pass. Uses `DATABASE_URL` from GitHub Secrets.
+  - **Database Functions**: New migration `20260722080000` adds:
+    - `log_audit_event()` trigger — fires on INSERT/UPDATE/DELETE on `members`, `profiles`, `transactions` as a safety net alongside app-level AuditLoggingService.
+    - `archive_old_attendance()` — moves attendance records older than 2 years to `attendance_archive` table.
+    - `archive_old_messages()` — moves messages older than 1 year to `messages_archive` table.
+  - **Partial Index**: `idx_risk_scores_high_risk` on `risk_scores(church_id, member_id, score) WHERE level IN ('high', 'critical')` — optimizes pastoral attention queries.
+  - **ESLint Config**: Added `test/` to `tsconfig.eslint.json` include — fixes 33 parse errors for test files.
+  - **Tests**: Build clean, lint clean (0 errors), **402 tests passing across 27 suites**.
+
 - **2026-07-21** — Completed Wave 9: Advanced Analytics & Reporting.
   - **Module**: Created `src/analytics/` with `AnalyticsModule`, `AnalyticsService`, `AnalyticsController`, and DTOs.
   - **Endpoints** (6 under `/api/v1/analytics`):

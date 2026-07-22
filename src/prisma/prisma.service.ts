@@ -29,6 +29,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import type { PoolConfig } from 'pg';
 
 /**
  * PrismaService provides database access through Prisma ORM.
@@ -40,6 +41,12 @@ import { PrismaPg } from '@prisma/adapter-pg';
  * Uses the @prisma/adapter-pg driver adapter for PostgreSQL connections
  * as required by Prisma 7's "client" engine type.
  *
+ * Connection pooling is configured via environment variables:
+ * - DATABASE_URL: PostgreSQL connection string (required)
+ * - DB_POOL_MAX: Maximum connections in pool (default: 10)
+ * - DB_IDLE_TIMEOUT_MS: Idle connection timeout in ms (default: 10000)
+ * - DB_CONNECT_TIMEOUT_MS: Connection timeout in ms (default: 0 = no timeout)
+ *
  * @extends PrismaClient
  * @implements OnModuleInit
  * @implements OnModuleDestroy
@@ -49,10 +56,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const adapter = new PrismaPg({
+    const poolConfig: PoolConfig = {
       connectionString: process.env.DATABASE_URL,
-    });
+      max: parseInt(process.env.DB_POOL_MAX ?? '10', 10),
+      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS ?? '0', 10),
+    };
+
+    const adapter = new PrismaPg(poolConfig);
     super({ adapter });
+
+    this.logger.log(
+      `Connection pool configured: max=${poolConfig.max}, idleTimeout=${poolConfig.idleTimeoutMillis}ms, connectTimeout=${poolConfig.connectionTimeoutMillis}ms`,
+    );
   }
 
   /**

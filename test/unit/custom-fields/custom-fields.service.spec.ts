@@ -89,7 +89,12 @@ describe('CustomFieldsService', () => {
 
     it('should create dropdown with options', async () => {
       (prismaMock.customFieldDefinition.create as jest.Mock).mockImplementation(({ data }) =>
-        Promise.resolve({ ...mockField, name: data.name, field_type: data.field_type, options: data.options }),
+        Promise.resolve({
+          ...mockField,
+          name: data.name,
+          field_type: data.field_type,
+          options: data.options,
+        }),
       );
       const result = await service.create(
         { name: 'Department', field_type: 'dropdown', options: ['Music', 'Protocol'] },
@@ -130,12 +135,7 @@ describe('CustomFieldsService', () => {
 
   describe('update', () => {
     it('should update a field', async () => {
-      const result = await service.update(
-        mockField.id,
-        { name: 'Job Title' },
-        churchId,
-        userId,
-      );
+      const result = await service.update(mockField.id, { name: 'Job Title' }, churchId, userId);
       expect(result.name).toBe('Occupation');
       expect(prismaMock.customFieldDefinition.update).toHaveBeenCalled();
     });
