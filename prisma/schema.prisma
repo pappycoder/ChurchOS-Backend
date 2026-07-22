@@ -395,6 +395,7 @@ model RecurringGiving {
   payment_reference     String?
   authorization_code    String?         // Paystack authorization code
   is_active             Boolean         @default(true)
+  paused_at             DateTime?
   next_charge_date      DateTime?
   last_charge_date      DateTime?
   failed_attempt_count  Int             @default(0)

@@ -339,6 +339,36 @@ export class GivingController {
     return { success: true };
   }
 
+  @Patch('recurring/:id/pause')
+  @ApiOperation({
+    summary: 'Pause recurring giving',
+    description: 'Temporarily pauses a recurring giving schedule. No further charges will be made until resumed.',
+  })
+  async pauseRecurringGiving(
+    @Param('id') id: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    await this.givingService.pauseRecurringGiving(id, churchId, user.sub);
+    return { success: true };
+  }
+
+  @Patch('recurring/:id/resume')
+  @ApiOperation({
+    summary: 'Resume recurring giving',
+    description: 'Resumes a previously paused recurring giving schedule.',
+  })
+  async resumeRecurringGiving(
+    @Param('id') id: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    await this.givingService.resumeRecurringGiving(id, churchId, user.sub);
+    return { success: true };
+  }
+
   // ─── TRANSACTIONS ────────────────────────────────────────────────
 
   /**
@@ -402,5 +432,19 @@ export class GivingController {
       'Content-Length': buffer.length,
     });
     res.send(buffer);
+  }
+
+  @Post('transactions/:transactionId/send-receipt')
+  @ApiOperation({
+    summary: 'Send receipt',
+    description: 'Sends a receipt for a transaction via WhatsApp or email.',
+  })
+  async sendReceipt(
+    @Param('transactionId') transactionId: string,
+    @Body('channel') channel: 'whatsapp' | 'email',
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean; message: string }> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.sendReceipt(transactionId, churchId, channel);
   }
 }

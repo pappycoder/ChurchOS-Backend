@@ -11,6 +11,8 @@
 
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResendService } from '../communication/resend.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { NotificationResponseDto } from './dto/notification-response.dto';
 import { Prisma } from '@prisma/client';
 
@@ -18,7 +20,11 @@ import { Prisma } from '@prisma/client';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly resendService?: ResendService,
+    private readonly whatsappService?: WhatsAppService,
+  ) {}
 
   /**
    * List notifications for a profile with pagination.
@@ -187,6 +193,101 @@ export class NotificationsService {
     );
 
     return { sent };
+  }
+
+  /**
+   * Sends a document via WhatsApp.
+   *
+   * Currently creates an in-app notification. Full WhatsApp document
+   * sending will be implemented when the WhatsApp media upload API is integrated.
+   */
+  async sendWhatsAppWithDocument(
+    phone: string,
+    _buffer: Buffer,
+    _filename: string,
+    caption: string,
+    churchId: string,
+  ): Promise<void> {
+    this.logger.log(`WhatsApp document to ${phone}: ${caption} (church: ${churchId})`);
+
+    const profiles = await this.prisma.profile.findMany({
+      where: { church_id: churchId, phone },
+      select: { id: true },
+    });
+
+    if (this.whatsappService) {
+      try {
+        await this.whatsappService.sendMessage(phone, `${caption}\n\nFile: ${_filename}`, churchId);
+      } catch (err) {
+        this.logger.warn(`WhatsApp delivery failed: ${(err as Error).message}`);
+      }
+    }
+
+    for (const profile of profiles) {
+      await this.prisma.notification.create({
+        data: {
+          church_id: churchId,
+          profile_id: profile.id,
+          type: 'receipt',
+          title: 'Receipt Sent',
+          body: caption,
+        },
+      });
+    }
+  }
+
+  /**
+   * Sends an email with attachment.
+   *
+   * Currently creates an in-app notification. Full email delivery
+   * will be implemented via Resend API integration.
+   */
+  async sendEmailWithAttachment(
+    email: string,
+    subject: string,
+    body: string,
+    buffer: Buffer,
+    filename: string,
+    churchId: string,
+  ): Promise<void> {
+    this.logger.log(`Email with attachment to ${email}: ${subject} (church: ${churchId})`);
+
+    const members = await this.prisma.member.findMany({
+      where: { church_id: churchId, email },
+      select: { id: true },
+    });
+
+    const memberIds = members.map((m) => m.id);
+
+    if (memberIds.length === 0) return;
+
+    if (this.resendService) {
+      try {
+        await this.resendService.sendEmail(email, subject, body, churchId, {
+          filename,
+          content: buffer,
+        });
+      } catch (err) {
+        this.logger.warn(`Email delivery failed: ${(err as Error).message}`);
+      }
+    }
+
+    const profiles = await this.prisma.profile.findMany({
+      where: { church_id: churchId, member_id: { in: memberIds } },
+      select: { id: true },
+    });
+
+    for (const profile of profiles) {
+      await this.prisma.notification.create({
+        data: {
+          church_id: churchId,
+          profile_id: profile.id,
+          type: 'receipt',
+          title: 'Receipt Sent',
+          body: subject,
+        },
+      });
+    }
   }
 
   private mapNotificationToDto(

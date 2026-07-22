@@ -18,6 +18,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
+interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
 @Injectable()
 export class ResendService {
   private readonly logger = new Logger(ResendService.name);
@@ -37,7 +42,13 @@ export class ResendService {
    * @returns The created Message record ID
    * @throws InternalServerErrorException if Resend API is not configured or send fails
    */
-  async sendEmail(to: string, subject: string, html: string, churchId: string): Promise<string> {
+  async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    churchId: string,
+    attachment?: EmailAttachment,
+  ): Promise<string> {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     const fromAddress = this.config.get<string>('RESEND_FROM', 'noreply@churchos.app');
 
@@ -46,18 +57,29 @@ export class ResendService {
     }
 
     try {
+      const payload: Record<string, unknown> = {
+        from: fromAddress,
+        to: [to],
+        subject,
+        html,
+      };
+
+      if (attachment) {
+        payload.attachments = [
+          {
+            filename: attachment.filename,
+            content: attachment.content.toString('base64'),
+          },
+        ];
+      }
+
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [to],
-          subject,
-          html,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

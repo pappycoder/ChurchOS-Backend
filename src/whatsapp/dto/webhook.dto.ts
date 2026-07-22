@@ -93,11 +93,29 @@ export class WebhookStatusDto {
   timestamp?: string;
 }
 
+export class WebhookMetadataDto {
+  @ApiPropertyOptional({ description: 'Display phone number', example: '+234 801 234 5678' })
+  @IsString()
+  @IsOptional()
+  display_phone_number?: string;
+
+  @ApiPropertyOptional({ description: 'Phone number ID', example: '1234567890' })
+  @IsString()
+  @IsOptional()
+  phone_number_id?: string;
+}
+
 export class WebhookBodyDto {
   @ApiPropertyOptional({ description: 'Messaging product', example: 'whatsapp' })
   @IsString()
   @IsOptional()
   messaging_product?: string;
+
+  @ApiPropertyOptional({ description: 'Webhook metadata' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WebhookMetadataDto)
+  metadata?: WebhookMetadataDto;
 
   @ApiPropertyOptional({ description: 'Contacts array' })
   @IsArray()

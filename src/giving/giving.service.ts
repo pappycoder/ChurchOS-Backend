@@ -884,6 +884,97 @@ export class GivingService {
   }
 
   /**
+   * Pauses a recurring giving schedule.
+   *
+   * Sets `is_active = false` and records `paused_at`. No further charges
+   * until the schedule is resumed.
+   *
+   * @throws NotFoundException  Schedule not found or doesn't belong to the church.
+   * @throws BadRequestException Schedule is already paused or cancelled.
+   */
+  async pauseRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+    const recurring = await this.prisma.recurringGiving.findUnique({
+      where: { id },
+    });
+
+    if (!recurring || recurring.church_id !== churchId) {
+      throw new NotFoundException('Recurring giving not found');
+    }
+
+    if (!recurring.is_active) {
+      throw new BadRequestException('Recurring giving is already paused or cancelled');
+    }
+
+    await this.prisma.recurringGiving.update({
+      where: { id },
+      data: {
+        is_active: false,
+        paused_at: new Date(),
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'recurring_giving',
+      action: 'UPDATE',
+      entityId: id,
+      oldValues: { isActive: true, pausedAt: null },
+      newValues: { isActive: false, pausedAt: new Date().toISOString() },
+    });
+
+    this.logger.log(`Recurring giving paused: ${id}`);
+  }
+
+  /**
+   * Resumes a previously paused recurring giving schedule.
+   *
+   * Sets `is_active = true` and clears `paused_at`.
+   *
+   * @throws NotFoundException  Schedule not found or doesn't belong to the church.
+   * @throws BadRequestException Schedule is not paused (active or fully cancelled).
+   */
+  async resumeRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+    const recurring = await this.prisma.recurringGiving.findUnique({
+      where: { id },
+    });
+
+    if (!recurring || recurring.church_id !== churchId) {
+      throw new NotFoundException('Recurring giving not found');
+    }
+
+    if (recurring.is_active) {
+      throw new BadRequestException('Recurring giving is not paused');
+    }
+
+    if (recurring.paused_at === null) {
+      throw new BadRequestException(
+        'Recurring giving is fully cancelled and cannot be resumed. Create a new schedule instead.',
+      );
+    }
+
+    await this.prisma.recurringGiving.update({
+      where: { id },
+      data: {
+        is_active: true,
+        paused_at: null,
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'recurring_giving',
+      action: 'UPDATE',
+      entityId: id,
+      oldValues: { isActive: false },
+      newValues: { isActive: true, pausedAt: null },
+    });
+
+    this.logger.log(`Recurring giving resumed: ${id}`);
+  }
+
+  /**
    * Processes a recurring giving charge.
    *
    * Charges the member's saved authorization via the configured gateway,
@@ -1123,6 +1214,103 @@ export class GivingService {
     const filename = `receipt-${transaction.receipt_number || transaction.id}.pdf`;
 
     return { buffer, filename };
+  }
+
+  /**
+   * Sends a receipt for a transaction via WhatsApp or email.
+   *
+   * @param transactionId - The transaction ID
+   * @param churchId - The church ID for tenant isolation
+   * @param channel - 'whatsapp' or 'email'
+   * @returns Success status message
+   *
+   * @throws NotFoundException Transaction not found
+   * @throws BadRequestException Transaction not successful or no recipient
+   */
+  async sendReceipt(
+    transactionId: string,
+    churchId: string,
+    channel: 'whatsapp' | 'email',
+  ): Promise<{ success: boolean; message: string }> {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: { category: true },
+    });
+
+    if (!transaction || transaction.church_id !== churchId) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (transaction.status !== 'success') {
+      throw new BadRequestException('Receipts can only be sent for successful transactions');
+    }
+
+    if (!transaction.member_id) {
+      throw new BadRequestException('No member associated with this transaction');
+    }
+
+    const member = await this.prisma.member.findUnique({
+      where: { id: transaction.member_id },
+      select: { first_name: true, last_name: true, email: true, phone: true },
+    });
+
+    if (!member) {
+      throw new BadRequestException('Member not found');
+    }
+
+    const { buffer, filename } = await this.generateReceipt(transactionId, churchId);
+
+    if (channel === 'whatsapp') {
+      const phone = member.phone;
+      if (!phone) {
+        throw new BadRequestException('Member has no phone number on file');
+      }
+
+      await this.notifications.sendWhatsAppWithDocument(
+        phone,
+        buffer,
+        filename,
+        `Your receipt for ${transaction.category?.name || 'giving'} - ${transaction.receipt_number || transaction.id}`,
+        churchId,
+      );
+
+      await this.audit.log({
+        userId: transaction.member_id,
+        churchId,
+        entity: 'transaction',
+        action: 'UPDATE',
+        entityId: transactionId,
+        newValues: { receiptSentVia: 'whatsapp', sentAt: new Date().toISOString() },
+      });
+
+      return { success: true, message: 'Receipt sent via WhatsApp' };
+    }
+
+    // Email channel
+    const email = member.email;
+    if (!email) {
+      throw new BadRequestException('Member has no email on file');
+    }
+
+    await this.notifications.sendEmailWithAttachment(
+      email,
+      `Your Receipt - ${transaction.category?.name || 'Giving'}`,
+      `Dear ${member.first_name},\n\nPlease find attached your receipt for ${transaction.category?.name || 'giving'} of ${transaction.currency} ${transaction.amount.toLocaleString()}.\n\nReceipt Number: ${transaction.receipt_number || 'N/A'}\n\nGod bless you!`,
+      buffer,
+      filename,
+      churchId,
+    );
+
+    await this.audit.log({
+      userId: transaction.member_id,
+      churchId,
+      entity: 'transaction',
+      action: 'UPDATE',
+      entityId: transactionId,
+      newValues: { receiptSentVia: 'email', sentAt: new Date().toISOString() },
+    });
+
+    return { success: true, message: 'Receipt sent via email' };
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ import { ListProfilesDto } from './dto/list-profiles.dto';
 import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
 import { generateSecret, generateURI, verify } from 'otplib';
 import { Prisma } from '@prisma/client';
+import { RedisService } from '../redis/redis.service';
 
 /**
  * Service for managing user profiles.
@@ -40,6 +41,7 @@ export class ProfileService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
     private readonly mediaService: MediaService,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -422,15 +424,15 @@ export class ProfileService {
       data: { mfa_enabled: false },
     });
 
-    // Store secret in a transient way — use a predictable key
-    // In production this should use Redis with TTL; for now store via audit
+    await this.redis.set(this.getMfaSecretKey(userId), secret, 600);
+
     await this.audit.log({
       userId,
       churchId: profile.church_id,
       entity: 'profile',
       action: 'CREATE',
       entityId: profile.id,
-      newValues: { secret },
+      newValues: { mfa_setup_started: true },
     });
 
     this.logger.log(`MFA secret generated for user: ${userId}`);
@@ -464,21 +466,12 @@ export class ProfileService {
       throw new BadRequestException('MFA is already enabled');
     }
 
-    // Retrieve the secret from the last audit log with a secret in new_values
-    const auditLog = await this.prisma.auditLog.findFirst({
-      where: {
-        user_id: userId,
-        entity: 'profile',
-        entity_id: profile.id,
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    const secret = await this.redis.get<string>(this.getMfaSecretKey(userId));
 
-    if (!auditLog || !auditLog.new_values) {
+    if (!secret) {
       throw new BadRequestException('No MFA secret found. Run /mfa/generate first.');
     }
 
-    const secret = (auditLog.new_values as Record<string, string>).secret;
     const isValid = verify({ token: code, secret });
 
     if (!isValid) {
@@ -489,6 +482,8 @@ export class ProfileService {
       where: { user_id: userId },
       data: { mfa_enabled: true },
     });
+
+    await this.redis.del(this.getMfaSecretKey(userId));
 
     await this.audit.log({
       userId,
@@ -530,21 +525,12 @@ export class ProfileService {
       throw new BadRequestException('MFA is not enabled');
     }
 
-    // Retrieve secret from last audit log with a secret
-    const auditLog = await this.prisma.auditLog.findFirst({
-      where: {
-        user_id: userId,
-        entity: 'profile',
-        entity_id: profile.id,
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    const secret = await this.redis.get<string>(this.getMfaSecretKey(userId));
 
-    if (!auditLog || !auditLog.new_values) {
+    if (!secret) {
       throw new BadRequestException('MFA secret not found. Re-enable MFA.');
     }
 
-    const secret = (auditLog.new_values as Record<string, string>).secret;
     const isValid = verify({ token: code, secret });
 
     if (!isValid) {
@@ -555,6 +541,8 @@ export class ProfileService {
       where: { user_id: userId },
       data: { mfa_enabled: false },
     });
+
+    await this.redis.del(this.getMfaSecretKey(userId));
 
     await this.audit.log({
       userId,
@@ -568,6 +556,10 @@ export class ProfileService {
     this.logger.log(`MFA disabled for user: ${userId}`);
 
     return this.getMyProfile(userId);
+  }
+
+  private getMfaSecretKey(userId: string): string {
+    return `mfa:${userId}`;
   }
 
   /**

@@ -9,6 +9,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { MediaModule } from '../media/media.module';
+import { RedisModule } from '../redis/redis.module';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 
@@ -28,7 +29,7 @@ import { ProfileService } from './profile.service';
  * ```
  */
 @Module({
-  imports: [AuthModule, MediaModule],
+  imports: [AuthModule, MediaModule, RedisModule],
   controllers: [ProfileController],
   providers: [ProfileService],
   exports: [ProfileService],

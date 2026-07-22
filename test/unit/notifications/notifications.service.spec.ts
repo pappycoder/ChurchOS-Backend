@@ -42,6 +42,8 @@ function model(name: string): Record<string, jest.Mock> {
 
 let prisma: ReturnType<typeof createPrismaMock>;
 let service: NotificationsService;
+let resendService: { sendEmail: jest.Mock };
+let whatsappService: { sendMessage: jest.Mock };
 
 const mockChurchId = '00000000-0000-0000-0000-000000000001';
 const mockProfileId = '22222222-2222-2222-2222-222222222222';
@@ -61,8 +63,13 @@ const mockNotification = {
 beforeEach(() => {
   prisma = createPrismaMock();
 
+  resendService = { sendEmail: jest.fn().mockResolvedValue('message-1') };
+  whatsappService = { sendMessage: jest.fn().mockResolvedValue(undefined) };
+
   service = new NotificationsService(
     prisma as unknown as import('../../../src/prisma/prisma.service').PrismaService,
+    resendService as never,
+    whatsappService as never,
   );
 });
 
@@ -157,6 +164,53 @@ describe('NotificationsService', () => {
 
       expect(result.title).toBe('Welcome');
       expect(result.type).toBe('system');
+    });
+  });
+
+  describe('sendEmailWithAttachment', () => {
+    it('should forward attachments to the email service', async () => {
+      model('member').findMany.mockResolvedValue([{ id: 'member-1' }]);
+      model('profile').findMany.mockResolvedValue([{ id: mockProfileId }]);
+
+      await service.sendEmailWithAttachment(
+        'member@example.com',
+        'Receipt',
+        'Body',
+        Buffer.from('pdf'),
+        'receipt.pdf',
+        mockChurchId,
+      );
+
+      expect(resendService.sendEmail).toHaveBeenCalledWith(
+        'member@example.com',
+        'Receipt',
+        'Body',
+        mockChurchId,
+        expect.objectContaining({
+          filename: 'receipt.pdf',
+          content: expect.any(Buffer),
+        }),
+      );
+    });
+  });
+
+  describe('sendWhatsAppWithDocument', () => {
+    it('should send document content via the WhatsApp service', async () => {
+      model('profile').findMany.mockResolvedValue([{ id: mockProfileId }]);
+
+      await service.sendWhatsAppWithDocument(
+        '+2348000000000',
+        Buffer.from('doc'),
+        'receipt.pdf',
+        'Receipt ready',
+        mockChurchId,
+      );
+
+      expect(whatsappService.sendMessage).toHaveBeenCalledWith(
+        '+2348000000000',
+        expect.stringContaining('Receipt ready'),
+        mockChurchId,
+      );
     });
   });
 

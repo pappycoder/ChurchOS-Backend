@@ -13,6 +13,7 @@ import { ProfileService } from '../../../src/profile/profile.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { MediaService, MulterFile } from '../../../src/media/media.service';
+import { RedisService } from '../../../src/redis/redis.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 jest.mock('otplib', () => ({
@@ -28,6 +29,7 @@ describe('ProfileService', () => {
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
   let audit: { log: jest.Mock };
   let mediaService: { uploadImage: jest.Mock; deleteByUrl: jest.Mock };
+  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockChurchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -75,11 +77,17 @@ describe('ProfileService', () => {
       uploadImage: jest.fn(),
       deleteByUrl: jest.fn().mockResolvedValue(undefined),
     };
+    redis = {
+      set: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      del: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new ProfileService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
       mediaService as unknown as MediaService,
+      redis as unknown as RedisService,
     );
   });
 
@@ -314,6 +322,42 @@ describe('ProfileService', () => {
   });
 
   // ─── LIST PROFILES ─────────────────────────────────────────────────
+
+  describe('MFA secret storage', () => {
+    it('should store generated MFA secrets in Redis for later verification', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...mockProfileWithRelations,
+        church: { name: 'Grace Community Church' },
+      });
+      model(prisma, 'profile').update.mockResolvedValue({});
+
+      await service.generateMfaSecret(mockUserId);
+
+      expect(redis.set).toHaveBeenCalledWith(
+        expect.stringContaining('mfa:'),
+        expect.any(String),
+        600,
+      );
+    });
+
+    it('should verify MFA using the Redis-stored secret', async () => {
+      model(prisma, 'profile')
+        .findUnique.mockResolvedValueOnce({
+          ...mockProfileWithRelations,
+          mfa_enabled: false,
+        })
+        .mockResolvedValueOnce({
+          ...mockProfileWithRelations,
+          mfa_enabled: true,
+        });
+      redis.get.mockResolvedValue('JBSWY3DPEHPK3PXP');
+
+      const result = await service.enableMfa(mockUserId, '123456');
+
+      expect(result.mfaEnabled).toBe(true);
+      expect(redis.get).toHaveBeenCalledWith(expect.stringContaining('mfa:'));
+    });
+  });
 
   describe('listProfiles', () => {
     it('should return paginated profiles', async () => {

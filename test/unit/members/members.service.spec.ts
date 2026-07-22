@@ -167,6 +167,16 @@ describe('MembersService', () => {
       expect(result.firstName).toBe('Chioma');
     });
 
+    it('should hide sensitive member fields when the viewer lacks access', async () => {
+      model('member').findUnique.mockResolvedValue(mockMember);
+
+      const result = await service.getMemberById(mockMemberId, mockChurchId, ['members:read']);
+
+      expect(result.email).toBeUndefined();
+      expect(result.phone).toBeUndefined();
+      expect(result.address).toBeUndefined();
+    });
+
     it('should throw NotFoundException if member not found', async () => {
       model('member').findUnique.mockResolvedValue(null);
 

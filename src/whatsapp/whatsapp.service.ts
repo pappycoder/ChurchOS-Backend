@@ -61,6 +61,9 @@ export class WhatsAppService {
     this.commandHandlers.set('PRAYER', this.handlePrayer.bind(this));
     this.commandHandlers.set('EVENTS', this.handleEvents.bind(this));
     this.commandHandlers.set('STATUS', this.handleStatus.bind(this));
+    this.commandHandlers.set('SERMON', this.handleSermon.bind(this));
+    this.commandHandlers.set('TESTIMONY', this.handleTestimony.bind(this));
+    this.commandHandlers.set('BIRTHDAY', this.handleBirthday.bind(this));
   }
 
   /**
@@ -78,6 +81,8 @@ export class WhatsAppService {
 
     let processed = 0;
 
+    const phoneNumberId = body.metadata?.phone_number_id;
+
     for (const msg of body.messages) {
       try {
         const normalized = await this.normalizeMessage(
@@ -85,6 +90,7 @@ export class WhatsAppService {
           msg.id,
           msg.timestamp,
           msg.text?.body,
+          phoneNumberId,
         );
         if (normalized) {
           await this.routeMessage(normalized);
@@ -349,6 +355,7 @@ export class WhatsAppService {
     messageId: string,
     timestamp: string,
     body?: string,
+    phoneNumberId?: string,
   ): Promise<NormalizedMessage | null> {
     if (!body || body.trim().length === 0) {
       this.logger.debug(`Skipping non-text message from ${phone}`);
@@ -361,8 +368,16 @@ export class WhatsAppService {
       select: { id: true, church_id: true },
     });
 
-    const churchId = profile?.church_id || '';
+    let churchId = profile?.church_id || '';
     const memberId = profile?.id || null;
+
+    // If no profile match, resolve church from phone_number_id and create Visitor
+    if (!profile && phoneNumberId) {
+      churchId = await this.resolveChurchFromPhoneNumberId(phoneNumberId);
+      if (churchId) {
+        await this.ensureVisitorRecord(phone, churchId);
+      }
+    }
 
     // Log inbound message
     await this.prisma.message.create({
@@ -432,6 +447,9 @@ export class WhatsAppService {
       '• PRAYER — Submit a prayer request',
       '• EVENTS — See upcoming events',
       '• STATUS — View your giving/attendance',
+      '• SERMON — Search recent sermons',
+      '• TESTIMONY — Share your testimony',
+      '• BIRTHDAY — Check your birthday info',
       '• HELP — Show this message',
     ].join('\n');
   }
@@ -609,6 +627,148 @@ export class WhatsAppService {
     ].join('\n');
   }
 
+  private async handleSermon(msg: NormalizedMessage, args: string): Promise<string> {
+    if (!msg.memberId) {
+      return 'You are not registered as a member. Please visit our church to register.';
+    }
+
+    const query: Record<string, unknown> = {
+      church_id: msg.churchId,
+    };
+
+    if (args) {
+      const terms = args.split(/\s+/).filter(Boolean);
+      query.OR = terms.map((term) => ({
+        OR: [
+          { title: { contains: term, mode: 'insensitive' } },
+          { speaker: { contains: term, mode: 'insensitive' } },
+          { series: { contains: term, mode: 'insensitive' } },
+          { tags: { contains: term, mode: 'insensitive' } },
+        ],
+      }));
+    }
+
+    const sermons = await this.prisma.sermon.findMany({
+      where: query as never,
+      orderBy: { sermon_date: 'desc' },
+      take: 5,
+    });
+
+    if (sermons.length === 0) {
+      return args
+        ? `🔍 No sermons found matching "${args}". Try a different search term.`
+        : '📚 No sermons available yet. Check back later!';
+    }
+
+    const lines = ['📚 *Recent Sermons*', ''];
+    for (const sermon of sermons) {
+      const date = sermon.sermon_date
+        ? new Date(sermon.sermon_date).toLocaleDateString('en-NG', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })
+        : '';
+      lines.push(`• *${sermon.title}* — ${sermon.speaker || 'Unknown speaker'}`);
+      if (date) lines.push(`  ${date}`);
+      if (sermon.description) {
+        lines.push(`  ${sermon.description.substring(0, 80)}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  private async handleTestimony(msg: NormalizedMessage, args: string): Promise<string> {
+    if (!args.trim()) {
+      return [
+        '🙌 *Share Your Testimony*',
+        '',
+        'Type TESTIMONY followed by your testimony:',
+        'TESTIMONY God healed me during last week\'s service!',
+      ].join('\n');
+    }
+
+    await this.audit.log({
+      userId: msg.memberId || 'anonymous',
+      churchId: msg.churchId,
+      entity: 'testimony',
+      action: 'CREATE',
+      newValues: {
+        phone: msg.phone,
+        content: args.substring(0, 500),
+        receivedAt: new Date().toISOString(),
+      },
+    });
+
+    return [
+      '🙌 *Thank you for sharing your testimony!*',
+      '',
+      'Your testimony has been received and will be reviewed by our pastoral team.',
+      'May God continue to bless you abundantly!',
+    ].join('\n');
+  }
+
+  private async handleBirthday(msg: NormalizedMessage, _args: string): Promise<string> {
+    if (!msg.memberId) {
+      return 'You are not registered as a member. Please visit our church to register.';
+    }
+
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: msg.memberId },
+      select: { first_name: true, member_id: true },
+    });
+
+    if (!profile) {
+      return 'Profile not found. Please visit our church to register.';
+    }
+
+    if (!profile.member_id) {
+      return [
+        '🎂 *Birthday Update*',
+        '',
+        'We don\'t have your birthday on file yet.',
+        'Please update your profile at the church reception to add your birthday.',
+      ].join('\n');
+    }
+
+    const member = await this.prisma.member.findUnique({
+      where: { id: profile.member_id },
+      select: { date_of_birth: true },
+    });
+
+    if (!member?.date_of_birth) {
+      return [
+        '🎂 *Birthday Update*',
+        '',
+        'We don\'t have your birthday on file yet.',
+        'Please update your profile at the church reception to add your birthday.',
+      ].join('\n');
+    }
+
+    const today = new Date();
+    const dob = new Date(member.date_of_birth);
+    const thisYear = today.getFullYear();
+    const birthday = new Date(thisYear, dob.getMonth(), dob.getDate());
+
+    if (birthday < today) {
+      birthday.setFullYear(thisYear + 1);
+    }
+
+    const daysUntil = Math.ceil(
+      (birthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    return [
+      `🎂 *Birthday Info for ${profile.first_name || 'Member'}*`,
+      '',
+      `Your birthday is on ${dob.toLocaleDateString('en-NG', { month: 'long', day: 'numeric' })}.`,
+      daysUntil > 0
+        ? `⏰ ${daysUntil} day(s) until your next birthday!`
+        : `🎉 Today is your birthday! Happy birthday! 🎉`,
+    ].join('\n');
+  }
+
   // ─── STATUS UPDATES ────────────────────────────────────────────
 
   private async handleStatusUpdates(
@@ -629,6 +789,45 @@ export class WhatsAppService {
   }
 
   // ─── MAPPERS ───────────────────────────────────────────────────
+
+  private async resolveChurchFromPhoneNumberId(phoneNumberId: string): Promise<string> {
+    const configs = await this.prisma.churchConfig.findMany({
+      where: {
+        key: 'whatsapp_phone_number_id',
+      },
+      select: { church_id: true, value: true },
+    });
+
+    const match = configs.find((c) => String(c.value) === phoneNumberId);
+    return match?.church_id || '';
+  }
+
+  private async ensureVisitorRecord(phone: string, churchId: string): Promise<void> {
+    const existing = await this.prisma.visitor.findFirst({
+      where: {
+        church_id: churchId,
+        whatsapp_number: phone,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    await this.prisma.visitor.create({
+      data: {
+        church_id: churchId,
+        first_name: 'WhatsApp',
+        last_name: 'Visitor',
+        whatsapp_number: phone,
+        phone,
+        follow_up_status: 'new',
+      },
+    });
+
+    this.logger.log(`Visitor record created for ${phone} in church ${churchId}`);
+  }
 
   private mapMessageToDto(
     message: Record<string, unknown> & { id: string; created_at: Date },
