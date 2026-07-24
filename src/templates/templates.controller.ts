@@ -24,7 +24,7 @@ import {
   HttpStatus,
   Request,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
@@ -97,6 +97,39 @@ export class TemplatesController {
         totalPages: Math.ceil(result.total / (query.limit || 20)),
       },
     };
+  }
+
+  /**
+   * Publishes a draft template, making it available for use in broadcasts.
+   *
+   * @param templateId - Template UUID to publish
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Updated template response with published status
+   */
+  @Post(':templateId/publish')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Publish a template',
+    description:
+      'Transitions a draft template to published status, making it available for use in broadcasts. Returns 400 if the template is already published or archived.',
+  })
+  @ApiParam({ name: 'templateId', description: 'Template UUID' })
+  @ApiResponse({ status: 200, description: 'Template published successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Template is already published or archived',
+  })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  async publish(
+    @Param('templateId') templateId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TemplateResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.templatesService.publish(templateId, churchId, user.sub);
   }
 
   /**

@@ -48,6 +48,16 @@ export class CreateTemplateDto {
   variables?: string[];
 
   @ApiPropertyOptional({
+    description: 'Initial status of the template. Defaults to "draft" if omitted.',
+    enum: ['draft', 'published'],
+    example: 'draft',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['draft', 'published'])
+  status?: string;
+
+  @ApiPropertyOptional({
     description: 'External template ID/name from WhatsApp (e.g. namespace:template_name)',
     example: 'churchos:welcome_message',
   })

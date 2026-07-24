@@ -18,7 +18,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
@@ -56,6 +56,7 @@ export class TemplatesService {
         content: dto.content,
         channel: dto.channel,
         language: dto.language || 'en',
+        status: dto.status || 'draft',
         category: dto.category,
         variables: (dto.variables ?? []) as Prisma.InputJsonValue,
         external_id: dto.externalId,
@@ -135,6 +136,56 @@ export class TemplatesService {
     }
 
     return this.mapToResponseDto(template);
+  }
+
+  /**
+   * Publishes a draft template, making it available for use in broadcasts.
+   *
+   * @param templateId - Template UUID to publish
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the publish (for audit)
+   * @returns Updated template response
+   * @throws NotFoundException if template doesn't exist
+   * @throws BadRequestException if template is already published or archived
+   */
+  async publish(
+    templateId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<TemplateResponseDto> {
+    const existing = await this.prisma.template.findFirst({
+      where: { id: templateId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Template not found');
+    }
+
+    if (existing.status === 'published') {
+      throw new BadRequestException('Template is already published');
+    }
+
+    if (existing.status === 'archived') {
+      throw new BadRequestException('Cannot publish an archived template');
+    }
+
+    const updated = await this.prisma.template.update({
+      where: { id: templateId },
+      data: { status: 'published' },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'template',
+      action: 'UPDATE',
+      entityId: templateId,
+      oldValues: { status: existing.status },
+      newValues: { status: 'published' },
+    });
+
+    this.logger.log(`Template published: ${templateId}`);
+    return this.mapToResponseDto(updated);
   }
 
   /**

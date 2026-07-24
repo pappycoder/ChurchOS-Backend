@@ -12,7 +12,7 @@ import { TemplatesService } from '../../../src/templates/templates.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -71,6 +71,48 @@ describe('TemplatesService', () => {
       expect(result.externalId).toBe('churchos:welcome_message');
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'template', action: 'CREATE' }),
+      );
+    });
+
+    it('should default status to draft when omitted', async () => {
+      prisma.template.create.mockResolvedValue({ ...mockTemplate, status: 'draft' });
+
+      await service.create(
+        {
+          name: 'Draft Template',
+          content: 'Hello!',
+          channel: 'sms',
+        },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.template.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'draft' }),
+        }),
+      );
+    });
+
+    it('should create a template as published when status is set', async () => {
+      prisma.template.create.mockResolvedValue({ ...mockTemplate, status: 'published' });
+
+      const result = await service.create(
+        {
+          name: 'Published Template',
+          content: 'Hello!',
+          channel: 'sms',
+          status: 'published',
+        },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(result.status).toBe('published');
+      expect(prisma.template.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'published' }),
+        }),
       );
     });
   });
@@ -137,6 +179,55 @@ describe('TemplatesService', () => {
       expect(prisma.template.delete).toHaveBeenCalledWith({
         where: { id: mockTemplateId },
       });
+    });
+  });
+
+  describe('publish', () => {
+    const draftTemplate = { ...mockTemplate, status: 'draft' };
+
+    it('should publish a draft template', async () => {
+      prisma.template.findFirst.mockResolvedValue(draftTemplate);
+      prisma.template.update.mockResolvedValue({ ...draftTemplate, status: 'published' });
+
+      const result = await service.publish(mockTemplateId, mockChurchId, mockUserId);
+
+      expect(result.status).toBe('published');
+      expect(prisma.template.update).toHaveBeenCalledWith({
+        where: { id: mockTemplateId },
+        data: { status: 'published' },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity: 'template',
+          action: 'UPDATE',
+          oldValues: { status: 'draft' },
+          newValues: { status: 'published' },
+        }),
+      );
+    });
+
+    it('should throw BadRequestException if template is already published', async () => {
+      prisma.template.findFirst.mockResolvedValue(mockTemplate);
+
+      await expect(service.publish(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException if template is archived', async () => {
+      prisma.template.findFirst.mockResolvedValue({ ...mockTemplate, status: 'archived' });
+
+      await expect(service.publish(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException if template not found', async () => {
+      prisma.template.findFirst.mockResolvedValue(null);
+
+      await expect(service.publish(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

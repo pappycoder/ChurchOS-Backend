@@ -200,6 +200,12 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-07-24** — Template Publish Workflow.
+  - **CreateTemplateDto**: Added optional `status` field (`draft` | `published`) so templates can be created in published state directly, eliminating the two-step create-then-update flow for ready templates.
+  - **TemplatesService.publish()**: New dedicated method that transitions a draft template to published. Validates the template exists, belongs to the church, and is not already published or archived. Returns clear `BadRequestException` for invalid state transitions.
+  - **Controller**: Added `POST /templates/:templateId/publish` endpoint with `church_admin`, `branch_pastor`, `secretary` role restrictions. Full Swagger documentation with 200/400/404 responses.
+  - **Tests**: Added 5 new tests — default status on create, explicit published status on create, publish draft success, publish already-published rejection, publish archived rejection, publish non-existent rejection.
+
 - **2026-07-22** — Backend Infrastructure Hardening (Tasks 1-5).
   - **Module Fix**: Added `AuthModule` import to `CustomFieldsModule` and `VisitorsModule` — fixes runtime crash where `JwtAuthGuard` couldn't resolve `JwksService` dependency.
   - **Connection Pooling**: Updated `PrismaService` to accept pool config via env vars (`DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECT_TIMEOUT_MS`). Uses `pg.PoolConfig` instead of raw connection string. Defaults: 10 max connections, 10s idle timeout.
