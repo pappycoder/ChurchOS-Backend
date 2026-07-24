@@ -14,4 +14,3 @@ export class DeveloperGuideController {
     res.send(renderGuidePage(baseUrl, swaggerUrl));
   }
 }
-

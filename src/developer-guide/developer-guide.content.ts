@@ -244,7 +244,8 @@ const ALL_FLOWS: Flow[] = [
     title: 'Attendance Tracking',
     description:
       'Track service attendance with a two-step flow: first create a Service (e.g., "Sunday Morning Service"), then record attendance against it. Supports individual check-in, bulk import, visitor check-in, and trend analytics.',
-    prerequisites: 'Existing members in the system. At least one Service must be created before recording attendance.',
+    prerequisites:
+      'Existing members in the system. At least one Service must be created before recording attendance.',
     steps: [
       {
         method: 'POST',
@@ -419,7 +420,8 @@ const ALL_FLOWS: Flow[] = [
     title: 'Digital Giving (Paystack / Flutterwave)',
     description:
       'Accept digital payments through Paystack or Flutterwave. The flow is: initialize a payment → redirect the member to the gateway → handle the webhook callback → allow PDF receipt download. The default gateway is configured per-church.',
-    prerequisites: 'Configured PAYSTACK_SECRET_KEY or FLUTTERWAVE_SECRET_KEY in environment. Existing giving categories.',
+    prerequisites:
+      'Configured PAYSTACK_SECRET_KEY or FLUTTERWAVE_SECRET_KEY in environment. Existing giving categories.',
     steps: [
       {
         method: 'GET',
@@ -530,7 +532,8 @@ const ALL_FLOWS: Flow[] = [
     title: 'Cash / Bank Transfer Giving',
     description:
       'Record offline giving (cash, bank transfers, or other non-digital payments) directly into the system. This is typically done by church administrators, secretaries, or treasurers.',
-    prerequisites: 'Existing giving categories. User must have treasurer, secretary, or church_admin role.',
+    prerequisites:
+      'Existing giving categories. User must have treasurer, secretary, or church_admin role.',
     steps: [
       {
         method: 'POST',
@@ -591,7 +594,8 @@ const ALL_FLOWS: Flow[] = [
     title: 'Recurring Giving (Automated Charges)',
     description:
       'Allow members to set up recurring giving plans (weekly, monthly, quarterly). The system automatically charges their saved payment method on the next_charge_date via Paystack charge_authorization.',
-    prerequisites: 'The member must have completed at least one digital payment to save their authorization code.',
+    prerequisites:
+      'The member must have completed at least one digital payment to save their authorization code.',
     steps: [
       {
         method: 'POST',
@@ -802,7 +806,8 @@ Building Project,400000,8,16.0`,
     title: 'Paid Event with Ticket Tiers',
     description:
       'Create paid events with multiple ticket tiers (e.g., Regular, VIP, Table). Members pay during registration via Paystack. Ticket validation is available for at-door check-in.',
-    prerequisites: 'Configured PAYSTACK_SECRET_KEY. Existing giving categories for ticket payments.',
+    prerequisites:
+      'Configured PAYSTACK_SECRET_KEY. Existing giving categories for ticket payments.',
     steps: [
       {
         method: 'POST',
@@ -1180,7 +1185,7 @@ abc123challengetoken`,
     category: 'Pastoral & Admin',
     title: 'Cell Group Management',
     description:
-      'Cell groups are small fellowship groups that meet in members\' homes. They can be organized under Departments, have assigned leaders and assistants, track attendance, and provide geolocation-based recommendations using the Haversine formula.',
+      "Cell groups are small fellowship groups that meet in members' homes. They can be organized under Departments, have assigned leaders and assistants, track attendance, and provide geolocation-based recommendations using the Haversine formula.",
     prerequisites: 'An authenticated session with church_admin or senior_pastor role.',
     steps: [
       {
@@ -1711,7 +1716,8 @@ abc123challengetoken`,
     title: 'Outbound Webhooks',
     description:
       'Subscribe to internal events and receive HTTP callbacks when they occur. Supports events like member.created, transaction.completed, etc. Deliveries include HMAC-SHA256 signed payloads with automatic retry (3 attempts, exponential backoff).',
-    prerequisites: 'An authenticated session with church_admin role for management. A publicly accessible endpoint URL on your side to receive webhooks.',
+    prerequisites:
+      'An authenticated session with church_admin role for management. A publicly accessible endpoint URL on your side to receive webhooks.',
     steps: [
       {
         method: 'POST',
@@ -1954,9 +1960,11 @@ abc123challengetoken`,
     id: '22',
     category: 'Authentication',
     title: 'User Registration & Login',
-    description: 'Register a new user account and authenticate via JWT token exchange. Covers the complete auth lifecycle with Supabase Auth.',
+    description:
+      'Register a new user account and authenticate via JWT token exchange. Covers the complete auth lifecycle with Supabase Auth.',
     prerequisites: 'None — registration is publicly accessible.',
-    businessRule: 'Registration creates both a Supabase auth user and a Profile record in a transaction. Login returns ES256-signed JWT verified via JWKS. Rate limit: 10 req/min.',
+    businessRule:
+      'Registration creates both a Supabase auth user and a Profile record in a transaction. Login returns ES256-signed JWT verified via JWKS. Rate limit: 10 req/min.',
     steps: [
       {
         method: 'POST',
@@ -2028,9 +2036,12 @@ abc123challengetoken`,
     id: '23',
     category: 'Authentication',
     title: 'Password Management',
-    description: 'Handle password resets and authenticated password changes for church staff and members.',
-    prerequisites: 'User must be logged in for password change. SMTP must be configured in Supabase for forgot-password emails.',
-    businessRule: 'Forgot-password always returns 200 to prevent email enumeration. Change-password verifies current password against Supabase before updating.',
+    description:
+      'Handle password resets and authenticated password changes for church staff and members.',
+    prerequisites:
+      'User must be logged in for password change. SMTP must be configured in Supabase for forgot-password emails.',
+    businessRule:
+      'Forgot-password always returns 200 to prevent email enumeration. Change-password verifies current password against Supabase before updating.',
     steps: [
       {
         method: 'POST',
@@ -2088,7 +2099,8 @@ abc123challengetoken`,
     title: 'Session Logout & Token Revocation',
     description: 'Terminate active sessions and revoke JWT tokens to prevent further API access.',
     prerequisites: 'User must be authenticated with a valid JWT.',
-    businessRule: 'Tokens are blacklisted in Redis until their natural expiry. Rate limit: 10 req/min on auth endpoints.',
+    businessRule:
+      'Tokens are blacklisted in Redis until their natural expiry. Rate limit: 10 req/min on auth endpoints.',
     steps: [
       {
         method: 'POST',
@@ -2110,9 +2122,11 @@ abc123challengetoken`,
     id: '25',
     category: 'Profile',
     title: 'Profile Management',
-    description: 'Retrieve, update, and manage user profiles within the church scope. Includes photo upload with automatic WebP optimization.',
+    description:
+      'Retrieve, update, and manage user profiles within the church scope. Includes photo upload with automatic WebP optimization.',
     prerequisites: 'User must be authenticated. JWT must contain valid church_id claim.',
-    businessRule: 'Profiles are scoped by church_id from JWT. Partial updates only affect provided fields. Photos are optimized to WebP (quality 80, max 1200px). Old avatar is deleted when replaced.',
+    businessRule:
+      'Profiles are scoped by church_id from JWT. Partial updates only affect provided fields. Photos are optimized to WebP (quality 80, max 1200px). Old avatar is deleted when replaced.',
     steps: [
       {
         method: 'GET',
@@ -2185,9 +2199,11 @@ abc123challengetoken`,
     id: '26',
     category: 'Profile',
     title: 'Profile Listing & Role Management',
-    description: 'Search, filter, and manage church staff profiles. Update user roles with appropriate authorization checks.',
+    description:
+      'Search, filter, and manage church staff profiles. Update user roles with appropriate authorization checks.',
     prerequisites: 'Role updates require admin role (super_admin, senior_pastor, or church_admin).',
-    businessRule: 'Valid roles: super_admin, senior_pastor, church_admin, branch_pastor, secretary, treasurer, department_head, member, visitor. Self-demotion and super_admin modification are blocked.',
+    businessRule:
+      'Valid roles: super_admin, senior_pastor, church_admin, branch_pastor, secretary, treasurer, department_head, member, visitor. Self-demotion and super_admin modification are blocked.',
     steps: [
       {
         method: 'GET',
@@ -2246,9 +2262,11 @@ abc123challengetoken`,
     id: '27',
     category: 'Members',
     title: 'Member Details & History',
-    description: 'View full member profiles with aggregated giving, attendance, event, and pastoral history. Manage internal admin notes.',
+    description:
+      'View full member profiles with aggregated giving, attendance, event, and pastoral history. Manage internal admin notes.',
     prerequisites: 'Member record must exist in the same church.',
-    businessRule: 'History queries aggregate from giving, attendance, events, and pastoral tables. Notes are visible only to admin roles and are audit-logged.',
+    businessRule:
+      'History queries aggregate from giving, attendance, events, and pastoral tables. Notes are visible only to admin roles and are audit-logged.',
     steps: [
       {
         method: 'GET',
@@ -2317,9 +2335,11 @@ abc123challengetoken`,
     id: '28',
     category: 'Members',
     title: 'Member Data Export',
-    description: 'Export member data as CSV or XLSX with configurable field selection and filters for offline analysis.',
+    description:
+      'Export member data as CSV or XLSX with configurable field selection and filters for offline analysis.',
     prerequisites: 'Export requires church_admin or senior_pastor role.',
-    businessRule: 'Supports CSV and XLSX formats. Filters include status, branch, gender, date range. Large exports (>10000 records) are processed asynchronously via BullMQ.',
+    businessRule:
+      'Supports CSV and XLSX formats. Filters include status, branch, gender, date range. Large exports (>10000 records) are processed asynchronously via BullMQ.',
     steps: [
       {
         method: 'GET',
@@ -2341,9 +2361,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '29',
     category: 'Attendance',
     title: 'Service Management',
-    description: 'Create, list, and update church service schedules for attendance tracking across branches.',
+    description:
+      'Create, list, and update church service schedules for attendance tracking across branches.',
     prerequisites: 'Service day_of_week uses 0=Sunday through 6=Saturday format.',
-    businessRule: 'Services are scoped by church_id. Multiple services can exist per day (e.g., 8AM and 10AM Sunday). Cannot delete a service with attendance records.',
+    businessRule:
+      'Services are scoped by church_id. Multiple services can exist per day (e.g., 8AM and 10AM Sunday). Cannot delete a service with attendance records.',
     steps: [
       {
         method: 'POST',
@@ -2416,9 +2438,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '30',
     category: 'Attendance',
     title: 'Check-In & Attendance Recording',
-    description: 'Record member attendance for services. Supports single, bulk, and walk-in visitor check-in workflows.',
+    description:
+      'Record member attendance for services. Supports single, bulk, and walk-in visitor check-in workflows.',
     prerequisites: 'Service must exist and be active in the church.',
-    businessRule: 'Duplicate check-in prevention via unique constraint on (service_id, member_id). Visitor check-in creates a temporary member record with minimal fields.',
+    businessRule:
+      'Duplicate check-in prevention via unique constraint on (service_id, member_id). Visitor check-in creates a temporary member record with minimal fields.',
     steps: [
       {
         method: 'POST',
@@ -2496,7 +2520,8 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     title: 'Attendance Analytics & Trends',
     description: 'View attendance summaries and trends with daily, weekly, and monthly grouping.',
     prerequisites: 'Attendance records must exist for the queried period.',
-    businessRule: 'Trends support daily, weekly, and monthly grouping. Summary shows total check-ins, unique attendees, and first-time vs returning breakdown.',
+    businessRule:
+      'Trends support daily, weekly, and monthly grouping. Summary shows total check-ins, unique attendees, and first-time vs returning breakdown.',
     steps: [
       {
         method: 'GET',
@@ -2557,9 +2582,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '32',
     category: 'Branches',
     title: 'Branch Deletion & Multi-Tenant Scoping',
-    description: 'Delete church branches with safety checks and understand how branch scoping works for multi-tenant data isolation.',
+    description:
+      'Delete church branches with safety checks and understand how branch scoping works for multi-tenant data isolation.',
     prerequisites: 'Branch must exist. Church_admin or senior_pastor role required.',
-    businessRule: 'Branch deletion is blocked if any members are assigned to the branch. All queries are scoped by church_id for tenant isolation.',
+    businessRule:
+      'Branch deletion is blocked if any members are assigned to the branch. All queries are scoped by church_id for tenant isolation.',
     steps: [
       {
         method: 'DELETE',
@@ -2581,9 +2608,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '33',
     category: 'Church',
     title: 'Church Configuration & Settings',
-    description: 'Manage church-level configuration including payment gateway, WhatsApp settings, branding, and feature toggles.',
+    description:
+      'Manage church-level configuration including payment gateway, WhatsApp settings, branding, and feature toggles.',
     prerequisites: 'Church must exist. Church_admin or senior_pastor role required.',
-    businessRule: 'Config is stored as key-value pairs. Default payment gateway can be paystack or flutterwave. Changes are audit-logged.',
+    businessRule:
+      'Config is stored as key-value pairs. Default payment gateway can be paystack or flutterwave. Changes are audit-logged.',
     steps: [
       {
         method: 'GET',
@@ -2631,9 +2660,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '34',
     category: 'Church',
     title: 'Staff Invitation & Management',
-    description: 'Invite new staff members via email, manage staff roles, and remove staff from the church.',
+    description:
+      'Invite new staff members via email, manage staff roles, and remove staff from the church.',
     prerequisites: 'Requires church_admin or senior_pastor role.',
-    businessRule: 'Invitations use Supabase admin invite API. Staff listing supports pagination, search by name/email, and role/branch filtering.',
+    businessRule:
+      'Invitations use Supabase admin invite API. Staff listing supports pagination, search by name/email, and role/branch filtering.',
     steps: [
       {
         method: 'POST',
@@ -2711,9 +2742,12 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '35',
     category: 'Giving',
     title: 'Recurring Giving Setup',
-    description: 'Set up automated recurring giving schedules using saved payment authorization codes. Members can schedule weekly, bi-weekly, or monthly tithes and offerings.',
-    prerequisites: 'Member must have completed at least one successful digital payment to have a stored authorization code.',
-    businessRule: 'Recurring schedules are processed nightly by BullMQ RecurringGivingProcessor. Authorization codes are stored from successful Paystack/Flutterwave transactions.',
+    description:
+      'Set up automated recurring giving schedules using saved payment authorization codes. Members can schedule weekly, bi-weekly, or monthly tithes and offerings.',
+    prerequisites:
+      'Member must have completed at least one successful digital payment to have a stored authorization code.',
+    businessRule:
+      'Recurring schedules are processed nightly by BullMQ RecurringGivingProcessor. Authorization codes are stored from successful Paystack/Flutterwave transactions.',
     steps: [
       {
         method: 'POST',
@@ -2799,9 +2833,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '36',
     category: 'Giving',
     title: 'Transaction Listing & Filtering',
-    description: 'Query and filter giving transactions with pagination. Supports filtering by category, member, status, type, date range, and payment gateway.',
+    description:
+      'Query and filter giving transactions with pagination. Supports filtering by category, member, status, type, date range, and payment gateway.',
     prerequisites: 'Transactions must exist in the church scope.',
-    businessRule: 'Transactions are immutable once their status is finalized (success, failed). Only pending transactions can be modified. All queries scoped by church_id.',
+    businessRule:
+      'Transactions are immutable once their status is finalized (success, failed). Only pending transactions can be modified. All queries scoped by church_id.',
     steps: [
       {
         method: 'GET',
@@ -2847,9 +2883,11 @@ Emeka,Nwosu,emeka@example.com,+2348022334455,active,Surulere Chapel`,
     id: '37',
     category: 'Giving',
     title: 'PDF Receipt Download',
-    description: 'Download a PDF receipt for any successful giving transaction. Receipts are auto-generated with a sequential receipt number.',
+    description:
+      'Download a PDF receipt for any successful giving transaction. Receipts are auto-generated with a sequential receipt number.',
     prerequisites: 'Transaction must have status "success" in the same church.',
-    businessRule: 'Receipt numbers follow the format: {YEAR}/{CATEGORY_PREFIX}/{SEQUENTIAL} (e.g., 2026/TIT/0001). PDF is generated server-side using PDFKit.',
+    businessRule:
+      'Receipt numbers follow the format: {YEAR}/{CATEGORY_PREFIX}/{SEQUENTIAL} (e.g., 2026/TIT/0001). PDF is generated server-side using PDFKit.',
     steps: [
       {
         method: 'GET',
@@ -2872,9 +2910,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '38',
     category: 'Events',
     title: 'Paid Event Ticket Tiers',
-    description: 'Create and manage multi-tier ticket pricing for paid events. Supports early bird, regular, and VIP tiers with quantity limits.',
-    prerequisites: 'Event must exist and have type "paid". Church_admin or branch_pastor role required.',
-    businessRule: 'Ticket tiers are created after the event. Capacity is enforced per tier. Total registrations cannot exceed event capacity across all tiers.',
+    description:
+      'Create and manage multi-tier ticket pricing for paid events. Supports early bird, regular, and VIP tiers with quantity limits.',
+    prerequisites:
+      'Event must exist and have type "paid". Church_admin or branch_pastor role required.',
+    businessRule:
+      'Ticket tiers are created after the event. Capacity is enforced per tier. Total registrations cannot exceed event capacity across all tiers.',
     steps: [
       {
         method: 'POST',
@@ -2925,9 +2966,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '39',
     category: 'Events',
     title: 'Event Registration & Ticket Purchase',
-    description: 'Register members for events. For free events, registration is instant. For paid events, payment is required before registration is confirmed.',
+    description:
+      'Register members for events. For free events, registration is instant. For paid events, payment is required before registration is confirmed.',
     prerequisites: 'Event must exist and registration must be open.',
-    businessRule: 'Free events confirm registration immediately. Paid events require payment confirmation via webhook before ticket is issued. Capacity and duplicate checks apply.',
+    businessRule:
+      'Free events confirm registration immediately. Paid events require payment confirmation via webhook before ticket is issued. Capacity and duplicate checks apply.',
     steps: [
       {
         method: 'POST',
@@ -2972,9 +3015,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '40',
     category: 'Events',
     title: 'Event Ticket Validation',
-    description: 'Validate tickets at the event entrance. Each ticket has a unique code that can be scanned or entered manually.',
-    prerequisites: 'Event must be ongoing or upcoming. Ticket must exist and be confirmed (payment completed).',
-    businessRule: 'Tickets can only be validated once. Validation records the timestamp and validator identity for audit.',
+    description:
+      'Validate tickets at the event entrance. Each ticket has a unique code that can be scanned or entered manually.',
+    prerequisites:
+      'Event must be ongoing or upcoming. Ticket must exist and be confirmed (payment completed).',
+    businessRule:
+      'Tickets can only be validated once. Validation records the timestamp and validator identity for audit.',
     steps: [
       {
         method: 'POST',
@@ -3004,9 +3050,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '41',
     category: 'Events',
     title: 'Event Payment Webhook',
-    description: 'Handle Paystack payment confirmation for paid event registrations. Called automatically by Paystack after successful payment.',
-    prerequisites: 'Paystack must be configured as the payment gateway. The event registration must have a pending payment.',
-    businessRule: 'Webhook verifies HMAC-SHA512 signature (x-paystack-signature). Idempotent for terminal states — already-confirmed registrations are skipped.',
+    description:
+      'Handle Paystack payment confirmation for paid event registrations. Called automatically by Paystack after successful payment.',
+    prerequisites:
+      'Paystack must be configured as the payment gateway. The event registration must have a pending payment.',
+    businessRule:
+      'Webhook verifies HMAC-SHA512 signature (x-paystack-signature). Idempotent for terminal states — already-confirmed registrations are skipped.',
     steps: [
       {
         method: 'POST',
@@ -3038,9 +3087,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '42',
     category: 'Sermons',
     title: 'Sermon Archive & Search',
-    description: 'Create, search, and manage sermon records. Supports filtering by speaker, series, tags, and date ranges for easy discovery.',
+    description:
+      'Create, search, and manage sermon records. Supports filtering by speaker, series, tags, and date ranges for easy discovery.',
     prerequisites: 'Church_admin or branch_pastor role required for creating/updating sermons.',
-    businessRule: 'Sermons are scoped by church_id. Audio URLs are set after upload to Supabase Storage via the MediaService.',
+    businessRule:
+      'Sermons are scoped by church_id. Audio URLs are set after upload to Supabase Storage via the MediaService.',
     steps: [
       {
         method: 'POST',
@@ -3148,9 +3199,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '43',
     category: 'WhatsApp',
     title: 'WhatsApp Template Messaging',
-    description: 'Send pre-approved WhatsApp template messages to members. Templates must be created and approved by WhatsApp before use.',
-    prerequisites: 'Template must have external_status "published" and channel "whatsapp". 360dialog API key must be configured.',
-    businessRule: 'Templates use variable interpolation with {{1}}, {{2}} placeholders. Only published templates can be sent. Rate limit: 1000 messages/minute.',
+    description:
+      'Send pre-approved WhatsApp template messages to members. Templates must be created and approved by WhatsApp before use.',
+    prerequisites:
+      'Template must have external_status "published" and channel "whatsapp". 360dialog API key must be configured.',
+    businessRule:
+      'Templates use variable interpolation with {{1}}, {{2}} placeholders. Only published templates can be sent. Rate limit: 1000 messages/minute.',
     steps: [
       {
         method: 'POST',
@@ -3181,9 +3235,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '44',
     category: 'WhatsApp',
     title: 'WhatsApp Message History',
-    description: 'View sent and received WhatsApp messages with delivery status tracking. Supports filtering by phone number, direction, and date range.',
+    description:
+      'View sent and received WhatsApp messages with delivery status tracking. Supports filtering by phone number, direction, and date range.',
     prerequisites: 'WhatsApp channel must be configured with 360dialog.',
-    businessRule: 'Messages are logged to the Message model with direction (inbound/outbound) and channel status. Webhook updates status asynchronously.',
+    businessRule:
+      'Messages are logged to the Message model with direction (inbound/outbound) and channel status. Webhook updates status asynchronously.',
     steps: [
       {
         method: 'GET',
@@ -3208,9 +3264,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '45',
     category: 'Templates',
     title: 'Create & List Message Templates',
-    description: 'Create and manage message templates for WhatsApp, SMS, and Email channels. Templates support variable placeholders for personalization.',
+    description:
+      'Create and manage message templates for WhatsApp, SMS, and Email channels. Templates support variable placeholders for personalization.',
     prerequisites: 'Church_admin or branch_pastor role required.',
-    businessRule: 'Templates are scoped by church_id. Each template has a channel (whatsapp, sms, email), category (transactional, promotional, alert), and optional external_id for WhatsApp approval tracking.',
+    businessRule:
+      'Templates are scoped by church_id. Each template has a channel (whatsapp, sms, email), category (transactional, promotional, alert), and optional external_id for WhatsApp approval tracking.',
     steps: [
       {
         method: 'POST',
@@ -3260,9 +3318,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '46',
     category: 'Templates',
     title: 'Template Update & Status Management',
-    description: 'Update template content, manage approval status for WhatsApp templates, and archive unused templates.',
+    description:
+      'Update template content, manage approval status for WhatsApp templates, and archive unused templates.',
     prerequisites: 'Template must exist and belong to the church.',
-    businessRule: 'WhatsApp template content cannot be edited after submission — a new version must be created. SMS and Email templates can be freely updated.',
+    businessRule:
+      'WhatsApp template content cannot be edited after submission — a new version must be created. SMS and Email templates can be freely updated.',
     steps: [
       {
         method: 'PATCH',
@@ -3296,9 +3356,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '47',
     category: 'Broadcasts',
     title: 'Create & Send Broadcast Campaign',
-    description: 'Create and send bulk message campaigns to targeted audience segments with channel selection (WhatsApp, SMS, or Email).',
-    prerequisites: 'At least one template must exist for the selected channel. Church_admin or branch_pastor role required.',
-    businessRule: 'Audience is filtered by member status, branch, gender, and free-text search. Messages are enqueued to channel-specific BullMQ queues for async delivery.',
+    description:
+      'Create and send bulk message campaigns to targeted audience segments with channel selection (WhatsApp, SMS, or Email).',
+    prerequisites:
+      'At least one template must exist for the selected channel. Church_admin or branch_pastor role required.',
+    businessRule:
+      'Audience is filtered by member status, branch, gender, and free-text search. Messages are enqueued to channel-specific BullMQ queues for async delivery.',
     steps: [
       {
         method: 'POST',
@@ -3353,9 +3416,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '48',
     category: 'Broadcasts',
     title: 'Monitor & Cancel Broadcast',
-    description: 'Track broadcast progress with real-time delivery stats and cancel scheduled broadcasts before they begin sending.',
+    description:
+      'Track broadcast progress with real-time delivery stats and cancel scheduled broadcasts before they begin sending.',
     prerequisites: 'Broadcast must exist and belong to the church.',
-    businessRule: 'Only broadcasts with status "scheduled" or "draft" can be cancelled. Already-sending broadcasts cannot be interrupted.',
+    businessRule:
+      'Only broadcasts with status "scheduled" or "draft" can be cancelled. Already-sending broadcasts cannot be interrupted.',
     steps: [
       {
         method: 'GET',
@@ -3402,9 +3467,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '49',
     category: 'Pastoral',
     title: 'Life Event Tracking',
-    description: 'Record and manage significant life events for members including birthdays, weddings, baptisms, dedications, and anniversaries.',
-    prerequisites: 'Member must exist in the church. Church_admin, branch_pastor, or pastoral team role required.',
-    businessRule: 'Life events are used for automated greeting campaigns and pastoral follow-up. Events are linked to members and can trigger notifications.',
+    description:
+      'Record and manage significant life events for members including birthdays, weddings, baptisms, dedications, and anniversaries.',
+    prerequisites:
+      'Member must exist in the church. Church_admin, branch_pastor, or pastoral team role required.',
+    businessRule:
+      'Life events are used for automated greeting campaigns and pastoral follow-up. Events are linked to members and can trigger notifications.',
     steps: [
       {
         method: 'POST',
@@ -3453,9 +3521,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '50',
     category: 'Pastoral',
     title: 'Upcoming Life Events & Engagement Scores',
-    description: 'View upcoming life events for automated greetings and track member engagement and risk scores.',
-    prerequisites: 'Life events must be recorded. Scoring requires sufficient activity data (attendance, giving, events, communication).',
-    businessRule: 'Engagement score (0-100) weights: attendance 30%, giving 25%, events 20%, communication 15%, consistency 10%. Risk score flags members with declining participation.',
+    description:
+      'View upcoming life events for automated greetings and track member engagement and risk scores.',
+    prerequisites:
+      'Life events must be recorded. Scoring requires sufficient activity data (attendance, giving, events, communication).',
+    businessRule:
+      'Engagement score (0-100) weights: attendance 30%, giving 25%, events 20%, communication 15%, consistency 10%. Risk score flags members with declining participation.',
     steps: [
       {
         method: 'GET',
@@ -3493,9 +3564,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '51',
     category: 'Pastoral',
     title: 'Pastoral Notes & Confidentiality',
-    description: 'Create and manage encrypted pastoral notes with confidentiality-based access control. Supports standard, confidential, and restricted notes.',
+    description:
+      'Create and manage encrypted pastoral notes with confidentiality-based access control. Supports standard, confidential, and restricted notes.',
     prerequisites: 'Member must exist. PASTORAL_ENCRYPTION_KEY must be configured.',
-    businessRule: 'Notes are AES-256-GCM encrypted at rest. Confidential notes require church_admin/branch_pastor. Restricted notes require dual-authorization for deletion. Standard notes are visible to all pastoral staff.',
+    businessRule:
+      'Notes are AES-256-GCM encrypted at rest. Confidential notes require church_admin/branch_pastor. Restricted notes require dual-authorization for deletion. Standard notes are visible to all pastoral staff.',
     steps: [
       {
         method: 'POST',
@@ -3531,9 +3604,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '52',
     category: 'Admin',
     title: 'Admin Dashboard Overview',
-    description: 'Access the admin dashboard with aggregated metrics including members needing attention, engagement distribution, and rising stars.',
+    description:
+      'Access the admin dashboard with aggregated metrics including members needing attention, engagement distribution, and rising stars.',
     prerequisites: 'Requires church_admin, senior_pastor, or branch_pastor role.',
-    businessRule: 'Dashboard data is pre-computed from aggregated queries across multiple tables. Metrics are updated nightly but can be manually refreshed.',
+    businessRule:
+      'Dashboard data is pre-computed from aggregated queries across multiple tables. Metrics are updated nightly but can be manually refreshed.',
     steps: [
       {
         method: 'GET',
@@ -3561,9 +3636,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '53',
     category: 'Admin',
     title: 'Manual Score Recalculation',
-    description: 'Trigger manual recalculation of engagement and risk scores for a specific member or the entire church.',
+    description:
+      'Trigger manual recalculation of engagement and risk scores for a specific member or the entire church.',
     prerequisites: 'Requires church_admin or senior_pastor role.',
-    businessRule: 'Recalculation is processed asynchronously via BullMQ. Large churches (>5000 members) may take several minutes. Rate limit: 1 request per 5 minutes.',
+    businessRule:
+      'Recalculation is processed asynchronously via BullMQ. Large churches (>5000 members) may take several minutes. Rate limit: 1 request per 5 minutes.',
     steps: [
       {
         method: 'POST',
@@ -3593,9 +3670,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '54',
     category: 'Assets',
     title: 'Asset Category Management',
-    description: 'Create and manage asset categories for organizing church inventory (furniture, electronics, vehicles, musical instruments, etc.).',
+    description:
+      'Create and manage asset categories for organizing church inventory (furniture, electronics, vehicles, musical instruments, etc.).',
     prerequisites: 'Requires church_admin or branch_pastor role.',
-    businessRule: 'Category names must be unique within a church. Categories can be soft-deleted (deactivated) if no assets are assigned.',
+    businessRule:
+      'Category names must be unique within a church. Categories can be soft-deleted (deactivated) if no assets are assigned.',
     steps: [
       {
         method: 'POST',
@@ -3640,9 +3719,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '55',
     category: 'Assets',
     title: 'Asset Registration & Lifecycle',
-    description: 'Register church assets with detailed information including purchase details, location, custodian, and condition tracking.',
+    description:
+      'Register church assets with detailed information including purchase details, location, custodian, and condition tracking.',
     prerequisites: 'Asset category must exist. Church_admin or branch_pastor role required.',
-    businessRule: 'Asset tags are unique per church (format: CHURCHOS-XXX-001). Condition tracking: new, good, fair, poor, damaged. Status: active, maintenance, retired, lost.',
+    businessRule:
+      'Asset tags are unique per church (format: CHURCHOS-XXX-001). Condition tracking: new, good, fair, poor, damaged. Status: active, maintenance, retired, lost.',
     steps: [
       {
         method: 'POST',
@@ -3699,9 +3780,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '56',
     category: 'Assets',
     title: 'Asset Maintenance & Depreciation',
-    description: 'Schedule and track asset maintenance tasks. Calculate depreciation using straight-line or reducing-balance methods.',
+    description:
+      'Schedule and track asset maintenance tasks. Calculate depreciation using straight-line or reducing-balance methods.',
     prerequisites: 'Asset must be registered and active.',
-    businessRule: 'Maintenance statuses: scheduled, in_progress, completed, cancelled. Depreciation methods: straight-line (SL) or reducing-balance (RB). Yearly snapshots are stored.',
+    businessRule:
+      'Maintenance statuses: scheduled, in_progress, completed, cancelled. Depreciation methods: straight-line (SL) or reducing-balance (RB). Yearly snapshots are stored.',
     steps: [
       {
         method: 'POST',
@@ -3760,9 +3843,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '57',
     category: 'Assets',
     title: 'Asset Loan Management & QR Scanning',
-    description: 'Loan assets to members or external parties with return tracking. Generate QR codes for quick asset identification and scan logging.',
+    description:
+      'Loan assets to members or external parties with return tracking. Generate QR codes for quick asset identification and scan logging.',
     prerequisites: 'Asset must be registered and in "active" status.',
-    businessRule: 'An asset on loan cannot be loaned again until returned. QR codes use format CHURCHOS:ASSET:<assetId>. Scan logs record timestamp, location, and scanner identity.',
+    businessRule:
+      'An asset on loan cannot be loaned again until returned. QR codes use format CHURCHOS:ASSET:<assetId>. Scan logs record timestamp, location, and scanner identity.',
     steps: [
       {
         method: 'POST',
@@ -3859,9 +3944,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '58',
     category: 'Forms',
     title: 'Form Builder & Publishing',
-    description: 'Create custom forms with field definitions (text, number, select, date, file, etc.), set visibility permissions, and publish for member submissions.',
+    description:
+      'Create custom forms with field definitions (text, number, select, date, file, etc.), set visibility permissions, and publish for member submissions.',
     prerequisites: 'Church_admin or branch_pastor role required.',
-    businessRule: 'Forms can be public (anonymous submission via public_token) or private (authenticated members only). Forms support field validation, required fields, and file attachments.',
+    businessRule:
+      'Forms can be public (anonymous submission via public_token) or private (authenticated members only). Forms support field validation, required fields, and file attachments.',
     steps: [
       {
         method: 'POST',
@@ -3915,9 +4002,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '59',
     category: 'Forms',
     title: 'Form Submissions & Attachments',
-    description: 'Submit form responses with field values and optional file attachments. Supports both authenticated and public anonymous submissions.',
-    prerequisites: 'Form must be published. Public forms require the public_token for anonymous access.',
-    businessRule: 'Submissions are validated against field definitions (required fields, type constraints). File attachments are uploaded via MediaService and linked to the submission.',
+    description:
+      'Submit form responses with field values and optional file attachments. Supports both authenticated and public anonymous submissions.',
+    prerequisites:
+      'Form must be published. Public forms require the public_token for anonymous access.',
+    businessRule:
+      'Submissions are validated against field definitions (required fields, type constraints). File attachments are uploaded via MediaService and linked to the submission.',
     steps: [
       {
         method: 'POST',
@@ -3974,9 +4064,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '60',
     category: 'Forms',
     title: 'Submission Approval Workflow',
-    description: 'Review, approve, or reject form submissions. Supports moderated workflows where submissions require admin approval before being finalized.',
-    prerequisites: 'Form must have submissions. Approver must have church_admin or branch_pastor role.',
-    businessRule: 'Approved submissions are finalized and cannot be modified. Rejected submissions include a rejection_reason. Submissions can be re-submitted after rejection.',
+    description:
+      'Review, approve, or reject form submissions. Supports moderated workflows where submissions require admin approval before being finalized.',
+    prerequisites:
+      'Form must have submissions. Approver must have church_admin or branch_pastor role.',
+    businessRule:
+      'Approved submissions are finalized and cannot be modified. Rejected submissions include a rejection_reason. Submissions can be re-submitted after rejection.',
     steps: [
       {
         method: 'GET',
@@ -4040,9 +4133,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '61',
     category: 'Analytics',
     title: 'Analytics Dashboard',
-    description: 'Access the unified analytics dashboard with a comprehensive overview of members, attendance, giving, risk scores, events, forms, and engagement.',
+    description:
+      'Access the unified analytics dashboard with a comprehensive overview of members, attendance, giving, risk scores, events, forms, and engagement.',
     prerequisites: 'Requires church_admin, senior_pastor, or branch_pastor role.',
-    businessRule: 'Dashboard data is computed from aggregated real-time queries across multiple tables. All metrics are scoped by church_id and date range.',
+    businessRule:
+      'Dashboard data is computed from aggregated real-time queries across multiple tables. All metrics are scoped by church_id and date range.',
     steps: [
       {
         method: 'GET',
@@ -4069,9 +4164,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '62',
     category: 'Analytics',
     title: 'Giving & Attendance Analytics',
-    description: 'Detailed analytics for giving (totals, trends, category breakdown, top donors) and attendance (check-ins, sources, branch breakdown, first-time vs returning).',
+    description:
+      'Detailed analytics for giving (totals, trends, category breakdown, top donors) and attendance (check-ins, sources, branch breakdown, first-time vs returning).',
     prerequisites: 'Sufficient data must exist for meaningful analysis.',
-    businessRule: 'Giving analytics trend data can be grouped by daily, weekly, or monthly. Attendance analytics show source breakdown (QR, WhatsApp, manual) and branch-level stats.',
+    businessRule:
+      'Giving analytics trend data can be grouped by daily, weekly, or monthly. Attendance analytics show source breakdown (QR, WhatsApp, manual) and branch-level stats.',
     steps: [
       {
         method: 'GET',
@@ -4117,9 +4214,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '63',
     category: 'Analytics',
     title: 'Members, Events & Communication Analytics',
-    description: 'Member demographics and growth trends, event performance metrics, and communication channel delivery stats.',
+    description:
+      'Member demographics and growth trends, event performance metrics, and communication channel delivery stats.',
     prerequisites: 'Sufficient data must exist for the queried period.',
-    businessRule: 'Member analytics include status breakdown, gender distribution, age group analysis. Event analytics include registration trends, revenue, and capacity utilization.',
+    businessRule:
+      'Member analytics include status breakdown, gender distribution, age group analysis. Event analytics include registration trends, revenue, and capacity utilization.',
     steps: [
       {
         method: 'GET',
@@ -4185,9 +4284,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '64',
     category: 'Custom Fields',
     title: 'Custom Field Management',
-    description: 'Create and manage custom fields for members and other entities. Extend member profiles with church-specific data fields.',
+    description:
+      'Create and manage custom fields for members and other entities. Extend member profiles with church-specific data fields.',
     prerequisites: 'Requires church_admin role.',
-    businessRule: 'Custom fields are scoped by church_id. Field types: text, number, date, select, multi_select, boolean. Custom fields appear in member detail responses and list filters.',
+    businessRule:
+      'Custom fields are scoped by church_id. Field types: text, number, date, select, multi_select, boolean. Custom fields appear in member detail responses and list filters.',
     steps: [
       {
         method: 'POST',
@@ -4240,9 +4341,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '65',
     category: 'Visitors',
     title: 'Visitor Registration & Management',
-    description: 'Register and manage church visitors captured through the attendance visitor check-in flow or manual entry.',
+    description:
+      'Register and manage church visitors captured through the attendance visitor check-in flow or manual entry.',
     prerequisites: 'Visitor check-in requires an active service.',
-    businessRule: 'Visitors are stored as members with status "visitor". They can be converted to full members through the member update flow. Visitor data is scoped by church.',
+    businessRule:
+      'Visitors are stored as members with status "visitor". They can be converted to full members through the member update flow. Visitor data is scoped by church.',
     steps: [
       {
         method: 'POST',
@@ -4295,9 +4398,12 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '66',
     category: 'Users',
     title: 'User Invitation & Listing',
-    description: 'Manage church users (staff accounts). Invite new users via email, list existing users with filters, and view user details.',
-    prerequisites: 'Requires church_admin or senior_pastor role. Supabase Auth admin API must be accessible.',
-    businessRule: 'Invitations use Supabase admin API to create users and send invite emails. Users are scoped by church_id. Listing supports search, filter by role/status, and sort.',
+    description:
+      'Manage church users (staff accounts). Invite new users via email, list existing users with filters, and view user details.',
+    prerequisites:
+      'Requires church_admin or senior_pastor role. Supabase Auth admin API must be accessible.',
+    businessRule:
+      'Invitations use Supabase admin API to create users and send invite emails. Users are scoped by church_id. Listing supports search, filter by role/status, and sort.',
     steps: [
       {
         method: 'POST',
@@ -4369,9 +4475,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '67',
     category: 'Users',
     title: 'User Deactivation & Password Reset',
-    description: 'Deactivate user accounts, send password reset emails, and force sign-out for security management.',
+    description:
+      'Deactivate user accounts, send password reset emails, and force sign-out for security management.',
     prerequisites: 'Requires church_admin or senior_pastor role. Cannot deactivate self.',
-    businessRule: 'Deactivation sets the user status to "deactivated" but retains the account record. Password reset sends a Supabase reset email. Force sign-out invalidates all active sessions.',
+    businessRule:
+      'Deactivation sets the user status to "deactivated" but retains the account record. Password reset sends a Supabase reset email. Force sign-out invalidates all active sessions.',
     steps: [
       {
         method: 'POST',
@@ -4417,9 +4525,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '68',
     category: 'Notifications',
     title: 'Notification Management',
-    description: 'View and manage in-app notifications for church members and staff. Supports read/unread tracking and bulk mark-as-read.',
+    description:
+      'View and manage in-app notifications for church members and staff. Supports read/unread tracking and bulk mark-as-read.',
     prerequisites: 'User must be authenticated.',
-    businessRule: 'Notifications are scoped by user (recipient). Unread count is a lightweight query for badge display. Notifications are auto-generated by system events (new member, giving received, etc.).',
+    businessRule:
+      'Notifications are scoped by user (recipient). Unread count is a lightweight query for badge display. Notifications are auto-generated by system events (new member, giving received, etc.).',
     steps: [
       {
         method: 'GET',
@@ -4481,9 +4591,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '69',
     category: 'Sync',
     title: 'Offline Data Synchronization',
-    description: 'Support offline mobile clients by providing push/pull sync with idempotency, conflict resolution, and cursor-based pagination.',
+    description:
+      'Support offline mobile clients by providing push/pull sync with idempotency, conflict resolution, and cursor-based pagination.',
     prerequisites: 'Client must have a stable internet connection for the sync operation.',
-    businessRule: 'Idempotency: duplicate entity_id + action combinations are skipped. Conflict resolution: last-write-wins based on clientTimestamp. Pull uses cursor-based pagination for reliable offset handling.',
+    businessRule:
+      'Idempotency: duplicate entity_id + action combinations are skipped. Conflict resolution: last-write-wins based on clientTimestamp. Pull uses cursor-based pagination for reliable offset handling.',
     steps: [
       {
         method: 'POST',
@@ -4549,9 +4661,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '70',
     category: 'Reports',
     title: 'Financial Reports',
-    description: 'Generate financial reports with revenue totals, category breakdowns, monthly trends, and branch-level analysis.',
+    description:
+      'Generate financial reports with revenue totals, category breakdowns, monthly trends, and branch-level analysis.',
     prerequisites: 'Requires church_admin, senior_pastor, or treasurer role.',
-    businessRule: 'All financial data is aggregated from the transactions table. Reports are scoped by church_id and can be filtered by date range, category, and branch.',
+    businessRule:
+      'All financial data is aggregated from the transactions table. Reports are scoped by church_id and can be filtered by date range, category, and branch.',
     steps: [
       {
         method: 'GET',
@@ -4577,9 +4691,11 @@ Includes: Church name, member name, receipt number, date, category, amount (in w
     id: '71',
     category: 'Reports',
     title: 'Attendance & Member Reports',
-    description: 'Generate attendance reports with service-level detail, trends, and member demographics reports including status and gender breakdowns.',
+    description:
+      'Generate attendance reports with service-level detail, trends, and member demographics reports including status and gender breakdowns.',
     prerequisites: 'Requires church_admin, senior_pastor, or branch_pastor role.',
-    businessRule: 'Attendance reports aggregate from the attendance table. Member reports include status distribution, gender breakdown, and monthly growth trends.',
+    businessRule:
+      'Attendance reports aggregate from the attendance table. Member reports include status distribution, gender breakdown, and monthly growth trends.',
     steps: [
       {
         method: 'GET',
@@ -4644,9 +4760,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '72',
     category: 'Webhooks',
     title: 'Webhook Subscription Management',
-    description: 'Create and manage outbound webhook subscriptions to receive real-time event notifications from the ChurchOS platform.',
+    description:
+      'Create and manage outbound webhook subscriptions to receive real-time event notifications from the ChurchOS platform.',
     prerequisites: 'Requires church_admin or senior_pastor role.',
-    businessRule: 'Webhook payloads are signed with HMAC-SHA256. Delivery uses BullMQ with 3 retries and exponential backoff (5s, 25s, 125s). Supported events: member.created, member.updated, transaction.success, etc.',
+    businessRule:
+      'Webhook payloads are signed with HMAC-SHA256. Delivery uses BullMQ with 3 retries and exponential backoff (5s, 25s, 125s). Supported events: member.created, member.updated, transaction.success, etc.',
     steps: [
       {
         method: 'POST',
@@ -4706,9 +4824,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '73',
     category: 'Webhooks',
     title: 'Webhook Delivery Logs & Testing',
-    description: 'View delivery history for webhook subscriptions, including payload, response status, and retry attempts. Test webhook subscriptions with sample events.',
+    description:
+      'View delivery history for webhook subscriptions, including payload, response status, and retry attempts. Test webhook subscriptions with sample events.',
     prerequisites: 'Webhook subscription must exist and be active.',
-    businessRule: 'Delivery logs are retained for 30 days. Each delivery includes the full payload, response status code, response body (truncated), and duration. Failed deliveries include error details.',
+    businessRule:
+      'Delivery logs are retained for 30 days. Each delivery includes the full payload, response status code, response body (truncated), and duration. Failed deliveries include error details.',
     steps: [
       {
         method: 'GET',
@@ -4753,9 +4873,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '74',
     category: 'Media',
     title: 'File Upload & Optimization',
-    description: 'Upload images and files to Supabase Storage. Images are automatically optimized to WebP format with configurable quality and size limits.',
+    description:
+      'Upload images and files to Supabase Storage. Images are automatically optimized to WebP format with configurable quality and size limits.',
     prerequisites: 'Must be authenticated. Max file size is configurable (default 5MB).',
-    businessRule: 'Images are converted to WebP via sharp (quality 80, max 1200px width/height). Original files are stored as-is. A MediaAsset record is created for every upload with MIME type, size, and dimensions.',
+    businessRule:
+      'Images are converted to WebP via sharp (quality 80, max 1200px width/height). Original files are stored as-is. A MediaAsset record is created for every upload with MIME type, size, and dimensions.',
     steps: [
       {
         method: 'POST',
@@ -4805,9 +4927,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '75',
     category: 'Media',
     title: 'Media Library Management',
-    description: 'Browse, search, and manage uploaded media assets. Supports folder organization, permission settings, and asset deletion.',
+    description:
+      'Browse, search, and manage uploaded media assets. Supports folder organization, permission settings, and asset deletion.',
     prerequisites: 'Media assets must exist. Deletion requires church_admin role.',
-    businessRule: 'Library supports filtering by folder, MIME type, and permission level. Deletion removes both the database record and the storage file. Permissions: public, church_only, admin_only.',
+    businessRule:
+      'Library supports filtering by folder, MIME type, and permission level. Deletion removes both the database record and the storage file. Permissions: public, church_only, admin_only.',
     steps: [
       {
         method: 'GET',
@@ -4896,9 +5020,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '76',
     category: 'Family',
     title: 'Family Group Management',
-    description: 'Create and manage family groups within the church. Associate members as family members with designated head-of-family and relationship tracking.',
+    description:
+      'Create and manage family groups within the church. Associate members as family members with designated head-of-family and relationship tracking.',
     prerequisites: 'Members must exist in the church.',
-    businessRule: 'Each family has one head (the primary contact). Members can belong to one family at a time. Relationships: head, spouse, child, parent, sibling, other.',
+    businessRule:
+      'Each family has one head (the primary contact). Members can belong to one family at a time. Relationships: head, spouse, child, parent, sibling, other.',
     steps: [
       {
         method: 'POST',
@@ -4970,9 +5096,11 @@ Content-Disposition: attachment; filename="members-report-2026-07-31.csv"`,
     id: '77',
     category: 'Health',
     title: 'System Health Check',
-    description: 'Monitor system health including database connectivity, Redis availability, and all BullMQ queue statuses.',
+    description:
+      'Monitor system health including database connectivity, Redis availability, and all BullMQ queue statuses.',
     prerequisites: 'Public endpoint — no authentication required.',
-    businessRule: 'Health check returns live status of all infrastructure dependencies. Queue metrics include waiting, active, completed, and failed job counts. 5-second timeout per dependency.',
+    businessRule:
+      'Health check returns live status of all infrastructure dependencies. Queue metrics include waiting, active, completed, and failed job counts. 5-second timeout per dependency.',
     steps: [
       {
         method: 'GET',
@@ -5013,12 +5141,12 @@ function escapeHtml(text: string): string {
 }
 
 function renderFlowStep(step: FlowStep): string {
-  const methodBadge = step.method !== '-'
-    ? `<span class="method-badge method-${step.method}">${step.method}</span>`
-    : '';
-  const pathHtml = step.path !== '-'
-    ? `<code class="step-path">${escapeHtml(step.path)}</code>`
-    : '';
+  const methodBadge =
+    step.method !== '-'
+      ? `<span class="method-badge method-${step.method}">${step.method}</span>`
+      : '';
+  const pathHtml =
+    step.path !== '-' ? `<code class="step-path">${escapeHtml(step.path)}</code>` : '';
 
   let curlSection = '';
   if (step.curl) {
@@ -5080,16 +5208,23 @@ export function renderGuidePage(baseUrl: string, swaggerUrl: string): string {
     categories.get(flow.category)!.push(flow);
   }
 
-  const sidebarNav = Array.from(categories.entries()).map(([category, flows]) => {
-    const links = flows.map((f) =>
-      `<a href="#flow-${f.id}">${escapeHtml(f.title)} <span class="count">${f.steps.length}</span></a>`,
-    ).join('\n');
-    return `<div class="nav-category">${escapeHtml(category)}</div>\n${links}`;
-  }).join('\n');
+  const sidebarNav = Array.from(categories.entries())
+    .map(([category, flows]) => {
+      const links = flows
+        .map(
+          (f) =>
+            `<a href="#flow-${f.id}">${escapeHtml(f.title)} <span class="count">${f.steps.length}</span></a>`,
+        )
+        .join('\n');
+      return `<div class="nav-category">${escapeHtml(category)}</div>\n${links}`;
+    })
+    .join('\n');
 
-  const contentHtml = Array.from(categories.entries()).map(([_category, flows]) => {
-    return flows.map(renderFlow).join('\n');
-  }).join('\n');
+  const contentHtml = Array.from(categories.entries())
+    .map(([_category, flows]) => {
+      return flows.map(renderFlow).join('\n');
+    })
+    .join('\n');
 
   const totalSteps = ALL_FLOWS.reduce((sum, f) => sum + f.steps.length, 0);
 
