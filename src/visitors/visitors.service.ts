@@ -20,13 +20,9 @@ export class VisitorsService {
     churchId: string,
     userId: string,
   ): Promise<VisitorResponseDto> {
-    if (dto.assigned_to_id) {
-      const assignee = await this.prisma.profile.findUnique({
-        where: { id: dto.assigned_to_id },
-      });
-      if (!assignee || assignee.church_id !== churchId) {
-        throw new BadRequestException('Assigned team member not found');
-      }
+    let assignedToId = dto.assigned_to_id;
+    if (assignedToId) {
+      assignedToId = await this.resolveAssigneeProfileId(assignedToId, churchId);
     }
 
     const visitor = await this.prisma.visitor.create({
@@ -37,7 +33,7 @@ export class VisitorsService {
         phone: dto.phone,
         whatsapp_number: dto.whatsapp_number,
         email: dto.email,
-        assigned_to_id: dto.assigned_to_id,
+        assigned_to_id: assignedToId,
         notes: dto.notes,
       },
       include: { assigned_to: { select: { first_name: true, last_name: true } } },
@@ -104,15 +100,6 @@ export class VisitorsService {
       throw new NotFoundException('Visitor not found');
     }
 
-    if (dto.assigned_to_id) {
-      const assignee = await this.prisma.profile.findUnique({
-        where: { id: dto.assigned_to_id },
-      });
-      if (!assignee || assignee.church_id !== churchId) {
-        throw new BadRequestException('Assigned team member not found');
-      }
-    }
-
     const updateData: Record<string, unknown> = {};
     if (dto.first_name !== undefined) updateData.first_name = dto.first_name;
     if (dto.last_name !== undefined) updateData.last_name = dto.last_name;
@@ -120,8 +107,14 @@ export class VisitorsService {
     if (dto.whatsapp_number !== undefined) updateData.whatsapp_number = dto.whatsapp_number;
     if (dto.email !== undefined) updateData.email = dto.email;
     if (dto.follow_up_status !== undefined) updateData.follow_up_status = dto.follow_up_status;
-    if (dto.assigned_to_id !== undefined) updateData.assigned_to_id = dto.assigned_to_id;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
+    if (dto.assigned_to_id !== undefined) {
+      let resolvedId = dto.assigned_to_id;
+      if (resolvedId) {
+        resolvedId = await this.resolveAssigneeProfileId(resolvedId, churchId);
+      }
+      updateData.assigned_to_id = resolvedId;
+    }
 
     const visitor = await this.prisma.visitor.update({
       where: { id },
@@ -220,6 +213,28 @@ export class VisitorsService {
       visitor: this.toResponseDto(updatedVisitor),
       memberId: member.id,
     };
+  }
+
+  private async resolveAssigneeProfileId(assigneeId: string, churchId: string): Promise<string> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: assigneeId },
+      select: { id: true, church_id: true },
+    });
+
+    if (profile && profile.church_id === churchId) {
+      return profile.id;
+    }
+
+    const memberProfile = await this.prisma.profile.findUnique({
+      where: { member_id: assigneeId },
+      select: { id: true, church_id: true },
+    });
+
+    if (!memberProfile || memberProfile.church_id !== churchId) {
+      throw new BadRequestException('Assigned team member not found');
+    }
+
+    return memberProfile.id;
   }
 
   private toResponseDto(visitor: {

@@ -13,6 +13,8 @@ import { ProfileService } from '../../../src/profile/profile.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { MediaService, MulterFile } from '../../../src/media/media.service';
+import { SupabaseService } from '../../../src/supabase/supabase.service';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../src/redis/redis.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
@@ -29,6 +31,8 @@ describe('ProfileService', () => {
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
   let audit: { log: jest.Mock };
   let mediaService: { uploadImage: jest.Mock; deleteByUrl: jest.Mock };
+  let config: { get: jest.Mock };
+  let supabase: { client: { auth: { admin: { inviteUserByEmail: jest.Mock; updateUserById: jest.Mock; getUserById: jest.Mock; generateLink: jest.Mock; signOut: jest.Mock } } } };
   let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
@@ -77,6 +81,25 @@ describe('ProfileService', () => {
       uploadImage: jest.fn(),
       deleteByUrl: jest.fn().mockResolvedValue(undefined),
     };
+    config = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'WEB_URL') return 'https://churchos.app';
+        return undefined;
+      }),
+    };
+    supabase = {
+      client: {
+        auth: {
+          admin: {
+            inviteUserByEmail: jest.fn(),
+            updateUserById: jest.fn(),
+            getUserById: jest.fn(),
+            generateLink: jest.fn(),
+            signOut: jest.fn(),
+          },
+        },
+      },
+    };
     redis = {
       set: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue(null),
@@ -85,8 +108,10 @@ describe('ProfileService', () => {
 
     service = new ProfileService(
       prisma as unknown as PrismaService,
+      config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
       mediaService as unknown as MediaService,
+      supabase as unknown as SupabaseService,
       redis as unknown as RedisService,
     );
   });

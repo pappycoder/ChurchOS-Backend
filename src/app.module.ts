@@ -50,7 +50,7 @@ import { FormsModule } from './forms/forms.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 import { VisitorsModule } from './visitors/visitors.module';
-import { UsersModule } from './users/users.module';
+
 import { NotificationsModule } from './notifications/notifications.module';
 import { SyncModule } from './sync/sync.module';
 import { ReportsModule } from './reports/reports.module';
@@ -184,9 +184,6 @@ import { PermissionsModule } from './auth/permissions.module';
 
     // Import VisitorsModule for visitor tracking and conversion funnel.
     VisitorsModule,
-
-    // Import UsersModule for user management (staff accounts).
-    UsersModule,
 
     // Import NotificationsModule for in-app notification management.
     NotificationsModule,

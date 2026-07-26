@@ -239,14 +239,41 @@ export class SermonsService {
   private async resolveMemberId(userId: string): Promise<string> {
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: userId },
-      select: { member_id: true },
+      select: {
+        id: true,
+        member_id: true,
+        first_name: true,
+        last_name: true,
+        church_id: true,
+        branch_id: true,
+      },
     });
 
-    if (!profile?.member_id) {
-      throw new NotFoundException('User profile is not linked to a member record');
+    if (!profile) {
+      throw new NotFoundException('User does not have a profile');
     }
 
-    return profile.member_id;
+    if (profile.member_id) {
+      return profile.member_id;
+    }
+
+    // Auto-create a Member record and link it to the profile
+    const member = await this.prisma.member.create({
+      data: {
+        church_id: profile.church_id,
+        branch_id: profile.branch_id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        status: 'active',
+      },
+    });
+
+    await this.prisma.profile.update({
+      where: { id: profile.id },
+      data: { member_id: member.id },
+    });
+
+    return member.id;
   }
 
   /**

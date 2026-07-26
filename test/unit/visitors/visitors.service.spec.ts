@@ -56,6 +56,9 @@ describe('VisitorsService', () => {
       profile: {
         findUnique: jest.fn().mockImplementation(({ where }) => {
           if (where.id === assigneeId) return Promise.resolve(mockProfile);
+          if (where.member_id === 'member-abc') {
+            return Promise.resolve({ id: 'profile-from-member', church_id: churchId });
+          }
           return Promise.resolve(null);
         }),
       },
@@ -125,6 +128,23 @@ describe('VisitorsService', () => {
       await expect(
         service.create({ first_name: 'Amina', assigned_to_id: 'invalid' }, churchId, userId),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should resolve member_id to profile_id for assignee', async () => {
+      (prismaMock.visitor.create as jest.Mock).mockImplementation(({ data }) =>
+        Promise.resolve({
+          ...mockVisitor,
+          first_name: data.first_name,
+          assigned_to_id: data.assigned_to_id,
+          assigned_to: { first_name: 'David', last_name: 'Adeyemi' },
+        }),
+      );
+      const result = await service.create(
+        { first_name: 'Amina', assigned_to_id: 'member-abc' },
+        churchId,
+        userId,
+      );
+      expect(result.assignedToId).toBe('profile-from-member');
     });
   });
 

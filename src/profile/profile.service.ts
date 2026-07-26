@@ -15,14 +15,18 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaService, MulterFile } from '../media/media.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
+import { InviteUserDto } from './dto/invite-user.dto';
 import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
 import { generateSecret, generateURI, verify } from 'otplib';
 import { Prisma } from '@prisma/client';
@@ -39,8 +43,10 @@ export class ProfileService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
     private readonly mediaService: MediaService,
+    private readonly supabase: SupabaseService,
     private readonly redis: RedisService,
   ) {}
 
@@ -556,6 +562,219 @@ export class ProfileService {
     this.logger.log(`MFA disabled for user: ${userId}`);
 
     return this.getMyProfile(userId);
+  }
+
+  /**
+   * Invite a new user via email.
+   * Creates a Supabase Auth user via admin invite API, then creates the Profile.
+   */
+  async inviteUser(
+    dto: InviteUserDto,
+    churchId: string,
+    invitedByUserId: string,
+  ): Promise<ProfileResponseDto> {
+    if (!dto.email?.trim()) {
+      throw new BadRequestException('Email is required');
+    }
+
+    if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
+      throw new BadRequestException('First name and last name are required');
+    }
+
+    const supabase = this.supabase.client;
+
+    const existing = await this.prisma.profile.findFirst({
+      where: {
+        church_id: churchId,
+        OR: [{ phone: dto.phone || '__none__' }],
+      },
+    });
+
+    if (existing && dto.phone && existing.phone === dto.phone) {
+      throw new ConflictException('A user with this phone number already exists');
+    }
+
+    const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
+      data: {
+        first_name: dto.firstName,
+        last_name: dto.lastName,
+        church_id: churchId,
+        role: dto.role,
+      },
+      redirectTo: `${this.config.get<string>('WEB_URL')}/auth/callback`,
+    });
+
+    if (error) {
+      this.logger.error(`Supabase invite failed: ${error.message}`);
+      throw new BadRequestException(`Failed to send invitation: ${error.message}`);
+    }
+
+    if (!data?.user) {
+      throw new BadRequestException('Failed to create user');
+    }
+
+    const profile = await this.prisma.profile.create({
+      data: {
+        user_id: data.user.id,
+        church_id: churchId,
+        branch_id: dto.branchId || null,
+        role: dto.role,
+        first_name: dto.firstName,
+        last_name: dto.lastName,
+        phone: dto.phone || null,
+      },
+    });
+
+    await this.audit.log({
+      userId: invitedByUserId,
+      churchId,
+      entity: 'user',
+      action: 'CREATE',
+      entityId: profile.id,
+      newValues: { email: dto.email, role: dto.role },
+    });
+
+    this.logger.log(`User invited: ${dto.email} as ${dto.role} for church ${churchId}`);
+
+    return this.mapToResponseDto({
+      ...profile,
+      church: null,
+      branch: null,
+    });
+  }
+
+  /**
+   * Deactivate a user (disable their Supabase Auth account).
+   */
+  async deactivateUser(
+    profileId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<{ deactivated: boolean }> {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (profile.role === 'super_admin') {
+      throw new BadRequestException('Cannot deactivate a super_admin user');
+    }
+
+    const supabase = this.supabase.client;
+    const { error } = await supabase.auth.admin.updateUserById(profile.user_id, {
+      ban_duration: 'none',
+    });
+
+    if (error) {
+      this.logger.warn(`Supabase user disable warning: ${error.message}`);
+    }
+
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { role: profile.role },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'user',
+      action: 'DELETE',
+      entityId: profileId,
+      newValues: { deactivated: true },
+    });
+
+    this.logger.log(`User deactivated: ${profileId} for church ${churchId}`);
+
+    return { deactivated: true };
+  }
+
+  /**
+   * Reset a user's password via Supabase Auth admin API.
+   */
+  async resetUserPassword(
+    profileId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<{ resetSent: boolean }> {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    const supabase = this.supabase.client;
+
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(
+      profile.user_id,
+    );
+
+    if (userError || !userData?.user?.email) {
+      this.logger.error(`Could not look up user email for password reset: ${userError?.message}`);
+      throw new BadRequestException('Could not find user email for password reset');
+    }
+
+    const { error } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: userData.user.email,
+    });
+
+    if (error) {
+      this.logger.error(`Password reset failed: ${error.message}`);
+      throw new BadRequestException('Failed to generate password reset link');
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'user',
+      action: 'UPDATE',
+      entityId: profileId,
+      newValues: { action: 'password_reset' },
+    });
+
+    this.logger.log(`Password reset link generated for user ${profileId}`);
+
+    return { resetSent: true };
+  }
+
+  /**
+   * Force sign-out a user by invalidating their refresh tokens.
+   */
+  async forceSignOut(
+    profileId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<{ signedOut: boolean }> {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    const supabase = this.supabase.client;
+    const { error } = await supabase.auth.admin.signOut(profile.user_id);
+
+    if (error) {
+      this.logger.warn(`Force sign-out warning: ${error.message}`);
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'user',
+      action: 'UPDATE',
+      entityId: profileId,
+      newValues: { action: 'force_signout' },
+    });
+
+    return { signedOut: true };
   }
 
   private getMfaSecretKey(userId: string): string {

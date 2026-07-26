@@ -113,9 +113,16 @@ export class ReportsService {
       : new Date(new Date().setMonth(new Date().getMonth() - 12));
     const end = endDate ? new Date(endDate) : new Date();
 
+    const attendanceWhere: Record<string, unknown> = {
+      church_id: churchId,
+      checkin_at: { gte: start, lte: end },
+    };
+    if (branchId) {
+      attendanceWhere.service = { is: { branch_id: branchId } };
+    }
+
     const serviceWhere: Record<string, unknown> = {
       church_id: churchId,
-      date: { gte: start, lte: end },
     };
     if (branchId) {
       serviceWhere.branch_id = branchId;
@@ -123,9 +130,7 @@ export class ReportsService {
 
     const [totalAttendance, serviceCount, byService] = await Promise.all([
       this.prisma.attendance.aggregate({
-        where: {
-          service: serviceWhere,
-        },
+        where: attendanceWhere,
         _count: true,
       }),
       this.prisma.service.count({ where: serviceWhere }),
@@ -261,20 +266,20 @@ export class ReportsService {
     end: Date,
     branchId?: string,
   ): Promise<MonthlyTrendDto[]> {
-    const serviceWhere: Record<string, unknown> = {
+    const attendanceWhere: Record<string, unknown> = {
       church_id: churchId,
-      date: { gte: start, lte: end },
+      checkin_at: { gte: start, lte: end },
     };
     if (branchId) {
-      serviceWhere.branch_id = branchId;
+      attendanceWhere.service = { is: { branch_id: branchId } };
     }
 
     const attendances = await this.prisma.attendance.findMany({
-      where: { service: serviceWhere },
-      select: { created_at: true },
+      where: attendanceWhere,
+      select: { checkin_at: true },
     });
 
-    return this.aggregateMonthly(attendances, 'created_at', null);
+    return this.aggregateMonthly(attendances, 'checkin_at', null);
   }
 
   private async getMonthlyMemberGrowth(

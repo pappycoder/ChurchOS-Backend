@@ -57,52 +57,48 @@ export class WebhooksController {
   /**
    * Deactivate a webhook subscription.
    */
-  @Delete(':subscriptionId')
+  @Delete(':webhookId')
   @RequireRoles('church_admin')
   @ApiOperation({
     summary: 'Deactivate webhook',
     description: 'Deactivate a webhook subscription.',
   })
   async deactivate(
-    @Param('subscriptionId') subscriptionId: string,
+    @Param('webhookId') webhookId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ deactivated: boolean }> {
     const churchId = req.profile?.church_id || '';
-    return this.webhooksService.deactivateSubscription(
-      subscriptionId,
-      churchId,
-      req.user?.sub || '',
-    );
+    return this.webhooksService.deactivateSubscription(webhookId, churchId, req.user?.sub || '');
   }
 
   /**
    * List delivery history for a subscription.
    */
-  @Get(':subscriptionId/deliveries')
+  @Get(':webhookId/deliveries')
   @RequireRoles('church_admin')
   @ApiOperation({
     summary: 'Delivery history',
     description: 'View delivery attempts for a webhook.',
   })
   async listDeliveries(
-    @Param('subscriptionId') subscriptionId: string,
+    @Param('webhookId') webhookId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<WebhookDeliveryResponseDto[]> {
     const churchId = req.profile?.church_id || '';
-    return this.webhooksService.listDeliveries(subscriptionId, churchId);
+    return this.webhooksService.listDeliveries(webhookId, churchId);
   }
 
   /**
    * Fire a test delivery.
    */
-  @Post(':subscriptionId/test')
+  @Post(':webhookId/test')
   @RequireRoles('church_admin')
   @ApiOperation({ summary: 'Test webhook', description: 'Send a test ping to the webhook URL.' })
   async testDelivery(
-    @Param('subscriptionId') subscriptionId: string,
+    @Param('webhookId') webhookId: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ deliveryId: string }> {
     const churchId = req.profile?.church_id || '';
-    return this.webhooksService.testDelivery(subscriptionId, churchId);
+    return this.webhooksService.testDelivery(webhookId, churchId);
   }
 }

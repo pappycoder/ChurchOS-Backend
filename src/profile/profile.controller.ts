@@ -38,12 +38,17 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
+import { InviteUserDto } from './dto/invite-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
-import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
+  CurrentUser,
+  SupabaseUser,
+  AuthenticatedRequest,
+} from '../common/decorators/current-user.decorator';
+import {
+  ApiCreateEndpoint,
   ApiGetEndpoint,
   ApiUpdateEndpoint,
   ApiDeleteEndpoint,
@@ -271,5 +276,91 @@ export class ProfileController {
     const churchId = req.profile?.church_id || '';
     await this.profileService.softDeleteProfile(profileId, churchId, user.sub);
     return { success: true };
+  }
+
+  /**
+   * Invite a new user via email.
+   */
+  @Post('invite')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @ApiCreateEndpoint(
+    'Invite a new user',
+    'Sends an email invitation and creates a Profile record for the new user.',
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async inviteUser(
+    @Body() dto: InviteUserDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.inviteUser(dto, churchId, user.sub);
+  }
+
+  /**
+   * Deactivate a user account.
+   */
+  @Post(':profileId/deactivate')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Deactivate user',
+    "Disables the user's Supabase Auth account and marks the profile as inactive.",
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async deactivateUser(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ deactivated: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.deactivateUser(profileId, churchId, user.sub);
+  }
+
+  /**
+   * Reset a user's password.
+   */
+  @Post(':profileId/reset-password')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Reset user password',
+    "Generates and sends a password reset link to the user's email.",
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async resetPassword(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ resetSent: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.resetUserPassword(profileId, churchId, user.sub);
+  }
+
+  /**
+   * Force sign-out a user.
+   */
+  @Post(':profileId/force-signout')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Force sign-out',
+    'Invalidates all refresh tokens for the user, forcing them to re-authenticate.',
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async forceSignOut(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ signedOut: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.forceSignOut(profileId, churchId, user.sub);
   }
 }

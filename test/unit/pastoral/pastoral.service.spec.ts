@@ -18,7 +18,7 @@ describe('PastoralService', () => {
     id: 'note-1',
     church_id: mockChurchId,
     member_id: mockMemberId,
-    author_id: mockUserId,
+    author_id: mockMemberId,
     content: 'encrypted-content',
     confidentiality: 'standard',
     tags: ['prayer'],
@@ -31,6 +31,16 @@ describe('PastoralService', () => {
   beforeEach(async () => {
     prisma = createPrismaMock();
     auditLog = jest.fn();
+
+    // Mock profile lookup for resolveMemberId (user.sub → member_id)
+    prisma.profile.findUnique.mockResolvedValue({
+      id: 'profile-1',
+      member_id: mockMemberId,
+      first_name: 'Pastor',
+      last_name: 'Smith',
+      church_id: mockChurchId,
+      branch_id: null,
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -114,6 +124,47 @@ describe('PastoralService', () => {
       const createCall = prisma.pastoralNote.create.mock.calls[0][0];
       expect(createCall.data.confidentiality).toBe('standard');
     });
+
+    it('should auto-create a Member record when profile has no member_id', async () => {
+      // Profile without member_id
+      prisma.profile.findUnique.mockResolvedValue({
+        id: 'profile-no-member',
+        member_id: null,
+        first_name: 'Admin',
+        last_name: 'User',
+        church_id: mockChurchId,
+        branch_id: null,
+      });
+
+      const newMember = {
+        id: 'auto-member-1',
+        church_id: mockChurchId,
+        first_name: 'Admin',
+        last_name: 'User',
+      };
+      prisma.member.create.mockResolvedValue(newMember);
+      prisma.profile.update.mockResolvedValue({
+        id: 'profile-no-member',
+        member_id: 'auto-member-1',
+      });
+      prisma.pastoralNote.create.mockResolvedValue({
+        ...mockNote,
+        author_id: 'auto-member-1',
+      });
+
+      const result = await service.createNote(
+        { memberId: mockMemberId, content: 'Test content', tags: ['prayer'] },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.member.create).toHaveBeenCalled();
+      expect(prisma.profile.update).toHaveBeenCalledWith({
+        where: { id: 'profile-no-member' },
+        data: { member_id: 'auto-member-1' },
+      });
+      expect(result.id).toBe('note-1');
+    });
   });
 
   describe('getNoteById', () => {
@@ -142,7 +193,7 @@ describe('PastoralService', () => {
       prisma.pastoralNote.findFirst.mockResolvedValue({
         ...mockNote,
         confidentiality: 'restricted',
-        author_id: 'other-user',
+        author_id: 'other-member',
       });
 
       await expect(
@@ -156,7 +207,7 @@ describe('PastoralService', () => {
         ...mockNote,
         content: service.encrypt(plaintext),
         confidentiality: 'restricted',
-        author_id: 'other-user',
+        author_id: 'other-member',
       });
 
       const result = await service.getNoteById('note-1', mockChurchId, 'church_admin', mockUserId);
@@ -169,7 +220,7 @@ describe('PastoralService', () => {
         ...mockNote,
         content: service.encrypt(plaintext),
         confidentiality: 'restricted',
-        author_id: mockUserId,
+        author_id: mockMemberId,
       });
 
       const result = await service.getNoteById('note-1', mockChurchId, 'branch_pastor', mockUserId);
@@ -200,7 +251,7 @@ describe('PastoralService', () => {
     it('should allow admin to update any note', async () => {
       prisma.pastoralNote.findFirst.mockResolvedValue({
         ...mockNote,
-        author_id: 'other-user',
+        author_id: 'other-member',
       });
       prisma.pastoralNote.update.mockResolvedValue(mockNote);
 
@@ -218,7 +269,7 @@ describe('PastoralService', () => {
     it('should throw ForbiddenException for non-author/non-admin', async () => {
       prisma.pastoralNote.findFirst.mockResolvedValue({
         ...mockNote,
-        author_id: 'other-user',
+        author_id: 'other-member',
       });
 
       await expect(

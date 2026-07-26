@@ -2,8 +2,9 @@
  * @file permissions.service.ts
  * @description Service for managing role-based permissions with church-specific overrides.
  *
- * Resolves effective permissions by checking church-specific overrides first,
- * then falling back to global defaults. Caches results in Redis with 15-minute TTL.
+ * Resolves effective permissions by starting with global defaults, then
+ * merging church-specific overrides additively. Caches results in Redis
+ * with 15-minute TTL.
  *
  * The `super_admin` role is always locked to ALL permissions.
  *
@@ -11,10 +12,10 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
-import { ChurchRolePermission, RolePermission } from '@prisma/client';
+import { RolePermission } from '@prisma/client';
 
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 const CACHE_PREFIX = 'perms:';
@@ -48,7 +49,7 @@ export class PermissionsService {
 
   /**
    * Gets effective permissions for a role in a church.
-   * Checks church-specific overrides first, falls back to global defaults.
+   * Starts with global defaults, then adds church-specific overrides.
    * super_admin always returns ALL permissions.
    *
    * @param churchId - Church ID
@@ -148,9 +149,15 @@ export class PermissionsService {
 
     return roles.map((role: { name: string; description: string | null }) => {
       const isCustomized = customizedRoles.has(role.name);
-      const permissionIds = isCustomized
-        ? overrideMap.get(role.name) || new Set<string>()
-        : defaultMap.get(role.name) || new Set<string>();
+
+      // Merge: start with defaults, add church overrides (additive)
+      const permissionIds = new Set<string>(defaultMap.get(role.name) || new Set<string>());
+      const roleOverrides = overrideMap.get(role.name);
+      if (roleOverrides) {
+        for (const id of roleOverrides) {
+          permissionIds.add(id);
+        }
+      }
 
       const rolePerms = permissions.filter((p: PermissionDto) => permissionIds.has(p.id));
 
@@ -185,27 +192,25 @@ export class PermissionsService {
       select: { id: true, name: true, resource: true, action: true },
     });
 
-    const churchOverrides = await this.prisma.churchRolePermission.findMany({
-      where: { church_id: churchId, role_name: roleName },
-      select: { permission_id: true },
-    });
-
-    const isCustomized = churchOverrides.length > 0;
-    const overrideIds = new Set<string>(
-      churchOverrides.map((o: { permission_id: string }) => o.permission_id),
-    );
-
-    let effectiveIds: Set<string>;
-    if (isCustomized) {
-      effectiveIds = overrideIds;
-    } else {
-      const defaultPerms = await this.prisma.rolePermission.findMany({
+    const [defaultPerms, overrideIds] = await Promise.all([
+      this.prisma.rolePermission.findMany({
         where: { role: { name: roleName } },
         select: { permission_id: true },
-      });
-      effectiveIds = new Set<string>(
-        defaultPerms.map((p: { permission_id: string }) => p.permission_id),
-      );
+      }),
+      this.prisma.churchRolePermission.findMany({
+        where: { church_id: churchId, role_name: roleName },
+        select: { permission_id: true },
+      }),
+    ]);
+
+    const isCustomized = overrideIds.length > 0;
+
+    // Merge: start with defaults, add church overrides (additive)
+    const effectiveIds = new Set<string>(
+      defaultPerms.map((p: { permission_id: string }) => p.permission_id),
+    );
+    for (const o of overrideIds) {
+      effectiveIds.add(o.permission_id);
     }
 
     const rolePerms = permissions.filter((p: PermissionDto) => effectiveIds.has(p.id));
@@ -233,6 +238,32 @@ export class PermissionsService {
   ): Promise<void> {
     if (roleName === 'super_admin') {
       throw new Error('Cannot modify super_admin permissions (locked to ALL)');
+    }
+
+    // Prevent removing critical permissions from church_admin
+    if (roleName === 'church_admin') {
+      const allPermissions = await this.getAllPermissions();
+      const REQUIRED_ADMIN_PERMISSIONS = [
+        'members:create',
+        'members:read',
+        'members:update',
+        'members:delete',
+        'profiles:create',
+        'profiles:read',
+        'profiles:update',
+        'profiles:delete',
+        'church:read',
+        'church:update',
+      ];
+      const providedNames = allPermissions
+        .filter((p) => permissionIds.includes(p.id))
+        .map((p) => p.name);
+      const missing = REQUIRED_ADMIN_PERMISSIONS.filter((p) => !providedNames.includes(p));
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `church_admin must always have these permissions: ${missing.join(', ')}`,
+        );
+      }
     }
 
     // Verify role exists
@@ -297,30 +328,33 @@ export class PermissionsService {
   // ─── Private Helpers ──────────────────────────────────────
 
   /**
-   * Resolves permissions for a role, checking church overrides first.
+   * Resolves effective permissions for a role in a church.
+   *
+   * Always starts with global defaults from role_permissions, then merges
+   * church-specific overrides additively. This prevents a partial church
+   * override from accidentally stripping default permissions.
    */
   private async resolvePermissions(churchId: string, roleName: string): Promise<string[]> {
-    // Check for church-specific overrides
-    const overrides = await this.prisma.churchRolePermission.findMany({
-      where: { church_id: churchId, role_name: roleName },
-      include: { permission: { select: { name: true } } },
-    });
+    const [defaults, overrides] = await Promise.all([
+      this.prisma.rolePermission.findMany({
+        where: { role: { name: roleName } },
+        include: { permission: { select: { name: true } } },
+      }),
+      this.prisma.churchRolePermission.findMany({
+        where: { church_id: churchId, role_name: roleName },
+        include: { permission: { select: { name: true } } },
+      }),
+    ]);
 
-    if (overrides.length > 0) {
-      return overrides.map(
-        (o: ChurchRolePermission & { permission: { name: string } }) => o.permission.name,
-      );
+    // Start with global defaults, then add any church-specific extras
+    const permSet = new Set<string>(
+      defaults.map((d: RolePermission & { permission: { name: string } }) => d.permission.name),
+    );
+    for (const o of overrides) {
+      permSet.add(o.permission.name);
     }
 
-    // Fall back to global defaults
-    const defaults = await this.prisma.rolePermission.findMany({
-      where: { role: { name: roleName } },
-      include: { permission: { select: { name: true } } },
-    });
-
-    return defaults.map(
-      (d: RolePermission & { permission: { name: string } }) => d.permission.name,
-    );
+    return Array.from(permSet);
   }
 
   /**

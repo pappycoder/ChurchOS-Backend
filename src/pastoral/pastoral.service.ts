@@ -18,7 +18,13 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { Prisma } from '@prisma/client';
@@ -83,6 +89,9 @@ export class PastoralService {
     churchId: string,
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
+    // Resolve Supabase user ID to member ID for the author_id FK
+    const memberId = await this.resolveMemberId(userId);
+
     // Encrypt the plaintext content using AES-256-GCM
     const encryptedContent = this.encrypt(dto.content);
 
@@ -91,7 +100,7 @@ export class PastoralService {
       data: {
         church_id: churchId,
         member_id: dto.memberId,
-        author_id: userId,
+        author_id: memberId,
         content: encryptedContent,
         confidentiality: dto.confidentiality || 'standard',
         tags: dto.tags || [],
@@ -168,7 +177,8 @@ export class PastoralService {
     }
 
     // Apply confidentiality-based access control filter for the user's role
-    const confidentialityFilter = this.getConfidentialityFilter(userRole, userId);
+    const memberId = await this.resolveMemberId(userId);
+    const confidentialityFilter = this.getConfidentialityFilter(userRole, memberId);
     if (confidentialityFilter) {
       where.AND = confidentialityFilter;
     }
@@ -240,7 +250,8 @@ export class PastoralService {
     }
 
     // Verify the user has access based on the note's confidentiality level
-    this.checkConfidentialityAccess(note, userRole, userId);
+    const memberId = await this.resolveMemberId(userId);
+    this.checkConfidentialityAccess(note, userRole, memberId);
 
     // Decrypt the content and map to response DTO
     const decryptedContent = this.decrypt(note.content);
@@ -266,6 +277,9 @@ export class PastoralService {
     userId: string,
     userRole: string,
   ): Promise<PastoralNoteResponseDto> {
+    // Resolve Supabase user ID to member ID for ownership check
+    const memberId = await this.resolveMemberId(userId);
+
     // Fetch the existing note to verify it exists and check ownership
     const existing = await this.prisma.pastoralNote.findFirst({
       where: { id: noteId, church_id: churchId },
@@ -277,7 +291,7 @@ export class PastoralService {
     }
 
     // Enforce that only the author or admin/pastor can update
-    if (existing.author_id !== userId && !['church_admin', 'senior_pastor'].includes(userRole)) {
+    if (existing.author_id !== memberId && !['church_admin', 'senior_pastor'].includes(userRole)) {
       throw new ForbiddenException('Only the author or admin can update this note');
     }
 
@@ -341,6 +355,9 @@ export class PastoralService {
     userId: string,
     userRole: string,
   ): Promise<void> {
+    // Resolve Supabase user ID to member ID for ownership check
+    const memberId = await this.resolveMemberId(userId);
+
     // Fetch the existing note to verify it exists and check confidentiality
     const existing = await this.prisma.pastoralNote.findFirst({
       where: { id: noteId, church_id: churchId },
@@ -364,7 +381,7 @@ export class PastoralService {
     // For non-restricted notes, only the author or admin can delete
     if (
       existing.confidentiality !== 'restricted' &&
-      existing.author_id !== userId &&
+      existing.author_id !== memberId &&
       !['church_admin', 'senior_pastor'].includes(userRole)
     ) {
       throw new ForbiddenException('Only the author or admin can delete this note');
@@ -386,6 +403,57 @@ export class PastoralService {
       newValues: { memberId: existing.member_id },
     });
   }
+
+  // ─── Member ID Resolution ────────────────────────────────
+
+  /**
+   * Resolves a Supabase Auth user ID to a Member ID via the Profile table.
+   *
+   * @param userId - Supabase Auth user ID (user.sub)
+   * @returns The member_id from the user's Profile
+   * @throws BadRequestException if user has no member profile
+   */
+  private async resolveMemberId(userId: string): Promise<string> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        member_id: true,
+        first_name: true,
+        last_name: true,
+        church_id: true,
+        branch_id: true,
+      },
+    });
+
+    if (!profile) {
+      throw new BadRequestException('User does not have a profile');
+    }
+
+    if (profile.member_id) {
+      return profile.member_id;
+    }
+
+    // Auto-create a Member record and link it to the profile
+    const member = await this.prisma.member.create({
+      data: {
+        church_id: profile.church_id,
+        branch_id: profile.branch_id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        status: 'active',
+      },
+    });
+
+    await this.prisma.profile.update({
+      where: { id: profile.id },
+      data: { member_id: member.id },
+    });
+
+    return member.id;
+  }
+
+  // ─── Encryption ──────────────────────────────────────────
 
   /**
    * Encrypts plaintext content using AES-256-GCM.

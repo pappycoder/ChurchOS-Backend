@@ -2,7 +2,7 @@
  * @file invite-user.dto.ts
  * @description DTO for inviting a new user.
  *
- * @module users/dto/invite-user.dto
+ * @module profile/dto/invite-user.dto
  * @since 1.0.0
  */
 
