@@ -442,6 +442,7 @@ model Event {
 
 model EventRegistration {
   id                String                   @id @default(uuid())
+  church_id         String
   event_id          String
   member_id         String
   custom_data       Json                     @default("{}")
@@ -459,6 +460,7 @@ model EventRegistration {
   member Member @relation(fields: [member_id], references: [id])
 
   @@unique([event_id, member_id])
+  @@index([church_id, event_id])
   @@map("event_registrations")
 }
 
@@ -613,6 +615,7 @@ model Sermon {
 
 model SermonBookmark {
   id         String   @id @default(uuid())
+  church_id  String
   member_id  String
   sermon_id  String
   created_at DateTime @default(now())
@@ -621,6 +624,7 @@ model SermonBookmark {
   sermon Sermon @relation(fields: [sermon_id], references: [id], onDelete: Cascade)
 
   @@unique([member_id, sermon_id])
+  @@index([church_id, member_id])
   @@index([member_id])
   @@index([sermon_id])
   @@map("sermon_bookmarks")
@@ -1126,6 +1130,19 @@ model SyncQueue {
 
   @@index([synced, created_at])
   @@map("sync_queue")
+}
+
+model SyncDevice {
+  id               String    @id @default(uuid())
+  church_id        String
+  device_id        String
+  last_pull_cursor DateTime?
+  last_seen_at     DateTime  @default(now())
+  created_at       DateTime  @default(now())
+
+  @@unique([church_id, device_id])
+  @@index([church_id, last_pull_cursor])
+  @@map("sync_devices")
 }
 
 model Notification {

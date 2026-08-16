@@ -105,7 +105,7 @@ export class CacheInterceptor implements NestInterceptor {
     }
 
     // ─── Try to serve from cache ─────────────────────────────────
-    const cacheKey = this.buildCacheKey(request);
+    const cacheKey = await this.buildCacheKey(request);
 
     try {
       const cached = await this.redis.get<string>(cacheKey);
@@ -135,14 +135,27 @@ export class CacheInterceptor implements NestInterceptor {
 
   /**
    * Builds a unique cache key from the request method, URL, query params,
-   * and the authenticated tenant. Including the church_id prevents cached
-   * responses from leaking across churches (multi-tenant isolation).
+   * the authenticated tenant, and the tenant's current cache version.
+   *
+   * Including church_id prevents cached responses from leaking across
+   * churches (multi-tenant isolation). Including the cache version means any
+   * write to the church (via CacheVersionInterceptor) changes the key and
+   * forces a recompute — stale data can never be served.
    */
-  private buildCacheKey(request: Request): string {
+  private async buildCacheKey(request: Request): Promise<string> {
     const queryString = request.url.includes('?') ? request.url.split('?')[1] || '' : '';
     const path = request.route?.path || request.url.split('?')[0];
     const churchId = (request as AuthenticatedRequest).profile?.church_id || 'global';
-    return `cache:${request.method}:${churchId}:${path}:${queryString}`;
+
+    let version = '0';
+    try {
+      version = String((await this.redis.get<number>(`cache:ver:${churchId}`)) ?? 0);
+    } catch {
+      // Fall back to version 0 if the version read fails — the entry simply
+      // gets a short TTL and is recomputed on the next mutation.
+    }
+
+    return `cache:${request.method}:${churchId}:${version}:${path}:${queryString}`;
   }
 
   /**

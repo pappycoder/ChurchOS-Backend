@@ -21,6 +21,7 @@ import { ScoringService } from '../../pastoral/scoring.service';
 import { PastoralService } from '../../pastoral/pastoral.service';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SyncService } from '../../sync/sync.service';
 
 @Processor('nightly-jobs')
 export class NightlyJobsProcessor extends WorkerHost {
@@ -31,6 +32,7 @@ export class NightlyJobsProcessor extends WorkerHost {
     private readonly pastoralService: PastoralService,
     private readonly whatsappService: WhatsAppService,
     private readonly prisma: PrismaService,
+    private readonly syncService: SyncService,
     @InjectQueue('recurring-giving') private readonly recurringQueue: Queue,
   ) {
     super();
@@ -53,6 +55,7 @@ export class NightlyJobsProcessor extends WorkerHost {
     recurringChargesDispatched: number;
     lifeEventGreetingsSent: number;
     ndprRecordsPurged: number;
+    syncQueuePurged: number;
   }> {
     const { churchId } = job.data;
 
@@ -74,6 +77,7 @@ export class NightlyJobsProcessor extends WorkerHost {
     await job.updateProgress(85);
 
     const ndprDeleted = await this.purgeExpiredNdprData(churchId);
+    const syncQueuePurged = await this.syncService.cleanupExpiredChanges(churchId);
     await job.updateProgress(100);
 
     this.logger.log(
@@ -82,7 +86,8 @@ export class NightlyJobsProcessor extends WorkerHost {
         `${attention.length} needing attention, ` +
         `${lifeEventGreetingsSent} life event greetings sent, ` +
         `${recurringChargesDispatched} recurring charges dispatched, ` +
-        `${ndprDeleted} NDPR records purged`,
+        `${ndprDeleted} NDPR records purged, ` +
+        `${syncQueuePurged} sync queue rows purged`,
     );
 
     return {
@@ -92,6 +97,7 @@ export class NightlyJobsProcessor extends WorkerHost {
       recurringChargesDispatched,
       lifeEventGreetingsSent,
       ndprRecordsPurged: ndprDeleted,
+      syncQueuePurged,
     };
   }
 

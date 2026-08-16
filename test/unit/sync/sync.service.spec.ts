@@ -10,10 +10,13 @@ import { AuditLoggingService } from '../../../src/common/services/audit-logging.
 function createPrismaMock() {
   const models: Record<string, Record<string, jest.Mock>> = {};
 
+  const $executeRaw = jest.fn().mockResolvedValue(undefined);
+
   const handler: ProxyHandler<Record<string, unknown>> = {
     get(_target, prop: string) {
       if (prop === '$transaction') return $transaction;
       if (prop === '$queryRaw') return jest.fn().mockResolvedValue([]);
+      if (prop === '$executeRaw') return $executeRaw;
       if (!models[prop]) {
         models[prop] = {
           findMany: jest.fn(),
@@ -36,6 +39,7 @@ function createPrismaMock() {
 
   const txHandler: ProxyHandler<Record<string, unknown>> = {
     get(_target, prop: string) {
+      if (prop === '$executeRaw') return $executeRaw;
       return models[prop];
     },
   };
@@ -47,10 +51,13 @@ function createPrismaMock() {
       return fn(tx);
     });
 
-  return new Proxy({ $transaction } as Record<string, unknown>, handler) as Record<
+  return new Proxy({ $transaction, $executeRaw } as Record<string, unknown>, handler) as Record<
     string,
     unknown
-  > & { $transaction: jest.Mock };
+  > & {
+    $transaction: jest.Mock;
+    $executeRaw: jest.Mock;
+  };
 }
 
 function model(name: string): Record<string, jest.Mock> {
@@ -94,6 +101,8 @@ describe('SyncService', () => {
       expect(result.accepted).toBe(1);
       expect(result.rejected).toBe(0);
       expect(result.conflicts).toHaveLength(0);
+      // Device-originated applies suppress the outbox trigger via the session GUC
+      expect(prisma.$executeRaw).toHaveBeenCalled();
       expect(model('member').upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: mockMemberId },
@@ -200,7 +209,82 @@ describe('SyncService', () => {
   });
 
   describe('pullChanges', () => {
-    it('should return pending changes', async () => {
+    const memberRow = {
+      id: mockMemberId,
+      church_id: mockChurchId,
+      branch_id: null,
+      first_name: 'John',
+      last_name: 'Doe',
+      email: null,
+      phone: '+2348012345678',
+      whatsapp_number: null,
+      date_of_birth: null,
+      gender: 'male',
+      address: null,
+      city: null,
+      state: null,
+      status: 'active',
+      member_since: new Date('2026-01-01T10:00:00Z'),
+      photo_url: null,
+      custom_fields: {},
+      notes: null,
+      created_at: new Date('2026-01-01T10:00:00Z'),
+      updated_at: new Date('2026-01-01T10:00:00Z'),
+    };
+
+    function mockDevice(cursor: Date | null = null) {
+      model('syncDevice').upsert.mockResolvedValue({
+        id: 'dev-1',
+        church_id: mockChurchId,
+        device_id: 'device-1',
+        last_pull_cursor: cursor,
+        last_seen_at: new Date(),
+        created_at: new Date(),
+      });
+      model('syncDevice').update.mockResolvedValue({});
+    }
+
+    it('should get-or-create the device watermark and query after the cursor', async () => {
+      mockDevice(new Date('2026-07-01T00:00:00Z'));
+      model('syncQueue').findMany.mockResolvedValue([]);
+
+      const result = await service.pullChanges(mockChurchId, 'device-1');
+
+      expect(model('syncDevice').upsert).toHaveBeenCalledWith({
+        where: { church_id_device_id: { church_id: mockChurchId, device_id: 'device-1' } },
+        create: { church_id: mockChurchId, device_id: 'device-1' },
+        update: { last_seen_at: expect.any(Date) },
+      });
+      expect(model('syncQueue').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            church_id: mockChurchId,
+            created_at: { gt: new Date('2026-07-01T00:00:00Z') },
+          }),
+        }),
+      );
+      expect(result.changes).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+      expect(result.cursor).toBe('2026-07-01T00:00:00.000Z');
+    });
+
+    it('should prefer the client-provided cursor over the stored watermark', async () => {
+      mockDevice(new Date('2026-07-01T00:00:00Z'));
+      model('syncQueue').findMany.mockResolvedValue([]);
+
+      await service.pullChanges(mockChurchId, 'device-1', 100, '2026-07-10T00:00:00Z');
+
+      expect(model('syncQueue').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            created_at: { gt: new Date('2026-07-10T00:00:00Z') },
+          }),
+        }),
+      );
+    });
+
+    it('should hydrate create/update changes to live camelCase state', async () => {
+      mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
         {
           entity: 'member',
@@ -210,29 +294,85 @@ describe('SyncService', () => {
           created_at: new Date('2026-07-22T10:00:00Z'),
         },
       ]);
+      model('member').findUnique.mockResolvedValue(memberRow);
 
-      const result = await service.pullChanges(mockChurchId);
+      const result = await service.pullChanges(mockChurchId, 'device-1');
 
       expect(result.changes).toHaveLength(1);
-      expect(result.hasMore).toBe(false);
       expect(result.changes[0].entity).toBe('member');
+      expect(result.changes[0].entityId).toBe(mockMemberId);
+      expect(result.changes[0].action).toBe('create');
+      expect(result.changes[0].data).toMatchObject({
+        firstName: 'John',
+        lastName: 'Doe',
+        churchId: mockChurchId,
+      });
+      expect(result.changes[0].data).not.toBeNull();
+      expect(result.cursor).toBe('2026-07-22T10:00:00.000Z');
+    });
+
+    it('should return tombstones for deletes', async () => {
+      mockDevice();
+      model('syncQueue').findMany.mockResolvedValue([
+        {
+          entity: 'member',
+          entity_id: mockMemberId,
+          action: 'delete',
+          data: {},
+          created_at: new Date('2026-07-22T10:00:00Z'),
+        },
+      ]);
+
+      const result = await service.pullChanges(mockChurchId, 'device-1');
+
+      expect(result.changes[0].data).toBeNull();
+      expect(model('member').findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should tombstone changes whose record no longer exists', async () => {
+      mockDevice();
+      model('syncQueue').findMany.mockResolvedValue([
+        {
+          entity: 'member',
+          entity_id: mockMemberId,
+          action: 'update',
+          data: {},
+          created_at: new Date('2026-07-22T10:00:00Z'),
+        },
+      ]);
+      model('member').findUnique.mockResolvedValue(null);
+
+      const result = await service.pullChanges(mockChurchId, 'device-1');
+
+      expect(result.changes[0].data).toBeNull();
     });
 
     it('should detect hasMore when limit exceeded', async () => {
-      // Return 11 items when limit is 10
+      mockDevice();
       const items = Array.from({ length: 11 }, (_, i) => ({
         entity: 'member',
         entity_id: `id-${i}`,
         action: 'update',
         data: {},
-        created_at: new Date(),
+        created_at: new Date(2026, 6, 22, 10, i),
       }));
       model('syncQueue').findMany.mockResolvedValue(items);
+      model('member').findUnique.mockResolvedValue(memberRow);
 
-      const result = await service.pullChanges(mockChurchId, 10);
+      const result = await service.pullChanges(mockChurchId, 'device-1', 10);
 
       expect(result.hasMore).toBe(true);
       expect(result.changes).toHaveLength(10);
+      expect(model('member').findUnique).toHaveBeenCalledTimes(10);
+    });
+
+    it('should reject an invalid cursor', async () => {
+      mockDevice();
+      model('syncQueue').findMany.mockResolvedValue([]);
+
+      await expect(
+        service.pullChanges(mockChurchId, 'device-1', 100, 'not-a-date'),
+      ).rejects.toThrow('Invalid cursor');
     });
   });
 
@@ -291,6 +431,27 @@ describe('SyncService', () => {
       const result = await service.markSynced(mockChurchId, ['id-1', 'id-2', 'id-3']);
 
       expect(result.marked).toBe(3);
+    });
+  });
+
+  describe('cleanupExpiredChanges', () => {
+    it('should purge rows synced over 30 days ago and any row older than 90 days', async () => {
+      model('syncQueue').deleteMany.mockResolvedValue({ count: 5 });
+
+      const result = await service.cleanupExpiredChanges(mockChurchId);
+
+      expect(result).toBe(5);
+      expect(model('syncQueue').deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            church_id: mockChurchId,
+            OR: [
+              expect.objectContaining({ synced: true, synced_at: expect.anything() }),
+              expect.objectContaining({ created_at: expect.anything() }),
+            ],
+          }),
+        }),
+      );
     });
   });
 });

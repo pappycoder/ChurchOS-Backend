@@ -38,10 +38,12 @@ interface PullResult {
     entity: string;
     entityId: string;
     action: string;
-    data: Record<string, unknown>;
+    data: Record<string, unknown> | null;
     createdAt: string;
   }[];
   hasMore: boolean;
+  /** Resume cursor: the created_at of the last returned change */
+  cursor: string | null;
 }
 
 export interface BootstrapResult {
@@ -161,16 +163,22 @@ const ENTITY_CONFIGS: Record<string, EntityFieldConfig> = {
     fields: {
       eventId: 'event_id',
       memberId: 'member_id',
+      tierId: 'tier_id',
+      transactionId: 'transaction_id',
+      ticketId: 'ticket_id',
       customData: 'custom_data',
       paymentStatus: 'payment_status',
       paymentReference: 'payment_reference',
       quantity: 'quantity',
+      checkedIn: 'checked_in',
+      checkedInAt: 'checked_in_at',
     },
-    dates: [],
+    dates: ['checkedInAt'],
   },
 };
 
 interface DelegateLike {
+  findUnique(args: { where: { id: string } }): Promise<Record<string, unknown> | null>;
   upsert(args: {
     where: { id: string };
     create: Record<string, unknown>;
@@ -254,7 +262,10 @@ export class SyncService {
 
         // Apply the change to the real tables and record it in the outbox
         // atomically so propagation never diverges from the source of truth.
+        // The session GUC suppresses the sync_outbox trigger during the apply
+        // so device-originated changes are recorded exactly once here.
         await this.prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.sync_outbox.skip', 'true', true)`;
           await this.applyChange(tx, change, churchId);
           await tx.syncQueue.create({
             data: {
@@ -293,37 +304,75 @@ export class SyncService {
   }
 
   /**
-   * Pull pending server-side changes for a mobile client.
-   * Returns unsynced changes from the sync queue (delta).
+   * Pull pending server-side changes for a client device.
+   *
+   * Returns changes created after the device's watermark, hydrated to their
+   * live camelCase state. Deleted records come back as tombstones
+   * (data: null) so clients can remove them locally.
+   *
+   * Each device keeps a watermark (SyncDevice.last_pull_cursor) as a
+   * fallback for clients that lose their cursor. Clients that track their
+   * own cursor pass it back via the `cursor` parameter, which takes
+   * precedence and avoids any risk of skipping an unapplied change.
+   *
+   * @param churchId - Church ID to scope the pull
+   * @param deviceId - Stable client install identifier
+   * @param limit - Max items to return (default: 100)
+   * @param cursor - Client-side resume cursor (ISO timestamp)
+   * @returns Hydrated changes, hasMore flag, and the resume cursor
    */
-  async pullChanges(churchId: string, limit = 100, cursor?: string): Promise<PullResult> {
-    const where: Prisma.SyncQueueWhereInput = {
-      church_id: churchId,
-      synced: false,
-    };
+  async pullChanges(
+    churchId: string,
+    deviceId: string,
+    limit = 100,
+    cursor?: string,
+  ): Promise<PullResult> {
+    const device = await this.prisma.syncDevice.upsert({
+      where: { church_id_device_id: { church_id: churchId, device_id: deviceId } },
+      create: { church_id: churchId, device_id: deviceId },
+      update: { last_seen_at: new Date() },
+    });
 
-    if (cursor) {
-      where.created_at = { gt: new Date(cursor) };
+    const cursorDate = cursor ? new Date(cursor) : (device.last_pull_cursor ?? new Date(0));
+
+    if (Number.isNaN(cursorDate.getTime())) {
+      throw new BadRequestException('Invalid cursor');
     }
 
-    const changes = await this.prisma.syncQueue.findMany({
-      where,
+    const rows = await this.prisma.syncQueue.findMany({
+      where: {
+        church_id: churchId,
+        created_at: { gt: cursorDate },
+      },
       orderBy: { created_at: 'asc' },
       take: limit + 1, // Fetch one extra to determine hasMore
     });
 
-    const hasMore = changes.length > limit;
-    const items = hasMore ? changes.slice(0, limit) : changes;
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+
+    const changes = [];
+    for (const row of items) {
+      changes.push(await this.hydrateChange(row));
+    }
+
+    // Store the LOW watermark of this page as the fallback cursor. Re-pulling
+    // from it after a client crash re-delivers the whole page (idempotent
+    // apply) instead of skipping an unapplied change.
+    const fallbackCursor = items[0]?.created_at;
+    if (fallbackCursor) {
+      await this.prisma.syncDevice.update({
+        where: { id: device.id },
+        data: { last_pull_cursor: fallbackCursor },
+      });
+    }
+
+    const lastItem = items[items.length - 1];
 
     return {
-      changes: items.map((c) => ({
-        entity: c.entity,
-        entityId: c.entity_id,
-        action: c.action,
-        data: (c.data as Record<string, unknown>) || {},
-        createdAt: c.created_at.toISOString(),
-      })),
+      changes,
       hasMore,
+      cursor: lastItem ? lastItem.created_at.toISOString() : cursorDate.toISOString(),
     };
   }
 
@@ -377,6 +426,37 @@ export class SyncService {
     });
 
     return { marked: result.count };
+  }
+
+  /**
+   * Purges expired sync queue rows to bound table growth.
+   *
+   * Removes rows acknowledged by clients (synced) older than 30 days and any
+   * row older than 90 days regardless of acknowledgement, so devices that
+   * never come back online cannot accumulate rows forever. Clients that fall
+   * beyond the retention window are expected to re-bootstrap.
+   *
+   * @param churchId - Church ID to scope the purge
+   * @returns Number of rows deleted
+   */
+  async cleanupExpiredChanges(churchId: string): Promise<number> {
+    const syncedCutoff = new Date();
+    syncedCutoff.setDate(syncedCutoff.getDate() - 30);
+
+    const hardCutoff = new Date();
+    hardCutoff.setDate(hardCutoff.getDate() - 90);
+
+    const result = await this.prisma.syncQueue.deleteMany({
+      where: {
+        church_id: churchId,
+        OR: [
+          { synced: true, synced_at: { lte: syncedCutoff } },
+          { created_at: { lte: hardCutoff } },
+        ],
+      },
+    });
+
+    return result.count;
   }
 
   /**
@@ -437,6 +517,138 @@ export class SyncService {
     }
 
     return mapped;
+  }
+
+  /**
+   * Hydrates a single sync queue row to its live camelCase state.
+   *
+   * create/update rows are resolved against the current database row so the
+   * client always receives the authoritative latest state (even when several
+   * updates landed in the queue). delete rows and rows whose record has since
+   * been removed become tombstones (data: null) so clients can drop them.
+   */
+  private async hydrateChange(row: {
+    entity: string;
+    entity_id: string;
+    action: string;
+    data: Prisma.JsonValue;
+    created_at: Date;
+  }): Promise<PullResult['changes'][number]> {
+    const base = {
+      entity: row.entity,
+      entityId: row.entity_id,
+      action: row.action,
+      createdAt: row.created_at.toISOString(),
+    };
+
+    if (row.action === 'delete') {
+      return { ...base, data: null };
+    }
+
+    const mapper = this.hydrateMappers[row.entity];
+    if (!mapper) {
+      return { ...base, data: (row.data as Record<string, unknown>) || null };
+    }
+
+    const config = ENTITY_CONFIGS[row.entity];
+    const delegate = (this.prisma as unknown as Record<string, DelegateLike>)[config.delegate];
+
+    const record = await delegate.findUnique({ where: { id: row.entity_id } });
+    if (!record) {
+      return { ...base, data: null };
+    }
+
+    return { ...base, data: mapper(record) };
+  }
+
+  private readonly hydrateMappers: Record<
+    string,
+    (record: Record<string, unknown>) => Record<string, unknown>
+  > = {
+    member: (r) => this.mapMember(r as Parameters<typeof this.mapMember>[0]),
+    service: (r) => this.mapService(r as Parameters<typeof this.mapService>[0]),
+    givingCategory: (r) =>
+      this.mapGivingCategory(r as Parameters<typeof this.mapGivingCategory>[0]),
+    visitor: (r) => this.mapVisitor(r as Parameters<typeof this.mapVisitor>[0]),
+    attendance: (r) => this.mapAttendance(r as Parameters<typeof this.mapAttendance>[0]),
+    transaction: (r) => this.mapTransaction(r as Parameters<typeof this.mapTransaction>[0]),
+    lifeEvent: (r) => this.mapLifeEvent(r as Parameters<typeof this.mapLifeEvent>[0]),
+    sermonBookmark: (r) =>
+      this.mapSermonBookmark(r as Parameters<typeof this.mapSermonBookmark>[0]),
+    eventRegistration: (r) =>
+      this.mapEventRegistration(r as Parameters<typeof this.mapEventRegistration>[0]),
+  };
+
+  private mapLifeEvent(e: {
+    id: string;
+    church_id: string;
+    member_id: string;
+    type: string;
+    date: Date;
+    details: Prisma.JsonValue;
+    notified: boolean;
+    created_at: Date;
+  }): Record<string, unknown> {
+    return {
+      id: e.id,
+      churchId: e.church_id,
+      memberId: e.member_id,
+      type: e.type,
+      date: e.date.toISOString(),
+      details: e.details,
+      notified: e.notified,
+      createdAt: e.created_at.toISOString(),
+    };
+  }
+
+  private mapSermonBookmark(b: {
+    id: string;
+    church_id: string;
+    member_id: string;
+    sermon_id: string;
+    created_at: Date;
+  }): Record<string, unknown> {
+    return {
+      id: b.id,
+      churchId: b.church_id,
+      memberId: b.member_id,
+      sermonId: b.sermon_id,
+      createdAt: b.created_at.toISOString(),
+    };
+  }
+
+  private mapEventRegistration(r: {
+    id: string;
+    church_id: string;
+    event_id: string;
+    member_id: string;
+    custom_data: Prisma.JsonValue;
+    payment_status: string;
+    payment_reference: string | null;
+    transaction_id: string | null;
+    ticket_id: string | null;
+    tier_id: string | null;
+    quantity: number;
+    checked_in: boolean;
+    checked_in_at: Date | null;
+    created_at: Date;
+  }): Record<string, unknown> {
+    return {
+      id: r.id,
+      churchId: r.church_id,
+      eventId: r.event_id,
+      memberId: r.member_id,
+      customData: r.custom_data,
+      paymentStatus: r.payment_status,
+      paymentReference: r.payment_reference,
+      transactionId: r.transaction_id,
+      ticketId: r.ticket_id,
+      tierId: r.tier_id,
+      quantity: r.quantity,
+      checkedIn: r.checked_in,
+      checkedInAt: r.checked_in_at?.toISOString() ?? null,
+      createdAt: r.created_at.toISOString(),
+    };
   }
 
   private mapMember(m: {

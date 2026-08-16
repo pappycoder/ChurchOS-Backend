@@ -89,6 +89,31 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Atomically increments a counter, optionally refreshing its TTL.
+   *
+   * Used by the cache-version interceptor to invalidate a tenant's cached
+   * responses after any mutation.
+   *
+   * @param key - Counter key
+   * @param ttlSeconds - Optional TTL to set after incrementing
+   * @returns The new counter value
+   */
+  async incr(key: string, ttlSeconds = 0): Promise<number> {
+    if (this._driver === 'upstash') {
+      const value = await (this._client as UpstashRedis).incr(key);
+      if (ttlSeconds) {
+        await (this._client as UpstashRedis).expire(key, ttlSeconds);
+      }
+      return value;
+    }
+    const value = await (this._client as IORedis).incr(key);
+    if (ttlSeconds) {
+      await (this._client as IORedis).expire(key, ttlSeconds);
+    }
+    return value;
+  }
+
   async exists(key: string): Promise<boolean> {
     if (this._driver === 'upstash') {
       const result = await (this._client as UpstashRedis).exists(key);

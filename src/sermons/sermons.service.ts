@@ -336,6 +336,7 @@ export class SermonsService {
 
     await this.prisma.sermonBookmark.create({
       data: {
+        church_id: churchId,
         member_id: memberId,
         sermon_id: sermonId,
       },

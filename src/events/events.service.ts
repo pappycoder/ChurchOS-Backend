@@ -445,6 +445,7 @@ export class EventsService {
     if (event.is_free) {
       const registration = await this.prisma.eventRegistration.create({
         data: {
+          church_id: churchId,
           event_id: eventId,
           member_id: memberId,
           custom_data: (customData ?? {}) as unknown as Prisma.InputJsonValue,
@@ -526,6 +527,7 @@ export class EventsService {
 
     const registration = await this.prisma.eventRegistration.create({
       data: {
+        church_id: churchId,
         event_id: eventId,
         member_id: memberId,
         custom_data: (customData ?? {}) as unknown as Prisma.InputJsonValue,

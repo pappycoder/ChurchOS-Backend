@@ -11,11 +11,13 @@
  */
 
 import { Module, Global, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 
 import { AuditLoggingService } from './services/audit-logging.service';
 import { RequestContextService } from './services/request-context.service';
 import { RequestContextMiddleware } from './middleware/request-context.middleware';
 import { CacheInterceptor } from './interceptors/cache.interceptor';
+import { CacheVersionInterceptor } from './interceptors/cache-version.interceptor';
 
 /**
  * Global module providing shared services and middleware.
@@ -33,6 +35,12 @@ import { CacheInterceptor } from './interceptors/cache.interceptor';
     AuditLoggingService,
     RequestContextService,
     CacheInterceptor,
+    // Globally bumps each church's cache version after every write request so
+    // cached analytics/reports responses are never stale (see CacheInterceptor).
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheVersionInterceptor,
+    },
     // CacheInterceptor is available for injection but not global by default.
     // Controllers opt in via @UseInterceptors(CacheInterceptor) + @CacheTTL().
     // This pattern avoids caching all GET responses indiscriminately.

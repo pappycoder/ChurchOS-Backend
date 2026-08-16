@@ -6,8 +6,8 @@
  * @since 1.0.0
  */
 
-import { Controller, Get, Post, Body, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Query, Headers, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SupabaseJwtPayload } from '../auth/strategies/jwt.strategy';
@@ -66,27 +66,35 @@ export class SyncController {
   @Get('pull')
   @ApiGetEndpoint(
     'Pull server changes',
-    'Retrieves pending server-side changes for mobile client caching.',
+    'Retrieves pending server-side changes for offline client caching, hydrated to current state.',
   )
   @ApiQuery({ name: 'limit', required: false, description: 'Max items to return (default: 100)' })
-  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor (ISO timestamp)' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Resume cursor (ISO timestamp)' })
+  @ApiHeader({
+    name: 'x-device-id',
+    required: false,
+    description: 'Stable client install identifier (default: web)',
+  })
   async pullChanges(
     @Query('limit') limit?: string,
     @Query('cursor') cursor?: string,
+    @Headers('x-device-id') deviceId?: string,
     @Request() req?: Record<string, unknown>,
   ): Promise<{
     changes: {
       entity: string;
       entityId: string;
       action: string;
-      data: Record<string, unknown>;
+      data: Record<string, unknown> | null;
       createdAt: string;
     }[];
     hasMore: boolean;
+    cursor: string | null;
   }> {
     const profile = req?.['profile'] as { church_id: string } | undefined;
     return this.syncService.pullChanges(
       profile?.church_id || '',
+      deviceId || 'web',
       limit ? parseInt(limit, 10) : 100,
       cursor,
     );
