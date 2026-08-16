@@ -233,10 +233,36 @@ export class SermonsService {
    * Looks up the user's profile to find the linked member record.
    *
    * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @returns The member ID linked to the user's profile
-   * @throws NotFoundException if the user has no linked member record
+   * @returns The member ID linked to the user's profile, or null if none
    */
-  private async resolveMemberId(userId: string): Promise<string> {
+  private async resolveMemberId(userId: string): Promise<string | null> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        member_id: true,
+        first_name: true,
+        last_name: true,
+        church_id: true,
+        branch_id: true,
+      },
+    });
+
+    if (!profile) {
+      return null;
+    }
+
+    return profile.member_id;
+  }
+
+  /**
+   * Returns the member ID linked to a user's profile, creating a Member
+   * record on the fly for write operations that require one.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @returns The member ID linked to the user's profile
+   */
+  private async ensureMemberId(userId: string): Promise<string> {
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: userId },
       select: {
@@ -257,7 +283,7 @@ export class SermonsService {
       return profile.member_id;
     }
 
-    // Auto-create a Member record and link it to the profile
+    // Create a Member record and link it to the profile
     const member = await this.prisma.member.create({
       data: {
         church_id: profile.church_id,
@@ -297,7 +323,7 @@ export class SermonsService {
       throw new NotFoundException('Sermon not found');
     }
 
-    const memberId = await this.resolveMemberId(userId);
+    const memberId = await this.ensureMemberId(userId);
 
     // Check if already bookmarked
     const existing = await this.prisma.sermonBookmark.findUnique({
@@ -328,6 +354,10 @@ export class SermonsService {
   async removeBookmark(sermonId: string, userId: string): Promise<{ bookmarked: boolean }> {
     const memberId = await this.resolveMemberId(userId);
 
+    if (!memberId) {
+      return { bookmarked: false };
+    }
+
     const existing = await this.prisma.sermonBookmark.findUnique({
       where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },
     });
@@ -354,6 +384,10 @@ export class SermonsService {
   async listBookmarks(userId: string, churchId: string): Promise<SermonResponseDto[]> {
     const memberId = await this.resolveMemberId(userId);
 
+    if (!memberId) {
+      return [];
+    }
+
     const bookmarks = await this.prisma.sermonBookmark.findMany({
       where: {
         member_id: memberId,
@@ -379,6 +413,10 @@ export class SermonsService {
    */
   async isBookmarked(sermonId: string, userId: string): Promise<{ bookmarked: boolean }> {
     const memberId = await this.resolveMemberId(userId);
+
+    if (!memberId) {
+      return { bookmarked: false };
+    }
 
     const bookmark = await this.prisma.sermonBookmark.findUnique({
       where: { member_id_sermon_id: { member_id: memberId, sermon_id: sermonId } },

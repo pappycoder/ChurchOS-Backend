@@ -39,6 +39,9 @@ export class ProfileResponseDto {
   @ApiProperty({ description: 'Last name', example: 'Ogundimu' })
   lastName!: string;
 
+  @ApiPropertyOptional({ description: 'Email address', example: 'adebayo@church.com' })
+  email?: string;
+
   @ApiPropertyOptional({ description: 'Phone number', example: '+234 803 456 7890' })
   phone?: string;
 

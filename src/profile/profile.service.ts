@@ -33,6 +33,22 @@ import { Prisma } from '@prisma/client';
 import { RedisService } from '../redis/redis.service';
 
 /**
+ * Rank of each role for privilege-escalation checks. A user may only assign
+ * roles at or below their own rank, and only a super_admin may assign
+ * super_admin.
+ */
+const ROLE_RANK: Record<string, number> = {
+  super_admin: 100,
+  senior_pastor: 80,
+  church_admin: 60,
+  branch_pastor: 50,
+  secretary: 40,
+  treasurer: 40,
+  department_head: 40,
+  member: 10,
+};
+
+/**
  * Service for managing user profiles.
  * Provides methods for self-service profile updates, admin role management,
  * and profile listing with multi-tenant scoping.
@@ -307,6 +323,7 @@ export class ProfileService {
    * @param dto - Role update data
    * @param churchId - Church ID for multi-tenant scoping
    * @param adminUserId - Admin user ID for audit logging
+   * @param adminRole - The acting admin's own role, used to prevent escalation
    * @returns Updated profile
    * @throws NotFoundException if profile doesn't exist
    * @throws ForbiddenException if trying to modify a super_admin
@@ -316,6 +333,7 @@ export class ProfileService {
     dto: UpdateRoleDto,
     churchId: string,
     adminUserId: string,
+    adminRole: string,
   ): Promise<ProfileResponseDto> {
     const existing = await this.prisma.profile.findUnique({
       where: { id: profileId },
@@ -333,6 +351,17 @@ export class ProfileService {
     // Prevent self-demotion
     if (existing.user_id === adminUserId && dto.role !== existing.role) {
       throw new ForbiddenException('Cannot change your own role');
+    }
+
+    // Privilege-escalation guards: an admin cannot grant a role above their own,
+    // and only a super_admin can assign the super_admin role.
+    if (dto.role === 'super_admin' && adminRole !== 'super_admin') {
+      throw new ForbiddenException('Only a super_admin can assign the super_admin role');
+    }
+    const callerRank = ROLE_RANK[adminRole] ?? 0;
+    const targetRank = ROLE_RANK[dto.role] ?? 0;
+    if (targetRank > callerRank) {
+      throw new ForbiddenException('Cannot assign a role higher than your own');
     }
 
     await this.prisma.profile.update({
@@ -378,13 +407,19 @@ export class ProfileService {
       throw new ForbiddenException('Cannot deactivate your own account');
     }
 
+    // Persist the soft-delete by marking the profile inactive
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { status: 'inactive' },
+    });
+
     await this.audit.log({
       userId: adminUserId,
       churchId,
       entity: 'profile',
       action: 'DELETE',
       entityId: profileId,
-      oldValues: { role: existing.role },
+      oldValues: { role: existing.role, status: existing.status },
       newValues: { status: 'inactive' },
     });
 
@@ -583,15 +618,22 @@ export class ProfileService {
 
     const supabase = this.supabase.client;
 
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const orConditions: Prisma.ProfileWhereInput[] = [{ email: normalizedEmail }];
+    if (dto.phone) {
+      orConditions.push({ phone: dto.phone });
+    }
+
     const existing = await this.prisma.profile.findFirst({
       where: {
         church_id: churchId,
-        OR: [{ phone: dto.phone || '__none__' }],
+        OR: orConditions,
       },
     });
 
-    if (existing && dto.phone && existing.phone === dto.phone) {
-      throw new ConflictException('A user with this phone number already exists');
+    if (existing) {
+      const field = existing.email === normalizedEmail ? 'email' : 'phone';
+      throw new ConflictException(`A user with this ${field} already exists in this church`);
     }
 
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
@@ -613,17 +655,29 @@ export class ProfileService {
       throw new BadRequestException('Failed to create user');
     }
 
-    const profile = await this.prisma.profile.create({
-      data: {
-        user_id: data.user.id,
-        church_id: churchId,
-        branch_id: dto.branchId || null,
-        role: dto.role,
-        first_name: dto.firstName,
-        last_name: dto.lastName,
-        phone: dto.phone || null,
-      },
-    });
+    let profile;
+    try {
+      profile = await this.prisma.profile.create({
+        data: {
+          user_id: data.user.id,
+          church_id: churchId,
+          branch_id: dto.branchId || null,
+          role: dto.role,
+          first_name: dto.firstName,
+          last_name: dto.lastName,
+          phone: dto.phone || null,
+          email: normalizedEmail,
+        },
+      });
+    } catch (err) {
+      // Roll back the created Supabase Auth user so we don't leak an orphaned
+      // account that has no local profile.
+      this.logger.error(
+        `Profile creation failed for invited user, deleting Supabase user ${data.user.id}: ${(err as Error).message}`,
+      );
+      await supabase.auth.admin.deleteUser(data.user.id).catch(() => {});
+      throw new BadRequestException('Failed to create user profile');
+    }
 
     await this.audit.log({
       userId: invitedByUserId,
@@ -664,18 +718,18 @@ export class ProfileService {
     }
 
     const supabase = this.supabase.client;
-    const { error } = await supabase.auth.admin.updateUserById(profile.user_id, {
-      ban_duration: 'none',
-    });
 
-    if (error) {
-      this.logger.warn(`Supabase user disable warning: ${error.message}`);
-    }
-
+    // Mark the profile inactive so the auth layer rejects future requests
     await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: profile.role },
+      data: { status: 'inactive' },
     });
+
+    // Invalidate the user's active sessions so deactivation takes effect immediately
+    const { error } = await supabase.auth.admin.signOut(profile.user_id);
+    if (error) {
+      this.logger.warn(`Supabase sign-out warning: ${error.message}`);
+    }
 
     await this.audit.log({
       userId,
@@ -683,7 +737,8 @@ export class ProfileService {
       entity: 'user',
       action: 'DELETE',
       entityId: profileId,
-      newValues: { deactivated: true },
+      oldValues: { role: profile.role, status: profile.status },
+      newValues: { deactivated: true, status: 'inactive' },
     });
 
     this.logger.log(`User deactivated: ${profileId} for church ${churchId}`);
@@ -718,9 +773,10 @@ export class ProfileService {
       throw new BadRequestException('Could not find user email for password reset');
     }
 
-    const { error } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: userData.user.email,
+    // Actually deliver the reset email. generateLink() only builds a link and
+    // never sends it; resetPasswordForEmail() emails the user a reset link.
+    const { error } = await supabase.auth.resetPasswordForEmail(userData.user.email, {
+      redirectTo: `${this.config.get<string>('WEB_URL')}/auth/reset-password`,
     });
 
     if (error) {
@@ -793,8 +849,10 @@ export class ProfileService {
     church_id: string;
     branch_id: string | null;
     role: string;
+    status: string;
     first_name: string;
     last_name: string;
+    email?: string | null;
     phone: string | null;
     avatar_url: string | null;
     mfa_enabled: boolean;
@@ -820,10 +878,11 @@ export class ProfileService {
       role: profile.role,
       firstName: profile.first_name,
       lastName: profile.last_name,
+      email: profile.email || undefined,
       phone: profile.phone || undefined,
       avatarUrl: profile.avatar_url || undefined,
       mfaEnabled: profile.mfa_enabled,
-      status: 'active',
+      status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),
       church: profile.church

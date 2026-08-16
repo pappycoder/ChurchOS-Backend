@@ -288,8 +288,19 @@ export class AttendanceService {
       }
 
       try {
-        // Check for duplicate if member
+        // Verify the member belongs to the church before writing
         if (record.memberId) {
+          const member = await this.prisma.member.findFirst({
+            where: { id: record.memberId, church_id: churchId },
+            select: { id: true },
+          });
+
+          if (!member) {
+            errors.push({ index: i, message: 'Member not found in this church' });
+            continue;
+          }
+
+          // Check for duplicate if member
           const existing = await this.prisma.attendance.findUnique({
             where: {
               service_id_member_id: {

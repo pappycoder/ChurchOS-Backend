@@ -38,6 +38,7 @@ describe('WhatsAppOutboundProcessor', () => {
     messageId?: string;
   }): {
     id: string;
+    name: string;
     data: Record<string, unknown>;
     attemptsMade: number;
     opts: { attempts: number };
@@ -45,6 +46,7 @@ describe('WhatsAppOutboundProcessor', () => {
   } {
     return {
       id: 'job-1',
+      name: 'send',
       data: {
         to: '+2348012345678',
         message: 'Hello from ChurchOS',
@@ -58,12 +60,12 @@ describe('WhatsAppOutboundProcessor', () => {
     };
   }
 
-  describe('handleSend', () => {
+  describe('process', () => {
     it('should send WhatsApp message and store message ID in job data', async () => {
       whatsappService.sendMessage.mockResolvedValue({ messageId: 'wa-msg-id' });
 
       const job = createJob({ attemptsMade: 0, attempts: 3 });
-      await processor.handleSend(job as unknown as Job);
+      await processor.process(job as unknown as Job);
 
       expect(whatsappService.sendMessage).toHaveBeenCalledWith(
         '+2348012345678',
@@ -119,6 +121,23 @@ describe('WhatsAppOutboundProcessor', () => {
       await expect(
         processor.onFailed(job as unknown as Job, new Error('WhatsApp failed')),
       ).resolves.toBeUndefined();
+    });
+
+    it('should skip SMS fallback for template jobs without a plain-text message', async () => {
+      configService.get.mockReturnValue(true);
+
+      const job = createJob();
+      job.data = {
+        to: '+2348012345678',
+        templateName: 'welcome',
+        language: 'en',
+        variables: { name: 'John' },
+        churchId: 'church-1',
+      };
+
+      await processor.onFailed(job as unknown as Job, new Error('WhatsApp failed'));
+
+      expect(termiiService.sendSms).not.toHaveBeenCalled();
     });
   });
 });

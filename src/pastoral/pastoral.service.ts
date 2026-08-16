@@ -90,7 +90,17 @@ export class PastoralService {
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
     // Resolve Supabase user ID to member ID for the author_id FK
-    const memberId = await this.resolveMemberId(userId);
+    const memberId = await this.ensureMemberId(userId);
+
+    // Verify the subject member belongs to this church
+    const subjectMember = await this.prisma.member.findFirst({
+      where: { id: dto.memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!subjectMember) {
+      throw new NotFoundException('Member not found in this church');
+    }
 
     // Encrypt the plaintext content using AES-256-GCM
     const encryptedContent = this.encrypt(dto.content);
@@ -410,10 +420,37 @@ export class PastoralService {
    * Resolves a Supabase Auth user ID to a Member ID via the Profile table.
    *
    * @param userId - Supabase Auth user ID (user.sub)
+   * @returns The member_id from the user's Profile, or null if none
+   */
+  private async resolveMemberId(userId: string): Promise<string | null> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        member_id: true,
+        first_name: true,
+        last_name: true,
+        church_id: true,
+        branch_id: true,
+      },
+    });
+
+    if (!profile) {
+      return null;
+    }
+
+    return profile.member_id;
+  }
+
+  /**
+   * Returns the member ID linked to a user's profile, creating a Member
+   * record on the fly for write operations that require an author.
+   *
+   * @param userId - Supabase Auth user ID (user.sub)
    * @returns The member_id from the user's Profile
    * @throws BadRequestException if user has no member profile
    */
-  private async resolveMemberId(userId: string): Promise<string> {
+  private async ensureMemberId(userId: string): Promise<string> {
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: userId },
       select: {
@@ -434,7 +471,7 @@ export class PastoralService {
       return profile.member_id;
     }
 
-    // Auto-create a Member record and link it to the profile
+    // Create a Member record and link it to the profile
     const member = await this.prisma.member.create({
       data: {
         church_id: profile.church_id,
@@ -531,18 +568,19 @@ export class PastoralService {
    */
   private getConfidentialityFilter(
     userRole: string,
-    userId: string,
+    userId: string | null,
   ): Prisma.PastoralNoteWhereInput | null {
     // Check if the user is an admin or pastor role
     const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
 
     if (isAdminOrPastor) {
       // Admins/pastors see standard, confidential, and their own restricted notes
+      const restrictedFilter: Prisma.PastoralNoteWhereInput[] = userId
+        ? [{ confidentiality: 'restricted', author_id: userId }]
+        : [];
+
       return {
-        OR: [
-          { confidentiality: { in: ['standard', 'confidential'] } },
-          { confidentiality: 'restricted', author_id: userId },
-        ],
+        OR: [{ confidentiality: { in: ['standard', 'confidential'] } }, ...restrictedFilter],
       };
     }
 
@@ -561,7 +599,7 @@ export class PastoralService {
   private checkConfidentialityAccess(
     note: { confidentiality: string; author_id: string },
     userRole: string,
-    userId: string,
+    userId: string | null,
   ): void {
     // Allow all staff to access standard notes
     if (note.confidentiality === 'standard') {
@@ -643,6 +681,16 @@ export class PastoralService {
     churchId: string,
     userId: string,
   ): Promise<LifeEventResponseDto> {
+    // Verify the member belongs to this church
+    const subjectMember = await this.prisma.member.findFirst({
+      where: { id: dto.memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!subjectMember) {
+      throw new NotFoundException('Member not found in this church');
+    }
+
     // Create the life event record in the database
     const event = await this.prisma.lifeEvent.create({
       data: {

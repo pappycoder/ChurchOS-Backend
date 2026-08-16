@@ -32,7 +32,19 @@ describe('ProfileService', () => {
   let audit: { log: jest.Mock };
   let mediaService: { uploadImage: jest.Mock; deleteByUrl: jest.Mock };
   let config: { get: jest.Mock };
-  let supabase: { client: { auth: { admin: { inviteUserByEmail: jest.Mock; updateUserById: jest.Mock; getUserById: jest.Mock; generateLink: jest.Mock; signOut: jest.Mock } } } };
+  let supabase: {
+    client: {
+      auth: {
+        admin: {
+          inviteUserByEmail: jest.Mock;
+          updateUserById: jest.Mock;
+          getUserById: jest.Mock;
+          generateLink: jest.Mock;
+          signOut: jest.Mock;
+        };
+      };
+    };
+  };
   let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
@@ -510,6 +522,7 @@ describe('ProfileService', () => {
         { role: 'branch_pastor' },
         mockChurchId,
         mockAdminUserId,
+        'church_admin',
       );
 
       expect(result.role).toBe('branch_pastor');
@@ -526,7 +539,13 @@ describe('ProfileService', () => {
       model(prisma, 'profile').findUnique.mockResolvedValue(null);
 
       await expect(
-        service.updateProfileRole(mockProfileId, { role: 'member' }, mockChurchId, mockAdminUserId),
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'member' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -539,7 +558,13 @@ describe('ProfileService', () => {
       });
 
       await expect(
-        service.updateProfileRole(mockProfileId, { role: 'member' }, mockChurchId, mockAdminUserId),
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'member' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -552,8 +577,78 @@ describe('ProfileService', () => {
       });
 
       await expect(
-        service.updateProfileRole(mockProfileId, { role: 'member' }, mockChurchId, mockAdminUserId),
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'member' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when a church_admin tries to assign super_admin', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        role: 'member',
+      });
+
+      await expect(
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'super_admin' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when assigning a role above own rank', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        role: 'member',
+      });
+
+      await expect(
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'senior_pastor' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow super_admin to assign the super_admin role', async () => {
+      model(prisma, 'profile')
+        .findUnique.mockResolvedValueOnce({
+          id: mockProfileId,
+          user_id: mockUserId,
+          church_id: mockChurchId,
+          role: 'member',
+        })
+        .mockResolvedValueOnce({
+          ...mockProfileWithRelations,
+          role: 'super_admin',
+        });
+
+      model(prisma, 'profile').update.mockResolvedValue({});
+
+      const result = await service.updateProfileRole(
+        mockProfileId,
+        { role: 'super_admin' },
+        mockChurchId,
+        mockAdminUserId,
+        'super_admin',
+      );
+
+      expect(result.role).toBe('super_admin');
     });
   });
 
@@ -566,10 +661,17 @@ describe('ProfileService', () => {
         user_id: mockUserId,
         church_id: mockChurchId,
         role: 'member',
+        status: 'active',
       });
 
       await service.softDeleteProfile(mockProfileId, mockChurchId, mockAdminUserId);
 
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockProfileId },
+          data: { status: 'inactive' },
+        }),
+      );
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: mockAdminUserId,

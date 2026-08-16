@@ -21,7 +21,7 @@
  */
 
 import { Module, forwardRef, OnModuleDestroy, Logger } from '@nestjs/common';
-import { BullModule, InjectQueue } from '@nestjs/bull';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
@@ -52,9 +52,9 @@ const DEFAULT_JOB_OPTIONS = {
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        redis: {
+        connection: {
           url: config.get<string>('REDIS_URL', 'redis://localhost:6379'),
-          maxRetriesPerRequest: 3,
+          maxRetriesPerRequest: null,
         },
       }),
     }),

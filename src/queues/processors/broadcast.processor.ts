@@ -10,16 +10,18 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { BroadcastService } from '../../broadcast/broadcast.service';
 
 @Processor('broadcast')
-export class BroadcastProcessor {
+export class BroadcastProcessor extends WorkerHost {
   private readonly logger = new Logger(BroadcastProcessor.name);
 
-  constructor(private readonly broadcastService: BroadcastService) {}
+  constructor(private readonly broadcastService: BroadcastService) {
+    super();
+  }
 
   /**
    * Processes a single broadcast job.
@@ -29,8 +31,7 @@ export class BroadcastProcessor {
    *
    * @param job - BullMQ job containing broadcast ID and church ID
    */
-  @Process('send')
-  async handleSend(job: Job<{ broadcastId: string; churchId: string }>): Promise<void> {
+  async process(job: Job<{ broadcastId: string; churchId: string }>): Promise<void> {
     const { broadcastId, churchId } = job.data;
     this.logger.log(`Processing broadcast ${broadcastId}`);
 
@@ -42,7 +43,7 @@ export class BroadcastProcessor {
   /**
    * Handles job completion for observability logging.
    */
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job): void {
     this.logger.log(`Broadcast job ${job.id} completed`);
   }
@@ -50,7 +51,7 @@ export class BroadcastProcessor {
   /**
    * Handles job failure with logging.
    */
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `Broadcast job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,

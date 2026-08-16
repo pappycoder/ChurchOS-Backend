@@ -7,7 +7,7 @@
  */
 
 import { Module, OnModuleDestroy, Logger } from '@nestjs/common';
-import { BullModule, InjectQueue } from '@nestjs/bull';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { WebhooksController } from './webhooks.controller';

@@ -122,6 +122,7 @@ describe('AdminService', () => {
   describe('addDepartmentMember', () => {
     it('should add a member to a department', async () => {
       prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
       prisma.departmentMember.findUnique.mockResolvedValue(null);
       prisma.departmentMember.create.mockResolvedValue({} as never);
 
@@ -137,6 +138,7 @@ describe('AdminService', () => {
 
     it('should prevent duplicate membership', async () => {
       prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
       (prisma.departmentMember.findUnique as jest.Mock).mockResolvedValue({
         id: 'dm-1',
         member_id: 'm-1',
@@ -151,6 +153,20 @@ describe('AdminService', () => {
           mockUserId,
         ),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('should reject a member from another church', async () => {
+      prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.member.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.addDepartmentMember(
+          mockDepartmentId,
+          { memberId: mockMemberId },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

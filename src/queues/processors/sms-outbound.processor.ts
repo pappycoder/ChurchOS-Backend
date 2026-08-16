@@ -12,16 +12,18 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { TermiiService } from '../../communication/termii.service';
 
 @Processor('sms-outbound')
-export class SmsOutboundProcessor {
+export class SmsOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(SmsOutboundProcessor.name);
 
-  constructor(private readonly termiiService: TermiiService) {}
+  constructor(private readonly termiiService: TermiiService) {
+    super();
+  }
 
   /**
    * Processes a single outbound SMS message job.
@@ -33,8 +35,7 @@ export class SmsOutboundProcessor {
    * @returns Void — SMS sent via TermiiService (Termii API)
    * @throws Error if Termii API is not configured or send fails (triggers retry)
    */
-  @Process('send')
-  async handleSend(job: Job<{ to: string; message: string; churchId: string }>): Promise<void> {
+  async process(job: Job<{ to: string; message: string; churchId: string }>): Promise<void> {
     const { to, message, churchId } = job.data;
     this.logger.log(`Processing SMS to ${to} (job ${job.id})`);
 
@@ -48,7 +49,7 @@ export class SmsOutboundProcessor {
    *
    * @param job - The completed BullMQ job
    */
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job): void {
     this.logger.log(`SMS job ${job.id} completed → ${job.data.to}`);
   }
@@ -59,7 +60,7 @@ export class SmsOutboundProcessor {
    * @param job - The failed BullMQ job
    * @param error - The error that caused the failure
    */
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `SMS job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,

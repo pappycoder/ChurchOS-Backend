@@ -16,6 +16,7 @@ import {
   ApiGetEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { SyncService } from './sync.service';
+import { BootstrapResult } from './sync.service';
 import { SyncPushDto } from './dto/sync-push.dto';
 
 @ApiTags('Sync')
@@ -44,6 +45,19 @@ export class SyncController {
   }> {
     const profile = req['profile'] as { church_id: string };
     return this.syncService.pushChanges(profile.church_id, user.sub, dto.changes);
+  }
+
+  /**
+   * Bootstrap a fresh offline client with a full data snapshot.
+   */
+  @Get('bootstrap')
+  @ApiGetEndpoint(
+    'Bootstrap offline data',
+    'Returns a full snapshot of the church\u2019s core collections plus a revision cursor for incremental syncs.',
+  )
+  async bootstrap(@Request() req: Record<string, unknown>): Promise<BootstrapResult> {
+    const profile = req['profile'] as { church_id: string };
+    return this.syncService.bootstrap(profile.church_id);
   }
 
   /**

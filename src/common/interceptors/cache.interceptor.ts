@@ -29,6 +29,7 @@ import { Observable, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { RedisService } from '../../redis/redis.service';
 import { Request } from 'express';
+import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 
 export const CACHE_TTL_KEY = 'cache_ttl';
 export const CACHE_INVALIDATE_KEY = 'cache_invalidate';
@@ -133,12 +134,15 @@ export class CacheInterceptor implements NestInterceptor {
   }
 
   /**
-   * Builds a unique cache key from the request method, URL, and query params.
+   * Builds a unique cache key from the request method, URL, query params,
+   * and the authenticated tenant. Including the church_id prevents cached
+   * responses from leaking across churches (multi-tenant isolation).
    */
   private buildCacheKey(request: Request): string {
     const queryString = request.url.includes('?') ? request.url.split('?')[1] || '' : '';
     const path = request.route?.path || request.url.split('?')[0];
-    return `cache:${request.method}:${path}:${queryString}`;
+    const churchId = (request as AuthenticatedRequest).profile?.church_id || 'global';
+    return `cache:${request.method}:${churchId}:${path}:${queryString}`;
   }
 
   /**

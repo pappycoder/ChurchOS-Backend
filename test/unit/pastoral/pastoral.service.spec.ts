@@ -42,6 +42,9 @@ describe('PastoralService', () => {
       branch_id: null,
     });
 
+    // Mock subject member lookup for church-scoped validation
+    prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PastoralService,

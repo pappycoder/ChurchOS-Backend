@@ -13,8 +13,8 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
-import { InjectQueue } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
 import { ScoringService } from '../../pastoral/scoring.service';
@@ -23,7 +23,7 @@ import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Processor('nightly-jobs')
-export class NightlyJobsProcessor {
+export class NightlyJobsProcessor extends WorkerHost {
   private readonly logger = new Logger(NightlyJobsProcessor.name);
 
   constructor(
@@ -32,7 +32,9 @@ export class NightlyJobsProcessor {
     private readonly whatsappService: WhatsAppService,
     private readonly prisma: PrismaService,
     @InjectQueue('recurring-giving') private readonly recurringQueue: Queue,
-  ) {}
+  ) {
+    super();
+  }
 
   /**
    * Runs scheduled nightly maintenance tasks for a church.
@@ -44,8 +46,7 @@ export class NightlyJobsProcessor {
    * @param job - BullMQ job containing church ID
    * @returns Job result with scoring and recurring charge summary
    */
-  @Process('run')
-  async handleRun(job: Job<{ churchId: string }>): Promise<{
+  async process(job: Job<{ churchId: string }>): Promise<{
     engagementScored: number;
     riskScored: number;
     membersNeedingAttention: number;
@@ -168,41 +169,75 @@ export class NightlyJobsProcessor {
       if (oldDeletedMembers.length > 0) {
         const memberIds = oldDeletedMembers.map((m) => m.id);
 
-        // Delete related records first (foreign key constraints)
-        await this.prisma.departmentMember.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.cellGroupMember.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.cellGroupAttendance.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.sermonBookmark.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.pastoralNote.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.lifeEvent.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.transaction.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
-        await this.prisma.attendance.deleteMany({
-          where: { member_id: { in: memberIds } },
-        });
+        await this.prisma.$transaction(async (tx) => {
+          // Detach optional foreign-key references before deletion
+          await tx.profile.updateMany({
+            where: { member_id: { in: memberIds } },
+            data: { member_id: null },
+          });
+          await tx.assetLoan.updateMany({
+            where: { borrower_member_id: { in: memberIds } },
+            data: { borrower_member_id: null },
+          });
+          await tx.visitor.updateMany({
+            where: { converted_member_id: { in: memberIds } },
+            data: { converted_member_id: null },
+          });
 
-        // Finally delete the member records
-        const deleted = await this.prisma.member.deleteMany({
-          where: { id: { in: memberIds } },
-        });
-        totalDeleted += deleted.count;
+          // Delete related records first (foreign key constraints)
+          await tx.departmentMember.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.cellGroupMember.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.cellGroupAttendance.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.familyMember.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.sermonBookmark.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.pastoralNote.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.lifeEvent.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.riskScore.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.engagementScore.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.recurringGiving.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.eventRegistration.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.ticket.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.transaction.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
+          await tx.attendance.deleteMany({
+            where: { member_id: { in: memberIds } },
+          });
 
-        this.logger.log(
-          `NDPR purge: deleted ${deleted.count} member records (retention: ${retentionDays}d)`,
-        );
+          // Finally delete the member records
+          const deleted = await tx.member.deleteMany({
+            where: { id: { in: memberIds } },
+          });
+          totalDeleted += deleted.count;
+
+          this.logger.log(
+            `NDPR purge: deleted ${deleted.count} member records (retention: ${retentionDays}d)`,
+          );
+        });
       }
 
       // 2. Delete audit logs older than 2 years (general retention policy)
@@ -332,7 +367,7 @@ export class NightlyJobsProcessor {
     return greetings[eventType] || null;
   }
 
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `Nightly jobs job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,

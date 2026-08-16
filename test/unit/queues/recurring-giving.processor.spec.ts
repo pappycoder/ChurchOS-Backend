@@ -18,18 +18,19 @@ describe('RecurringGivingProcessor', () => {
     processor = new RecurringGivingProcessor(givingService as unknown as GivingService);
   });
 
-  describe('handleCharge', () => {
+  describe('process', () => {
     it('should delegate to GivingService.processRecurringCharge', async () => {
       givingService.processRecurringCharge.mockResolvedValue(true);
 
       const job = {
+        name: 'charge',
         data: {
           recurringGivingId: 'rrr-rrrr-rrrr-rrrr',
           churchId: 'ccc-cccc-cccc-cccc',
         },
       } as never;
 
-      const result = await processor.handleCharge(job);
+      const result = await processor.process(job);
 
       expect(result).toBe(true);
       expect(givingService.processRecurringCharge).toHaveBeenCalledWith(
@@ -42,13 +43,14 @@ describe('RecurringGivingProcessor', () => {
       givingService.processRecurringCharge.mockResolvedValue(false);
 
       const job = {
+        name: 'charge',
         data: {
           recurringGivingId: 'rrr-rrrr-rrrr-rrrr',
           churchId: 'ccc-cccc-cccc-cccc',
         },
       } as never;
 
-      const result = await processor.handleCharge(job);
+      const result = await processor.process(job);
 
       expect(result).toBe(false);
     });

@@ -13,7 +13,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Injectable, NestMiddleware, ForbiddenException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { decodeJwt } from 'jose';
 import { RequestContextService } from '../services/request-context.service';
@@ -76,7 +76,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     if (!authReq.profile) {
       const profile = await this.prisma.profile.findUnique({
         where: { user_id: sub },
-        select: { id: true, church_id: true, branch_id: true, role: true },
+        select: { id: true, church_id: true, branch_id: true, role: true, status: true },
       });
       if (profile) {
         authReq.profile = {
@@ -87,6 +87,12 @@ export class RequestContextMiddleware implements NestMiddleware {
     }
 
     const profile = authReq.profile;
+
+    // Reject requests from deactivated accounts before they reach any handler
+    if (profile && profile.status === 'inactive') {
+      next(new ForbiddenException('Account deactivated. Contact your church administrator.'));
+      return;
+    }
 
     const context = {
       userId: authReq.user.id,

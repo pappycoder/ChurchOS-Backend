@@ -2,7 +2,7 @@ allowBuilds:
   '@nestjs/core': true
   '@prisma/engines': true
   '@sentry/node-cpu-profiler': true
-  msgpackr-extract: set this to true or false
+  msgpackr-extract: true
   prisma: true
 minimumReleaseAgeExclude:
   - '@supabase/auth-js@2.110.6'

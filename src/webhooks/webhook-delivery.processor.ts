@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,13 +25,14 @@ interface WebhookDeliveryJob {
 }
 
 @Processor('webhook-delivery')
-export class WebhookDeliveryProcessor {
+export class WebhookDeliveryProcessor extends WorkerHost {
   private readonly logger = new Logger(WebhookDeliveryProcessor.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    super();
+  }
 
-  @Process('deliver')
-  async handleDelivery(job: Job<WebhookDeliveryJob>): Promise<void> {
+  async process(job: Job<WebhookDeliveryJob>): Promise<void> {
     const { deliveryId, url, secret, event, payload } = job.data;
 
     await this.prisma.webhookDelivery.update({
@@ -71,7 +72,7 @@ export class WebhookDeliveryProcessor {
     });
   }
 
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   async onFailed(job: Job<WebhookDeliveryJob>, error: Error): Promise<void> {
     this.logger.error(`Webhook delivery failed: ${job.data.deliveryId} — ${error.message}`);
 
@@ -86,7 +87,7 @@ export class WebhookDeliveryProcessor {
       .catch((err) => this.logger.error(`Failed to update delivery status: ${err.message}`));
   }
 
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   async onCompleted(job: Job<WebhookDeliveryJob>): Promise<void> {
     this.logger.log(`Webhook delivered: ${job.data.event} → ${job.data.url}`);
   }

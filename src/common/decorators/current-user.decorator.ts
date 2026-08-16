@@ -21,6 +21,7 @@ export interface AuthenticatedRequest extends Request {
     church_id: string;
     branch_id?: string;
     role: string;
+    status?: string;
     permissions?: string[];
   };
 }

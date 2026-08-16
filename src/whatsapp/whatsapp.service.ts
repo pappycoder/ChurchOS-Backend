@@ -365,11 +365,11 @@ export class WhatsAppService {
     // Look up member by phone number
     const profile = await this.prisma.profile.findFirst({
       where: { phone },
-      select: { id: true, church_id: true },
+      select: { church_id: true, member_id: true },
     });
 
     let churchId = profile?.church_id || '';
-    const memberId = profile?.id || null;
+    const memberId = profile?.member_id || null;
 
     // If no profile match, resolve church from phone_number_id and create Visitor
     if (!profile && phoneNumberId) {

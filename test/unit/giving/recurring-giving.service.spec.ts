@@ -129,6 +129,7 @@ describe('GivingService - Recurring Giving', () => {
   describe('createRecurringGiving', () => {
     it('should create a recurring giving schedule', async () => {
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId });
       model('recurringGiving').findFirst.mockResolvedValue(null);
       model('recurringGiving').create.mockResolvedValue(mockRecurring);
 
@@ -211,6 +212,7 @@ describe('GivingService - Recurring Giving', () => {
 
     it('should throw ConflictException if active recurring already exists', async () => {
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId });
       model('recurringGiving').findFirst.mockResolvedValue(mockRecurring);
 
       await expect(
@@ -226,6 +228,25 @@ describe('GivingService - Recurring Giving', () => {
           mockUserId,
         ),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('should reject a member from another church', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createRecurringGiving(
+          {
+            categoryId: mockCategoryId,
+            amount: 5000,
+            frequency: 'monthly',
+            email: 'test@example.com',
+            memberId: mockMemberId,
+          },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

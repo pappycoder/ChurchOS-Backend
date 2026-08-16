@@ -252,7 +252,13 @@ export class ProfileController {
     @Request() req: AuthenticatedRequest,
   ): Promise<ProfileResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.profileService.updateProfileRole(profileId, dto, churchId, user.sub);
+    return this.profileService.updateProfileRole(
+      profileId,
+      dto,
+      churchId,
+      user.sub,
+      req.profile?.role || 'member',
+    );
   }
 
   /**

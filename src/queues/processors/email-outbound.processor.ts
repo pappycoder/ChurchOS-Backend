@@ -12,16 +12,18 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { ResendService } from '../../communication/resend.service';
 
 @Processor('email-outbound')
-export class EmailOutboundProcessor {
+export class EmailOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailOutboundProcessor.name);
 
-  constructor(private readonly resendService: ResendService) {}
+  constructor(private readonly resendService: ResendService) {
+    super();
+  }
 
   /**
    * Processes a single outbound email job.
@@ -33,8 +35,7 @@ export class EmailOutboundProcessor {
    * @returns Void — email sent via ResendService (Resend API)
    * @throws Error if Resend API is not configured or send fails (triggers retry)
    */
-  @Process('send')
-  async handleSend(
+  async process(
     job: Job<{ to: string; subject: string; html: string; churchId: string }>,
   ): Promise<void> {
     const { to, subject, html, churchId } = job.data;
@@ -50,7 +51,7 @@ export class EmailOutboundProcessor {
    *
    * @param job - The completed BullMQ job
    */
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job): void {
     this.logger.log(`Email job ${job.id} completed → ${job.data.to}`);
   }
@@ -61,7 +62,7 @@ export class EmailOutboundProcessor {
    * @param job - The failed BullMQ job
    * @param error - The error that caused the failure
    */
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `Email job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,

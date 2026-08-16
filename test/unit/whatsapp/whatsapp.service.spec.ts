@@ -29,6 +29,7 @@ describe('WhatsAppService', () => {
 
   const mockProfile = {
     id: mockMemberId,
+    member_id: mockMemberId,
     church_id: mockChurchId,
     phone: mockPhone,
   };

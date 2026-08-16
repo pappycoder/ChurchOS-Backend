@@ -272,6 +272,16 @@ export class AdminService {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
+    // Verify the member belongs to this church
+    const member = await this.prisma.member.findFirst({
+      where: { id: dto.memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this church');
+    }
+
     // Check if the member is already assigned to this department
     const existing = await this.prisma.departmentMember.findUnique({
       where: { department_id_member_id: { department_id: departmentId, member_id: dto.memberId } },
@@ -546,6 +556,16 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    // Verify the member belongs to this church
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this church');
+    }
+
     const existing = await this.prisma.cellGroupMember.findUnique({
       where: {
         cell_group_id_member_id: { cell_group_id: groupId, member_id: memberId },
@@ -675,6 +695,16 @@ export class AdminService {
 
     if (!group) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    // Verify the member belongs to this church
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this church');
     }
 
     const meetingDateObj = new Date(meetingDate);

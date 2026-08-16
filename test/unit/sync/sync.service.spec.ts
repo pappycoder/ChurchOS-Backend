@@ -4,13 +4,15 @@
  */
 
 import { SyncService } from '../../../src/sync/sync.service';
+import { PrismaService } from '../../../src/prisma/prisma.service';
+import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 
 function createPrismaMock() {
   const models: Record<string, Record<string, jest.Mock>> = {};
-  const $transactionMock = jest.fn();
+
   const handler: ProxyHandler<Record<string, unknown>> = {
     get(_target, prop: string) {
-      if (prop === '$transaction') return $transactionMock;
+      if (prop === '$transaction') return $transaction;
       if (prop === '$queryRaw') return jest.fn().mockResolvedValue([]);
       if (!models[prop]) {
         models[prop] = {
@@ -25,15 +27,30 @@ function createPrismaMock() {
           aggregate: jest.fn(),
           groupBy: jest.fn(),
           upsert: jest.fn(),
+          deleteMany: jest.fn(),
         };
       }
       return models[prop];
     },
   };
-  return new Proxy(
-    { $transaction: $transactionMock } as Record<string, unknown>,
-    handler,
-  ) as Record<string, unknown> & { $transaction: jest.Mock };
+
+  const txHandler: ProxyHandler<Record<string, unknown>> = {
+    get(_target, prop: string) {
+      return models[prop];
+    },
+  };
+
+  const $transaction = jest
+    .fn()
+    .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = new Proxy({} as Record<string, unknown>, txHandler);
+      return fn(tx);
+    });
+
+  return new Proxy({ $transaction } as Record<string, unknown>, handler) as Record<
+    string,
+    unknown
+  > & { $transaction: jest.Mock };
 }
 
 function model(name: string): Record<string, jest.Mock> {
@@ -46,27 +63,29 @@ let service: SyncService;
 
 const mockChurchId = '00000000-0000-0000-0000-000000000001';
 const mockUserId = '11111111-1111-1111-1111-111111111111';
+const mockMemberId = '44444444-4444-4444-4444-444444444444';
 
 beforeEach(() => {
   prisma = createPrismaMock();
   audit = { log: jest.fn().mockResolvedValue(undefined) };
 
   service = new SyncService(
-    prisma as unknown as import('../../../src/prisma/prisma.service').PrismaService,
-    audit as unknown as import('../../../src/common/services/audit-logging.service').AuditLoggingService,
+    prisma as unknown as PrismaService,
+    audit as unknown as AuditLoggingService,
   );
 });
 
 describe('SyncService', () => {
   describe('pushChanges', () => {
-    it('should push changes successfully', async () => {
-      model('syncQueue').findFirst.mockResolvedValue(null); // no existing
+    it('should push changes successfully and apply them to the database', async () => {
+      model('syncQueue').findFirst.mockResolvedValue(null); // no existing / pending
+      model('member').upsert.mockResolvedValue({ id: mockMemberId });
       model('syncQueue').create.mockResolvedValue({ id: '1' });
 
       const result = await service.pushChanges(mockChurchId, mockUserId, [
         {
           entity: 'member',
-          entityId: '44444444-4444-4444-4444-444444444444',
+          entityId: mockMemberId,
           action: 'create',
           data: { firstName: 'John', lastName: 'Doe' },
         },
@@ -75,6 +94,26 @@ describe('SyncService', () => {
       expect(result.accepted).toBe(1);
       expect(result.rejected).toBe(0);
       expect(result.conflicts).toHaveLength(0);
+      expect(model('member').upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockMemberId },
+          create: expect.objectContaining({
+            id: mockMemberId,
+            first_name: 'John',
+            last_name: 'Doe',
+            church_id: mockChurchId,
+          }),
+        }),
+      );
+      expect(model('syncQueue').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            church_id: mockChurchId,
+            entity: 'member',
+            entity_id: mockMemberId,
+          }),
+        }),
+      );
     });
 
     it('should skip already-synced changes (idempotency)', async () => {
@@ -83,7 +122,7 @@ describe('SyncService', () => {
       const result = await service.pushChanges(mockChurchId, mockUserId, [
         {
           entity: 'member',
-          entityId: '44444444-4444-4444-4444-444444444444',
+          entityId: mockMemberId,
           action: 'create',
           data: { firstName: 'John' },
         },
@@ -91,6 +130,7 @@ describe('SyncService', () => {
 
       expect(result.accepted).toBe(1);
       expect(model('syncQueue').create).not.toHaveBeenCalled();
+      expect(model('member').upsert).not.toHaveBeenCalled();
     });
 
     it('should reject older client timestamps (conflict)', async () => {
@@ -105,7 +145,7 @@ describe('SyncService', () => {
       const result = await service.pushChanges(mockChurchId, mockUserId, [
         {
           entity: 'member',
-          entityId: '44444444-4444-4444-4444-444444444444',
+          entityId: mockMemberId,
           action: 'create',
           data: { firstName: 'John' },
           clientTimestamp: '2026-07-22T11:00:00Z', // older
@@ -113,7 +153,43 @@ describe('SyncService', () => {
       ]);
 
       expect(result.rejected).toBe(1);
-      expect(result.conflicts).toContain('member/44444444-4444-4444-4444-444444444444');
+      expect(result.conflicts).toContain(`member/${mockMemberId}`);
+      expect(model('member').upsert).not.toHaveBeenCalled();
+    });
+
+    it('should reject changes for unsupported entities', async () => {
+      model('syncQueue').findFirst.mockResolvedValue(null);
+
+      const result = await service.pushChanges(mockChurchId, mockUserId, [
+        {
+          entity: 'alienSaucer',
+          entityId: mockMemberId,
+          action: 'create',
+          data: {},
+        },
+      ]);
+
+      expect(result.rejected).toBe(1);
+    });
+
+    it('should apply deletes scoped by church', async () => {
+      model('syncQueue').findFirst.mockResolvedValue(null);
+      model('member').deleteMany.mockResolvedValue({ count: 1 });
+      model('syncQueue').create.mockResolvedValue({ id: '1' });
+
+      const result = await service.pushChanges(mockChurchId, mockUserId, [
+        {
+          entity: 'member',
+          entityId: mockMemberId,
+          action: 'delete',
+          data: {},
+        },
+      ]);
+
+      expect(result.accepted).toBe(1);
+      expect(model('member').deleteMany).toHaveBeenCalledWith({
+        where: { id: mockMemberId, church_id: mockChurchId },
+      });
     });
 
     it('should throw BadRequestException for empty changes', async () => {
@@ -128,7 +204,7 @@ describe('SyncService', () => {
       model('syncQueue').findMany.mockResolvedValue([
         {
           entity: 'member',
-          entity_id: '44444444-4444-4444-4444-444444444444',
+          entity_id: mockMemberId,
           action: 'create',
           data: { firstName: 'John' },
           created_at: new Date('2026-07-22T10:00:00Z'),
@@ -157,6 +233,54 @@ describe('SyncService', () => {
 
       expect(result.hasMore).toBe(true);
       expect(result.changes).toHaveLength(10);
+    });
+  });
+
+  describe('bootstrap', () => {
+    it('should return a full snapshot with camelCase collections', async () => {
+      const member = {
+        id: mockMemberId,
+        church_id: mockChurchId,
+        branch_id: null,
+        first_name: 'John',
+        last_name: 'Doe',
+        email: null,
+        phone: '+2348012345678',
+        whatsapp_number: null,
+        date_of_birth: null,
+        gender: 'male',
+        address: null,
+        city: null,
+        state: null,
+        status: 'active',
+        member_since: new Date('2026-01-01T10:00:00Z'),
+        photo_url: null,
+        custom_fields: {},
+        notes: null,
+        created_at: new Date('2026-01-01T10:00:00Z'),
+        updated_at: new Date('2026-01-01T10:00:00Z'),
+      };
+
+      model('member').findMany.mockResolvedValue([member]);
+      model('service').findMany.mockResolvedValue([]);
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('visitor').findMany.mockResolvedValue([]);
+      model('attendance').findMany.mockResolvedValue([]);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      const result = await service.bootstrap(mockChurchId);
+
+      expect(result.churchId).toBe(mockChurchId);
+      expect(typeof result.revision).toBe('string');
+      expect(result.collections.members).toHaveLength(1);
+      expect(result.collections.members[0]).toMatchObject({
+        id: mockMemberId,
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: '+2348012345678',
+        memberSince: '2026-01-01T10:00:00.000Z',
+      });
+      expect(result.collections.services).toEqual([]);
     });
   });
 

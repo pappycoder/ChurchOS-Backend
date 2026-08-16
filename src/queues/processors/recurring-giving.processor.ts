@@ -11,16 +11,18 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { GivingService } from '../../giving/giving.service';
 
 @Processor('recurring-giving')
-export class RecurringGivingProcessor {
+export class RecurringGivingProcessor extends WorkerHost {
   private readonly logger = new Logger(RecurringGivingProcessor.name);
 
-  constructor(private readonly givingService: GivingService) {}
+  constructor(private readonly givingService: GivingService) {
+    super();
+  }
 
   /**
    * Processes a single recurring giving charge job.
@@ -31,8 +33,7 @@ export class RecurringGivingProcessor {
    * @param job - BullMQ job containing RecurringGiving ID and church ID
    * @returns Whether the charge was successful
    */
-  @Process('charge')
-  async handleCharge(job: Job<{ recurringGivingId: string; churchId: string }>): Promise<boolean> {
+  async process(job: Job<{ recurringGivingId: string; churchId: string }>): Promise<boolean> {
     const { recurringGivingId, churchId } = job.data;
     this.logger.log(`Processing recurring charge for ${recurringGivingId}`);
 
@@ -49,14 +50,14 @@ export class RecurringGivingProcessor {
    * @param job - The failed BullMQ job
    * @param error - The error that caused the failure
    */
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error): void {
     this.logger.error(
       `Recurring giving job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}): ${error.message}`,
     );
   }
 
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job, result: boolean): void {
     this.logger.log(
       `Recurring giving job ${job.id} completed: ${result ? 'success' : 'charge returned false'}`,

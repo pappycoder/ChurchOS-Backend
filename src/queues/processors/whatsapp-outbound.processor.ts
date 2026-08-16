@@ -15,22 +15,58 @@
  * @since 1.0.0
  */
 
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import { TermiiService } from '../../communication/termii.service';
 
+type WhatsAppSendJob = Job<{
+  to: string;
+  message: string;
+  churchId: string;
+  memberId?: string;
+  messageId?: string;
+}>;
+
+type WhatsAppTemplateJob = Job<{
+  to: string;
+  templateName: string;
+  language: string;
+  variables?: Record<string, string>;
+  churchId: string;
+  memberId?: string;
+  messageId?: string;
+}>;
+
 @Processor('whatsapp-outbound')
-export class WhatsAppOutboundProcessor {
+export class WhatsAppOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(WhatsAppOutboundProcessor.name);
 
   constructor(
     private readonly whatsappService: WhatsAppService,
     private readonly config: ConfigService,
     private readonly termiiService: TermiiService,
-  ) {}
+  ) {
+    super();
+  }
+
+  /**
+   * Routes each job to its handler by job name.
+   *
+   * @param job - The BullMQ job pulled from the queue
+   */
+  async process(job: Job): Promise<void> {
+    switch (job.name) {
+      case 'send':
+        return this.handleSend(job as WhatsAppSendJob);
+      case 'send-template':
+        return this.handleSendTemplate(job as WhatsAppTemplateJob);
+      default:
+        throw new Error(`Unknown job name: ${job.name}`);
+    }
+  }
 
   /**
    * Processes a single outbound WhatsApp message job.
@@ -43,16 +79,7 @@ export class WhatsAppOutboundProcessor {
    * @returns Void — message sent via WhatsAppService (360dialog API)
    * @throws Error if WhatsApp API is not configured or send fails (triggers retry)
    */
-  @Process('send')
-  async handleSend(
-    job: Job<{
-      to: string;
-      message: string;
-      churchId: string;
-      memberId?: string;
-      messageId?: string;
-    }>,
-  ): Promise<void> {
+  private async handleSend(job: WhatsAppSendJob): Promise<void> {
     const { to, message, churchId, memberId } = job.data;
     this.logger.log(`Processing WhatsApp message to ${to} (job ${job.id})`);
 
@@ -72,18 +99,7 @@ export class WhatsAppOutboundProcessor {
    * Delegates to WhatsAppService.sendTemplateMessage(). On success, stores
    * the created message ID in the job data for fallback linking.
    */
-  @Process('send-template')
-  async handleSendTemplate(
-    job: Job<{
-      to: string;
-      templateName: string;
-      language: string;
-      variables?: Record<string, string>;
-      churchId: string;
-      memberId?: string;
-      messageId?: string;
-    }>,
-  ): Promise<void> {
+  private async handleSendTemplate(job: WhatsAppTemplateJob): Promise<void> {
     const { to, templateName, language, variables, churchId, memberId } = job.data;
     this.logger.log(`Processing WhatsApp template message to ${to} (job ${job.id})`);
 
@@ -108,7 +124,7 @@ export class WhatsAppOutboundProcessor {
    *
    * @param job - The completed BullMQ job
    */
-  @OnQueueCompleted()
+  @OnWorkerEvent('completed')
   onCompleted(job: Job): void {
     this.logger.log(`WhatsApp job ${job.id} completed → ${job.data.to}`);
   }
@@ -122,7 +138,7 @@ export class WhatsAppOutboundProcessor {
    * @param job - The failed BullMQ job
    * @param error - The error that caused the failure
    */
-  @OnQueueFailed()
+  @OnWorkerEvent('failed')
   async onFailed(
     job: Job<{
       to: string;
@@ -143,6 +159,16 @@ export class WhatsAppOutboundProcessor {
 
     if (isFinalAttempt && fallbackEnabled) {
       const { to, message, churchId, messageId } = job.data;
+
+      // Template sends carry no plain-text body, so an SMS fallback can't be
+      // composed from them — log and skip to avoid sending "undefined".
+      if (!message) {
+        this.logger.warn(
+          `SMS fallback skipped for template WhatsApp job ${job.id} → ${to} (no plain-text body)`,
+        );
+        return;
+      }
+
       this.logger.log(`Falling back to SMS for WhatsApp job ${job.id} → ${to}`);
 
       try {

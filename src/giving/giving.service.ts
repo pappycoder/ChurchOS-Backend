@@ -295,6 +295,18 @@ export class GivingService {
       throw new BadRequestException('This giving category is no longer active');
     }
 
+    // Verify member belongs to this church if provided
+    if (dto.memberId) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: dto.memberId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!member) {
+        throw new NotFoundException('Member not found in this church');
+      }
+    }
+
     // Generate unique reference
     const reference = this.generatePaymentReference(category.name);
 
@@ -582,6 +594,18 @@ export class GivingService {
       throw new BadRequestException('This giving category is no longer active');
     }
 
+    // Verify member belongs to this church if provided
+    if (dto.memberId) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: dto.memberId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!member) {
+        throw new NotFoundException('Member not found in this church');
+      }
+    }
+
     // Generate receipt number
     const receiptNumber = await this.generateReceiptNumber(category.name, churchId);
 
@@ -738,22 +762,45 @@ export class GivingService {
       );
     }
 
-    // Check for existing active recurring giving for this member+category
-    if (dto.memberId) {
-      const existing = await this.prisma.recurringGiving.findFirst({
-        where: {
-          church_id: churchId,
-          member_id: dto.memberId,
-          category_id: dto.categoryId,
-          is_active: true,
-        },
-      });
+    // Resolve the member this recurring giving belongs to
+    let targetMemberId: string | null = dto.memberId ?? null;
 
-      if (existing) {
-        throw new ConflictException(
-          'An active recurring giving already exists for this member and category',
-        );
-      }
+    if (!targetMemberId) {
+      const profile = await this.prisma.profile.findUnique({
+        where: { user_id: userId },
+        select: { member_id: true },
+      });
+      targetMemberId = profile?.member_id || null;
+    }
+
+    if (!targetMemberId) {
+      throw new BadRequestException('memberId is required, or link a member to your profile first');
+    }
+
+    // Verify the member belongs to this church
+    const member = await this.prisma.member.findFirst({
+      where: { id: targetMemberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this church');
+    }
+
+    // Check for existing active recurring giving for this member+category
+    const existing = await this.prisma.recurringGiving.findFirst({
+      where: {
+        church_id: churchId,
+        member_id: targetMemberId,
+        category_id: dto.categoryId,
+        is_active: true,
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        'An active recurring giving already exists for this member and category',
+      );
     }
 
     const nextChargeDate = this.calculateNextChargeDate(dto.frequency);
@@ -761,7 +808,7 @@ export class GivingService {
     const recurring = await this.prisma.recurringGiving.create({
       data: {
         church_id: churchId,
-        member_id: dto.memberId || userId,
+        member_id: targetMemberId,
         category_id: dto.categoryId,
         amount: dto.amount,
         currency: 'NGN',
