@@ -1,0 +1,402 @@
+/**
+ * @file auth.service.ts
+ * @description Auth business logic for registration, profile retrieval, and session management.
+ *
+ * Handles Supabase Auth user creation, ChurchOS Profile creation, and
+ * profile lookup. All mutations are audit-logged.
+ *
+ * @module auth/auth.service
+ * @since 1.0.0
+ */
+
+import {
+  Injectable,
+  Logger,
+  ConflictException,
+  UnauthorizedException,
+  InternalServerErrorException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { RedisService } from '../redis/redis.service';
+import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { RegisterDto } from './dto/register.dto';
+import { RegisterResponseDto } from './dto/auth-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { LoginResponseDto } from './dto/session-response.dto';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly supabase: SupabaseService,
+    private readonly redis: RedisService,
+    private readonly audit: AuditLoggingService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * Registers a new church admin user.
+   *
+   * Flow:
+   * 1. Create Supabase Auth user (email/password)
+   * 2. Create Church record
+   * 3. Create Profile linking Supabase user to church with church_admin role
+   * 4. Audit-log the registration
+   *
+   * @param dto - Registration data
+   * @returns Registration response with userId, profileId, churchId
+   * @throws ConflictException if email is already registered
+   * @throws InternalServerErrorException if Supabase or DB operations fail
+   */
+  async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    // TODO: Change Supabase rate limit back to 30/5mins after testing (currently set to 3000/5mins)
+    // Create Supabase Auth user
+    const { data: authData, error: authError } = await this.supabase.client.auth.signUp({
+      email: dto.email,
+      password: dto.password,
+      options: {
+        data: {
+          first_name: dto.firstName,
+          last_name: dto.lastName,
+          church_name: dto.churchName,
+        },
+      },
+    });
+
+    if (authError) {
+      this.logger.error(
+        `Supabase signUp error: ${authError.message} (status: ${authError.status})`,
+      );
+      if (authError.message?.includes('already registered')) {
+        throw new ConflictException('An account with this email already exists');
+      }
+      if (
+        authError.message?.includes('rate limit') ||
+        authError.message?.includes('too many') ||
+        authError.status === 429
+      ) {
+        this.logger.warn(`Supabase signUp rate limited for ${dto.email}`);
+        throw new HttpException(
+          'Too many registration attempts. Please try again in a few minutes.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      this.logger.error(`Supabase signUp failed: ${authError.message}`);
+      throw new InternalServerErrorException('Failed to create user account');
+    }
+
+    if (!authData.user) {
+      throw new InternalServerErrorException('Failed to create user account');
+    }
+
+    const userId = authData.user.id;
+
+    // Create Church + Profile in a transaction
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Create church
+        const church = await tx.church.create({
+          data: {
+            name: dto.churchName,
+            denomination: dto.denomination,
+          },
+        });
+
+        // Create admin profile
+        const profile = await tx.profile.create({
+          data: {
+            user_id: userId,
+            church_id: church.id,
+            role: 'church_admin',
+            first_name: dto.firstName,
+            last_name: dto.lastName,
+            phone: dto.phone,
+          },
+        });
+
+        return { church, profile };
+      });
+
+      // Audit-log the registration
+      await this.audit.log({
+        userId,
+        churchId: result.church.id,
+        entity: 'auth',
+        action: 'CREATE',
+        entityId: result.profile.id,
+        newValues: {
+          email: dto.email,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          churchName: dto.churchName,
+        },
+      });
+
+      this.logger.log(`User registered: ${dto.email} → ${result.church.name}`);
+
+      return {
+        userId,
+        email: dto.email,
+        profileId: result.profile.id,
+        churchId: result.church.id,
+        churchName: result.church.name,
+        role: result.profile.role,
+      };
+    } catch (error) {
+      // If Prisma fails after Supabase user was created, log but don't rethrow auth user
+      this.logger.error(
+        `Failed to create church/profile for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException('Failed to complete registration');
+    }
+  }
+
+  /**
+   * Authenticates a user with email and password.
+   *
+   * Flow:
+   * 1. Call Supabase signInWithPassword
+   * 2. Fetch profile from Prisma
+   * 3. Audit-log the login event
+   * 4. Return tokens and profile
+   *
+   * @param dto - Login credentials
+   * @returns Login response with tokens and profile
+   * @throws UnauthorizedException on invalid credentials
+   */
+  async login(dto: LoginDto): Promise<LoginResponseDto> {
+    const { data, error } = await this.supabase.client.auth.signInWithPassword({
+      email: dto.email,
+      password: dto.password,
+    });
+
+    if (error) {
+      if (
+        error.message?.includes('rate limit') ||
+        error.message?.includes('too many') ||
+        error.status === 429
+      ) {
+        this.logger.warn(`Login rate limited for ${dto.email}`);
+        throw new HttpException(
+          'Too many login attempts. Please try again in a few minutes.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      this.logger.warn(`Login failed for ${dto.email}: ${error.message}`);
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!data.user || !data.session) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const userId = data.user.id;
+
+    // Fetch profile
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        church_id: true,
+        branch_id: true,
+        role: true,
+        first_name: true,
+        last_name: true,
+      },
+    });
+
+    // Audit-log the login (even if profile is missing)
+    await this.audit.log({
+      userId,
+      churchId: profile?.church_id || '',
+      entity: 'auth',
+      action: 'LOGIN',
+      entityId: userId,
+      newValues: { email: dto.email },
+    });
+
+    this.logger.log(`User logged in: ${dto.email}`);
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+      userId,
+      email: data.user.email || dto.email,
+      profile: profile
+        ? {
+            profileId: profile.id,
+            churchId: profile.church_id,
+            branchId: profile.branch_id || undefined,
+            role: profile.role,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+          }
+        : undefined,
+    };
+  }
+
+  /**
+   * Logs out a user by blacklisting their JWT token in Redis.
+   *
+   * @param userId - Supabase Auth user ID
+   * @param token - JWT token to blacklist
+   * @param churchId - Church ID for audit logging
+   */
+  async logout(userId: string, token: string, churchId: string): Promise<void> {
+    // Calculate TTL from JWT expiry (default 3600s if we can't parse)
+    const ttlSeconds = 3600;
+
+    // Blacklist the token in Redis
+    await this.redis.set(`auth:blacklist:${token}`, userId, ttlSeconds);
+
+    // Audit-log the logout
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'auth',
+      action: 'LOGOUT',
+      entityId: userId,
+      newValues: { timestamp: new Date().toISOString() },
+    });
+
+    this.logger.log(`User logged out: ${userId}`);
+  }
+
+  /**
+   * Initiates a password reset by sending a reset email via Supabase.
+   *
+   * Always returns success to prevent email enumeration.
+   *
+   * @param email - Email address to send reset link to
+   * @param redirectTo - URL to redirect to after password reset
+   */
+  async forgotPassword(email: string, redirectTo?: string): Promise<void> {
+    const webUrl = this.config.get<string>('WEB_URL', 'http://localhost:3000');
+    const redirectUrl = redirectTo || `${webUrl}/reset-password`;
+
+    const { error } = await this.supabase.client.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      this.logger.error(`Forgot password failed for ${email}: ${error.message}`);
+      // Don't throw — always return success to prevent email enumeration
+    } else {
+      this.logger.log(`Password reset email sent to: ${email}`);
+    }
+  }
+
+  /**
+   * Completes a password reset with a recovery token.
+   *
+   * @param token - Recovery token from email link
+   * @param newPassword - New password to set
+   * @throws BadRequestException if token is invalid or expired
+   */
+  async resetPassword(_token: string, newPassword: string): Promise<void> {
+    const { error } = await this.supabase.client.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      this.logger.error(`Password reset failed: ${error.message}`);
+      throw new BadRequestException('Invalid or expired recovery token');
+    }
+
+    this.logger.log('Password reset completed successfully');
+  }
+
+  /**
+   * Changes password for an authenticated user.
+   *
+   * Flow:
+   * 1. Verify current password by calling signInWithPassword
+   * 2. Update to new password
+   * 3. Audit-log the event
+   *
+   * @param userId - Supabase Auth user ID
+   * @param email - User email (for re-authentication)
+   * @param currentPassword - Current password for verification
+   * @param newPassword - New password to set
+   * @throws UnauthorizedException if current password is incorrect
+   */
+  async changePassword(
+    userId: string,
+    email: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    // Verify current password
+    const { error: signInError } = await this.supabase.client.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      this.logger.warn(`Change password failed for ${userId}: current password incorrect`);
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Update to new password
+    const { error: updateError } = await this.supabase.client.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      this.logger.error(`Change password update failed for ${userId}: ${updateError.message}`);
+      throw new InternalServerErrorException('Failed to update password');
+    }
+
+    // Audit-log
+    await this.audit.log({
+      userId,
+      churchId: '',
+      entity: 'auth',
+      action: 'UPDATE',
+      entityId: userId,
+      newValues: { action: 'password_changed' },
+    });
+
+    this.logger.log(`Password changed for user: ${userId}`);
+  }
+
+  /**
+   * Refreshes the session tokens using Supabase's refreshSession.
+   *
+   * @param refreshToken - Current refresh token
+   * @returns New tokens and expiry
+   * @throws UnauthorizedException if refresh fails
+   */
+  async refreshSession(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: number;
+  }> {
+    const { data, error } = await this.supabase.client.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      this.logger.warn(`Session refresh failed: ${error.message}`);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (!data.session) {
+      throw new UnauthorizedException('Failed to refresh session');
+    }
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+    };
+  }
+}

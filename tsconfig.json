@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
-    "rootDir": "./src",
     "module": "commonjs",
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
@@ -23,8 +23,10 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "types": ["node", "jest", "multer"],
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["prisma", "scripts", "dist", "node_modules"]
 }

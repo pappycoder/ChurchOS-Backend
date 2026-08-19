@@ -1,0 +1,13 @@
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/engines': true
+  '@sentry/node-cpu-profiler': true
+  msgpackr-extract: true
+  prisma: true
+minimumReleaseAgeExclude:
+  - '@supabase/auth-js@2.110.6'
+  - '@supabase/functions-js@2.110.6'
+  - '@supabase/postgrest-js@2.110.6'
+  - '@supabase/realtime-js@2.110.6'
+  - '@supabase/storage-js@2.110.6'
+  - '@supabase/supabase-js@2.110.6'

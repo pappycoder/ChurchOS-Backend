@@ -8,7 +8,7 @@ This repository contains the backend API for ChurchOS. It is built with:
 
 - **NestJS** — Modular TypeScript backend framework
 - **Prisma** — Type-safe ORM for PostgreSQL
-- **Supabase Auth** — Authentication, MFA, session management
+- **Supabase Auth** — Authentication, MFA, session management (ES256 via JWKS)
 - **Supabase Storage** — File uploads (photos, receipts, media)
 - **Upstash Redis** — Caching and BullMQ job queues
 - **Paystack / Flutterwave** — Payment processing
@@ -85,6 +85,8 @@ DATABASE_URL=postgresql://user:password@localhost:5432/churchos
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_ANON_KEY=your-anon-key
+# Optional: Only needed for legacy HS256 tokens. ES256 tokens (default) use JWKS.
+# SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase-dashboard
 REDIS_URL=redis://localhost:6379
 PAYSTACK_SECRET_KEY=
 PAYSTACK_PUBLIC_KEY=

@@ -1,0 +1,118 @@
+/**
+ * @file sync.controller.ts
+ * @description HTTP endpoints for offline data synchronization.
+ *
+ * @module sync/sync.controller
+ * @since 1.0.0
+ */
+
+import { Controller, Get, Post, Body, Query, Headers, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SupabaseJwtPayload } from '../auth/strategies/jwt.strategy';
+import {
+  ApiCreateEndpoint,
+  ApiGetEndpoint,
+} from '../common/decorators/api-standard-responses.decorator';
+import { SyncService } from './sync.service';
+import { BootstrapResult } from './sync.service';
+import { SyncPushDto } from './dto/sync-push.dto';
+
+@ApiTags('Sync')
+@ApiBearerAuth('supabase-auth')
+@UseGuards(JwtAuthGuard)
+@Controller('sync')
+export class SyncController {
+  constructor(private readonly syncService: SyncService) {}
+
+  /**
+   * Push offline changes to the server.
+   */
+  @Post('push')
+  @ApiCreateEndpoint(
+    'Push offline changes',
+    'Submits offline changes from mobile clients for server-side processing.',
+  )
+  async pushChanges(
+    @Body() dto: SyncPushDto,
+    @CurrentUser() user: SupabaseJwtPayload,
+    @Request() req: Record<string, unknown>,
+  ): Promise<{
+    accepted: number;
+    rejected: number;
+    conflicts: string[];
+  }> {
+    const profile = req['profile'] as { church_id: string };
+    return this.syncService.pushChanges(profile.church_id, user.sub, dto.changes);
+  }
+
+  /**
+   * Bootstrap a fresh offline client with a full data snapshot.
+   */
+  @Get('bootstrap')
+  @ApiGetEndpoint(
+    'Bootstrap offline data',
+    'Returns a full snapshot of the church\u2019s core collections plus a revision cursor for incremental syncs.',
+  )
+  async bootstrap(@Request() req: Record<string, unknown>): Promise<BootstrapResult> {
+    const profile = req['profile'] as { church_id: string };
+    return this.syncService.bootstrap(profile.church_id);
+  }
+
+  /**
+   * Pull pending server changes.
+   */
+  @Get('pull')
+  @ApiGetEndpoint(
+    'Pull server changes',
+    'Retrieves pending server-side changes for offline client caching, hydrated to current state.',
+  )
+  @ApiQuery({ name: 'limit', required: false, description: 'Max items to return (default: 100)' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Resume cursor (ISO timestamp)' })
+  @ApiHeader({
+    name: 'x-device-id',
+    required: false,
+    description: 'Stable client install identifier (default: web)',
+  })
+  async pullChanges(
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+    @Headers('x-device-id') deviceId?: string,
+    @Request() req?: Record<string, unknown>,
+  ): Promise<{
+    changes: {
+      entity: string;
+      entityId: string;
+      action: string;
+      data: Record<string, unknown> | null;
+      createdAt: string;
+    }[];
+    hasMore: boolean;
+    cursor: string | null;
+  }> {
+    const profile = req?.['profile'] as { church_id: string } | undefined;
+    return this.syncService.pullChanges(
+      profile?.church_id || '',
+      deviceId || 'web',
+      limit ? parseInt(limit, 10) : 100,
+      cursor,
+    );
+  }
+
+  /**
+   * Mark items as synced.
+   */
+  @Post('mark-synced')
+  @ApiCreateEndpoint(
+    'Mark as synced',
+    'Marks sync queue items as processed after successful client-side application.',
+  )
+  async markSynced(
+    @Body() body: { entityIds: string[] },
+    @Request() req: Record<string, unknown>,
+  ): Promise<{ marked: number }> {
+    const profile = req['profile'] as { church_id: string };
+    return this.syncService.markSynced(profile.church_id, body.entityIds);
+  }
+}
