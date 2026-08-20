@@ -238,6 +238,11 @@ export class ProfileService {
       where.branch_id = query.branchId;
     }
 
+    // Apply status filter
+    if (query.status) {
+      where.status = query.status;
+    }
+
     // Build sort
     const orderBy: Prisma.ProfileOrderByWithRelationInput[] = [];
     if (query.sortBy) {
@@ -424,6 +429,52 @@ export class ProfileService {
     });
 
     this.logger.log(`Profile deactivated: ${profileId} by ${adminUserId}`);
+  }
+
+  /**
+   * Reactivates a deactivated profile by setting status back to active.
+   *
+   * @param profileId - Profile UUID to reactivate
+   * @param churchId - Church ID for multi-tenant scoping
+   * @param adminUserId - Admin user ID for audit logging
+   * @returns Updated profile response
+   * @throws NotFoundException if profile doesn't exist
+   */
+  async reactivateProfile(
+    profileId: string,
+    churchId: string,
+    adminUserId: string,
+  ): Promise<ProfileResponseDto> {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Profile not found');
+    }
+
+    if (profile.status === 'active') {
+      return this.getProfileById(profileId, churchId);
+    }
+
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { status: 'active' },
+    });
+
+    await this.audit.log({
+      userId: adminUserId,
+      churchId,
+      entity: 'profile',
+      action: 'UPDATE',
+      entityId: profileId,
+      oldValues: { status: 'inactive' },
+      newValues: { status: 'active' },
+    });
+
+    this.logger.log(`Profile reactivated: ${profileId} by ${adminUserId}`);
+
+    return this.getProfileById(profileId, churchId);
   }
 
   /**

@@ -65,6 +65,15 @@ export class ListProfilesDto {
   branchId?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter by account status',
+    example: 'active',
+    enum: ['active', 'inactive'],
+  })
+  @IsEnum(['active', 'inactive'] as const)
+  @IsOptional()
+  status?: 'active' | 'inactive';
+
+  @ApiPropertyOptional({
     description: 'Sort field',
     default: 'created_at',
     enum: ['first_name', 'last_name', 'role', 'created_at'],

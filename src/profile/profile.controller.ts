@@ -327,6 +327,28 @@ export class ProfileController {
   }
 
   /**
+   * Reactivate a deactivated user account.
+   */
+  @Post(':profileId/activate')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Reactivate user',
+    'Restores a deactivated profile by setting its status back to active.',
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async reactivateUser(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.reactivateProfile(profileId, churchId, user.sub);
+  }
+
+  /**
    * Reset a user's password.
    */
   @Post(':profileId/reset-password')
