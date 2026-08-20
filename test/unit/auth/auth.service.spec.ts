@@ -28,6 +28,7 @@ describe('AuthService', () => {
   let updateUserMock: jest.Mock;
   let refreshSessionMock: jest.Mock;
   let resetPasswordForEmailMock: jest.Mock;
+  let signOutMock: jest.Mock;
   let redis: { set: jest.Mock; get: jest.Mock };
   let audit: { log: jest.Mock };
   let config: { get: jest.Mock };
@@ -81,6 +82,7 @@ describe('AuthService', () => {
     updateUserMock = jest.fn();
     refreshSessionMock = jest.fn();
     resetPasswordForEmailMock = jest.fn();
+    signOutMock = jest.fn().mockResolvedValue({ error: null });
 
     service = new AuthService(
       prisma as unknown as PrismaService,
@@ -92,6 +94,9 @@ describe('AuthService', () => {
             updateUser: updateUserMock,
             refreshSession: refreshSessionMock,
             resetPasswordForEmail: resetPasswordForEmailMock,
+            admin: {
+              signOut: signOutMock,
+            },
           },
         },
       } as unknown as SupabaseService,
@@ -301,10 +306,11 @@ describe('AuthService', () => {
   // ─── LOGOUT ────────────────────────────────────────────────────────
 
   describe('logout', () => {
-    it('should blacklist token and audit-log the logout', async () => {
+    it('should blacklist token, revoke Supabase sessions, and audit-log the logout', async () => {
       await service.logout(mockUserId, 'jwt-token', mockChurchId);
 
       expect(redis.set).toHaveBeenCalledWith('auth:blacklist:jwt-token', mockUserId, 3600);
+      expect(signOutMock).toHaveBeenCalledWith(mockUserId);
 
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({

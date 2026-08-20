@@ -257,6 +257,12 @@ export class AuthService {
     // Blacklist the token in Redis
     await this.redis.set(`auth:blacklist:${token}`, userId, ttlSeconds);
 
+    // Revoke all sessions in Supabase (invalidates refresh tokens)
+    const { error } = await this.supabase.client.auth.admin.signOut(userId);
+    if (error) {
+      this.logger.warn(`Failed to revoke Supabase sessions for user ${userId}: ${error.message}`);
+    }
+
     // Audit-log the logout
     await this.audit.log({
       userId,

@@ -14,6 +14,7 @@ import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@ne
 import { Request } from 'express';
 import { JwksService } from '../services/jwks.service';
 import { SupabaseJwtPayload } from '../strategies/jwt.strategy';
+import { RedisService } from '../../redis/redis.service';
 
 /**
  * JWT authentication guard for Supabase Auth tokens.
@@ -36,7 +37,10 @@ import { SupabaseJwtPayload } from '../strategies/jwt.strategy';
 export class JwtAuthGuard {
   private readonly logger = new Logger(JwtAuthGuard.name);
 
-  constructor(private readonly jwksService: JwksService) {}
+  constructor(
+    private readonly jwksService: JwksService,
+    private readonly redis: RedisService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -50,9 +54,15 @@ export class JwtAuthGuard {
 
     return this.jwksService
       .verifyToken(token)
-      .then(({ payload }) => {
+      .then(async ({ payload }) => {
         if (!payload.sub) {
           throw new UnauthorizedException('Invalid token: missing subject claim');
+        }
+
+        // Check if token has been blacklisted (logged out)
+        const isBlacklisted = await this.redis.get(`auth:blacklist:${token}`);
+        if (isBlacklisted) {
+          throw new UnauthorizedException('Token has been revoked');
         }
 
         // Map JWT payload to SupabaseJwtPayload
