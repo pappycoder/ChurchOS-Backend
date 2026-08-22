@@ -200,6 +200,14 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-23** — Profile email completeness (self-service edit + data backfill).
+  - **Root cause found**: `registerUser` never persisted email anywhere in Postgres — Church was created with only name/denomination and Profile with only names/phone, so legacy self-registered rows had `profiles.email = NULL` and every read endpoint omitted the field. Invites already persisted email (Aug-16 fix); admin edit already synced Supabase.
+  - **Registration** (`auth.service.ts`): church create now writes `email: dto.email` (church contact email) and profile create writes `email: dto.email`.
+  - **Self-service email edit**: `UpdateProfileDto` gains optional validated `email`; `updateMyProfile` mirrors the admin-edit pattern — when changed, syncs via `supabase.auth.admin.updateUserById(user_id, { email })` first (BadRequest on failure), then persists to `profiles.email`. Unchanged emails skip the auth call.
+  - **Safety-net hydration**: `getMyProfile` hydrates a NULL/empty email from Supabase Auth (`admin.getUserById`) once and persists it, so legacy accounts self-heal on first /me fetch without N+1 calls on list endpoints.
+  - **Backfill script** `scripts/backfill-profile-emails.ts` (+ `npm run backfill-profile-emails`): idempotent one-time maintenance — pages all Supabase Auth users, fills missing profile emails, then heals legacy churches missing a contact email using their earliest church_admin's email. Run against dev: 2/3 profiles healed (1 orphaned profile has no auth user); churches already populated.
+  - **Tests**: suite green at 510 passing / 35 suites (+4): /me hydration persists email, self-service email syncs+persists, unchanged email skips Supabase, Supabase rejection → BadRequest with no DB write.
+
 - **2026-08-22** — Role display labels (fix: custom roles showed as slugs).
   - **Schema/migration** `20260822010000_role_label`: `roles.label TEXT` nullable column; backfills all 8 templates with canonical labels and title-cases church-owned slugs (`media_team` → "Media Team"). Previously the friendly label was discarded at creation — only the slugified `name` was persisted.
   - **APIs**: `createRole` now persists `label`; `getRolesSummary`/`getRolePermissions` return it (`RoleWithPermissions.label`, Swagger on `RolePermissionsResponseDto`); profile detail `roles[]` includes `label` (church-owned record preferred when a name is shadowed).
