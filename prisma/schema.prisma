@@ -163,6 +163,7 @@ model Church {
   church_role_permissions ChurchRolePermission[]
   custom_field_definitions CustomFieldDefinition[]
   visitors          Visitor[]
+  roles             Role[]
 
   @@map("churches")
 }
@@ -1068,11 +1069,17 @@ model CustomFieldDefinition {
 
 model Role {
   id          String           @id @default(uuid())
-  name        String           @unique
+  church_id   String? // null = global template available to all churches
+  name        String
+  label       String? // Human-friendly display name (custom roles); templates use frontend dictionary
   description String?
   permissions RolePermission[]
   created_at  DateTime         @default(now())
 
+  church Church? @relation(fields: [church_id], references: [id], onDelete: Cascade)
+
+  @@unique([church_id, name])
+  @@index([church_id])
   @@map("roles")
 }
 

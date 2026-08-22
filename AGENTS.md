@@ -200,6 +200,18 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-22** — Role display labels (fix: custom roles showed as slugs).
+  - **Schema/migration** `20260822010000_role_label`: `roles.label TEXT` nullable column; backfills all 8 templates with canonical labels and title-cases church-owned slugs (`media_team` → "Media Team"). Previously the friendly label was discarded at creation — only the slugified `name` was persisted.
+  - **APIs**: `createRole` now persists `label`; `getRolesSummary`/`getRolePermissions` return it (`RoleWithPermissions.label`, Swagger on `RolePermissionsResponseDto`); profile detail `roles[]` includes `label` (church-owned record preferred when a name is shadowed).
+  - **Tests**: suite green at 506 passing / 35 suites (createRole asserts label persisted + echoed).
+
+- **2026-08-22** — Per-church custom roles.
+  - **Schema**: `Role.church_id String?` + FK to `Church` (`onDelete: Cascade`), `@@unique([church_id, name])`, `@@index([church_id])`, `Church.roles` back-relation (migration `20260822000000_per_church_custom_roles`). Seeded templates keep `church_id = null`; church-owned roles are per-tenant and deleted with their church. A church-owned role **shadows** a same-named global template for that church.
+  - **Permission resolution**: global templates = seed defaults ∪ additive `ChurchRolePermission` overrides; owned roles = absolute set in `RolePermission`. `getRolePermissions` now returns `isChurchOwned` and throws 404 when neither exists; profile.service Role lookups are scoped `OR [{church_id}, {church_id: null}]`.
+  - **New endpoint**: `POST /church/roles` (`CreateRoleDto`: label 3–50, description ≤200 optional, permissionIds optional) — slugifies the label ("Media Team" → `media_team`, `ROLE_NAME_PATTERN`), rejects reserved names (the 8 seeded roles) and duplicates with 409s, validates permission IDs, audit-logs CREATE. Guarded church_admin/super_admin.
+  - **Guardrails**: `super_admin` immutable everywhere; editing the `church_admin` template still requires the protected core permissions; reset-to-defaults is rejected for owned roles (nothing to reset); saves invalidate the `perms:{churchId}:{roleName}` Redis key.
+  - **Tests**: suite green at 506 passing / 35 suites — new `permissions.service.spec.ts` covers createRole paths (slugify/reserved/duplicate/bad-slug/unknown ids), template vs owned resolution, shadowing, absolute-replace saves, church_admin protection, reset rules, cross-role union, and catalog caching.
+
 - **2026-08-22** — Multi-role profiles (native array) + admin user-edit APIs.
   - **`Profile.role` is now `String[]`** (migration `20260821120000_profile_role_array`: `USING ARRAY["role"]::text[]`, default `ARRAY['member']::text[]`). Roles are stored **rank-descending**; `role[0]` is the primary. `ROLE_RANK`: super_admin 100, senior_pastor 80, church_admin 60, branch_pastor 50, secretary/treasurer/department_head 40, member 10. Scalar-list queries: `role: { has: x }` for single-match filters, `{ hasSome: [...] }` for any-of checks (admin.service, events.service, members.service, pastoral/scoring.service).
   - **Permissions union**: `PermissionsService.getUserPermissions(churchId, roleNames: string | string[])` merges permissions across all of a profile's roles (per-role Redis cache preserved). `RolesGuard`/`PermissionsGuard` read the raw `profile.role` array; request-context middleware exposes `request.profile.role` as the primary string plus a `roles: string[]` array.

@@ -343,19 +343,34 @@ export class ProfileService {
     // All roles held by the user, ordered by rank descending
     const roleNames = profile.role ?? [];
 
-    const [roleDescriptions, effectivePermissions, lastSignInAt] = await Promise.all([
+    const [roleRecords, effectivePermissions, lastSignInAt] = await Promise.all([
       this.prisma.role.findMany({
-        where: { name: { in: roleNames } },
-        select: { name: true, description: true },
+        where: {
+          name: { in: roleNames },
+          OR: [{ church_id: churchId }, { church_id: null }],
+        },
+        select: {
+          name: true,
+          label: true,
+          church_id: true,
+          description: true,
+        },
       }),
       this.buildEffectivePermissions(churchId, roleNames),
       this.getLastSignIn(profile.user_id),
     ]);
 
+    // Prefer the church-owned record's label when a name is shadowed.
+    const roleLabelFor = (name: string): string | undefined => {
+      const matches = roleRecords.filter((r) => r.name === name);
+      return matches.find((r) => r.church_id !== null)?.label ?? matches[0]?.label ?? undefined;
+    };
+
     const roles: ProfileRoleDto[] = roleNames.map((name) => ({
       name,
+      label: roleLabelFor(name),
       description:
-        roleDescriptions.find((r: { name: string }) => r.name === name)?.description ?? undefined,
+        roleRecords.find((r: { name: string }) => r.name === name)?.description ?? undefined,
     }));
 
     return this.mapToResponseDto(profile, { roles, effectivePermissions, lastSignInAt });
@@ -511,9 +526,13 @@ export class ProfileService {
 
     const requestedRoles = Array.from(new Set(dto.roles));
 
-    // Validate every requested role exists in the Role table
+    // Validate every requested role exists and is visible to this church
+    // (a global template or one owned by this church — never another church's)
     const validRoles = await this.prisma.role.findMany({
-      where: { name: { in: requestedRoles } },
+      where: {
+        name: { in: requestedRoles },
+        OR: [{ church_id: churchId }, { church_id: null }],
+      },
       select: { name: true },
     });
     if (validRoles.length !== requestedRoles.length) {

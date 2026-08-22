@@ -26,9 +26,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { RequireRoles } from './decorators/roles.decorator';
 import { PermissionsService } from './services/permissions.service';
-import { CurrentUserProfile } from '../common/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserProfile } from '../common/decorators/current-user.decorator';
 import {
   SetRolePermissionsDto,
+  CreateRoleDto,
   RolePermissionsResponseDto,
   RolesSummaryResponseDto,
 } from './dto/permissions.dto';
@@ -39,6 +40,36 @@ import {
 @Controller('church/roles')
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
+
+  // ─── Create a Custom Role ─────────────────────────────────
+
+  @Post()
+  @RequireRoles('church_admin', 'super_admin')
+  @ApiOperation({ summary: 'Create a custom role owned by this church' })
+  @ApiResponse({
+    status: 201,
+    description: 'Role created',
+    type: RolePermissionsResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'A role with this name already exists or is reserved',
+  })
+  async createRole(
+    @Body() dto: CreateRoleDto,
+    @CurrentUserProfile('church_id') churchId: string,
+    @CurrentUser('sub') actorUserId: string,
+  ): Promise<RolePermissionsResponseDto> {
+    return this.permissionsService.createRole(
+      churchId,
+      {
+        label: dto.label,
+        description: dto.description,
+        permissionIds: dto.permissionIds,
+      },
+      actorUserId,
+    );
+  }
 
   // ─── List All Roles with Permissions ─────────────────────
 

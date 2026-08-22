@@ -14,6 +14,12 @@ export class ProfileRoleDto {
   @ApiProperty({ description: 'Role name', example: 'department_head' })
   name!: string;
 
+  @ApiPropertyOptional({
+    description: 'Human-friendly display label (custom roles)',
+    example: 'Media Team',
+  })
+  label?: string;
+
   @ApiPropertyOptional({ description: 'Role description', example: 'Leads a ministry department' })
   description?: string;
 }
