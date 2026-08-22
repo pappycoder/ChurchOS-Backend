@@ -106,6 +106,7 @@ export class AuthService {
           data: {
             name: dto.churchName,
             denomination: dto.denomination,
+            email: dto.email,
           },
         });
 
@@ -118,6 +119,7 @@ export class AuthService {
             first_name: dto.firstName,
             last_name: dto.lastName,
             phone: dto.phone,
+            email: dto.email,
           },
         });
 

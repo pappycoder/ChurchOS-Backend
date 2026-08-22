@@ -23,6 +23,7 @@
     "delete-data": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts",
     "delete-data:dry": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts --dry-run",
     "seed-super-admin": "ts-node -P tsconfig.scripts.json scripts/seed-super-admin.ts",
+    "backfill-profile-emails": "ts-node -P tsconfig.scripts.json scripts/backfill-profile-emails.ts",
     "update-project-board": "bash scripts/update-project-board.sh",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"

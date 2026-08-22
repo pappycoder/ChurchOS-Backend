@@ -107,6 +107,26 @@ export class ProfileService {
       throw new NotFoundException('User profile not found');
     }
 
+    // Safety net: hydrate a missing email from Supabase Auth once, then persist
+    // it so subsequent reads (and list endpoints) see it without extra calls.
+    if (!profile.email) {
+      try {
+        const { data } = await this.supabase.client.auth.admin.getUserById(profile.user_id);
+        const authEmail = data?.user?.email;
+        if (authEmail) {
+          await this.prisma.profile.update({
+            where: { id: profile.id },
+            data: { email: authEmail },
+          });
+          profile.email = authEmail;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to hydrate email for user ${profile.user_id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
     return this.mapToResponseDto(profile);
   }
 
@@ -129,9 +149,20 @@ export class ProfileService {
       throw new NotFoundException('User profile not found');
     }
 
+    // Sync email changes to Supabase Auth so credentials stay consistent
+    if (dto.email !== undefined && dto.email !== existing.email) {
+      const { error } = await this.supabase.client.auth.admin.updateUserById(existing.user_id, {
+        email: dto.email,
+      });
+      if (error) {
+        throw new BadRequestException(`Failed to update auth email: ${error.message}`);
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
     if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
+    if (dto.email !== undefined) updateData.email = dto.email;
     if (dto.phone !== undefined) updateData.phone = dto.phone;
 
     if (Object.keys(updateData).length === 0) {
