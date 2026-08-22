@@ -57,6 +57,8 @@ import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorat
 import { ProfileService } from './profile.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateRolesDto } from './dto/update-roles.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
@@ -233,6 +235,35 @@ export class ProfileController {
   }
 
   /**
+   * Update a user's basic details (admin only).
+   */
+  @Patch(':profileId')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint(
+    'Update user details',
+    "Admin edit of a user's names, email, phone, branch assignment, and status. Email changes are synced to Supabase Auth. Accessible by super_admin, senior_pastor, and church_admin users.",
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async adminUpdateUser(
+    @Param('profileId') profileId: string,
+    @Body() dto: AdminUpdateUserDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.adminUpdateProfile(
+      profileId,
+      dto,
+      churchId,
+      user.sub,
+      req.profile?.role || 'member',
+    );
+  }
+
+  /**
    * Update a user's role (admin only).
    */
   @Patch(':profileId/role')
@@ -253,6 +284,35 @@ export class ProfileController {
   ): Promise<ProfileResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.profileService.updateProfileRole(
+      profileId,
+      dto,
+      churchId,
+      user.sub,
+      req.profile?.role || 'member',
+    );
+  }
+
+  /**
+   * Replace a user's full set of roles (admin only).
+   */
+  @Patch(':profileId/roles')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint(
+    'Update user roles',
+    "Replaces the user's complete set of roles. Effective permissions are accumulated across all assigned roles. Accessible by super_admin, senior_pastor, and church_admin users.",
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async updateRoles(
+    @Param('profileId') profileId: string,
+    @Body() dto: UpdateRolesDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.updateProfileRoles(
       profileId,
       dto,
       churchId,

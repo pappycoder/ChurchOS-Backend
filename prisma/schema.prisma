@@ -199,7 +199,7 @@ model Profile {
   church_id     String
   branch_id     String?
   member_id     String?  @unique
-  role          String   @default("member")
+  role          String[] @default(["member"]) // ordered by rank desc; role[0] = primary
   status        String   @default("active") // active, inactive (deactivated)
   first_name    String
   last_name     String

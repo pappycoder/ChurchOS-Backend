@@ -484,7 +484,7 @@ export class EventsService {
       this.logger.log(`Free registration: member ${memberId} → event ${eventId}`);
 
       const adminProfiles = await this.prisma.profile.findMany({
-        where: { church_id: churchId, role: { in: ['church_admin', 'branch_pastor'] } },
+        where: { church_id: churchId, role: { hasSome: ['church_admin', 'branch_pastor'] } },
       });
       for (const admin of adminProfiles) {
         await this.notifications

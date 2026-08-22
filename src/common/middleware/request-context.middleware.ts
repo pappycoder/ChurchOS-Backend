@@ -72,7 +72,9 @@ export class RequestContextMiddleware implements NestMiddleware {
       } as SupabaseJwtPayload;
     }
 
-    // Look up the user's profile to get church_id, branch_id, and role
+    // Look up the user's profile to get church_id, branch_id, and roles.
+    // role is a text array ordered by rank desc; expose the primary role
+    // as `role` and the full set as `roles` for downstream consumers.
     if (!authReq.profile) {
       const profile = await this.prisma.profile.findUnique({
         where: { user_id: sub },
@@ -80,8 +82,12 @@ export class RequestContextMiddleware implements NestMiddleware {
       });
       if (profile) {
         authReq.profile = {
-          ...profile,
+          id: profile.id,
+          church_id: profile.church_id,
           branch_id: profile.branch_id ?? undefined,
+          role: profile.role[0] ?? 'member',
+          roles: profile.role,
+          status: profile.status,
         };
       }
     }

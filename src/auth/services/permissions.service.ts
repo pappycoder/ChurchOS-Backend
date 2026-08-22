@@ -74,13 +74,30 @@ export class PermissionsService {
 
   /**
    * Gets all effective permissions for a user based on their profile.
+   * Accepts one or more role names and returns the union of their
+   * permissions, so users with multiple roles accumulate access.
    *
    * @param churchId - Church ID
-   * @param roleName - Role name from Profile.role
+   * @param roleNames - Role name(s) from the user's profile
    * @returns Array of permission name strings
    */
-  async getUserPermissions(churchId: string, roleName: string): Promise<string[]> {
-    return this.getPermissionsForRole(churchId, roleName);
+  async getUserPermissions(churchId: string, roleNames: string | string[]): Promise<string[]> {
+    const roles = Array.isArray(roleNames) ? roleNames : [roleNames];
+    if (roles.length === 0) {
+      return [];
+    }
+
+    const resolved = await Promise.all(
+      roles.map((roleName) => this.getPermissionsForRole(churchId, roleName)),
+    );
+
+    const permSet = new Set<string>();
+    for (const perms of resolved) {
+      for (const p of perms) {
+        permSet.add(p);
+      }
+    }
+    return Array.from(permSet);
   }
 
   /**

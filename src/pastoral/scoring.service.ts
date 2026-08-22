@@ -192,7 +192,7 @@ export class ScoringService {
 
     if (highRiskMembers.length > 0) {
       const adminProfiles = await this.prisma.profile.findMany({
-        where: { church_id: churchId, role: { in: ['church_admin', 'senior_pastor'] } },
+        where: { church_id: churchId, role: { hasSome: ['church_admin', 'senior_pastor'] } },
       });
       for (const admin of adminProfiles) {
         await this.notifications

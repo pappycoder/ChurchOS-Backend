@@ -1043,7 +1043,7 @@ export class AdminService {
 
       // Get the first admin profile for contact info
       const adminProfile = await this.prisma.profile.findFirst({
-        where: { church_id: church.id, role: { in: ['church_admin', 'senior_pastor'] } },
+        where: { church_id: church.id, role: { hasSome: ['church_admin', 'senior_pastor'] } },
         select: { first_name: true, last_name: true },
       });
 

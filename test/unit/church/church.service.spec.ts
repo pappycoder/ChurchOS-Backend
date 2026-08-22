@@ -223,7 +223,7 @@ describe('ChurchService', () => {
       expect(prisma.profile.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            role: 'branch_pastor',
+            role: ['branch_pastor'],
             first_name: 'James',
             last_name: 'Adeyemi',
             phone: '+2348012345678',
@@ -295,7 +295,7 @@ describe('ChurchService', () => {
       expect(result.success).toBe(true);
       expect(prisma.profile.update).toHaveBeenCalledWith({
         where: { id: 'profile-1' },
-        data: { role: 'removed' },
+        data: { role: ['removed'] },
       });
     });
 

@@ -241,14 +241,14 @@ async function createSuperAdminProfile(
   });
 
   if (existing) {
-    if (existing.role === 'super_admin') {
+    if (existing.role.includes('super_admin')) {
       console.log(`  ✅ Super admin profile already exists: ${existing.id}`);
       return existing.id;
     }
 
     const updated = await prisma.profile.update({
       where: { id: existing.id },
-      data: { role: 'super_admin', church_id: churchId },
+      data: { role: ['super_admin', ...existing.role], church_id: churchId },
     });
     console.log(`  ✅ Updated existing profile to super_admin: ${updated.id}`);
     return updated.id;
@@ -258,7 +258,7 @@ async function createSuperAdminProfile(
     data: {
       user_id: userId,
       church_id: churchId,
-      role: 'super_admin',
+      role: ['super_admin'],
       first_name: input.firstName,
       last_name: input.lastName,
       phone: input.phone,

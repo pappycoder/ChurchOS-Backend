@@ -20,7 +20,7 @@ export async function seedProfiles(
   console.log('📦 Seeding admin profile...');
 
   let profile = await prisma.profile.findFirst({
-    where: { church_id: churchId, role: 'church_admin' },
+    where: { church_id: churchId, role: { has: 'church_admin' } },
   });
 
   if (!profile) {
@@ -31,7 +31,7 @@ export async function seedProfiles(
         church_id: churchId,
         branch_id: branchId,
         member_id: adminMember.id,
-        role: 'church_admin',
+        role: ['church_admin'],
         first_name: adminMember.first_name,
         last_name: adminMember.last_name,
         phone: adminMember.phone,
@@ -39,7 +39,9 @@ export async function seedProfiles(
     });
   }
 
-  console.log(`  ✅ Admin Profile: ${profile.first_name} ${profile.last_name} (${profile.role})`);
+  console.log(
+    `  ✅ Admin Profile: ${profile.first_name} ${profile.last_name} (${profile.role.join(', ')})`,
+  );
 
   return { adminUserId: profile.user_id, adminProfileId: profile.id };
 }

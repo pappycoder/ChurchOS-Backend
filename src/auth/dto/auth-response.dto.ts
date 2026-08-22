@@ -30,8 +30,12 @@ export class RegisterResponseDto {
   @ApiProperty({ description: 'Church name', example: 'Grace Community Church' })
   churchName!: string;
 
-  @ApiProperty({ description: 'User role', example: 'church_admin' })
-  role!: string;
+  @ApiProperty({
+    description: 'User roles, ordered by rank descending (first = primary)',
+    example: ['church_admin'],
+    isArray: true,
+  })
+  role!: string[];
 }
 
 export class ProfileResponseDto {
@@ -53,8 +57,12 @@ export class ProfileResponseDto {
   })
   branchId?: string;
 
-  @ApiProperty({ description: 'User role', example: 'church_admin' })
-  role!: string;
+  @ApiProperty({
+    description: 'User roles, ordered by rank descending (first = primary)',
+    example: ['church_admin'],
+    isArray: true,
+  })
+  role!: string[];
 
   @ApiProperty({ description: 'First name', example: 'Adebayo' })
   firstName!: string;

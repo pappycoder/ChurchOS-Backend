@@ -8,6 +8,73 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
+ * A role assigned to a profile.
+ */
+export class ProfileRoleDto {
+  @ApiProperty({ description: 'Role name', example: 'department_head' })
+  name!: string;
+
+  @ApiPropertyOptional({ description: 'Role description', example: 'Leads a ministry department' })
+  description?: string;
+}
+
+/**
+ * An effective permission granted to a user via one or more roles.
+ */
+export class PermissionDetailDto {
+  @ApiProperty({ description: 'Permission name', example: 'members:update' })
+  name!: string;
+
+  @ApiProperty({ description: 'Resource the permission applies to', example: 'members' })
+  resource!: string;
+
+  @ApiProperty({ description: 'Action allowed on the resource', example: 'update' })
+  action!: string;
+
+  @ApiProperty({
+    description: 'Roles that grant this permission',
+    example: ['department_head', 'treasurer'],
+    isArray: true,
+  })
+  grantedBy!: string[];
+}
+
+/**
+ * Summary of the Member record linked to this profile, if any.
+ */
+export class MemberSummaryDto {
+  @ApiProperty({ description: 'Member ID', example: '44444444-4444-4444-4444-444444444444' })
+  memberId!: string;
+
+  @ApiProperty({ description: 'First name', example: 'Adebayo' })
+  firstName!: string;
+
+  @ApiProperty({ description: 'Last name', example: 'Ogundimu' })
+  lastName!: string;
+
+  @ApiPropertyOptional({ description: 'Email address', example: 'adebayo@church.com' })
+  email?: string;
+
+  @ApiPropertyOptional({ description: 'Phone number', example: '+234 803 456 7890' })
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'Member photo URL' })
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Date of birth', example: '1985-04-12T00:00:00.000Z' })
+  dateOfBirth?: string;
+
+  @ApiPropertyOptional({ description: 'Gender', example: 'male' })
+  gender?: string;
+
+  @ApiPropertyOptional({ description: 'Home address', example: '12 Awolowo Road, Ikoyi' })
+  address?: string;
+
+  @ApiProperty({ description: 'Membership status', example: 'active' })
+  status!: string;
+}
+
+/**
  * Response DTO for a single profile.
  * Used for GET /profiles/me, GET /profiles/:id, and list responses.
  */
@@ -30,8 +97,37 @@ export class ProfileResponseDto {
   })
   branchId?: string;
 
-  @ApiProperty({ description: 'User role', example: 'church_admin' })
-  role!: string;
+  @ApiProperty({
+    description: 'All roles assigned to the user, ordered by rank descending (first = primary)',
+    example: ['church_admin', 'treasurer'],
+    isArray: true,
+  })
+  role!: string[];
+
+  @ApiPropertyOptional({
+    description: 'Assigned roles with their descriptions',
+    type: [ProfileRoleDto],
+  })
+  roles?: ProfileRoleDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Effective permissions accumulated across all assigned roles (populated on detail responses)',
+    type: [PermissionDetailDto],
+  })
+  effectivePermissions?: PermissionDetailDto[];
+
+  @ApiPropertyOptional({
+    description: 'Last sign-in timestamp from the auth provider',
+    example: '2026-08-20T09:12:00.000Z',
+  })
+  lastSignInAt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Member record linked to this profile, if any',
+    type: MemberSummaryDto,
+  })
+  member?: MemberSummaryDto;
 
   @ApiProperty({ description: 'First name', example: 'Adebayo' })
   firstName!: string;

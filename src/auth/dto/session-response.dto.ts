@@ -42,7 +42,7 @@ export class LoginResponseDto {
       profileId: '22222222-2222-2222-2222-222222222222',
       churchId: '00000000-0000-0000-0000-000000000001',
       branchId: '33333333-3333-3333-3333-333333333333',
-      role: 'church_admin',
+      role: ['church_admin'],
       firstName: 'Adebayo',
       lastName: 'Ogundimu',
     },
@@ -51,7 +51,8 @@ export class LoginResponseDto {
     profileId: string;
     churchId: string;
     branchId?: string;
-    role: string;
+    /** All roles held, ordered by rank descending (first = primary) */
+    role: string[];
     firstName: string;
     lastName: string;
   };

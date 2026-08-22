@@ -114,7 +114,7 @@ export class AuthService {
           data: {
             user_id: userId,
             church_id: church.id,
-            role: 'church_admin',
+            role: ['church_admin'],
             first_name: dto.firstName,
             last_name: dto.lastName,
             phone: dto.phone,

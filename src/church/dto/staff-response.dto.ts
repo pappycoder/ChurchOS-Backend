@@ -34,8 +34,12 @@ export class StaffResponseDto {
   @ApiPropertyOptional({ description: 'Phone number', example: '+234 802 345 6789' })
   phone?: string;
 
-  @ApiProperty({ description: 'Staff role', example: 'branch_pastor' })
-  role!: string;
+  @ApiProperty({
+    description: 'Staff roles, ordered by rank descending (first = primary)',
+    example: ['branch_pastor'],
+    isArray: true,
+  })
+  role!: string[];
 
   @ApiPropertyOptional({ description: 'Branch name', example: 'Main Auditorium' })
   branchName?: string;

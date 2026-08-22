@@ -20,7 +20,10 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     church_id: string;
     branch_id?: string;
+    /** Primary role (highest rank held) */
     role: string;
+    /** All roles held, ordered by rank descending */
+    roles?: string[];
     status?: string;
     permissions?: string[];
   };

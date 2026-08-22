@@ -22,9 +22,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaService, MulterFile } from '../media/media.service';
 import { SupabaseService } from '../supabase/supabase.service';
-import { ProfileResponseDto } from './dto/profile-response.dto';
+import { PermissionsService } from '../auth/services/permissions.service';
+import {
+  PermissionDetailDto,
+  ProfileResponseDto,
+  ProfileRoleDto,
+} from './dto/profile-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateRolesDto } from './dto/update-roles.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
@@ -64,6 +71,7 @@ export class ProfileService {
     private readonly mediaService: MediaService,
     private readonly supabase: SupabaseService,
     private readonly redis: RedisService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   /**
@@ -228,9 +236,9 @@ export class ProfileService {
       ];
     }
 
-    // Apply role filter
+    // Apply role filter (matches profiles holding the role among their roles)
     if (query.role) {
-      where.role = query.role;
+      where.role = { has: query.role };
     }
 
     // Apply branch filter
@@ -311,6 +319,20 @@ export class ProfileService {
             is_headquarters: true,
           },
         },
+        member: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            phone: true,
+            photo_url: true,
+            date_of_birth: true,
+            gender: true,
+            address: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -318,11 +340,119 @@ export class ProfileService {
       throw new NotFoundException('Profile not found');
     }
 
-    return this.mapToResponseDto(profile);
+    // All roles held by the user, ordered by rank descending
+    const roleNames = profile.role ?? [];
+
+    const [roleDescriptions, effectivePermissions, lastSignInAt] = await Promise.all([
+      this.prisma.role.findMany({
+        where: { name: { in: roleNames } },
+        select: { name: true, description: true },
+      }),
+      this.buildEffectivePermissions(churchId, roleNames),
+      this.getLastSignIn(profile.user_id),
+    ]);
+
+    const roles: ProfileRoleDto[] = roleNames.map((name) => ({
+      name,
+      description:
+        roleDescriptions.find((r: { name: string }) => r.name === name)?.description ?? undefined,
+    }));
+
+    return this.mapToResponseDto(profile, { roles, effectivePermissions, lastSignInAt });
   }
 
   /**
-   * Updates a user's role (admin only).
+   * Builds the union of permissions granted across all of a user's roles,
+   * tracking which role(s) grant each permission.
+   *
+   * @param churchId - Church ID for church-specific overrides
+   * @param roleNames - All role names held by the user
+   * @returns Permission details sorted by resource then action
+   */
+  private async buildEffectivePermissions(
+    churchId: string,
+    roleNames: string[],
+  ): Promise<PermissionDetailDto[]> {
+    const details = new Map<string, PermissionDetailDto>();
+
+    const results = await Promise.all(
+      roleNames.map(async (roleName) => {
+        try {
+          return {
+            roleName,
+            role: await this.permissionsService.getRolePermissions(churchId, roleName),
+          };
+        } catch {
+          return { roleName, role: null };
+        }
+      }),
+    );
+
+    for (const { roleName, role } of results) {
+      if (!role) continue;
+      for (const p of role.permissions) {
+        const existing = details.get(p.name);
+        if (existing) {
+          if (!existing.grantedBy.includes(roleName)) {
+            existing.grantedBy.push(roleName);
+          }
+        } else {
+          details.set(p.name, {
+            name: p.name,
+            resource: p.resource,
+            action: p.action,
+            grantedBy: [roleName],
+          });
+        }
+      }
+    }
+
+    // super_admin is locked to ALL permissions
+    if (roleNames.includes('super_admin')) {
+      const all = await this.permissionsService.getAllPermissions();
+      for (const p of all) {
+        const existing = details.get(p.name);
+        if (existing) {
+          if (!existing.grantedBy.includes('super_admin')) {
+            existing.grantedBy.push('super_admin');
+          }
+        } else {
+          details.set(p.name, {
+            name: p.name,
+            resource: p.resource,
+            action: p.action,
+            grantedBy: ['super_admin'],
+          });
+        }
+      }
+    }
+
+    return Array.from(details.values()).sort((a, b) =>
+      a.resource === b.resource
+        ? a.action.localeCompare(b.action)
+        : a.resource.localeCompare(b.resource),
+    );
+  }
+
+  /**
+   * Fetches the user's last sign-in timestamp from Supabase Auth.
+   * Returns undefined on any failure — non-critical display data.
+   */
+  private async getLastSignIn(userId: string): Promise<string | undefined> {
+    try {
+      const { data, error } = await this.supabase.client.auth.admin.getUserById(userId);
+      if (error || !data?.user?.last_sign_in_at) {
+        return undefined;
+      }
+      return data.user.last_sign_in_at;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Updates a user's single primary role (admin only).
+   * Delegates to {@link updateProfileRoles} with a single-element set.
    *
    * @param profileId - Profile UUID to update
    * @param dto - Role update data
@@ -330,12 +460,43 @@ export class ProfileService {
    * @param adminUserId - Admin user ID for audit logging
    * @param adminRole - The acting admin's own role, used to prevent escalation
    * @returns Updated profile
-   * @throws NotFoundException if profile doesn't exist
-   * @throws ForbiddenException if trying to modify a super_admin
    */
   async updateProfileRole(
     profileId: string,
     dto: UpdateRoleDto,
+    churchId: string,
+    adminUserId: string,
+    adminRole: string,
+  ): Promise<ProfileResponseDto> {
+    return this.updateProfileRoles(
+      profileId,
+      { roles: [dto.role] },
+      churchId,
+      adminUserId,
+      adminRole,
+    );
+  }
+
+  /**
+   * Replaces the full set of roles on a user's profile (admin only).
+   *
+   * The synced primary role column (`profiles.role`) is updated to the
+   * highest-ranked role in the new set so legacy single-role reads stay
+   * correct. Permissions are accumulated across all assigned roles.
+   *
+   * @param profileId - Profile UUID to update
+   * @param dto - Full replacement set of roles
+   * @param churchId - Church ID for multi-tenant scoping
+   * @param adminUserId - Admin user ID for audit logging
+   * @param adminRole - The acting admin's own role, used to prevent escalation
+   * @returns Updated profile
+   * @throws NotFoundException if profile doesn't exist
+   * @throws ForbiddenException on privilege-escalation attempts or self role-change
+   * @throws BadRequestException if any role name is unknown
+   */
+  async updateProfileRoles(
+    profileId: string,
+    dto: UpdateRolesDto,
     churchId: string,
     adminUserId: string,
     adminRole: string,
@@ -348,30 +509,55 @@ export class ProfileService {
       throw new NotFoundException('Profile not found');
     }
 
-    // Prevent modifying super_admin roles
-    if (existing.role === 'super_admin') {
-      throw new ForbiddenException('Cannot modify a super_admin role');
+    const requestedRoles = Array.from(new Set(dto.roles));
+
+    // Validate every requested role exists in the Role table
+    const validRoles = await this.prisma.role.findMany({
+      where: { name: { in: requestedRoles } },
+      select: { name: true },
+    });
+    if (validRoles.length !== requestedRoles.length) {
+      const known = new Set(validRoles.map((r: { name: string }) => r.name));
+      const unknown = requestedRoles.filter((r) => !known.has(r));
+      throw new BadRequestException(`Unknown role(s): ${unknown.join(', ')}`);
     }
 
-    // Prevent self-demotion
-    if (existing.user_id === adminUserId && dto.role !== existing.role) {
-      throw new ForbiddenException('Cannot change your own role');
+    const currentRoles = existing.role ?? [];
+
+    // Prevent modifying super_admin users unless the caller is a super_admin
+    if (currentRoles.includes('super_admin') && adminRole !== 'super_admin') {
+      throw new ForbiddenException('Only a super_admin can modify a super_admin user');
     }
 
-    // Privilege-escalation guards: an admin cannot grant a role above their own,
-    // and only a super_admin can assign the super_admin role.
-    if (dto.role === 'super_admin' && adminRole !== 'super_admin') {
+    // Only a super_admin can assign the super_admin role
+    if (requestedRoles.includes('super_admin') && adminRole !== 'super_admin') {
       throw new ForbiddenException('Only a super_admin can assign the super_admin role');
     }
+
+    // Privilege-escalation guard: an admin cannot grant a role above their own
     const callerRank = ROLE_RANK[adminRole] ?? 0;
-    const targetRank = ROLE_RANK[dto.role] ?? 0;
-    if (targetRank > callerRank) {
-      throw new ForbiddenException('Cannot assign a role higher than your own');
+    for (const role of requestedRoles) {
+      if ((ROLE_RANK[role] ?? 0) > callerRank) {
+        throw new ForbiddenException('Cannot assign a role higher than your own');
+      }
     }
+
+    // Prevent admins from changing their own roles (no-op updates are allowed)
+    const unchanged =
+      requestedRoles.length === currentRoles.length &&
+      requestedRoles.every((r) => currentRoles.includes(r));
+    if (existing.user_id === adminUserId && !unchanged) {
+      throw new ForbiddenException('Cannot change your own roles');
+    }
+
+    // Store ordered by rank descending so role[0] is the primary role
+    const orderedRoles = [...requestedRoles].sort(
+      (a, b) => (ROLE_RANK[b] ?? 0) - (ROLE_RANK[a] ?? 0),
+    );
 
     await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: dto.role },
+      data: { role: orderedRoles },
     });
 
     await this.audit.log({
@@ -380,11 +566,119 @@ export class ProfileService {
       entity: 'profile',
       action: 'UPDATE',
       entityId: profileId,
-      oldValues: { role: existing.role },
-      newValues: { role: dto.role },
+      oldValues: { roles: currentRoles },
+      newValues: { roles: orderedRoles },
     });
 
-    this.logger.log(`Profile role updated: ${profileId} → ${dto.role} by ${adminUserId}`);
+    this.logger.log(
+      `Profile roles updated: ${profileId} → [${orderedRoles.join(', ')}] by ${adminUserId}`,
+    );
+
+    return this.getProfileById(profileId, churchId);
+  }
+
+  /**
+   * Admin update of another user's basic details.
+   *
+   * Supports partial updates of names, email, phone, branch assignment,
+   * and account status. Email changes are synced to Supabase Auth.
+   *
+   * @param profileId - Profile UUID to update
+   * @param dto - Fields to update (partial)
+   * @param churchId - Church ID for multi-tenant scoping
+   * @param adminUserId - Admin user ID for audit logging
+   * @param adminRole - The acting admin's own role, used for guard rails
+   * @returns Updated profile
+   * @throws NotFoundException if profile doesn't exist
+   * @throws ForbiddenException on guard-rail violations
+   * @throws BadRequestException if the branch is invalid or auth sync fails
+   */
+  async adminUpdateProfile(
+    profileId: string,
+    dto: AdminUpdateUserDto,
+    churchId: string,
+    adminUserId: string,
+    adminRole: string,
+  ): Promise<ProfileResponseDto> {
+    const existing = await this.prisma.profile.findUnique({
+      where: { id: profileId },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Profile not found');
+    }
+
+    const currentRoles = existing.role ?? [];
+
+    // Only super_admins can edit super_admin users
+    if (currentRoles.includes('super_admin') && adminRole !== 'super_admin') {
+      throw new ForbiddenException('Only a super_admin can edit a super_admin user');
+    }
+
+    // Prevent self-deactivation via inline edit
+    if (existing.user_id === adminUserId && dto.status === 'inactive') {
+      throw new ForbiddenException('Cannot deactivate your own account');
+    }
+
+    // Validate branch belongs to the same church
+    if (dto.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new BadRequestException('Branch not found in this church');
+      }
+    }
+
+    // Sync email changes to Supabase Auth so credentials stay consistent
+    if (dto.email !== undefined && dto.email !== existing.email) {
+      const { error } = await this.supabase.client.auth.admin.updateUserById(existing.user_id, {
+        email: dto.email,
+      });
+      if (error) {
+        throw new BadRequestException(`Failed to update auth email: ${error.message}`);
+      }
+    }
+
+    const data: Prisma.ProfileUncheckedUpdateInput = {};
+    if (dto.firstName !== undefined) data.first_name = dto.firstName;
+    if (dto.lastName !== undefined) data.last_name = dto.lastName;
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.branchId !== undefined) data.branch_id = dto.branchId || null;
+    if (dto.status !== undefined) data.status = dto.status;
+
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data,
+    });
+
+    await this.audit.log({
+      userId: adminUserId,
+      churchId,
+      entity: 'profile',
+      action: 'UPDATE',
+      entityId: profileId,
+      oldValues: {
+        firstName: existing.first_name,
+        lastName: existing.last_name,
+        email: existing.email,
+        phone: existing.phone,
+        branchId: existing.branch_id,
+        status: existing.status,
+      },
+      newValues: {
+        firstName: dto.firstName ?? existing.first_name,
+        lastName: dto.lastName ?? existing.last_name,
+        email: dto.email ?? existing.email,
+        phone: dto.phone ?? existing.phone,
+        branchId: dto.branchId !== undefined ? dto.branchId || null : existing.branch_id,
+        status: dto.status ?? existing.status,
+      },
+    });
+
+    this.logger.log(`Profile updated by admin: ${profileId} by ${adminUserId}`);
 
     return this.getProfileById(profileId, churchId);
   }
@@ -713,7 +1007,7 @@ export class ProfileService {
           user_id: data.user.id,
           church_id: churchId,
           branch_id: dto.branchId || null,
-          role: dto.role,
+          role: [dto.role],
           first_name: dto.firstName,
           last_name: dto.lastName,
           phone: dto.phone || null,
@@ -764,7 +1058,7 @@ export class ProfileService {
       throw new NotFoundException('User not found');
     }
 
-    if (profile.role === 'super_admin') {
+    if (profile.role.includes('super_admin')) {
       throw new BadRequestException('Cannot deactivate a super_admin user');
     }
 
@@ -892,41 +1186,61 @@ export class ProfileService {
    * Maps a Prisma Profile model to the response DTO.
    *
    * @param profile - Prisma profile with included relations
+   * @param extras - Optional enrichment data (roles, permissions, member, last sign-in)
    * @returns ProfileResponseDto
    */
-  private mapToResponseDto(profile: {
-    id: string;
-    user_id: string;
-    church_id: string;
-    branch_id: string | null;
-    role: string;
-    status: string;
-    first_name: string;
-    last_name: string;
-    email?: string | null;
-    phone: string | null;
-    avatar_url: string | null;
-    mfa_enabled: boolean;
-    created_at: Date;
-    updated_at: Date;
-    church?: {
+  private mapToResponseDto(
+    profile: {
       id: string;
-      name: string;
-      denomination: string | null;
-      logo_url: string | null;
-    } | null;
-    branch?: {
-      id: string;
-      name: string;
-      is_headquarters: boolean;
-    } | null;
-  }): ProfileResponseDto {
+      user_id: string;
+      church_id: string;
+      branch_id: string | null;
+      role: string[];
+      status: string;
+      first_name: string;
+      last_name: string;
+      email?: string | null;
+      phone: string | null;
+      avatar_url: string | null;
+      mfa_enabled: boolean;
+      created_at: Date;
+      updated_at: Date;
+      church?: {
+        id: string;
+        name: string;
+        denomination: string | null;
+        logo_url: string | null;
+      } | null;
+      branch?: {
+        id: string;
+        name: string;
+        is_headquarters: boolean;
+      } | null;
+      member?: {
+        id: string;
+        first_name: string;
+        last_name: string;
+        email: string | null;
+        phone: string | null;
+        photo_url: string | null;
+        date_of_birth: Date | null;
+        gender: string | null;
+        address: string | null;
+        status: string;
+      } | null;
+    },
+    extras?: {
+      roles?: ProfileRoleDto[];
+      effectivePermissions?: PermissionDetailDto[];
+      lastSignInAt?: string;
+    },
+  ): ProfileResponseDto {
     return {
       profileId: profile.id,
       userId: profile.user_id,
       churchId: profile.church_id,
       branchId: profile.branch_id || undefined,
-      role: profile.role,
+      role: profile.role ?? [],
       firstName: profile.first_name,
       lastName: profile.last_name,
       email: profile.email || undefined,
@@ -949,6 +1263,23 @@ export class ProfileService {
             branchId: profile.branch.id,
             name: profile.branch.name,
             isHeadquarters: profile.branch.is_headquarters,
+          }
+        : undefined,
+      roles: extras?.roles,
+      effectivePermissions: extras?.effectivePermissions,
+      lastSignInAt: extras?.lastSignInAt,
+      member: profile.member
+        ? {
+            memberId: profile.member.id,
+            firstName: profile.member.first_name,
+            lastName: profile.member.last_name,
+            email: profile.member.email || undefined,
+            phone: profile.member.phone || undefined,
+            photoUrl: profile.member.photo_url || undefined,
+            dateOfBirth: profile.member.date_of_birth?.toISOString(),
+            gender: profile.member.gender || undefined,
+            address: profile.member.address || undefined,
+            status: profile.member.status,
           }
         : undefined,
     };

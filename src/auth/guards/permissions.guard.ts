@@ -61,7 +61,8 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // Fetch the user's profile to get role and church_id
+    // Fetch the user's profile to get roles and church_id.
+    // role is a text array ordered by rank desc; role[0] is the primary role.
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: user.sub },
       select: { role: true, church_id: true },
@@ -71,10 +72,12 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('User profile not found');
     }
 
-    // Get effective permissions for this user's role in their church
+    const roleNames = profile.role ?? [];
+
+    // Get effective permissions across all of the user's roles in their church
     const userPermissions = await this.permissionsService.getUserPermissions(
       profile.church_id,
-      profile.role,
+      roleNames,
     );
 
     // Populate permissions on the request for downstream use

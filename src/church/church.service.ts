@@ -276,7 +276,7 @@ export class ChurchService {
         user_id: inviteData.user.id,
         church_id: churchId,
         branch_id: dto.branchId || null,
-        role: normalizedRole,
+        role: [normalizedRole],
         first_name: normalizedFirstName,
         last_name: normalizedLastName,
         phone: normalizedPhone,
@@ -340,7 +340,7 @@ export class ChurchService {
     const where: Prisma.ProfileWhereInput = { church_id: churchId };
 
     if (query.role) {
-      where.role = query.role;
+      where.role = { has: query.role };
     }
 
     const [profiles, total] = await Promise.all([
@@ -403,9 +403,10 @@ export class ChurchService {
 
     const oldRole = profile.role;
 
+    // Replace the full role set with the single requested role
     const updated = await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: dto.role },
+      data: { role: [dto.role] },
       include: {
         branch: { select: { name: true } },
       },
@@ -468,7 +469,7 @@ export class ChurchService {
 
     await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: 'removed' },
+      data: { role: ['removed'] },
     });
 
     await this.audit.log({
