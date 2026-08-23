@@ -200,6 +200,15 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-23** — Branches: country field + two update-path bug fixes.
+  - **Fix (400 on every edit)**: `UpdateBranchDto` was hand-rolled and missing `isHeadquarters`, so any UI PATCH carrying it died under the global pipe's `forbidNonWhitelisted`. Rewritten as `extends PartialType(CreateBranchDto)` — update payloads now accept exactly the create whitelist (incl. `isHeadquarters` and new `country`).
+  - **Fix (HQ toggle never persisted)**: `update()` never wrote `is_headquarters`. It now detects changes, enforces single-HQ per church (`ConflictException` when another HQ exists, scoped to other branches via `id: { not }`), and persists the flag.
+  - **New column**: `branches.country TEXT NOT NULL DEFAULT 'Nigeria'` (migration `20260823130000_branch_country`, mirrors `churches.country`). `CreateBranchDto` gains optional validated `country`; service defaults to `'Nigeria'` on create/update-null; `BranchResponseDto.country` required in responses.
+  - **Tests**: suite green at 517 / 35 suites (+4): country default on create, country persist on update, promote-to-HQ success, promote rejected while another HQ exists.
+
+- **2026-08-23** — Branches API opened to `super_admin` (frontend Branches admin page support).
+  - All five `BranchesController` endpoints (`POST /branches`, `GET /branches`, `GET /branches/:branchId`, `PATCH /branches/:branchId`, `DELETE /branches/:branchId`) previously omitted `super_admin` from `@RequireRoles`, so platform admins got 403 on every branch operation. Now matches the church module convention: writes = `church_admin, super_admin`; reads additionally allow `branch_pastor, secretary`. Service logic unchanged; no spec impact (branch coverage is service-level). Suite green at 513 passing / 35 suites; build clean.
+
 - **2026-08-23** — Unified church email model (single editable location).
   - **Decision**: the sign-in credential, the admin's profile contact record and `churches.email` are ONE email. It can only be changed by a church admin in Church Settings — self-service profile edits and ordinary members can no longer touch it (admin user-management `PATCH /profiles/:id` still syncs auth for *other* users, unchanged).
   - **Removed**: `email` from `UpdateProfileDto` and all Supabase-sync logic from `updateMyProfile` (names/phone only now).

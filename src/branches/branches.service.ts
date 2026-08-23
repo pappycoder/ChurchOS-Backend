@@ -69,6 +69,7 @@ export class BranchesService {
         address: dto.address,
         city: dto.city,
         state: dto.state,
+        country: dto.country ?? 'Nigeria',
         phone: dto.phone,
         email: dto.email,
         photo_url: dto.photoUrl,
@@ -190,9 +191,21 @@ export class BranchesService {
 
     const updateData: Prisma.BranchUpdateInput = {};
     if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.isHeadquarters !== undefined && dto.isHeadquarters !== existing.is_headquarters) {
+      if (dto.isHeadquarters) {
+        const existingHQ = await this.prisma.branch.findFirst({
+          where: { church_id: churchId, is_headquarters: true, id: { not: id } },
+        });
+        if (existingHQ) {
+          throw new ConflictException('A headquarters branch already exists for this church');
+        }
+      }
+      updateData.is_headquarters = dto.isHeadquarters;
+    }
     if (dto.address !== undefined) updateData.address = dto.address || null;
     if (dto.city !== undefined) updateData.city = dto.city || null;
     if (dto.state !== undefined) updateData.state = dto.state || null;
+    if (dto.country !== undefined) updateData.country = dto.country || 'Nigeria';
     if (dto.phone !== undefined) updateData.phone = dto.phone || null;
     if (dto.email !== undefined) updateData.email = dto.email || null;
     if (dto.photoUrl !== undefined) updateData.photo_url = dto.photoUrl || null;
@@ -287,6 +300,7 @@ export class BranchesService {
       address: string | null;
       city: string | null;
       state: string | null;
+      country: string | null;
       phone: string | null;
       email: string | null;
       photo_url: string | null;
@@ -303,6 +317,7 @@ export class BranchesService {
       address: branch.address || undefined,
       city: branch.city || undefined,
       state: branch.state || undefined,
+      country: branch.country || 'Nigeria',
       phone: branch.phone || undefined,
       email: branch.email || undefined,
       photoUrl: branch.photo_url || undefined,

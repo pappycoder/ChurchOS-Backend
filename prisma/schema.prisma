@@ -176,6 +176,7 @@ model Branch {
   address     String?
   city        String?
   state       String?
+  country     String   @default("Nigeria")
   phone       String?
   email       String?
   photo_url   String?

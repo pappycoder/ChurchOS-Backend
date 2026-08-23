@@ -39,6 +39,11 @@ export class CreateBranchDto {
   @IsOptional()
   state?: string;
 
+  @ApiPropertyOptional({ description: 'Country', example: 'Nigeria', default: 'Nigeria' })
+  @IsString()
+  @IsOptional()
+  country?: string;
+
   @ApiPropertyOptional({ description: 'Phone number', example: '+234 803 456 7890' })
   @IsString()
   @IsOptional()

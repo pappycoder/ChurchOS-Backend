@@ -61,7 +61,7 @@ export class BranchesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin')
+  @RequireRoles('church_admin', 'super_admin')
   @ApiCreateEndpoint(
     'Create a branch',
     'Creates a new branch for the church. Only one headquarters branch is allowed.',
@@ -83,7 +83,7 @@ export class BranchesController {
   }
 
   @Get()
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
   @ApiPaginatedResponse(BranchResponseDto)
   @ApiListEndpoint('List branches', 'Returns a paginated list of branches for the church.')
   /**
@@ -101,7 +101,7 @@ export class BranchesController {
   }
 
   @Get(':branchId')
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
   @ApiGetEndpoint('Get branch', 'Retrieves a single branch by ID with member count.')
   /**
    * Retrieves a single branch by ID.
@@ -118,7 +118,7 @@ export class BranchesController {
   }
 
   @Patch(':branchId')
-  @RequireRoles('church_admin')
+  @RequireRoles('church_admin', 'super_admin')
   @ApiUpdateEndpoint(
     'Update a branch',
     'Updates branch details. If photoUrl changes, the old image is deleted from storage.',
@@ -142,7 +142,7 @@ export class BranchesController {
   }
 
   @Delete(':branchId')
-  @RequireRoles('church_admin')
+  @RequireRoles('church_admin', 'super_admin')
   @ApiDeleteEndpoint(
     'Delete a branch',
     'Deletes a branch. Cannot delete if it has members assigned.',

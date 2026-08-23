@@ -20,6 +20,7 @@ describe('BranchesService', () => {
     address: '456 Grace Road',
     city: 'Lagos',
     state: 'Lagos',
+    country: 'Nigeria',
     phone: '+234 803 456 7890',
     email: 'main@church.org',
     photo_url: null,
@@ -127,6 +128,53 @@ describe('BranchesService', () => {
       await service.update('branch-1', { photoUrl: 'https://new-photo.jpg' }, 'church-1', 'user-1');
 
       expect(mediaDelete).toHaveBeenCalledWith('https://old-photo.jpg');
+    });
+
+    it('should default country to Nigeria on create when not provided', async () => {
+      prisma.branch.findFirst.mockResolvedValue(null);
+      prisma.branch.create.mockResolvedValue(mockBranch);
+
+      await service.create({ name: 'Ikeja Campus' }, 'church-1', 'user-1');
+
+      expect(prisma.branch.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ country: 'Nigeria' }) }),
+      );
+    });
+
+    it('should persist country on update', async () => {
+      prisma.branch.findUnique.mockResolvedValue(mockBranch);
+      prisma.branch.update.mockResolvedValue({ ...mockBranch, country: 'Ghana' });
+
+      const result = await service.update('branch-1', { country: 'Ghana' }, 'church-1', 'user-1');
+
+      expect(prisma.branch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ country: 'Ghana' }) }),
+      );
+      expect(result.country).toBe('Ghana');
+    });
+
+    it('should allow promoting a branch to headquarters', async () => {
+      const nonHQ = { ...mockBranch, is_headquarters: false };
+      prisma.branch.findUnique.mockResolvedValue(nonHQ);
+      prisma.branch.findFirst.mockResolvedValue(null); // no other HQ exists
+      prisma.branch.update.mockResolvedValue({ ...nonHQ, is_headquarters: true });
+
+      const result = await service.update('branch-1', { isHeadquarters: true }, 'church-1', 'user-1');
+
+      expect(prisma.branch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ is_headquarters: true }) }),
+      );
+      expect(result.isHeadquarters).toBe(true);
+    });
+
+    it('should reject promoting to headquarters when another HQ exists', async () => {
+      const nonHQ = { ...mockBranch, id: 'branch-2', is_headquarters: false };
+      prisma.branch.findUnique.mockResolvedValue(nonHQ);
+      prisma.branch.findFirst.mockResolvedValue(mockBranch); // another HQ exists
+
+      await expect(
+        service.update('branch-2', { isHeadquarters: true }, 'church-1', 'user-1'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

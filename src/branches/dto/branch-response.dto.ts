@@ -34,6 +34,9 @@ export class BranchResponseDto {
   @ApiPropertyOptional({ description: 'State', example: 'Lagos' })
   state?: string;
 
+  @ApiProperty({ description: 'Country', example: 'Nigeria' })
+  country!: string;
+
   @ApiPropertyOptional({ description: 'Phone number', example: '+234 803 456 7890' })
   phone?: string;
 
