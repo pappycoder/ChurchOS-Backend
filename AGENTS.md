@@ -200,6 +200,8 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **GET /profiles/me now returns `permissions?: string[]`**: the flat `resource:action` union across all held roles, resolved via `PermissionsService.getUserPermissions` (Redis-cached). Soft-fails to an empty array with a warn log — server guards remain the enforcement layer. Wired through `mapToResponseDto` extras; +2 profile.service.spec tests (519 passing).
+
 - **2026-08-23** — Branches: country field + two update-path bug fixes.
   - **Fix (400 on every edit)**: `UpdateBranchDto` was hand-rolled and missing `isHeadquarters`, so any UI PATCH carrying it died under the global pipe's `forbidNonWhitelisted`. Rewritten as `extends PartialType(CreateBranchDto)` — update payloads now accept exactly the create whitelist (incl. `isHeadquarters` and new `country`).
   - **Fix (HQ toggle never persisted)**: `update()` never wrote `is_headquarters`. It now detects changes, enforces single-HQ per church (`ConflictException` when another HQ exists, scoped to other branches via `id: { not }`), and persists the flag.

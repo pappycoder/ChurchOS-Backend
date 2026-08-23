@@ -197,6 +197,25 @@ describe('ProfileService', () => {
       expect(result.createdAt).toBe('2026-07-15T10:00:00.000Z');
     });
 
+    it('should include the resolved permission union on /me', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfileWithRelations);
+      permissionsService.getUserPermissions.mockResolvedValue(['members:read', 'members:create', 'branches:read']);
+
+      const result = await service.getMyProfile(mockUserId);
+
+      expect(permissionsService.getUserPermissions).toHaveBeenCalledWith(mockChurchId, ['church_admin']);
+      expect(result.permissions).toEqual(['members:read', 'members:create', 'branches:read']);
+    });
+
+    it('should soft-fail to empty permissions when resolution errors', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfileWithRelations);
+      permissionsService.getUserPermissions.mockRejectedValue(new Error('redis down'));
+
+      const result = await service.getMyProfile(mockUserId);
+
+      expect(result.permissions).toEqual([]);
+    });
+
     it('should throw NotFoundException if profile does not exist', async () => {
       model(prisma, 'profile').findUnique.mockResolvedValue(null);
 

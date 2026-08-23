@@ -124,6 +124,14 @@ export class ProfileResponseDto {
   effectivePermissions?: PermissionDetailDto[];
 
   @ApiPropertyOptional({
+    description:
+      'Flat list of permission names (resource:action) granted to this user across all roles',
+    type: [String],
+    example: ['members:read', 'branches:create'],
+  })
+  permissions?: string[];
+
+  @ApiPropertyOptional({
     description: 'Last sign-in timestamp from the auth provider',
     example: '2026-08-20T09:12:00.000Z',
   })

@@ -127,7 +127,22 @@ export class ProfileService {
       }
     }
 
-    return this.mapToResponseDto(profile);
+    // Resolve the flat permission union across all held roles so clients can
+    // gate UI affordances without extra calls. Soft-fails to an empty set —
+    // server-side guards remain the real enforcement layer.
+    let permissions: string[] = [];
+    try {
+      permissions = await this.permissionsService.getUserPermissions(
+        profile.church_id,
+        profile.role ?? [],
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to resolve permissions for user ${profile.user_id}: ${(err as Error).message}`,
+      );
+    }
+
+    return this.mapToResponseDto(profile, { permissions });
   }
 
   /**
@@ -1277,6 +1292,7 @@ export class ProfileService {
       roles?: ProfileRoleDto[];
       effectivePermissions?: PermissionDetailDto[];
       lastSignInAt?: string;
+      permissions?: string[];
     },
   ): ProfileResponseDto {
     return {
@@ -1311,6 +1327,7 @@ export class ProfileService {
         : undefined,
       roles: extras?.roles,
       effectivePermissions: extras?.effectivePermissions,
+      permissions: extras?.permissions,
       lastSignInAt: extras?.lastSignInAt,
       member: profile.member
         ? {
