@@ -200,6 +200,10 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-23** — TODO markers for upcoming integrations.
+  - Profile photo upload: bucket provisioning/policy check needed before production (`uploadProfilePhoto`).
+  - Member invite + forgot password: swap Supabase default emails for branded Resend sends (invite details; reset link via `admin.generateLink`).
+
 - **2026-08-23** — Change password fix (wrong "current password incorrect" errors).
   - **Root cause**: `changePassword` verified the current password by signing in with the **email from the JWT claim** (`user.email || ''`) — stale after email changes (e.g. via the new self-service edit) or empty when absent, so correct passwords were rejected. It then set the new password via `auth.updateUser()`, which depended on the shared service-role client retaining an in-memory user session.
   - **Rewrite** (`auth.service.ts`): resolves the authoritative account email via `admin.getUserById(userId)` (500 "Unable to verify your account" if none), verifies via `signInWithPassword`, sets the new password deterministically via `admin.updateUserById(userId, { password })`, and revokes existing sessions with `admin.signOut(userId)` (non-fatal on failure; access tokens stay valid until expiry so the current device isn't dropped mid-session). Real Supabase error messages are now logged server-side for diagnosability; the controller no longer passes the JWT email.

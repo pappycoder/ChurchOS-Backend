@@ -290,6 +290,10 @@ export class AuthService {
     const webUrl = this.config.get<string>('WEB_URL', 'http://localhost:3000');
     const redirectUrl = redirectTo || `${webUrl}/reset-password`;
 
+    // TODO: Send the reset email via Resend (branded template with expiry
+    // details and support contact) — generate the link via
+    // supabase.auth.admin.generateLink and email it ourselves instead of
+    // relying on Supabase's default reset template.
     const { error } = await this.supabase.client.auth.resetPasswordForEmail(email, {
       redirectTo: redirectUrl,
     });
@@ -338,7 +342,11 @@ export class AuthService {
    * @param newPassword - New password to set
    * @throws UnauthorizedException if current password is incorrect
    */
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     // Resolve the authoritative account email
     const { data: userData, error: getUserError } =
       await this.supabase.client.auth.admin.getUserById(userId);
@@ -359,9 +367,7 @@ export class AuthService {
     });
 
     if (signInError) {
-      this.logger.warn(
-        `Change password verification failed for ${userId}: ${signInError.message}`,
-      );
+      this.logger.warn(`Change password verification failed for ${userId}: ${signInError.message}`);
       throw new UnauthorizedException('Current password is incorrect');
     }
 

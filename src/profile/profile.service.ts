@@ -218,6 +218,8 @@ export class ProfileService {
     }
 
     // Upload new avatar
+    // TODO: Ensure the Supabase Storage bucket exists (and policies allow
+    // church-scoped writes) before this upload works in production.
     const result = await this.mediaService.uploadImage(file, 'profiles', churchId);
 
     // Update profile with new avatar URL
@@ -1031,6 +1033,9 @@ export class ProfileService {
       throw new ConflictException(`A user with this ${field} already exists in this church`);
     }
 
+    // TODO: Send the invitation via Resend (branded email with church name,
+    // inviter details, and setup instructions) instead of Supabase's default
+    // invite template.
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
       data: {
         first_name: dto.firstName,

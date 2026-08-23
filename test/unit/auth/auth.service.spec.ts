@@ -421,9 +421,9 @@ describe('AuthService', () => {
         error: { message: 'Invalid login credentials' },
       });
 
-      await expect(
-        service.changePassword(mockUserId, 'WrongPass', 'NewPass456!'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.changePassword(mockUserId, 'WrongPass', 'NewPass456!')).rejects.toThrow(
+        UnauthorizedException,
+      );
       expect(adminUpdateUserByIdMock).not.toHaveBeenCalled();
     });
 
