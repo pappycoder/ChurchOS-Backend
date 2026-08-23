@@ -38,6 +38,7 @@ import {
 } from '../common/decorators/api-standard-responses.decorator';
 import { ChurchService } from './church.service';
 import { UpdateChurchDto } from './dto/update-church.dto';
+import { UpdateChurchEmailDto } from './dto/update-church-email.dto';
 import { ChurchResponseDto } from './dto/church-response.dto';
 import { UpdateChurchConfigDto } from './dto/update-church-config.dto';
 import { ChurchConfigResponseDto } from './dto/church-config-response.dto';
@@ -98,6 +99,28 @@ export class ChurchController {
   ): Promise<ChurchResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.churchService.updateChurch(churchId, dto, user.id);
+  }
+
+  @Patch('email')
+  @RequireRoles('church_admin', 'super_admin')
+  @ApiUpdateEndpoint(
+    'Update the unified church email',
+    'Changes the email everywhere it lives for the acting admin: sign-in credential (Supabase Auth), profile contact record, and the church public contact email.',
+  )
+  /**
+   * Updates the unified church email.
+   * @param dto - The new email address
+   * @param user - Current authenticated user
+   * @param req - Authenticated request with user profile
+   * @returns Updated ChurchResponseDto
+   */
+  async updateChurchEmail(
+    @Body() dto: UpdateChurchEmailDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ChurchResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.churchService.updateChurchEmail(churchId, user.id, dto);
   }
 
   @Get('config')

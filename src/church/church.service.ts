@@ -12,12 +12,14 @@ import {
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaService } from '../media/media.service';
 import { UpdateChurchDto } from './dto/update-church.dto';
+import { UpdateChurchEmailDto } from './dto/update-church-email.dto';
 import { ChurchResponseDto } from './dto/church-response.dto';
 import { ChurchConfigResponseDto } from './dto/church-config-response.dto';
 import { UpdateChurchConfigDto } from './dto/update-church-config.dto';
@@ -138,6 +140,79 @@ export class ChurchService {
     this.logger.log(`Church updated: ${churchId}`);
 
     return this.mapToResponseDto(church);
+  }
+
+  /**
+   * Updates the unified church email — the acting admin's sign-in email
+   * (Supabase Auth), their profile contact record, and the church's public
+   * contact email are all kept aligned in one operation.
+   *
+   * The Supabase sync happens first so a rejected email never touches the
+   * database. A no-op returns early when everything already matches.
+   *
+   * @param churchId - The church UUID
+   * @param userId - The acting admin's Supabase Auth user ID
+   * @param dto - The new email address
+   * @returns Updated ChurchResponseDto
+   * @throws NotFoundException if the church or the acting admin's profile is missing
+   * @throws BadRequestException if Supabase rejects the new email
+   */
+  async updateChurchEmail(
+    churchId: string,
+    userId: string,
+    dto: UpdateChurchEmailDto,
+  ): Promise<ChurchResponseDto> {
+    const newEmail = dto.email.trim().toLowerCase();
+
+    const church = await this.prisma.church.findUnique({ where: { id: churchId } });
+    if (!church) {
+      throw new NotFoundException('Church not found');
+    }
+
+    const profile = await this.prisma.profile.findFirst({
+      where: { user_id: userId, church_id: churchId },
+    });
+    if (!profile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // No-op when the email is already aligned everywhere
+    if (newEmail === (church.email ?? '') && newEmail === (profile.email ?? '')) {
+      return this.getChurch(churchId);
+    }
+
+    // Sync the sign-in credential first — fail fast before any DB write
+    const { error } = await this.supabase.client.auth.admin.updateUserById(userId, {
+      email: newEmail,
+    });
+    if (error) {
+      throw new BadRequestException(`Failed to update auth email: ${error.message}`);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.church.update({
+        where: { id: churchId },
+        data: { email: newEmail },
+      }),
+      this.prisma.profile.update({
+        where: { id: profile.id },
+        data: { email: newEmail },
+      }),
+    ]);
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'church',
+      action: 'UPDATE',
+      entityId: churchId,
+      oldValues: { email: church.email },
+      newValues: { email: newEmail },
+    });
+
+    this.logger.log(`Unified church email updated for ${churchId} by user ${userId}`);
+
+    return this.getChurch(churchId);
   }
 
   /**

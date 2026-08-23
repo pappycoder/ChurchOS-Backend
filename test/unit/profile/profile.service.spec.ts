@@ -304,8 +304,7 @@ describe('ProfileService', () => {
       expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
     });
 
-    it('should sync a changed email to Supabase Auth and persist it', async () => {
-      supabase.client.auth.admin.updateUserById.mockResolvedValueOnce({ data: {}, error: null });
+    it('should never touch Supabase Auth — email is managed via church settings', async () => {
       model(prisma, 'profile')
         .findUnique.mockResolvedValueOnce({
           id: mockProfileId,
@@ -313,55 +312,15 @@ describe('ProfileService', () => {
           church_id: mockChurchId,
           email: 'old@demo.com',
         })
-        .mockResolvedValueOnce({ ...mockProfileWithRelations, email: 'new@demo.com' });
-
-      const result = await service.updateMyProfile(mockUserId, { email: 'new@demo.com' });
-
-      expect(supabase.client.auth.admin.updateUserById).toHaveBeenCalledWith(mockUserId, {
-        email: 'new@demo.com',
-      });
-      expect(result.email).toBe('new@demo.com');
-      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
-        where: { user_id: mockUserId },
-        data: { email: 'new@demo.com' },
-      });
-    });
-
-    it('should not call Supabase when the email is unchanged', async () => {
-      model(prisma, 'profile')
-        .findUnique.mockResolvedValueOnce({
-          id: mockProfileId,
-          user_id: mockUserId,
-          church_id: mockChurchId,
-          email: 'same@demo.com',
-        })
         .mockResolvedValueOnce(mockProfileWithRelations);
 
-      await service.updateMyProfile(mockUserId, { email: 'same@demo.com' });
+      await service.updateMyProfile(mockUserId, { firstName: 'NewName' });
 
       expect(supabase.client.auth.admin.updateUserById).not.toHaveBeenCalled();
       expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
         where: { user_id: mockUserId },
-        data: { email: 'same@demo.com' },
+        data: { first_name: 'NewName' },
       });
-    });
-
-    it('should throw BadRequestException when Supabase rejects the new email', async () => {
-      supabase.client.auth.admin.updateUserById.mockResolvedValueOnce({
-        data: {},
-        error: { message: 'already registered' },
-      });
-      model(prisma, 'profile').findUnique.mockResolvedValueOnce({
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-        email: 'old@demo.com',
-      });
-
-      await expect(
-        service.updateMyProfile(mockUserId, { email: 'taken@demo.com' }),
-      ).rejects.toThrow(BadRequestException);
-      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
     });
   });
 

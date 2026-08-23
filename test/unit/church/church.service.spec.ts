@@ -4,7 +4,7 @@ import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { MediaService } from '../../../src/media/media.service';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('ChurchService', () => {
@@ -43,6 +43,7 @@ describe('ChurchService', () => {
           inviteUserByEmail: jest.fn(),
           getUserById: jest.fn(),
           listUsers: jest.fn(),
+          updateUserById: jest.fn(),
         },
       },
     };
@@ -130,6 +131,77 @@ describe('ChurchService', () => {
 
       expect(result.churchId).toBe('church-1');
       expect(prisma.church.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateChurchEmail', () => {
+    const mockProfile = {
+      id: 'profile-1',
+      user_id: 'user-1',
+      church_id: 'church-1',
+      email: 'info@grace.org',
+    };
+
+    it('should sync the sign-in email and update profile + church together', async () => {
+      prisma.church.findUnique
+        .mockResolvedValueOnce(mockChurch)
+        .mockResolvedValueOnce({ ...mockChurch, email: 'new@grace.org' });
+      prisma.profile.findFirst.mockResolvedValue(mockProfile);
+      supabaseClient.auth.admin.updateUserById.mockResolvedValue({ error: null });
+      (prisma.$transaction as unknown as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.updateChurchEmail('church-1', 'user-1', {
+        email: 'new@grace.org',
+      });
+
+      expect(supabaseClient.auth.admin.updateUserById).toHaveBeenCalledWith('user-1', {
+        email: 'new@grace.org',
+      });
+      expect(prisma.$transaction as unknown as jest.Mock).toHaveBeenCalledTimes(1);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'church', action: 'UPDATE' }),
+      );
+      expect(result.email).toBe('new@grace.org');
+    });
+
+    it('should throw BadRequestException and write nothing when Supabase rejects the email', async () => {
+      prisma.church.findUnique.mockResolvedValue(mockChurch);
+      prisma.profile.findFirst.mockResolvedValue(mockProfile);
+      supabaseClient.auth.admin.updateUserById.mockResolvedValue({
+        error: { message: 'already registered' },
+      });
+
+      await expect(
+        service.updateChurchEmail('church-1', 'user-1', { email: 'taken@example.com' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when the email is already aligned everywhere', async () => {
+      prisma.church.findUnique
+        .mockResolvedValueOnce(mockChurch)
+        .mockResolvedValueOnce(mockChurch);
+      prisma.profile.findFirst.mockResolvedValue(mockProfile);
+
+      const result = await service.updateChurchEmail('church-1', 'user-1', {
+        email: 'info@grace.org',
+      });
+
+      expect(supabaseClient.auth.admin.updateUserById).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(result.email).toBe('info@grace.org');
+    });
+
+    it('should throw NotFoundException when the acting admin has no profile', async () => {
+      prisma.church.findUnique.mockResolvedValue(mockChurch);
+      prisma.profile.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateChurchEmail('church-1', 'user-1', { email: 'new@grace.org' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(supabaseClient.auth.admin.updateUserById).not.toHaveBeenCalled();
     });
   });
 

@@ -6,12 +6,13 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 /**
  * DTO for updating user profile details.
  * All fields are optional — only provided fields are updated.
- * Email changes are synced to Supabase Auth so credentials stay consistent.
+ * Note: email is intentionally excluded — it is managed by church admins
+ * via PATCH /church/email (sign-in credential, profile and church stay aligned).
  */
 export class UpdateProfileDto {
   @ApiPropertyOptional({
@@ -29,14 +30,6 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   lastName?: string;
-
-  @ApiPropertyOptional({
-    description: 'Email address (synced to Supabase Auth)',
-    example: 'adebayo@church.com',
-  })
-  @IsEmail({}, { message: 'Please provide a valid email address' })
-  @IsOptional()
-  email?: string;
 
   @ApiPropertyOptional({
     description: 'Phone number',

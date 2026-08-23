@@ -200,6 +200,12 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-23** — Unified church email model (single editable location).
+  - **Decision**: the sign-in credential, the admin's profile contact record and `churches.email` are ONE email. It can only be changed by a church admin in Church Settings — self-service profile edits and ordinary members can no longer touch it (admin user-management `PATCH /profiles/:id` still syncs auth for *other* users, unchanged).
+  - **Removed**: `email` from `UpdateProfileDto` and all Supabase-sync logic from `updateMyProfile` (names/phone only now).
+  - **New endpoint**: `PATCH /church/email` (`UpdateChurchEmailDto`, guarded church_admin/super_admin) → `updateChurchEmail`: no-op when already aligned; otherwise syncs Supabase Auth first (fail-fast BadRequest on rejection), then updates `profiles.email` + `churches.email` in one transaction, audit-logs, returns refreshed church.
+  - **Tests**: suite green at 513 passing / 35 suites — profile spec asserts self-service never touches Supabase; new church spec covers all-three alignment, Supabase rejection writes nothing, aligned no-op, missing acting-admin profile.
+
 - **2026-08-23** — TODO markers for upcoming integrations.
   - Profile photo upload: bucket provisioning/policy check needed before production (`uploadProfilePhoto`).
   - Member invite + forgot password: swap Supabase default emails for branded Resend sends (invite details; reset link via `admin.generateLink`).
