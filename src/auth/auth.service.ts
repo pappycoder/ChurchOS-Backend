@@ -326,41 +326,63 @@ export class AuthService {
    * Changes password for an authenticated user.
    *
    * Flow:
-   * 1. Verify current password by calling signInWithPassword
-   * 2. Update to new password
-   * 3. Audit-log the event
+   * 1. Resolve the account email from Supabase Auth (source of truth — the
+   *    JWT claim can be stale after email changes)
+   * 2. Verify current password via signInWithPassword
+   * 3. Set the new password via the admin API (no session dependency)
+   * 4. Revoke existing sessions so other devices re-authenticate
+   * 5. Audit-log the event
    *
    * @param userId - Supabase Auth user ID
-   * @param email - User email (for re-authentication)
    * @param currentPassword - Current password for verification
    * @param newPassword - New password to set
    * @throws UnauthorizedException if current password is incorrect
    */
-  async changePassword(
-    userId: string,
-    email: string,
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<void> {
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    // Resolve the authoritative account email
+    const { data: userData, error: getUserError } =
+      await this.supabase.client.auth.admin.getUserById(userId);
+
+    if (getUserError || !userData?.user?.email) {
+      this.logger.error(
+        `Change password failed for ${userId}: unable to resolve account email${
+          getUserError ? ` (${getUserError.message})` : ''
+        }`,
+      );
+      throw new InternalServerErrorException('Unable to verify your account');
+    }
+
     // Verify current password
     const { error: signInError } = await this.supabase.client.auth.signInWithPassword({
-      email,
+      email: userData.user.email,
       password: currentPassword,
     });
 
     if (signInError) {
-      this.logger.warn(`Change password failed for ${userId}: current password incorrect`);
+      this.logger.warn(
+        `Change password verification failed for ${userId}: ${signInError.message}`,
+      );
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    // Update to new password
-    const { error: updateError } = await this.supabase.client.auth.updateUser({
+    // Update to new password via the admin API
+    const { error: updateError } = await this.supabase.client.auth.admin.updateUserById(userId, {
       password: newPassword,
     });
 
     if (updateError) {
       this.logger.error(`Change password update failed for ${userId}: ${updateError.message}`);
       throw new InternalServerErrorException('Failed to update password');
+    }
+
+    // Revoke existing sessions so other devices must re-authenticate.
+    // Access tokens stay valid until expiry, so the current device keeps
+    // working until its next refresh.
+    const { error: signOutError } = await this.supabase.client.auth.admin.signOut(userId);
+    if (signOutError) {
+      this.logger.warn(
+        `Failed to revoke sessions after password change for ${userId}: ${signOutError.message}`,
+      );
     }
 
     // Audit-log

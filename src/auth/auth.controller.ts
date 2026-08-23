@@ -174,12 +174,7 @@ export class AuthController {
     @CurrentUser() user: SupabaseUser,
     @Body() dto: ChangePasswordDto,
   ): Promise<{ success: boolean }> {
-    await this.authService.changePassword(
-      user.id,
-      user.email || '',
-      dto.currentPassword,
-      dto.newPassword,
-    );
+    await this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
     return { success: true };
   }
 

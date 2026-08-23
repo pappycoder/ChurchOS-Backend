@@ -26,6 +26,8 @@ describe('AuthService', () => {
   let signUpMock: jest.Mock;
   let signInMock: jest.Mock;
   let updateUserMock: jest.Mock;
+  let getUserByIdMock: jest.Mock;
+  let adminUpdateUserByIdMock: jest.Mock;
   let refreshSessionMock: jest.Mock;
   let resetPasswordForEmailMock: jest.Mock;
   let signOutMock: jest.Mock;
@@ -83,6 +85,8 @@ describe('AuthService', () => {
     refreshSessionMock = jest.fn();
     resetPasswordForEmailMock = jest.fn();
     signOutMock = jest.fn().mockResolvedValue({ error: null });
+    getUserByIdMock = jest.fn();
+    adminUpdateUserByIdMock = jest.fn().mockResolvedValue({ error: null });
 
     service = new AuthService(
       prisma as unknown as PrismaService,
@@ -96,6 +100,8 @@ describe('AuthService', () => {
             resetPasswordForEmail: resetPasswordForEmailMock,
             admin: {
               signOut: signOutMock,
+              getUserById: getUserByIdMock,
+              updateUserById: adminUpdateUserByIdMock,
             },
           },
         },
@@ -377,20 +383,26 @@ describe('AuthService', () => {
 
   describe('changePassword', () => {
     it('should change password successfully', async () => {
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId, email: 'pastor@church.com' } },
+        error: null,
+      });
       signInMock.mockResolvedValue({ error: null });
-      updateUserMock.mockResolvedValue({ error: null });
+      adminUpdateUserByIdMock.mockResolvedValue({ error: null });
 
       await expect(
-        service.changePassword(mockUserId, 'pastor@church.com', 'OldPass123!', 'NewPass456!'),
+        service.changePassword(mockUserId, 'OldPass123!', 'NewPass456!'),
       ).resolves.toBeUndefined();
 
+      expect(getUserByIdMock).toHaveBeenCalledWith(mockUserId);
       expect(signInMock).toHaveBeenCalledWith({
         email: 'pastor@church.com',
         password: 'OldPass123!',
       });
-
-      expect(updateUserMock).toHaveBeenCalledWith({ password: 'NewPass456!' });
-
+      expect(adminUpdateUserByIdMock).toHaveBeenCalledWith(mockUserId, {
+        password: 'NewPass456!',
+      });
+      expect(signOutMock).toHaveBeenCalledWith(mockUserId);
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: mockUserId,
@@ -401,23 +413,44 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if current password is wrong', async () => {
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId, email: 'pastor@church.com' } },
+        error: null,
+      });
       signInMock.mockResolvedValue({
         error: { message: 'Invalid login credentials' },
       });
 
       await expect(
-        service.changePassword(mockUserId, 'pastor@church.com', 'WrongPass', 'NewPass456!'),
+        service.changePassword(mockUserId, 'WrongPass', 'NewPass456!'),
       ).rejects.toThrow(UnauthorizedException);
+      expect(adminUpdateUserByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException if the account email cannot be resolved', async () => {
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId, email: null } },
+        error: null,
+      });
+
+      await expect(
+        service.changePassword(mockUserId, 'OldPass123!', 'NewPass456!'),
+      ).rejects.toThrow('Unable to verify your account');
+      expect(signInMock).not.toHaveBeenCalled();
     });
 
     it('should throw InternalServerErrorException if password update fails', async () => {
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId, email: 'pastor@church.com' } },
+        error: null,
+      });
       signInMock.mockResolvedValue({ error: null });
-      updateUserMock.mockResolvedValue({
+      adminUpdateUserByIdMock.mockResolvedValue({
         error: { message: 'Update failed' },
       });
 
       await expect(
-        service.changePassword(mockUserId, 'pastor@church.com', 'OldPass123!', 'NewPass456!'),
+        service.changePassword(mockUserId, 'OldPass123!', 'NewPass456!'),
       ).rejects.toThrow('Failed to update password');
     });
   });

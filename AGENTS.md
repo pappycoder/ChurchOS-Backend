@@ -200,6 +200,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-23** — Change password fix (wrong "current password incorrect" errors).
+  - **Root cause**: `changePassword` verified the current password by signing in with the **email from the JWT claim** (`user.email || ''`) — stale after email changes (e.g. via the new self-service edit) or empty when absent, so correct passwords were rejected. It then set the new password via `auth.updateUser()`, which depended on the shared service-role client retaining an in-memory user session.
+  - **Rewrite** (`auth.service.ts`): resolves the authoritative account email via `admin.getUserById(userId)` (500 "Unable to verify your account" if none), verifies via `signInWithPassword`, sets the new password deterministically via `admin.updateUserById(userId, { password })`, and revokes existing sessions with `admin.signOut(userId)` (non-fatal on failure; access tokens stay valid until expiry so the current device isn't dropped mid-session). Real Supabase error messages are now logged server-side for diagnosability; the controller no longer passes the JWT email.
+  - **Tests**: suite green at 511 passing / 35 suites (+1): success path asserts admin-resolved email + admin password update + session revocation, wrong-password short-circuits before any update, unresolvable email → 500 without sign-in attempt, update failure → 500.
+
 - **2026-08-23** — Profile email completeness (self-service edit + data backfill).
   - **Root cause found**: `registerUser` never persisted email anywhere in Postgres — Church was created with only name/denomination and Profile with only names/phone, so legacy self-registered rows had `profiles.email = NULL` and every read endpoint omitted the field. Invites already persisted email (Aug-16 fix); admin edit already synced Supabase.
   - **Registration** (`auth.service.ts`): church create now writes `email: dto.email` (church contact email) and profile create writes `email: dto.email`.
