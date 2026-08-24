@@ -37,6 +37,8 @@ import {
   AttendanceTrendDto,
 } from './dto/attendance-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -57,6 +59,8 @@ export class AttendanceController {
   // ─── Service Endpoints ──────────────────────────────────
 
   @Post('services')
+  @RequirePermissions('attendance:create')
+  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a service', 'Creates a new church service schedule.')
   async createService(
@@ -69,6 +73,7 @@ export class AttendanceController {
   }
 
   @Get('services')
+  @RequirePermissions('attendance:read')
   @ApiPaginatedResponse(ServiceResponseDto)
   @ApiListEndpoint('List services', 'Retrieves a paginated list of church services.')
   async listServices(@Query() query: ListServicesDto, @Request() req: AuthenticatedRequest) {
@@ -86,6 +91,7 @@ export class AttendanceController {
   }
 
   @Get('services/:serviceId')
+  @RequirePermissions('attendance:read')
   @ApiGetEndpoint('Get service by ID', 'Retrieves a single service by its UUID.')
   async getServiceById(
     @Param('serviceId') serviceId: string,
@@ -96,6 +102,8 @@ export class AttendanceController {
   }
 
   @Patch('services/:serviceId')
+  @RequirePermissions('attendance:update')
+  @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Update a service', 'Updates a service with partial data.')
   async updateService(
     @Param('serviceId') serviceId: string,
@@ -110,6 +118,8 @@ export class AttendanceController {
   // ─── Attendance Endpoints ───────────────────────────────
 
   @Post('attendance')
+  @RequirePermissions('attendance:create')
+  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Record attendance', 'Records a single check-in for a service.')
   async recordAttendance(
@@ -122,6 +132,8 @@ export class AttendanceController {
   }
 
   @Post('attendance/bulk')
+  @RequirePermissions('attendance:create')
+  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Record bulk attendance',
@@ -141,6 +153,8 @@ export class AttendanceController {
   }
 
   @Post('attendance/visitor')
+  @RequirePermissions('attendance:create')
+  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Record visitor attendance',
@@ -156,6 +170,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/summary')
+  @RequirePermissions('attendance:read')
   @ApiOperation({
     summary: 'Get attendance summary',
     description: 'Returns total check-ins, member/visitor breakdown, and source breakdown.',
@@ -179,6 +194,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/trends')
+  @RequirePermissions('attendance:read')
   @ApiOperation({
     summary: 'Get attendance trends',
     description: 'Returns daily attendance counts for the last N days.',
@@ -200,6 +216,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/by-service/:serviceId')
+  @RequirePermissions('attendance:read')
   @ApiGetEndpoint(
     'Get attendance by service',
     'Retrieves all attendance records for a specific service.',

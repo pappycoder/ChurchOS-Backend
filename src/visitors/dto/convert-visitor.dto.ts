@@ -1,16 +1,26 @@
+/**
+ * @file convert-visitor.dto.ts
+ * @description DTO for converting a visitor into a member.
+ *
+ * @module visitors/dto/convert-visitor.dto
+ * @since 1.0.0
+ */
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ConvertVisitorDto {
   @ApiProperty({ description: 'First name for the new member' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  first_name!: string;
+  firstName!: string;
 
   @ApiProperty({ description: 'Last name for the new member' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  last_name!: string;
+  lastName!: string;
 
   @ApiPropertyOptional({ description: 'Email for the new member' })
   @IsOptional()
@@ -25,5 +35,5 @@ export class ConvertVisitorDto {
   @ApiPropertyOptional({ description: 'Branch ID for the new member' })
   @IsOptional()
   @IsString()
-  branch_id?: string;
+  branchId?: string;
 }

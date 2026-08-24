@@ -159,7 +159,12 @@ describe('BranchesService', () => {
       prisma.branch.findFirst.mockResolvedValue(null); // no other HQ exists
       prisma.branch.update.mockResolvedValue({ ...nonHQ, is_headquarters: true });
 
-      const result = await service.update('branch-1', { isHeadquarters: true }, 'church-1', 'user-1');
+      const result = await service.update(
+        'branch-1',
+        { isHeadquarters: true },
+        'church-1',
+        'user-1',
+      );
 
       expect(prisma.branch.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ is_headquarters: true }) }),

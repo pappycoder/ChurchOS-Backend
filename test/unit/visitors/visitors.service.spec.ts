@@ -19,6 +19,7 @@ describe('VisitorsService', () => {
     church_id: churchId,
     first_name: 'Amina',
     last_name: 'Okafor',
+    gender: 'female',
     phone: '+234 801 234 5678',
     whatsapp_number: null,
     email: 'amina@example.com',
@@ -27,6 +28,7 @@ describe('VisitorsService', () => {
     assigned_to_id: null,
     assigned_to: null,
     notes: null,
+    custom_fields: { how_heard: 'Friend' },
     converted_member_id: null,
     converted_at: null,
     created_at: new Date('2026-07-01'),
@@ -45,9 +47,9 @@ describe('VisitorsService', () => {
       visitor: {
         create: jest.fn().mockResolvedValue(mockVisitor),
         findMany: jest.fn().mockResolvedValue([mockVisitor]),
+        count: jest.fn().mockResolvedValue(1),
         findUnique: jest.fn().mockImplementation(({ where }) => {
           if (where.id === mockVisitor.id) return Promise.resolve(mockVisitor);
-          if (where.id === assigneeId) return Promise.resolve(mockProfile);
           return Promise.resolve(null);
         }),
         update: jest.fn().mockResolvedValue({ ...mockVisitor, follow_up_status: 'contacted' }),
@@ -95,15 +97,49 @@ describe('VisitorsService', () => {
   });
 
   describe('create', () => {
-    it('should create a visitor', async () => {
+    it('should create a visitor with defaults', async () => {
       const result = await service.create(
-        { first_name: 'Amina', last_name: 'Okafor', email: 'amina@example.com' },
+        { firstName: 'Amina', lastName: 'Okafor', email: 'amina@example.com' },
         churchId,
         userId,
       );
       expect(result.firstName).toBe('Amina');
       expect(result.followUpStatus).toBe('new');
+      expect(prismaMock.visitor.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            first_name: 'Amina',
+            follow_up_status: 'new',
+            custom_fields: {},
+          }),
+        }),
+      );
       expect(auditMock.log).toHaveBeenCalled();
+    });
+
+    it('should persist gender, first visit date, and custom fields', async () => {
+      await service.create(
+        {
+          firstName: 'Amina',
+          gender: 'female',
+          firstVisitDate: '2026-08-24T09:00:00.000Z',
+          followUpStatus: 'contacted',
+          customFields: { prayer_request: 'Job' },
+        },
+        churchId,
+        userId,
+      );
+      expect(prismaMock.visitor.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            gender: 'female',
+            follow_up_status: 'contacted',
+            custom_fields: { prayer_request: 'Job' },
+          }),
+        }),
+      );
+      const call = (prismaMock.visitor.create as jest.Mock).mock.calls[0][0];
+      expect(call.data.first_visit_date).toEqual(new Date('2026-08-24T09:00:00.000Z'));
     });
 
     it('should create visitor with assigned team member', async () => {
@@ -116,7 +152,7 @@ describe('VisitorsService', () => {
         }),
       );
       const result = await service.create(
-        { first_name: 'Amina', assigned_to_id: assigneeId },
+        { firstName: 'Amina', assignedToId: assigneeId },
         churchId,
         userId,
       );
@@ -126,7 +162,7 @@ describe('VisitorsService', () => {
     it('should reject invalid assignee', async () => {
       (prismaMock.profile.findUnique as jest.Mock).mockResolvedValue(null);
       await expect(
-        service.create({ first_name: 'Amina', assigned_to_id: 'invalid' }, churchId, userId),
+        service.create({ firstName: 'Amina', assignedToId: 'invalid' }, churchId, userId),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -140,7 +176,7 @@ describe('VisitorsService', () => {
         }),
       );
       const result = await service.create(
-        { first_name: 'Amina', assigned_to_id: 'member-abc' },
+        { firstName: 'Amina', assignedToId: 'member-abc' },
         churchId,
         userId,
       );
@@ -149,26 +185,47 @@ describe('VisitorsService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all visitors', async () => {
-      const result = await service.findAll(churchId);
-      expect(result).toHaveLength(1);
+    it('should return paginated visitors with meta totals', async () => {
+      const result = await service.findAll(churchId, { page: 2, limit: 10 });
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      expect(prismaMock.visitor.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 }),
+      );
     });
 
-    it('should filter by follow_up_status', async () => {
-      await service.findAll(churchId, { follow_up_status: 'new' });
-      expect(prismaMock.visitor.findMany).toHaveBeenCalled();
+    it('should filter by followUpStatus and assignedToId', async () => {
+      await service.findAll(churchId, { followUpStatus: 'new', assignedToId: assigneeId });
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.follow_up_status).toBe('new');
+      expect(arg.where.assigned_to_id).toBe(assigneeId);
     });
 
-    it('should filter by assigned_to_id', async () => {
-      await service.findAll(churchId, { assigned_to_id: assigneeId });
-      expect(prismaMock.visitor.findMany).toHaveBeenCalled();
+    it('should search across name, email, and phone', async () => {
+      await service.findAll(churchId, { search: 'Amina' });
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.OR).toHaveLength(4);
+    });
+
+    it('should map camelCase sortBy to snake_case columns', async () => {
+      await service.findAll(churchId, { sortBy: 'firstName', sortOrder: 'asc' });
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.orderBy).toEqual([{ first_name: 'asc' }]);
+    });
+
+    it('should default sort to newest first', async () => {
+      await service.findAll(churchId, {});
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.orderBy).toEqual([{ created_at: 'desc' }]);
     });
   });
 
   describe('findOne', () => {
-    it('should return a visitor by ID', async () => {
+    it('should return a visitor by ID including gender and customFields', async () => {
       const result = await service.findOne(mockVisitor.id, churchId);
       expect(result.id).toBe(mockVisitor.id);
+      expect(result.gender).toBe('female');
+      expect(result.customFields).toEqual({ how_heard: 'Friend' });
     });
 
     it('should throw NotFoundException for wrong church', async () => {
@@ -186,14 +243,25 @@ describe('VisitorsService', () => {
   });
 
   describe('update', () => {
-    it('should update visitor follow-up status', async () => {
+    it('should update visitor follow-up status and gender', async () => {
       const result = await service.update(
         mockVisitor.id,
-        { follow_up_status: 'contacted' },
+        { followUpStatus: 'contacted', gender: 'male' },
         churchId,
         userId,
       );
       expect(result.followUpStatus).toBe('contacted');
+      expect(prismaMock.visitor.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ follow_up_status: 'contacted', gender: 'male' }),
+        }),
+      );
+    });
+
+    it('should disconnect assignee when cleared', async () => {
+      await service.update(mockVisitor.id, { assignedToId: '' }, churchId, userId);
+      const arg = (prismaMock.visitor.update as jest.Mock).mock.calls[0][0];
+      expect(arg.data.assigned_to).toEqual({ disconnect: true });
     });
 
     it('should throw NotFoundException for missing visitor', async () => {
@@ -205,7 +273,7 @@ describe('VisitorsService', () => {
   });
 
   describe('convertToMember', () => {
-    it('should convert visitor to member', async () => {
+    it('should convert and carry gender + custom fields into the member', async () => {
       (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
         ...mockVisitor,
         follow_up_status: 'interested',
@@ -219,12 +287,20 @@ describe('VisitorsService', () => {
 
       const result = await service.convertToMember(
         mockVisitor.id,
-        { first_name: 'Amina', last_name: 'Okafor' },
+        { firstName: 'Amina', lastName: 'Okafor' },
         churchId,
         userId,
       );
       expect(result.memberId).toBe('cccccccc-cccc-cccc-cccc-cccccccccccc');
       expect(result.visitor.followUpStatus).toBe('converted');
+      expect(prismaMock.member.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            gender: 'female',
+            custom_fields: { how_heard: 'Friend' },
+          }),
+        }),
+      );
     });
 
     it('should reject if already converted', async () => {
@@ -236,7 +312,7 @@ describe('VisitorsService', () => {
       await expect(
         service.convertToMember(
           mockVisitor.id,
-          { first_name: 'Amina', last_name: 'Okafor' },
+          { firstName: 'Amina', lastName: 'Okafor' },
           churchId,
           userId,
         ),
@@ -248,7 +324,7 @@ describe('VisitorsService', () => {
       await expect(
         service.convertToMember(
           'nonexistent',
-          { first_name: 'Amina', last_name: 'Okafor' },
+          { firstName: 'Amina', lastName: 'Okafor' },
           churchId,
           userId,
         ),

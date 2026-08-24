@@ -7,8 +7,9 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { SERVICE_CATEGORIES } from './create-service.dto';
 
 /**
  * DTO for listing services with pagination, filters, and sorting.
@@ -33,6 +34,11 @@ export class ListServicesDto {
   @IsString()
   @IsOptional()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by category', enum: SERVICE_CATEGORIES })
+  @IsOptional()
+  @IsIn(SERVICE_CATEGORIES)
+  category?: string;
 
   @ApiPropertyOptional({ description: 'Filter by active status' })
   @IsBoolean()

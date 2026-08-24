@@ -13,6 +13,9 @@ export class VisitorResponseDto {
   @ApiPropertyOptional({ description: 'Last name' })
   lastName?: string;
 
+  @ApiPropertyOptional({ description: 'Gender (male or female)' })
+  gender?: string;
+
   @ApiPropertyOptional({ description: 'Phone number' })
   phone?: string;
 
@@ -39,6 +42,9 @@ export class VisitorResponseDto {
 
   @ApiPropertyOptional({ description: 'Notes' })
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Additional custom fields as JSON' })
+  customFields?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Converted member ID' })
   convertedMemberId?: string;

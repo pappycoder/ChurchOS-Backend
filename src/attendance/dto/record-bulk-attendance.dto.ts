@@ -7,17 +7,31 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+import { SERVICE_CATEGORIES } from './create-service.dto';
 
 /**
  * Individual attendance record within a bulk request.
  */
 export class BulkAttendanceRecordDto {
   @ApiPropertyOptional({ description: 'Member ID' })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   memberId?: string;
+
+  @ApiPropertyOptional({ description: 'Visitor ID (links the check-in to a visitor record)' })
+  @IsUUID()
+  @IsOptional()
+  visitorId?: string;
 
   @ApiPropertyOptional({ description: 'Visitor name' })
   @IsString()
@@ -40,6 +54,15 @@ export class RecordBulkAttendanceDto {
   @Type(() => BulkAttendanceRecordDto)
   @IsNotEmpty()
   records!: BulkAttendanceRecordDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Default check-in category for records without their own (falls back to the service category)',
+    enum: SERVICE_CATEGORIES,
+  })
+  @IsOptional()
+  @IsIn(SERVICE_CATEGORIES)
+  category?: string;
 
   @ApiPropertyOptional({
     description: 'Check-in source',

@@ -24,6 +24,12 @@ export class ServiceResponseDto {
   @ApiProperty({ description: 'Service name' })
   name!: string;
 
+  @ApiProperty({
+    description: 'Check-in category this service targets',
+    enum: ['adult', 'children'],
+  })
+  category!: string;
+
   @ApiPropertyOptional({ description: 'Day of week (0=Sunday, 6=Saturday)' })
   dayOfWeek?: number;
 

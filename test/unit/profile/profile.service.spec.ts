@@ -199,11 +199,17 @@ describe('ProfileService', () => {
 
     it('should include the resolved permission union on /me', async () => {
       model(prisma, 'profile').findUnique.mockResolvedValue(mockProfileWithRelations);
-      permissionsService.getUserPermissions.mockResolvedValue(['members:read', 'members:create', 'branches:read']);
+      permissionsService.getUserPermissions.mockResolvedValue([
+        'members:read',
+        'members:create',
+        'branches:read',
+      ]);
 
       const result = await service.getMyProfile(mockUserId);
 
-      expect(permissionsService.getUserPermissions).toHaveBeenCalledWith(mockChurchId, ['church_admin']);
+      expect(permissionsService.getUserPermissions).toHaveBeenCalledWith(mockChurchId, [
+        'church_admin',
+      ]);
       expect(result.permissions).toEqual(['members:read', 'members:create', 'branches:read']);
     });
 

@@ -24,8 +24,14 @@ export class AttendanceResponseDto {
   @ApiPropertyOptional({ description: 'Member ID' })
   memberId?: string;
 
+  @ApiPropertyOptional({ description: 'Linked visitor record ID' })
+  visitorId?: string;
+
   @ApiPropertyOptional({ description: 'Visitor name' })
   visitorName?: string;
+
+  @ApiProperty({ description: 'Check-in category', enum: ['adult', 'children'] })
+  category!: string;
 
   @ApiProperty({ description: 'Check-in time' })
   checkInAt!: string;
@@ -58,6 +64,18 @@ export class AttendanceSummaryDto {
 
   @ApiProperty({ description: 'Check-ins by source (manual, qr, whatsapp)' })
   bySource!: Record<string, number>;
+
+  @ApiProperty({
+    description: 'Check-ins by category (adult, children)',
+    example: { adult: 120, children: 45 },
+  })
+  byCategory!: Record<string, number>;
+
+  @ApiProperty({
+    description: 'Check-ins by gender derived from linked member/visitor records',
+    example: { male: 80, female: 70, unknown: 15 },
+  })
+  byGender!: Record<string, number>;
 }
 
 /**

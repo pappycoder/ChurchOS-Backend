@@ -180,9 +180,7 @@ describe('ChurchService', () => {
     });
 
     it('should no-op when the email is already aligned everywhere', async () => {
-      prisma.church.findUnique
-        .mockResolvedValueOnce(mockChurch)
-        .mockResolvedValueOnce(mockChurch);
+      prisma.church.findUnique.mockResolvedValueOnce(mockChurch).mockResolvedValueOnce(mockChurch);
       prisma.profile.findFirst.mockResolvedValue(mockProfile);
 
       const result = await service.updateChurchEmail('church-1', 'user-1', {

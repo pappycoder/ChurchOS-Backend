@@ -1,0 +1,262 @@
+/**
+ * @file attendance.service.spec.ts
+ * @description Unit tests for AttendanceService category + visitor-link behavior.
+ *
+ * Covers service categories, visitor check-in linkage, and the
+ * category/gender summary breakdowns added with the visitors module.
+ *
+ * @module test/unit/attendance/attendance.service.spec
+ * @since 1.0.0
+ */
+
+import { AttendanceService } from '../../../src/attendance/attendance.service';
+import { PrismaService } from '../../../src/prisma/prisma.service';
+import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { NotFoundException } from '@nestjs/common';
+
+describe('AttendanceService — categories & visitors', () => {
+  let service: AttendanceService;
+  let prisma: Record<string, unknown> & { $transaction: jest.Mock };
+  let audit: { log: jest.Mock };
+
+  const churchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const userId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const serviceId = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
+  const memberId = 'dddddddd-dddd-dddd-dddd-dddddddddd01';
+  const visitorId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee01';
+
+  const adultServiceRow = {
+    id: serviceId,
+    church_id: churchId,
+    branch_id: null,
+    name: 'Sunday Service',
+    category: 'adult',
+    day_of_week: 0,
+    start_time: null,
+    end_time: null,
+    is_active: true,
+    created_at: new Date('2026-01-01'),
+    updated_at: new Date('2026-01-01'),
+  };
+
+  const childrenServiceRow = {
+    ...adultServiceRow,
+    id: serviceId,
+    category: 'children',
+    name: 'Children Church',
+  };
+
+  const attendanceRow = {
+    id: 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1',
+    church_id: churchId,
+    service_id: serviceId,
+    member_id: null,
+    visitor_id: null,
+    visitor_name: 'Walk-in Guest',
+    category: 'adult',
+    checkin_at: new Date('2026-08-24T09:15:00Z'),
+    source: 'manual',
+    created_at: new Date('2026-08-24T09:15:00Z'),
+    service: { name: 'Sunday Service' },
+    member: null,
+    visitor: null,
+  };
+
+  function createPrismaMock() {
+    const models: Record<string, Record<string, jest.Mock>> = {};
+    const $transactionMock = jest.fn();
+
+    const handler: ProxyHandler<Record<string, unknown>> = {
+      get(_target, prop: string) {
+        if (prop === '$transaction') return $transactionMock;
+        if (!models[prop]) {
+          models[prop] = {
+            findMany: jest.fn(),
+            findUnique: jest.fn(),
+            findFirst: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            count: jest.fn(),
+            groupBy: jest.fn(),
+          };
+        }
+        return models[prop];
+      },
+    };
+
+    return new Proxy(
+      { $transaction: $transactionMock } as Record<string, unknown>,
+      handler,
+    ) as Record<string, unknown> & { $transaction: jest.Mock };
+  }
+
+  function model(name: string): Record<string, jest.Mock> {
+    return prisma[name] as Record<string, jest.Mock>;
+  }
+
+  beforeEach(() => {
+    prisma = createPrismaMock();
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
+    service = new AttendanceService(
+      prisma as unknown as PrismaService,
+      audit as unknown as AuditLoggingService,
+    );
+  });
+
+  describe('createService', () => {
+    it('should default the category to adult', async () => {
+      model('service').create.mockResolvedValue(adultServiceRow);
+      await service.createService({ name: 'Sunday Service' }, churchId, userId);
+      expect(model('service').create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ category: 'adult' }) }),
+      );
+    });
+
+    it('should persist an explicit children category', async () => {
+      model('service').create.mockResolvedValue(childrenServiceRow);
+      await service.createService(
+        { name: 'Children Church', category: 'children' },
+        churchId,
+        userId,
+      );
+      expect(model('service').create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ category: 'children' }) }),
+      );
+    });
+  });
+
+  describe('recordAttendance', () => {
+    it('should default category from the service (children service)', async () => {
+      model('service').findUnique.mockResolvedValue(childrenServiceRow);
+      model('member').findUnique.mockResolvedValue({ id: memberId, church_id: churchId });
+      model('attendance').findUnique.mockResolvedValue(null);
+      model('attendance').create.mockResolvedValue({ ...attendanceRow, category: 'children' });
+
+      await service.recordAttendance({ serviceId, memberId }, churchId, userId);
+
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ category: 'children', member_id: memberId }),
+        }),
+      );
+    });
+
+    it('should let an explicit category override the service default', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('member').findUnique.mockResolvedValue({ id: memberId, church_id: churchId });
+      model('attendance').findUnique.mockResolvedValue(null);
+      model('attendance').create.mockResolvedValue(attendanceRow);
+
+      await service.recordAttendance(
+        { serviceId, memberId, category: 'children' },
+        churchId,
+        userId,
+      );
+
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ category: 'children' }),
+        }),
+      );
+    });
+
+    it('should validate a linked visitor belongs to the church and store its id/name', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('visitor').findUnique.mockResolvedValue({
+        id: visitorId,
+        church_id: churchId,
+        first_name: 'Ada',
+        last_name: 'Nwosu',
+      });
+      model('attendance').create.mockResolvedValue({
+        ...attendanceRow,
+        visitor_id: visitorId,
+        visitor_name: 'Ada Nwosu',
+      });
+
+      await service.recordAttendance({ serviceId, visitorId, category: 'adult' }, churchId, userId);
+
+      expect(model('visitor').findUnique).toHaveBeenCalled();
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            visitor_id: visitorId,
+            visitor_name: 'Ada Nwosu',
+          }),
+        }),
+      );
+    });
+
+    it('should reject a visitor from another church', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('visitor').findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.recordAttendance({ serviceId, visitorId }, churchId, userId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('recordVisitorAttendance', () => {
+    it('should persist visitorId, name, and service-defaulted category', async () => {
+      model('service').findUnique.mockResolvedValue(childrenServiceRow);
+      model('visitor').findFirst.mockResolvedValue({ id: visitorId });
+      model('attendance').create.mockResolvedValue({
+        ...attendanceRow,
+        category: 'children',
+        visitor_id: visitorId,
+        visitor_name: 'Ada Nwosu',
+        visitor: { first_name: 'Ada', last_name: 'Nwosu' },
+      });
+
+      const result = await service.recordVisitorAttendance(
+        { serviceId, visitorName: 'Ada Nwosu', visitorId },
+        churchId,
+        userId,
+      );
+
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            visitor_id: visitorId,
+            visitor_name: 'Ada Nwosu',
+            category: 'children',
+          }),
+        }),
+      );
+      expect(result.visitorName).toBe('Ada Nwosu');
+      expect(result.category).toBe('children');
+    });
+  });
+
+  describe('getAttendanceSummary', () => {
+    it('should return byCategory counts and derived byGender breakdown', async () => {
+      model('attendance')
+        .count.mockResolvedValueOnce(10) // total
+        .mockResolvedValueOnce(7) // members
+        .mockResolvedValueOnce(3); // visitors
+      model('attendance')
+        .groupBy.mockResolvedValueOnce([
+          { source: 'manual', _count: { id: 8 } },
+          { source: 'qr', _count: { id: 2 } },
+        ])
+        .mockResolvedValueOnce([
+          { category: 'adult', _count: { id: 7 } },
+          { category: 'children', _count: { id: 3 } },
+        ]);
+      model('attendance').findMany.mockResolvedValue([
+        { member: { gender: 'male' }, visitor: null },
+        { member: { gender: 'Female' }, visitor: null }, // case-insensitive
+        { member: null, visitor: { gender: 'male' } },
+        { member: null, visitor: null }, // legacy unlinked → unknown
+      ]);
+
+      const result = await service.getAttendanceSummary(churchId);
+
+      expect(result.byCategory).toEqual({ adult: 7, children: 3 });
+      expect(result.byGender).toEqual({ male: 2, female: 1, unknown: 1 });
+      expect(result.bySource).toEqual({ manual: 8, qr: 2 });
+    });
+  });
+});

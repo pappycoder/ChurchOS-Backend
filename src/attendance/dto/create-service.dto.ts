@@ -7,7 +7,20 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
+
+/** Check-in audience categories a service can target. */
+export const SERVICE_CATEGORIES = ['adult', 'children'] as const;
+export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number];
 
 /**
  * DTO for creating a new church service schedule.
@@ -25,6 +38,15 @@ export class CreateServiceDto {
   @IsString()
   @IsOptional()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Check-in category this service targets (defaults to adult)',
+    enum: SERVICE_CATEGORIES,
+    default: 'adult',
+  })
+  @IsOptional()
+  @IsIn(SERVICE_CATEGORIES)
+  category?: ServiceCategory;
 
   @ApiPropertyOptional({
     description: 'Day of week (0=Sunday, 6=Saturday)',

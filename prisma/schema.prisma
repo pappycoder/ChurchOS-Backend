@@ -307,6 +307,7 @@ model Service {
   church_id   String
   branch_id   String?
   name        String   // e.g., "Sunday Service", "Wednesday Bible Study"
+  category    String   @default("adult") // adult | children — default for its check-ins
   day_of_week Int?     // 0=Sunday, 6=Saturday
   start_time  DateTime?
   end_time    DateTime?
@@ -327,7 +328,9 @@ model Attendance {
   church_id   String
   service_id  String
   member_id   String?
+  visitor_id  String?
   visitor_name String?
+  category    String   @default("adult") // adult | children (defaults from service at creation)
   checkin_at  DateTime @default(now())
   source      String   @default("manual") // manual, whatsapp, qr
   created_at  DateTime @default(now())
@@ -335,9 +338,11 @@ model Attendance {
   church  Church  @relation(fields: [church_id], references: [id])
   service Service @relation(fields: [service_id], references: [id])
   member  Member? @relation(fields: [member_id], references: [id])
+  visitor Visitor? @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
 
   @@unique([service_id, member_id]) // One check-in per service per member
   @@index([church_id, service_id, checkin_at])
+  @@index([church_id, visitor_id])
   @@map("attendance")
 }
 
@@ -1028,6 +1033,7 @@ model Visitor {
   church_id         String
   first_name        String
   last_name         String?
+  gender            String?
   phone             String?
   whatsapp_number   String?
   email             String?
@@ -1035,6 +1041,7 @@ model Visitor {
   follow_up_status  String   @default("new") // new, contacted, follow_up_scheduled, interested, converted, dropped_off
   assigned_to_id    String?  // Profile ID of follow-up team member
   notes             String?
+  custom_fields     Json     @default("{}")
   converted_member_id String? // Member ID if converted
   converted_at      DateTime?
   created_at        DateTime @default(now())
@@ -1043,6 +1050,7 @@ model Visitor {
   church         Church   @relation(fields: [church_id], references: [id])
   assigned_to    Profile? @relation("AssignedTo", fields: [assigned_to_id], references: [id])
   converted_member Member? @relation(fields: [converted_member_id], references: [id])
+  attendance     Attendance[]
 
   @@index([church_id, follow_up_status])
   @@index([church_id, assigned_to_id])
