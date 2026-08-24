@@ -200,6 +200,8 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **FamiliesController permission hardening**: all 7 endpoints now carry `@RequirePermissions` alongside their existing role checks — reads (`GET /families`, `GET /families/:familyId`) → `families:read`, create → `families:create`, update/add-member/remove-member → `families:update`, delete family → `families:delete`. Enforced by the global `PermissionsGuard`; `RolesGuard` remains attached per-route for the legacy role ceiling (verified present on every write route). Suite green at 520 passing; build clean.
+
 - **MembersController route-order fix**: `@Get(':memberId')` was declared before `search` / `export/csv` / `export/xlsx`, so Express shadowed those literal paths (e.g. `GET /members/search` resolved with memberId="search"). The three handlers moved above the param route; new `test/unit/members/members.controller.spec.ts` guards declaration order via source scan (controller's transitive ESM deps can't load under Jest). 520 tests passing.
 
 - **GET /profiles/me now returns `permissions?: string[]`**: the flat `resource:action` union across all held roles, resolved via `PermissionsService.getUserPermissions` (Redis-cached). Soft-fails to an empty array with a warn log — server guards remain the enforcement layer. Wired through `mapToResponseDto` extras; +2 profile.service.spec tests (519 passing).

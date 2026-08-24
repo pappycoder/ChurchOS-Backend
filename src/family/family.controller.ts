@@ -3,9 +3,10 @@
  * @description HTTP endpoints for family management.
  *
  * Provides REST endpoints for family CRUD, member addition/removal,
- * and listing with pagination. All endpoints require JWT authentication.
- * Write operations (create, update, delete, add/remove member) are restricted
- * to church_admin, branch_pastor, and secretary roles.
+ * and listing with pagination. All endpoints require JWT authentication
+ * plus a resource:action permission (families:create/read/update/delete)
+ * enforced by the global PermissionsGuard. Write operations additionally
+ * require church_admin, branch_pastor, or secretary roles.
  *
  * @module family/family.controller
  * @since 1.0.0
@@ -29,6 +30,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
   CurrentUser,
@@ -65,6 +67,7 @@ export class FamilyController {
   @Post()
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a family', 'Creates a new family record.')
   async create(
@@ -84,6 +87,7 @@ export class FamilyController {
    * @returns Paginated list of families
    */
   @Get()
+  @RequirePermissions('families:read')
   @ApiPaginatedResponse(FamilyResponseDto)
   @ApiOperation({
     summary: 'List families',
@@ -111,6 +115,7 @@ export class FamilyController {
    * @returns Family response with member details
    */
   @Get(':familyId')
+  @RequirePermissions('families:read')
   @ApiGetEndpoint('Get family by ID')
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
   async findOne(
@@ -133,6 +138,7 @@ export class FamilyController {
   @Patch(':familyId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Update a family')
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
@@ -157,6 +163,7 @@ export class FamilyController {
   @Delete(':familyId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('families:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a family')
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
@@ -182,6 +189,7 @@ export class FamilyController {
   @Post(':familyId/members')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Add member to family' })
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
@@ -207,6 +215,7 @@ export class FamilyController {
   @Delete(':familyId/members/:memberId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove member from family' })
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
