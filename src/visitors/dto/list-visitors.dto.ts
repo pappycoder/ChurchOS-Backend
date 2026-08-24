@@ -22,11 +22,11 @@ export class ListVisitorsDto {
   @IsOptional()
   page?: number;
 
-  @ApiPropertyOptional({ description: 'Items per page', default: 20, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({ description: 'Items per page', default: 20, minimum: 1, maximum: 200 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(200)
   @IsOptional()
   limit?: number;
 
