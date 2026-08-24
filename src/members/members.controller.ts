@@ -102,78 +102,6 @@ export class MembersController {
   }
 
   /**
-   * Get a single member by ID.
-   */
-  @Get(':memberId')
-  @ApiGetEndpoint('Get member by ID', 'Retrieves a single member by their UUID.')
-  async findOne(
-    @Param('memberId') memberId: string,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<MemberResponseDto> {
-    const churchId = req.profile?.church_id || '';
-    return this.membersService.getMemberById(memberId, churchId, req.profile?.permissions || []);
-  }
-
-  /**
-   * Update a member's details (partial update).
-   */
-  @Patch(':memberId')
-  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
-  @ApiUpdateEndpoint(
-    'Update member details',
-    'Updates a member with partial data. Only provided fields are updated.',
-  )
-  async update(
-    @Param('memberId') memberId: string,
-    @Body() dto: UpdateMemberDto,
-    @CurrentUser() user: SupabaseUser,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<MemberResponseDto> {
-    const churchId = req.profile?.church_id || '';
-    return this.membersService.updateMember(memberId, dto, churchId, user.id);
-  }
-
-  /**
-   * Soft-delete a member (set status to inactive).
-   */
-  @Delete(':memberId')
-  @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:delete')
-  @ApiDeleteEndpoint(
-    'Delete a member',
-    'Soft-deletes a member by setting their status to inactive.',
-  )
-  async remove(
-    @Param('memberId') memberId: string,
-    @CurrentUser() user: SupabaseUser,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<{ success: boolean }> {
-    const churchId = req.profile?.church_id || '';
-    await this.membersService.softDeleteMember(memberId, churchId, user.id);
-    return { success: true };
-  }
-
-  /**
-   * Restore a soft-deleted member (set status back to active).
-   */
-  @Post(':memberId/restore')
-  @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:update')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Restore a member',
-    description: 'Restores a soft-deleted member by setting their status back to active.',
-  })
-  async restore(
-    @Param('memberId') memberId: string,
-    @CurrentUser() user: SupabaseUser,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<MemberResponseDto> {
-    const churchId = req.profile?.church_id || '';
-    return this.membersService.restoreMember(memberId, churchId, user.id);
-  }
-
-  /**
    * Search members by name, email, or phone.
    */
   @Get('search')
@@ -257,6 +185,78 @@ export class MembersController {
       req.profile?.permissions || [],
     );
     res.send(buffer);
+  }
+
+  /**
+   * Get a single member by ID.
+   */
+  @Get(':memberId')
+  @ApiGetEndpoint('Get member by ID', 'Retrieves a single member by their UUID.')
+  async findOne(
+    @Param('memberId') memberId: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.getMemberById(memberId, churchId, req.profile?.permissions || []);
+  }
+
+  /**
+   * Update a member's details (partial update).
+   */
+  @Patch(':memberId')
+  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
+  @ApiUpdateEndpoint(
+    'Update member details',
+    'Updates a member with partial data. Only provided fields are updated.',
+  )
+  async update(
+    @Param('memberId') memberId: string,
+    @Body() dto: UpdateMemberDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.updateMember(memberId, dto, churchId, user.id);
+  }
+
+  /**
+   * Soft-delete a member (set status to inactive).
+   */
+  @Delete(':memberId')
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:delete')
+  @ApiDeleteEndpoint(
+    'Delete a member',
+    'Soft-deletes a member by setting their status to inactive.',
+  )
+  async remove(
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    await this.membersService.softDeleteMember(memberId, churchId, user.id);
+    return { success: true };
+  }
+
+  /**
+   * Restore a soft-deleted member (set status back to active).
+   */
+  @Post(':memberId/restore')
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restore a member',
+    description: 'Restores a soft-deleted member by setting their status back to active.',
+  })
+  async restore(
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.restoreMember(memberId, churchId, user.id);
   }
 
   /**
