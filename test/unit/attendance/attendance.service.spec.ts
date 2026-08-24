@@ -12,7 +12,7 @@
 import { AttendanceService } from '../../../src/attendance/attendance.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('AttendanceService — categories & visitors', () => {
   let service: AttendanceService;
@@ -257,6 +257,122 @@ describe('AttendanceService — categories & visitors', () => {
       expect(result.byCategory).toEqual({ adult: 7, children: 3 });
       expect(result.byGender).toEqual({ male: 2, female: 1, unknown: 1 });
       expect(result.bySource).toEqual({ manual: 8, qr: 2 });
+    });
+  });
+
+  describe('deleteService', () => {
+    it('should delete a service with no attendance records and audit-log it', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('attendance').count.mockResolvedValue(0);
+      model('service').delete.mockResolvedValue(adultServiceRow);
+
+      const result = await service.deleteService(serviceId, churchId, userId);
+
+      expect(result).toEqual({ success: true });
+      expect(model('service').delete).toHaveBeenCalledWith({ where: { id: serviceId } });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'service', action: 'DELETE' }),
+      );
+    });
+
+    it('should block deletion while attendance records reference the service', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('attendance').count.mockResolvedValue(12);
+
+      await expect(service.deleteService(serviceId, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(model('service').delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFound for a foreign-church service', async () => {
+      model('service').findUnique.mockResolvedValue(null);
+
+      await expect(service.deleteService(serviceId, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('deleteAttendance', () => {
+    it('should delete a record scoped to the church and audit-log it', async () => {
+      model('attendance').findUnique.mockResolvedValue(attendanceRow);
+      model('attendance').delete.mockResolvedValue(attendanceRow);
+
+      const result = await service.deleteAttendance(attendanceRow.id, churchId, userId);
+
+      expect(result).toEqual({ success: true });
+      expect(model('attendance').delete).toHaveBeenCalledWith({
+        where: { id: attendanceRow.id },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'attendance', action: 'DELETE' }),
+      );
+    });
+
+    it('should throw NotFound when the record is missing or belongs to another church', async () => {
+      model('attendance').findUnique.mockResolvedValue(null);
+
+      await expect(service.deleteAttendance(attendanceRow.id, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(model('attendance').delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listAttendance', () => {
+    it('should paginate, include display relations, and map the response', async () => {
+      model('attendance').findMany.mockResolvedValue([
+        {
+          ...attendanceRow,
+          member: { first_name: 'Chioma', last_name: 'Eze' },
+          visitor: { first_name: 'Ada', last_name: 'Nwosu' },
+        },
+      ]);
+      model('attendance').count.mockResolvedValue(1);
+
+      const result = await service.listAttendance(churchId, { page: 2, limit: 20 });
+
+      expect(model('attendance').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { church_id: churchId },
+          orderBy: { checkin_at: 'desc' },
+          skip: 20,
+          take: 20,
+        }),
+      );
+      expect(result.total).toBe(1);
+      expect(result.data[0].memberName).toBe('Chioma Eze');
+      expect(result.data[0].serviceName).toBe('Sunday Service');
+    });
+
+    it('should apply service/category/date-range filters to the where clause', async () => {
+      model('attendance').findMany.mockResolvedValue([]);
+      model('attendance').count.mockResolvedValue(0);
+
+      await service.listAttendance(churchId, {
+        serviceId,
+        category: 'children',
+        startDate: '2026-08-01',
+        endDate: '2026-08-24',
+        sortBy: 'createdAt',
+        sortOrder: 'asc',
+      });
+
+      expect(model('attendance').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            church_id: churchId,
+            service_id: serviceId,
+            category: 'children',
+            checkin_at: {
+              gte: new Date('2026-08-01'),
+              lte: new Date('2026-08-24'),
+            },
+          },
+          orderBy: { created_at: 'asc' },
+        }),
+      );
     });
   });
 });

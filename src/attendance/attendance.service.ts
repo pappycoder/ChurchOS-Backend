@@ -22,6 +22,7 @@ import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
+import { ListAttendanceDto } from './dto/list-attendance.dto';
 import { RecordAttendanceDto } from './dto/record-attendance.dto';
 import { RecordBulkAttendanceDto } from './dto/record-bulk-attendance.dto';
 import { ServiceResponseDto } from './dto/service-response.dto';
@@ -181,6 +182,39 @@ export class AttendanceService {
     this.logger.log(`Service updated: ${id}`);
 
     return this.mapToServiceResponse(service);
+  }
+
+  async deleteService(id: string, churchId: string, userId: string): Promise<{ success: boolean }> {
+    const existing = await this.prisma.service.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Service not found');
+    }
+
+    const attendanceCount = await this.prisma.attendance.count({
+      where: { service_id: id },
+    });
+
+    if (attendanceCount > 0) {
+      throw new ConflictException(
+        `Cannot delete this service: ${attendanceCount} attendance record(s) reference it. Delete those records first.`,
+      );
+    }
+
+    await this.prisma.service.delete({ where: { id } });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'service',
+      action: 'DELETE',
+      entityId: id,
+      oldValues: { name: existing.name, isActive: existing.is_active },
+    });
+
+    this.logger.log(`Service deleted: ${existing.name} (${id})`);
+
+    return { success: true };
   }
 
   // ─── Attendance Recording ───────────────────────────────
@@ -463,7 +497,86 @@ export class AttendanceService {
     return this.mapToAttendanceResponse(attendance);
   }
 
+  async deleteAttendance(
+    attendanceId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const existing = await this.prisma.attendance.findUnique({
+      where: { id: attendanceId },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Attendance record not found');
+    }
+
+    await this.prisma.attendance.delete({ where: { id: attendanceId } });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'attendance',
+      action: 'DELETE',
+      entityId: attendanceId,
+      oldValues: {
+        serviceId: existing.service_id,
+        memberId: existing.member_id,
+        visitorName: existing.visitor_name,
+      },
+    });
+
+    this.logger.log(`Attendance deleted: ${attendanceId}`);
+
+    return { success: true };
+  }
+
   // ─── Queries & Analytics ────────────────────────────────
+
+  async listAttendance(
+    churchId: string,
+    query: ListAttendanceDto,
+  ): Promise<{ data: AttendanceResponseDto[]; total: number }> {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AttendanceWhereInput = { church_id: churchId };
+
+    if (query.serviceId) where.service_id = query.serviceId;
+    if (query.memberId) where.member_id = query.memberId;
+    if (query.visitorId) where.visitor_id = query.visitorId;
+    if (query.category) where.category = query.category;
+    if (query.source) where.source = query.source;
+
+    if (query.startDate || query.endDate) {
+      where.checkin_at = {};
+      if (query.startDate) where.checkin_at.gte = new Date(query.startDate);
+      if (query.endDate) where.checkin_at.lte = new Date(query.endDate);
+    }
+
+    const sortField = query.sortBy === 'createdAt' ? 'created_at' : 'checkin_at';
+    const order = (query.sortOrder || 'desc') as Prisma.SortOrder;
+
+    const [records, total] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where,
+        orderBy: { [sortField]: order },
+        skip,
+        take: limit,
+        include: {
+          service: { select: { name: true } },
+          member: { select: { first_name: true, last_name: true } },
+          visitor: { select: { first_name: true, last_name: true } },
+        },
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return {
+      data: records.map((r) => this.mapToAttendanceResponse(r)),
+      total,
+    };
+  }
 
   async getAttendanceByService(
     serviceId: string,

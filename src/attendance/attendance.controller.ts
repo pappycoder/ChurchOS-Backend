@@ -15,6 +15,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -28,6 +29,7 @@ import { AttendanceService } from './attendance.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
+import { ListAttendanceDto } from './dto/list-attendance.dto';
 import { RecordAttendanceDto, RecordVisitorAttendanceDto } from './dto/record-attendance.dto';
 import { RecordBulkAttendanceDto } from './dto/record-bulk-attendance.dto';
 import { ServiceResponseDto } from './dto/service-response.dto';
@@ -46,6 +48,7 @@ import {
   ApiListEndpoint,
   ApiGetEndpoint,
   ApiUpdateEndpoint,
+  ApiDeleteEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 
@@ -115,7 +118,46 @@ export class AttendanceController {
     return this.attendanceService.updateService(serviceId, dto, churchId, user.id);
   }
 
+  @Delete('services/:serviceId')
+  @RequirePermissions('attendance:delete')
+  @UseGuards(RolesGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiDeleteEndpoint(
+    'Delete a service',
+    'Deletes a service. Blocked while attendance records reference it.',
+  )
+  async deleteService(
+    @Param('serviceId') serviceId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.attendanceService.deleteService(serviceId, churchId, user.id);
+  }
+
   // ─── Attendance Endpoints ───────────────────────────────
+
+  @Get('attendance')
+  @RequirePermissions('attendance:read')
+  @ApiPaginatedResponse(AttendanceResponseDto)
+  @ApiOperation({
+    summary: 'List attendance records',
+    description:
+      'Paginated check-in records with service/member/visitor filters, date range, and sorting.',
+  })
+  async listAttendance(@Query() query: ListAttendanceDto, @Request() req: AuthenticatedRequest) {
+    const churchId = req.profile?.church_id || '';
+    const result = await this.attendanceService.listAttendance(churchId, query);
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: query.page || 1,
+        limit: query.limit || 20,
+        totalPages: Math.ceil(result.total / (query.limit || 20)),
+      },
+    };
+  }
 
   @Post('attendance')
   @RequirePermissions('attendance:create')
@@ -167,6 +209,23 @@ export class AttendanceController {
   ): Promise<AttendanceResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.attendanceService.recordVisitorAttendance(dto, churchId, user.id);
+  }
+
+  @Delete('attendance/:attendanceId')
+  @RequirePermissions('attendance:delete')
+  @UseGuards(RolesGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiDeleteEndpoint(
+    'Delete an attendance record',
+    'Removes a single check-in record (e.g. a mis-check-in).',
+  )
+  async deleteAttendance(
+    @Param('attendanceId') attendanceId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const churchId = req.profile?.church_id || '';
+    return this.attendanceService.deleteAttendance(attendanceId, churchId, user.id);
   }
 
   @Get('attendance/summary')
