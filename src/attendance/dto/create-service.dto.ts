@@ -58,7 +58,7 @@ export class CreateServiceDto {
   @Min(0)
   @Max(6)
   @IsOptional()
-  dayOfWeek?: number;
+  dayOfWeek?: number | null;
 
   @ApiPropertyOptional({
     description: 'Start time (ISO 8601)',

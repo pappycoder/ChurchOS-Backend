@@ -208,6 +208,11 @@ All notable changes to this project are documented below. Update this section wi
   - **Attendance recording accepts `visitorId`** on single/bulk/visitor endpoints (validated church-scoped; linked visitor's name auto-resolves into `visitorName`) and an optional `category` override; responses expose `visitorId`/`category`. **Summary gains `byCategory` counts and derived `byGender` breakdown** resolved through linked member/visitor records (legacy unlinked rows count as unknown). Services list/filter support `category`.
   - **Tests**: suite green at 532 / 38 suites — visitors spec rewritten for the new contract (+pagination/search/sort/convert-carries-fields coverage), new attendance spec covers category defaulting/override, visitor linkage validation, and summary breakdowns.
 
+- **Attendance follow-ups: ranged trends + clearable service fields**:
+  - `GET /attendance/trends` gains optional `startDate`/`endDate` ISO params — an explicit range overrides the rolling N-day window (frontend Reports now drives the trend chart from its date-range filter; dashboard keeps the 30-day default).
+  - `UpdateServiceDto.dayOfWeek` is now `number | null`: `@IsOptional()` lets explicit nulls through and `updateService` persists them, so a service's day can be cleared back to "any day" (times already cleared via falsy→null).
+  - **Tests**: suite green at 542 / 37 suites (+3): trends range-override + window-fallback, update clears `day_of_week`.
+
 - **Attendance module completed (records list + deletions) — groundwork endpoints shipped**:
   - **New `GET /attendance`**: paginated check-in records (`{data, meta}`, limit cap 200) with `serviceId`/`memberId`/`visitorId`/`category`/`source` filters, ISO date-range (`startDate`/`endDate` on `checkin_at`), and `checkinAt|createdAt` sorting; rows include service name, member name, and linked visitor name via relations.
   - **New `DELETE /services/:serviceId`**: church-scoped delete that refuses with `ConflictException` while attendance rows reference the service (message includes the count); audit-logged. **New `DELETE /attendance/:attendanceId`**: church-scoped single record removal for mis-check-ins; audit-logged.

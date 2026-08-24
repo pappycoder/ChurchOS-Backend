@@ -265,13 +265,33 @@ export class AttendanceController {
     description: 'Number of days (default 30)',
   })
   @ApiQuery({ name: 'branchId', required: false, type: String, description: 'Filter by branch ID' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Start date (ISO 8601) — overrides the rolling days window when provided',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'End date (ISO 8601) — overrides the rolling days window when provided',
+  })
   async getAttendanceTrends(
     @Query('days') days: number,
     @Query('branchId') branchId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<AttendanceTrendDto[]> {
     const churchId = req.profile?.church_id || '';
-    return this.attendanceService.getAttendanceTrends(churchId, days || 30, branchId);
+    return this.attendanceService.getAttendanceTrends(
+      churchId,
+      days || 30,
+      branchId,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('attendance/by-service/:serviceId')

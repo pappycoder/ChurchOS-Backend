@@ -260,6 +260,46 @@ describe('AttendanceService — categories & visitors', () => {
     });
   });
 
+  describe('updateService', () => {
+    it('should clear day_of_week when an explicit null is sent', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('service').update.mockResolvedValue({ ...adultServiceRow, day_of_week: null });
+
+      await service.updateService(serviceId, { dayOfWeek: null }, churchId, userId);
+
+      expect(model('service').update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ day_of_week: null }),
+        }),
+      );
+    });
+  });
+
+  describe('getAttendanceTrends', () => {
+    it('should use the explicit date range instead of the rolling days window', async () => {
+      model('attendance').findMany.mockResolvedValue([]);
+
+      await service.getAttendanceTrends(churchId, 30, undefined, '2026-08-01', '2026-08-24');
+
+      const call = model('attendance').findMany.mock.calls[0][0];
+      expect(call.where.church_id).toBe(churchId);
+      expect(call.where.checkin_at.gte).toEqual(new Date('2026-08-01'));
+      expect(call.where.checkin_at.lte).toEqual(new Date('2026-08-24'));
+    });
+
+    it('should fall back to the rolling days window without a range', async () => {
+      model('attendance').findMany.mockResolvedValue([]);
+
+      const before = Date.now();
+      await service.getAttendanceTrends(churchId, 30);
+
+      const call = model('attendance').findMany.mock.calls[0][0];
+      const gte = call.where.checkin_at.gte as Date;
+      expect(gte.getTime()).toBeGreaterThanOrEqual(before - 30 * 86_400_000);
+      expect(gte.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+  });
+
   describe('deleteService', () => {
     it('should delete a service with no attendance records and audit-log it', async () => {
       model('service').findUnique.mockResolvedValue(adultServiceRow);

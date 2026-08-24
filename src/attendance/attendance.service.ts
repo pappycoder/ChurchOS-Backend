@@ -680,13 +680,23 @@ export class AttendanceService {
     churchId: string,
     days = 30,
     branchId?: string,
+    startDate?: string,
+    endDate?: string,
   ): Promise<AttendanceTrendDto[]> {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    // Explicit range wins over the rolling N-day window.
+    const checkinAt: Prisma.DateTimeFilter = {};
+    if (startDate || endDate) {
+      if (startDate) checkinAt.gte = new Date(startDate);
+      if (endDate) checkinAt.lte = new Date(endDate);
+    } else {
+      const windowStart = new Date();
+      windowStart.setDate(windowStart.getDate() - days);
+      checkinAt.gte = windowStart;
+    }
 
     const where: Prisma.AttendanceWhereInput = {
       church_id: churchId,
-      checkin_at: { gte: startDate },
+      checkin_at: checkinAt,
     };
 
     if (branchId) {
