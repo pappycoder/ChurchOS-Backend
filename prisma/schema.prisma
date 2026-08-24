@@ -264,6 +264,7 @@ model Member {
   sermon_bookmarks    SermonBookmark[]
   cell_group_members  CellGroupMember[]
   cell_group_attendance CellGroupAttendance[]
+  recurring_giving    RecurringGiving[]
 
   @@index([church_id, branch_id, status])
   @@index([phone])
@@ -318,6 +319,7 @@ model Service {
   church     Church       @relation(fields: [church_id], references: [id])
   branch     Branch?      @relation(fields: [branch_id], references: [id])
   attendance Attendance[]
+  transactions Transaction[]
 
   @@index([church_id, branch_id])
   @@map("services")
@@ -372,6 +374,8 @@ model Transaction {
   branch_id         String?
   member_id         String?
   category_id       String?
+  service_id        String? // Optional linkage: gift recorded against a service
+  event_id          String? // Optional linkage: gift recorded against an event
   amount            Float
   currency          String          @default("NGN")
   type              TransactionType @default(digital)
@@ -386,12 +390,15 @@ model Transaction {
   created_at        DateTime        @default(now())
   updated_at        DateTime        @updatedAt
 
-  church  Church          @relation(fields: [church_id], references: [id])
-  branch  Branch?         @relation(fields: [branch_id], references: [id])
-  member  Member?         @relation(fields: [member_id], references: [id])
+  church   Church          @relation(fields: [church_id], references: [id])
+  branch   Branch?         @relation(fields: [branch_id], references: [id])
+  member   Member?         @relation(fields: [member_id], references: [id])
   category GivingCategory? @relation(fields: [category_id], references: [id])
+  service  Service?        @relation(fields: [service_id], references: [id], onDelete: SetNull)
+  event    Event?          @relation(fields: [event_id], references: [id], onDelete: SetNull)
 
   @@index([church_id, member_id, created_at])
+  @@index([church_id, service_id])
   @@index([payment_reference])
   @@map("transactions")
 }
@@ -413,6 +420,8 @@ model RecurringGiving {
   failed_attempt_count  Int             @default(0)
   created_at            DateTime        @default(now())
   updated_at            DateTime        @updatedAt
+
+  member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
 
   @@index([church_id, member_id])
   @@map("recurring_giving")
@@ -442,6 +451,7 @@ model Event {
   registrations     EventRegistration[]
   tickets           Ticket[]
   ticket_tiers      EventTicketTier[]
+  transactions      Transaction[]
 
   @@index([church_id, start_date])
   @@map("events")

@@ -46,6 +46,20 @@ export class RecordCashDto {
   @IsOptional()
   branchId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Service ID — tags the gift against a church service',
+  })
+  @IsUUID()
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Event ID — tags the gift against a church event',
+  })
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
+
   @ApiPropertyOptional({ description: 'Notes', example: 'Cash offering from Sunday service' })
   @IsString()
   @IsOptional()

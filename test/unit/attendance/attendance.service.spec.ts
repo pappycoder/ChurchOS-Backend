@@ -300,10 +300,29 @@ describe('AttendanceService — categories & visitors', () => {
     });
   });
 
+  describe('listServices', () => {
+    it('should include the all-time attendance count per service', async () => {
+      model('service').findMany.mockResolvedValue([
+        { ...adultServiceRow, _count: { attendance: 128 } },
+      ]);
+      model('service').count.mockResolvedValue(1);
+
+      const result = await service.listServices(churchId, {});
+
+      expect(model('service').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: { _count: { select: { attendance: true } } },
+        }),
+      );
+      expect(result.data[0].attendanceCount).toBe(128);
+    });
+  });
+
   describe('deleteService', () => {
-    it('should delete a service with no attendance records and audit-log it', async () => {
+    it('should delete a service with no attendance or giving references', async () => {
       model('service').findUnique.mockResolvedValue(adultServiceRow);
       model('attendance').count.mockResolvedValue(0);
+      model('transaction').count.mockResolvedValue(0);
       model('service').delete.mockResolvedValue(adultServiceRow);
 
       const result = await service.deleteService(serviceId, churchId, userId);
@@ -318,6 +337,18 @@ describe('AttendanceService — categories & visitors', () => {
     it('should block deletion while attendance records reference the service', async () => {
       model('service').findUnique.mockResolvedValue(adultServiceRow);
       model('attendance').count.mockResolvedValue(12);
+      model('transaction').count.mockResolvedValue(0);
+
+      await expect(service.deleteService(serviceId, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(model('service').delete).not.toHaveBeenCalled();
+    });
+
+    it('should block deletion while giving transactions reference the service', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('attendance').count.mockResolvedValue(0);
+      model('transaction').count.mockResolvedValue(4);
 
       await expect(service.deleteService(serviceId, churchId, userId)).rejects.toThrow(
         ConflictException,

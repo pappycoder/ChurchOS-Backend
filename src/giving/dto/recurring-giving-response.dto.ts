@@ -16,6 +16,9 @@ export class RecurringGivingResponseDto {
   @ApiProperty({ description: 'Member ID' })
   memberId!: string;
 
+  @ApiPropertyOptional({ description: 'Member full name', example: 'Chioma Eze' })
+  memberName?: string;
+
   @ApiProperty({ description: 'Category ID' })
   categoryId!: string;
 

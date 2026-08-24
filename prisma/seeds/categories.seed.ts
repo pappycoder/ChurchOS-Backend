@@ -43,6 +43,24 @@ const CATEGORIES = [
     display_order: 7,
     is_recurring: false,
   },
+  {
+    name: 'Gift',
+    description: 'General gift',
+    display_order: 8,
+    is_recurring: false,
+  },
+  {
+    name: 'Venison',
+    description: 'Venison giving',
+    display_order: 9,
+    is_recurring: false,
+  },
+  {
+    name: 'Overall Total',
+    description: 'Aggregate total collected for a service or event (recorded as one entry)',
+    display_order: 10,
+    is_recurring: false,
+  },
 ];
 
 export async function seedCategories(

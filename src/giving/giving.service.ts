@@ -606,6 +606,30 @@ export class GivingService {
       }
     }
 
+    // Verify the linked service belongs to this church if provided
+    if (dto.serviceId) {
+      const service = await this.prisma.service.findFirst({
+        where: { id: dto.serviceId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!service) {
+        throw new NotFoundException('Service not found in this church');
+      }
+    }
+
+    // Verify the linked event belongs to this church if provided
+    if (dto.eventId) {
+      const event = await this.prisma.event.findFirst({
+        where: { id: dto.eventId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!event) {
+        throw new NotFoundException('Event not found in this church');
+      }
+    }
+
     // Generate receipt number
     const receiptNumber = await this.generateReceiptNumber(category.name, churchId);
 
@@ -616,6 +640,8 @@ export class GivingService {
         branch_id: dto.branchId,
         member_id: dto.memberId,
         category_id: dto.categoryId,
+        service_id: dto.serviceId,
+        event_id: dto.eventId,
         amount: dto.amount,
         currency: dto.currency || 'NGN',
         type: dto.type,
@@ -624,7 +650,12 @@ export class GivingService {
         receipt_number: receiptNumber,
         notes: dto.notes,
       },
-      include: { category: true },
+      include: {
+        category: true,
+        member: { select: { first_name: true, last_name: true } },
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+      },
     });
 
     await this.audit.log({
@@ -677,6 +708,8 @@ export class GivingService {
 
     if (query.categoryId) where.category_id = query.categoryId;
     if (query.memberId) where.member_id = query.memberId;
+    if (query.serviceId) where.service_id = query.serviceId;
+    if (query.eventId) where.event_id = query.eventId;
     if (query.status) where.status = query.status as Prisma.EnumTransactionStatusFilter;
     if (query.type) where.type = query.type as Prisma.EnumTransactionTypeFilter;
     if (query.gateway)
@@ -701,7 +734,12 @@ export class GivingService {
         orderBy,
         skip,
         take: limit,
-        include: { category: true },
+        include: {
+          category: true,
+          member: { select: { first_name: true, last_name: true } },
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+        },
       }),
       this.prisma.transaction.count({ where }),
     ]);
@@ -721,7 +759,12 @@ export class GivingService {
   ): Promise<TransactionResponseDto> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
-      include: { category: true },
+      include: {
+        category: true,
+        member: { select: { first_name: true, last_name: true } },
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+      },
     });
 
     if (!transaction || transaction.church_id !== churchId) {
@@ -858,6 +901,9 @@ export class GivingService {
         orderBy: { created_at: 'desc' },
         skip,
         take: limit,
+        include: {
+          member: { select: { first_name: true, last_name: true } },
+        },
       }),
       this.prisma.recurringGiving.count({ where }),
     ]);
@@ -871,7 +917,13 @@ export class GivingService {
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
     return {
-      data: items.map((r) => this.mapRecurringGivingToDto(r, categoryMap.get(r.category_id) || '')),
+      data: items.map((r) =>
+        this.mapRecurringGivingToDto(
+          r,
+          categoryMap.get(r.category_id) || '',
+          r.member ? `${r.member.first_name} ${r.member.last_name}` : undefined,
+        ),
+      ),
       total,
     };
   }
@@ -1182,11 +1234,13 @@ export class GivingService {
       updated_at: Date;
     },
     categoryName: string,
+    memberName?: string,
   ): RecurringGivingResponseDto {
     return {
       id: recurring.id,
       churchId: recurring.church_id,
       memberId: recurring.member_id,
+      memberName,
       categoryId: recurring.category_id,
       categoryName,
       amount: recurring.amount,
@@ -1467,6 +1521,8 @@ export class GivingService {
     branch_id: string | null;
     member_id: string | null;
     category_id: string | null;
+    service_id?: string | null;
+    event_id?: string | null;
     amount: number;
     currency: string;
     type: string;
@@ -1480,12 +1536,22 @@ export class GivingService {
     created_at: Date;
     updated_at: Date;
     category: { name: string } | null;
+    member?: { first_name: string; last_name: string } | null;
+    service?: { name: string } | null;
+    event?: { title: string } | null;
   }): TransactionResponseDto {
     return {
       transactionId: transaction.id,
       churchId: transaction.church_id,
       branchId: transaction.branch_id || undefined,
       memberId: transaction.member_id || undefined,
+      memberName: transaction.member
+        ? `${transaction.member.first_name} ${transaction.member.last_name}`
+        : undefined,
+      serviceId: transaction.service_id || undefined,
+      serviceName: transaction.service?.name || undefined,
+      eventId: transaction.event_id || undefined,
+      eventName: transaction.event?.title || undefined,
       categoryId: transaction.category_id ?? '',
       categoryName: transaction.category?.name ?? '',
       amount: transaction.amount,

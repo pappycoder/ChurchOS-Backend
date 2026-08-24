@@ -200,6 +200,15 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **2026-08-24** — Giving linkage (services/events) + service detail + seed additions:
+  - **Migration `20260824150000_transaction_service_event_linkage`**: `transactions.service_id`/`event_id` (TEXT NULL, FKs → services/events ON DELETE SET NULL, `[church_id, service_id]` index). **Migration `20260824150010_recurring_giving_member_fk`**: formalizes the missing `recurring_giving.member_id` FK (CASCADE — NDPR member purge now removes schedules).
+  - **RecordCashDto/listTransactions/TransactionResponseDto**: optional `serviceId`/`eventId` accepted on cash recording (church-scoped validation), filterable on list, and responses now carry `memberName`, `serviceName`, `eventName` via new includes.
+  - **Category creation gate widened** from church_admin-only to `church_admin/treasurer/secretary` (permission stays `giving:create`) so recorders can add inline categories.
+  - **Services**: list/detail responses gain all-time `attendanceCount` (`_count.attendance`); `deleteService` now also refuses while giving transactions reference the service.
+  - **Recurring list** includes `memberName`.
+  - **Seed fixes/additions**: categories gain `Gift`, `Venison`, and `Overall Total`; repaired a pre-existing permissions-seed breakage — Role upserts used `{ name }` as the unique key but per-church custom roles made `(church_id, name)` the compound unique that cannot express NULL in Prisma's where input; replaced with findFirst/update-or-create on `church_id: null`.
+  - **Tests**: suite green at 548 / 37 suites (+6).
+
 - **Visitors module modernized + attendance groundwork** (frontend Visitors pages in next commit):
   - **Schema/migration `20260824090000_visitor_gender_attendance_category`**: `visitors.gender TEXT` + `visitors.custom_fields JSONB DEFAULT '{}'`; `services.category TEXT NOT NULL DEFAULT 'adult'` (CHECK adult|children — a service's check-ins default to its category); `attendance.category TEXT NOT NULL DEFAULT 'adult'` (explicit override wins, else service category); `attendance.visitor_id TEXT` FK → visitors (ON DELETE SET NULL) + index — IDs across the schema are Prisma `String`/Postgres TEXT, so the FK column must be TEXT too (initial draft used UUID and failed 42804 against `visitors.id`; corrected before first apply) — check-ins can now link to real visitor records instead of free text only.
   - **Visitor DTOs normalized to camelCase** (`firstName`, `lastName`, `whatsappNumber`, `assignedToId`, `branchId`) matching members/families convention; gained `gender`, `customFields`, optional `firstVisitDate`, optional initial `followUpStatus`; new `ListVisitorsDto` (page/limit cap raised to `@Max(200)` so the web list-stats and follow-up board fetches pass validation). **GET /visitors rewritten paginated** (`{data, meta}`) with server search (first/last name, email, phone), status/assignee filters, and camelCase sortBy mapping.

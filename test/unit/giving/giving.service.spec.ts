@@ -627,6 +627,53 @@ describe('GivingService', () => {
         ),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('should persist service/event linkage when provided', async () => {
+      const serviceId = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1';
+      const eventId = 'e2e2e2e2-e2e2-e2e2-e2e2-e2e2e2e2e2e2';
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('service').findFirst.mockResolvedValue({ id: serviceId });
+      model('event').findFirst.mockResolvedValue({ id: eventId });
+      model('transaction').count.mockResolvedValue(0);
+      model('transaction').create.mockResolvedValue(mockTransaction);
+
+      await service.recordCashGiving(
+        {
+          categoryId: mockCategoryId,
+          amount: 5000,
+          type: 'cash',
+          serviceId,
+          eventId,
+        },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(model('transaction').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ service_id: serviceId, event_id: eventId }),
+        }),
+      );
+    });
+
+    it('should reject a linked service from another church', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('service').findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.recordCashGiving(
+          {
+            categoryId: mockCategoryId,
+            amount: 5000,
+            type: 'cash',
+            serviceId: 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1',
+          },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
   });
 
   // ─── TRANSACTION QUERIES ─────────────────────────────────────────
@@ -640,6 +687,38 @@ describe('GivingService', () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
+    });
+
+    it('should map member/service/event display names from includes', async () => {
+      model('transaction').findMany.mockResolvedValue([
+        {
+          ...mockTransaction,
+          member: { first_name: 'Chioma', last_name: 'Eze' },
+          service: { name: 'Sunday First Service' },
+          event: null,
+        },
+      ]);
+      model('transaction').count.mockResolvedValue(1);
+
+      const result = await service.listTransactions(mockChurchId, {});
+
+      expect(result.data[0].memberName).toBe('Chioma Eze');
+      expect(result.data[0].serviceName).toBe('Sunday First Service');
+      expect(result.data[0].eventName).toBeUndefined();
+    });
+
+    it('should filter by linked service', async () => {
+      model('transaction').findMany.mockResolvedValue([]);
+      model('transaction').count.mockResolvedValue(0);
+      const serviceId = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1';
+
+      await service.listTransactions(mockChurchId, { serviceId });
+
+      expect(model('transaction').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, service_id: serviceId }),
+        }),
+      );
     });
 
     it('should apply category filter', async () => {

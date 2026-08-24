@@ -77,7 +77,10 @@ export class AttendanceService {
   }
 
   async getServiceById(id: string, churchId: string): Promise<ServiceResponseDto> {
-    const service = await this.prisma.service.findUnique({ where: { id } });
+    const service = await this.prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { attendance: true } } },
+    });
 
     if (!service || service.church_id !== churchId) {
       throw new NotFoundException('Service not found');
@@ -126,6 +129,7 @@ export class AttendanceService {
         orderBy,
         skip,
         take: limit,
+        include: { _count: { select: { attendance: true } } },
       }),
       this.prisma.service.count({ where }),
     ]);
@@ -195,9 +199,13 @@ export class AttendanceService {
       where: { service_id: id },
     });
 
-    if (attendanceCount > 0) {
+    const transactionCount = await this.prisma.transaction.count({
+      where: { service_id: id },
+    });
+
+    if (attendanceCount > 0 || transactionCount > 0) {
       throw new ConflictException(
-        `Cannot delete this service: ${attendanceCount} attendance record(s) reference it. Delete those records first.`,
+        `Cannot delete this service: ${attendanceCount} attendance record(s) and ${transactionCount} giving transaction(s) reference it. Remove those records first.`,
       );
     }
 
@@ -748,6 +756,7 @@ export class AttendanceService {
     is_active: boolean;
     created_at: Date;
     updated_at: Date;
+    _count?: { attendance: number } | null;
   }): ServiceResponseDto {
     return {
       serviceId: service.id,
@@ -759,6 +768,7 @@ export class AttendanceService {
       startTime: service.start_time?.toISOString() || undefined,
       endTime: service.end_time?.toISOString() || undefined,
       isActive: service.is_active,
+      attendanceCount: service._count?.attendance ?? 0,
       createdAt: service.created_at.toISOString(),
       updatedAt: service.updated_at.toISOString(),
     };

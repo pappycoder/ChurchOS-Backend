@@ -19,6 +19,21 @@ export class TransactionResponseDto {
   @ApiPropertyOptional({ description: 'Member ID' })
   memberId?: string;
 
+  @ApiPropertyOptional({ description: 'Member full name', example: 'Chioma Eze' })
+  memberName?: string;
+
+  @ApiPropertyOptional({ description: 'Linked service ID' })
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Linked service name', example: 'Sunday First Service' })
+  serviceName?: string;
+
+  @ApiPropertyOptional({ description: 'Linked event ID' })
+  eventId?: string;
+
+  @ApiPropertyOptional({ description: 'Linked event title', example: 'Harvest 2026' })
+  eventName?: string;
+
   @ApiProperty({ description: 'Category ID' })
   categoryId!: string;
 

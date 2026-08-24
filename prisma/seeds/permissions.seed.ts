@@ -388,11 +388,19 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   console.log('  📦 Creating roles...');
   const createdRoles: { id: string; name: string }[] = [];
   for (const role of DEFAULT_ROLES) {
-    const created = await prisma.role.upsert({
-      where: { name: role.name },
-      update: { description: role.description },
-      create: { name: role.name, description: role.description },
+    // Roles are unique per (church_id, name); templates have church_id = null.
+    // The compound-unique filter cannot express NULL in this Prisma version,
+    // so look up explicitly instead of upsert.
+    const existing = await prisma.role.findFirst({
+      where: { name: role.name, church_id: null },
+      select: { id: true, name: true },
     });
+    const created = existing
+      ? await prisma.role.update({
+          where: { id: existing.id },
+          data: { description: role.description },
+        })
+      : await prisma.role.create({ data: { name: role.name, description: role.description } });
     createdRoles.push(created);
     console.log(`    ✅ Role: ${created.name}`);
   }

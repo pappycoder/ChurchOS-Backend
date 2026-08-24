@@ -77,7 +77,7 @@ export class GivingController {
    */
   @Post('categories')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
+  @RequireRoles('church_admin', 'treasurer', 'secretary')
   @RequirePermissions('giving:create')
   @ApiCreateEndpoint('Create a giving category', 'Creates a new giving category for the church.')
   async createCategory(

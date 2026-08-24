@@ -34,6 +34,16 @@ export class ListTransactionsDto {
   @IsOptional()
   memberId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by linked service ID' })
+  @IsUUID()
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by linked event ID' })
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
+
   @ApiPropertyOptional({
     description: 'Filter by status',
     enum: ['pending', 'success', 'failed', 'reversed'],
