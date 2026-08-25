@@ -200,6 +200,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Giving endpoints aligned with the web contracts (fixes 400s on every categories/transactions fetch)**:
+  - **`GET /giving/categories` is now paginated**: `ListCategoriesDto` gains optional `page` + `limit` (`@Max(100)`); previously only `isActive` was whitelisted, so the global pipe's `forbidNonWhitelisted` rejected any `limit`/`page` query with 400. `listCategories` returns `{ data, total }` (skip/take when a page size is supplied; bare calls still return every category so legacy/mobile consumers keep their all-rows behavior) and the controller now emits the standard `{ data, meta: { total, page, limit, totalPages } }` envelope that Swagger's `@ApiPaginatedResponse` always claimed.
+  - **`GET /giving/transactions` limit cap raised `@Max(100)` → `@Max(200)`**, matching visitors/attendance — the web dashboard/reports/service-detail fetch-all walks pages at 200.
+  - **Tests**: suite green at 550 / 37 suites (+2): unpaginated shape + skip/take absence, isActive filter retained, pagination math (page 2 × limit 10 → skip 10) with total passthrough.
+
 - **2026-08-24** — Giving linkage (services/events) + service detail + seed additions:
   - **Migration `20260824150000_transaction_service_event_linkage`**: `transactions.service_id`/`event_id` (TEXT NULL, FKs → services/events ON DELETE SET NULL, `[church_id, service_id]` index). **Migration `20260824150010_recurring_giving_member_fk`**: formalizes the missing `recurring_giving.member_id` FK (CASCADE — NDPR member purge now removes schedules).
   - **RecordCashDto/listTransactions/TransactionResponseDto**: optional `serviceId`/`eventId` accepted on cash recording (church-scoped validation), filterable on list, and responses now carry `memberName`, `serviceName`, `eventName` via new includes.

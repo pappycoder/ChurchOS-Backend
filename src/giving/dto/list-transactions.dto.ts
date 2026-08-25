@@ -20,7 +20,7 @@ export class ListTransactionsDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(200)
   @IsOptional()
   limit?: number;
 

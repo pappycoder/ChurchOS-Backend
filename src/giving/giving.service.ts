@@ -144,20 +144,31 @@ export class GivingService {
   }
 
   /**
-   * Lists all giving categories for a church.
+   * Lists giving categories for a church, ordered by display order.
+   * Pagination engages only when a page size is requested; bare calls
+   * keep returning every category (legacy consumers rely on that).
    */
-  async listCategories(churchId: string, isActive?: boolean): Promise<CategoryResponseDto[]> {
+  async listCategories(
+    churchId: string,
+    isActive?: boolean,
+    page?: number,
+    limit?: number,
+  ): Promise<{ data: CategoryResponseDto[]; total: number }> {
     const where: Prisma.GivingCategoryWhereInput = { church_id: churchId };
     if (isActive !== undefined) {
       where.is_active = isActive;
     }
 
-    const categories = await this.prisma.givingCategory.findMany({
-      where,
-      orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
-    });
+    const [categories, total] = await Promise.all([
+      this.prisma.givingCategory.findMany({
+        where,
+        orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
+        ...(limit ? { skip: ((page || 1) - 1) * limit, take: limit } : {}),
+      }),
+      this.prisma.givingCategory.count({ where }),
+    ]);
 
-    return categories.map((c) => this.mapCategoryToDto(c));
+    return { data: categories.map((c) => this.mapCategoryToDto(c)), total };
   }
 
   /**

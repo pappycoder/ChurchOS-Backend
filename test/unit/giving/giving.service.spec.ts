@@ -170,17 +170,31 @@ describe('GivingService', () => {
   });
 
   describe('listCategories', () => {
-    it('should return all categories', async () => {
+    it('should return all categories with total when unpaginated', async () => {
       model('givingCategory').findMany.mockResolvedValue([mockCategory]);
+      model('givingCategory').count.mockResolvedValue(1);
 
       const result = await service.listCategories(mockChurchId);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('Tithe');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe('Tithe');
+      expect(result.total).toBe(1);
+    });
+
+    it('should not pass skip/take when no page size is requested', async () => {
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('givingCategory').count.mockResolvedValue(0);
+
+      await service.listCategories(mockChurchId);
+
+      const arg = model('givingCategory').findMany.mock.calls[0][0];
+      expect(arg.skip).toBeUndefined();
+      expect(arg.take).toBeUndefined();
     });
 
     it('should filter by isActive', async () => {
       model('givingCategory').findMany.mockResolvedValue([]);
+      model('givingCategory').count.mockResolvedValue(0);
 
       await service.listCategories(mockChurchId, true);
 
@@ -189,6 +203,22 @@ describe('GivingService', () => {
           where: expect.objectContaining({ is_active: true }),
         }),
       );
+    });
+
+    it('should paginate when a page size is provided', async () => {
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('givingCategory').count.mockResolvedValue(12);
+
+      const result = await service.listCategories(mockChurchId, undefined, 2, 10);
+
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
+          skip: 10,
+          take: 10,
+        }),
+      );
+      expect(result.total).toBe(12);
     });
   });
 

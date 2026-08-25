@@ -98,13 +98,25 @@ export class GivingController {
     summary: 'List giving categories',
     description: 'Retrieves all giving categories for the church, ordered by display order.',
   })
-  async listCategories(
-    @Query() query: ListCategoriesDto,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<{ data: CategoryResponseDto[] }> {
+  async listCategories(@Query() query: ListCategoriesDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const data = await this.givingService.listCategories(churchId, query.isActive);
-    return { data };
+    const result = await this.givingService.listCategories(
+      churchId,
+      query.isActive,
+      query.page,
+      query.limit,
+    );
+    // Without a limit all rows are returned; report that as a single page.
+    const effectiveLimit = query.limit || result.total || 1;
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: query.page || 1,
+        limit: effectiveLimit,
+        totalPages: Math.ceil(result.total / effectiveLimit),
+      },
+    };
   }
 
   /**
