@@ -786,7 +786,8 @@ export class SyncService {
   private mapAttendance(a: {
     id: string;
     church_id: string;
-    service_id: string;
+    service_id: string | null;
+    event_id: string | null;
     member_id: string | null;
     visitor_name: string | null;
     checkin_at: Date;
@@ -797,6 +798,7 @@ export class SyncService {
       id: a.id,
       churchId: a.church_id,
       serviceId: a.service_id,
+      eventId: a.event_id,
       memberId: a.member_id,
       visitorName: a.visitor_name,
       checkinAt: a.checkin_at.toISOString(),

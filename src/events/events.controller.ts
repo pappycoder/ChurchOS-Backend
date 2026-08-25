@@ -47,6 +47,8 @@ import { RegisterForEventDto } from './dto/register-for-event.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
 import { TicketValidationResponseDto } from './dto/ticket-validation-response.dto';
 import { CreateTicketTierDto } from './dto/create-ticket-tier.dto';
+import { BulkCheckInDto, WalkInCheckInDto } from './dto/check-in.dto';
+import { AttendanceResponseDto } from '../attendance/dto/attendance-response.dto';
 
 /**
  * Controller for event management, registration, and ticketing.
@@ -279,5 +281,61 @@ export class EventsController {
   ): Promise<TicketValidationResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.validateTicket(code, eventId, churchId);
+  }
+
+  // ─── EVENT CHECK-IN ────────────────────────────────────────────
+
+  @Post(':eventId/check-in')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Bulk check-in attendees',
+    description: 'Checks in multiple members for an event at once.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async bulkCheckIn(
+    @Param('eventId') eventId: string,
+    @Body() dto: BulkCheckInDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ checkedIn: number; skipped: number }> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.bulkCheckInAttendees(eventId, dto.memberIds, churchId, user.sub);
+  }
+
+  @Post(':eventId/check-in/walk-in')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Walk-in check-in',
+    description: 'Checks in a walk-in attendee, creating a member record if needed.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async walkInCheckIn(
+    @Param('eventId') eventId: string,
+    @Body() dto: WalkInCheckInDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AttendanceResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.walkInCheckIn(eventId, dto, churchId, user.sub);
+  }
+
+  @Get(':eventId/attendance')
+  @ApiOperation({
+    summary: 'List event attendance',
+    description: 'Returns all attendance records for an event.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async getEventAttendance(
+    @Param('eventId') eventId: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AttendanceResponseDto[]> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.getEventAttendance(eventId, churchId);
   }
 }

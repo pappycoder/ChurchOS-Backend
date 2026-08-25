@@ -15,12 +15,18 @@ const CHECKIN_SOURCES = ['manual', 'qr', 'whatsapp'] as const;
 /**
  * DTO for recording a single attendance check-in.
  * Either memberId or visitorName/visitorId must be provided.
+ * Exactly one of serviceId or eventId must be provided (enforced at service level).
  */
 export class RecordAttendanceDto {
-  @ApiProperty({ description: 'Service ID', example: '11111111-0000-0000-0000-000000000000' })
-  @IsString()
-  @IsNotEmpty()
-  serviceId!: string;
+  @ApiPropertyOptional({ description: 'Service ID (for service check-in)' })
+  @IsUUID()
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Event ID (for event check-in)' })
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 
   @ApiPropertyOptional({ description: 'Member ID (for member check-in)' })
   @IsUUID()
@@ -57,13 +63,18 @@ export class RecordAttendanceDto {
 
 /**
  * DTO for recording a walk-in visitor attendance check-in.
- * Requires serviceId and visitorName (or visitorId).
+ * Requires serviceId or eventId and visitorName (or visitorId).
  */
 export class RecordVisitorAttendanceDto {
-  @ApiProperty({ description: 'Service ID', example: '11111111-0000-0000-0000-000000000000' })
-  @IsString()
-  @IsNotEmpty()
-  serviceId!: string;
+  @ApiPropertyOptional({ description: 'Service ID (for service check-in)' })
+  @IsUUID()
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Event ID (for event check-in)' })
+  @IsUUID()
+  @IsOptional()
+  eventId?: string;
 
   @ApiProperty({ description: 'Visitor name', example: 'John Doe' })
   @IsString()

@@ -14,10 +14,25 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Validate,
   ValidateNested,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SERVICE_CATEGORIES } from './create-service.dto';
+
+@ValidatorConstraint({ name: 'BulkServiceOrEventRequired', async: false })
+class BulkServiceOrEventRequired implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments) {
+    const obj = args.object as Record<string, unknown>;
+    return !!(obj.serviceId || obj.eventId);
+  }
+  defaultMessage() {
+    return 'Either serviceId or eventId must be provided';
+  }
+}
 
 /**
  * Individual attendance record within a bulk request.
@@ -43,10 +58,15 @@ export class BulkAttendanceRecordDto {
  * DTO for recording multiple attendance check-ins for a single service.
  */
 export class RecordBulkAttendanceDto {
-  @ApiProperty({ description: 'Service ID', example: '11111111-0000-0000-0000-000000000000' })
+  @ApiPropertyOptional({ description: 'Service ID (for service check-in)' })
   @IsString()
-  @IsNotEmpty()
-  serviceId!: string;
+  @IsOptional()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Event ID (for event check-in)' })
+  @IsString()
+  @IsOptional()
+  eventId?: string;
 
   @ApiProperty({ description: 'Array of attendance records', type: [BulkAttendanceRecordDto] })
   @IsArray()
@@ -72,4 +92,7 @@ export class RecordBulkAttendanceDto {
   @IsString()
   @IsOptional()
   source?: string;
+
+  @Validate(BulkServiceOrEventRequired)
+  _serviceOrEvent!: unknown;
 }

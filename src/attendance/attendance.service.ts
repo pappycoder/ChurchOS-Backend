@@ -236,16 +236,30 @@ export class AttendanceService {
       throw new BadRequestException('Either memberId, visitorId, or visitorName must be provided');
     }
 
-    // Verify service exists and belongs to this church
-    const service = await this.prisma.service.findUnique({
-      where: { id: dto.serviceId },
-    });
-
-    if (!service || service.church_id !== churchId) {
-      throw new NotFoundException('Service not found');
+    if (!dto.serviceId && !dto.eventId) {
+      throw new BadRequestException('Either serviceId or eventId must be provided');
     }
 
-    // Verify member exists if memberId provided
+    let serviceCategory: string | null = null;
+
+    if (dto.eventId) {
+      const event = await this.prisma.event.findFirst({
+        where: { id: dto.eventId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!event) {
+        throw new NotFoundException('Event not found');
+      }
+    } else {
+      const service = await this.prisma.service.findUnique({
+        where: { id: dto.serviceId },
+      });
+      if (!service || service.church_id !== churchId) {
+        throw new NotFoundException('Service not found');
+      }
+      serviceCategory = service.category;
+    }
+
     if (dto.memberId) {
       const member = await this.prisma.member.findUnique({
         where: { id: dto.memberId },
@@ -256,7 +270,6 @@ export class AttendanceService {
       }
     }
 
-    // Verify the linked visitor record belongs to this church
     let linkedVisitorName: string | null = null;
     if (dto.visitorId) {
       const visitor = await this.prisma.visitor.findUnique({
@@ -271,29 +284,41 @@ export class AttendanceService {
       linkedVisitorName = [visitor.first_name, visitor.last_name].filter(Boolean).join(' ');
     }
 
-    // Check for duplicate check-in
     if (dto.memberId) {
-      const existing = await this.prisma.attendance.findUnique({
-        where: {
-          service_id_member_id: {
-            service_id: dto.serviceId,
-            member_id: dto.memberId,
+      if (dto.eventId) {
+        const existing = await this.prisma.attendance.findUnique({
+          where: {
+            event_id_member_id: {
+              event_id: dto.eventId,
+              member_id: dto.memberId,
+            },
           },
-        },
-      });
-
-      if (existing) {
-        throw new ConflictException('Member already checked in for this service');
+        });
+        if (existing) {
+          throw new ConflictException('Member already checked in for this event');
+        }
+      } else {
+        const existing = await this.prisma.attendance.findUnique({
+          where: {
+            service_id_member_id: {
+              service_id: dto.serviceId!,
+              member_id: dto.memberId,
+            },
+          },
+        });
+        if (existing) {
+          throw new ConflictException('Member already checked in for this service');
+        }
       }
     }
 
-    // Category resolution: explicit override → service category → adult
-    const category = dto.category ?? service.category ?? 'adult';
+    const category = dto.category ?? serviceCategory ?? 'adult';
 
     const attendance = await this.prisma.attendance.create({
       data: {
         church_id: churchId,
-        service_id: dto.serviceId,
+        service_id: dto.serviceId || null,
+        event_id: dto.eventId || null,
         member_id: dto.memberId || null,
         visitor_id: dto.visitorId || null,
         visitor_name: dto.visitorName || linkedVisitorName,
@@ -302,6 +327,7 @@ export class AttendanceService {
       },
       include: {
         service: { select: { name: true } },
+        event: { select: { title: true } },
         member: { select: { first_name: true, last_name: true } },
       },
     });
@@ -314,6 +340,7 @@ export class AttendanceService {
       entityId: attendance.id,
       newValues: {
         serviceId: dto.serviceId,
+        eventId: dto.eventId,
         memberId: dto.memberId,
         visitorName: dto.visitorName,
         source: dto.source,
@@ -334,13 +361,24 @@ export class AttendanceService {
     skipped: number;
     errors: Array<{ index: number; message: string }>;
   }> {
-    // Verify service exists
-    const service = await this.prisma.service.findUnique({
-      where: { id: dto.serviceId },
-    });
+    let serviceCategory: string | null = null;
 
-    if (!service || service.church_id !== churchId) {
-      throw new NotFoundException('Service not found');
+    if (dto.eventId) {
+      const event = await this.prisma.event.findFirst({
+        where: { id: dto.eventId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!event) {
+        throw new NotFoundException('Event not found');
+      }
+    } else {
+      const service = await this.prisma.service.findUnique({
+        where: { id: dto.serviceId },
+      });
+      if (!service || service.church_id !== churchId) {
+        throw new NotFoundException('Service not found');
+      }
+      serviceCategory = service.category;
     }
 
     let recorded = 0;
@@ -359,7 +397,6 @@ export class AttendanceService {
       }
 
       try {
-        // Verify the linked visitor record belongs to the church before writing
         let linkedVisitorName: string | null = null;
         if (record.visitorId) {
           const visitor = await this.prisma.visitor.findFirst({
@@ -375,7 +412,6 @@ export class AttendanceService {
           linkedVisitorName = [visitor.first_name, visitor.last_name].filter(Boolean).join(' ');
         }
 
-        // Verify the member belongs to the church before writing
         if (record.memberId) {
           const member = await this.prisma.member.findFirst({
             where: { id: record.memberId, church_id: churchId },
@@ -387,30 +423,44 @@ export class AttendanceService {
             continue;
           }
 
-          // Check for duplicate if member
-          const existing = await this.prisma.attendance.findUnique({
-            where: {
-              service_id_member_id: {
-                service_id: dto.serviceId,
-                member_id: record.memberId,
+          if (dto.eventId) {
+            const existing = await this.prisma.attendance.findUnique({
+              where: {
+                event_id_member_id: {
+                  event_id: dto.eventId,
+                  member_id: record.memberId,
+                },
               },
-            },
-          });
-
-          if (existing) {
-            skipped++;
-            continue;
+            });
+            if (existing) {
+              skipped++;
+              continue;
+            }
+          } else {
+            const existing = await this.prisma.attendance.findUnique({
+              where: {
+                service_id_member_id: {
+                  service_id: dto.serviceId!,
+                  member_id: record.memberId,
+                },
+              },
+            });
+            if (existing) {
+              skipped++;
+              continue;
+            }
           }
         }
 
         await this.prisma.attendance.create({
           data: {
             church_id: churchId,
-            service_id: dto.serviceId,
+            service_id: dto.serviceId || null,
+            event_id: dto.eventId || null,
             member_id: record.memberId || null,
             visitor_id: record.visitorId || null,
             visitor_name: record.visitorName || linkedVisitorName,
-            category: dto.category ?? service.category ?? 'adult',
+            category: dto.category ?? serviceCategory ?? 'adult',
             source: dto.source || 'manual',
           },
         });
@@ -431,7 +481,13 @@ export class AttendanceService {
         entity: 'attendance',
         action: 'CREATE',
         entityId: 'bulk',
-        newValues: { serviceId: dto.serviceId, recorded, skipped, errorCount: errors.length },
+        newValues: {
+          serviceId: dto.serviceId,
+          eventId: dto.eventId,
+          recorded,
+          skipped,
+          errorCount: errors.length,
+        },
       });
     }
 
@@ -444,7 +500,8 @@ export class AttendanceService {
 
   async recordVisitorAttendance(
     dto: {
-      serviceId: string;
+      serviceId?: string;
+      eventId?: string;
       visitorName: string;
       visitorId?: string;
       category?: string;
@@ -457,15 +514,26 @@ export class AttendanceService {
       throw new BadRequestException('Visitor name is required');
     }
 
-    const service = await this.prisma.service.findUnique({
-      where: { id: dto.serviceId },
-    });
+    let serviceCategory: string | null = null;
 
-    if (!service || service.church_id !== churchId) {
-      throw new NotFoundException('Service not found');
+    if (dto.eventId) {
+      const event = await this.prisma.event.findFirst({
+        where: { id: dto.eventId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!event) {
+        throw new NotFoundException('Event not found');
+      }
+    } else {
+      const service = await this.prisma.service.findUnique({
+        where: { id: dto.serviceId },
+      });
+      if (!service || service.church_id !== churchId) {
+        throw new NotFoundException('Service not found');
+      }
+      serviceCategory = service.category;
     }
 
-    // Verify the linked visitor record belongs to this church
     if (dto.visitorId) {
       const visitor = await this.prisma.visitor.findFirst({
         where: { id: dto.visitorId, church_id: churchId },
@@ -480,14 +548,16 @@ export class AttendanceService {
     const attendance = await this.prisma.attendance.create({
       data: {
         church_id: churchId,
-        service_id: dto.serviceId,
+        service_id: dto.serviceId || null,
+        event_id: dto.eventId || null,
         visitor_id: dto.visitorId || null,
         visitor_name: dto.visitorName.trim(),
-        category: dto.category ?? service.category ?? 'adult',
+        category: dto.category ?? serviceCategory ?? 'adult',
         source: dto.source || 'manual',
       },
       include: {
         service: { select: { name: true } },
+        event: { select: { title: true } },
       },
     });
 
@@ -551,6 +621,7 @@ export class AttendanceService {
     const where: Prisma.AttendanceWhereInput = { church_id: churchId };
 
     if (query.serviceId) where.service_id = query.serviceId;
+    if (query.eventId) where.event_id = query.eventId;
     if (query.memberId) where.member_id = query.memberId;
     if (query.visitorId) where.visitor_id = query.visitorId;
     if (query.category) where.category = query.category;
@@ -573,6 +644,7 @@ export class AttendanceService {
         take: limit,
         include: {
           service: { select: { name: true } },
+          event: { select: { title: true } },
           member: { select: { first_name: true, last_name: true } },
           visitor: { select: { first_name: true, last_name: true } },
         },
@@ -777,7 +849,8 @@ export class AttendanceService {
   private mapToAttendanceResponse(record: {
     id: string;
     church_id: string;
-    service_id: string;
+    service_id: string | null;
+    event_id: string | null;
     member_id: string | null;
     visitor_id: string | null;
     visitor_name: string | null;
@@ -786,6 +859,7 @@ export class AttendanceService {
     source: string;
     created_at: Date;
     service?: { name: string } | null;
+    event?: { title: string } | null;
     member?: { first_name: string; last_name: string } | null;
     visitor?: { first_name: string; last_name: string | null } | null;
   }): AttendanceResponseDto {
@@ -796,7 +870,8 @@ export class AttendanceService {
     return {
       attendanceId: record.id,
       churchId: record.church_id,
-      serviceId: record.service_id,
+      serviceId: record.service_id || undefined,
+      eventId: record.event_id || undefined,
       memberId: record.member_id || undefined,
       visitorId: record.visitor_id || undefined,
       visitorName: record.visitor_name || linkedVisitorName,
@@ -808,6 +883,7 @@ export class AttendanceService {
         ? `${record.member.first_name} ${record.member.last_name}`
         : undefined,
       serviceName: record.service?.name || undefined,
+      eventName: record.event?.title || undefined,
     };
   }
 }

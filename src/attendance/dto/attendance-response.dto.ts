@@ -18,8 +18,11 @@ export class AttendanceResponseDto {
   @ApiProperty({ description: 'Church ID' })
   churchId!: string;
 
-  @ApiProperty({ description: 'Service ID' })
-  serviceId!: string;
+  @ApiPropertyOptional({ description: 'Service ID' })
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Event ID' })
+  eventId?: string;
 
   @ApiPropertyOptional({ description: 'Member ID' })
   memberId?: string;
@@ -47,6 +50,9 @@ export class AttendanceResponseDto {
 
   @ApiPropertyOptional({ description: 'Service name' })
   serviceName?: string;
+
+  @ApiPropertyOptional({ description: 'Event name' })
+  eventName?: string;
 }
 
 /**

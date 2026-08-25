@@ -326,24 +326,28 @@ model Service {
 }
 
 model Attendance {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   church_id   String
-  service_id  String
+  service_id  String?
+  event_id    String?
   member_id   String?
   visitor_id  String?
   visitor_name String?
-  category    String   @default("adult") // adult | children (defaults from service at creation)
-  checkin_at  DateTime @default(now())
-  source      String   @default("manual") // manual, whatsapp, qr
-  created_at  DateTime @default(now())
+  category    String    @default("adult") // adult | children (defaults from service at creation)
+  checkin_at  DateTime  @default(now())
+  source      String    @default("manual") // manual, whatsapp, qr
+  created_at  DateTime  @default(now())
 
-  church  Church  @relation(fields: [church_id], references: [id])
-  service Service @relation(fields: [service_id], references: [id])
-  member  Member? @relation(fields: [member_id], references: [id])
+  church  Church   @relation(fields: [church_id], references: [id])
+  service Service? @relation(fields: [service_id], references: [id])
+  event   Event?   @relation(fields: [event_id], references: [id])
+  member  Member?  @relation(fields: [member_id], references: [id])
   visitor Visitor? @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
 
   @@unique([service_id, member_id]) // One check-in per service per member
+  @@unique([event_id, member_id]) // One check-in per event per member
   @@index([church_id, service_id, checkin_at])
+  @@index([church_id, event_id, checkin_at])
   @@index([church_id, visitor_id])
   @@map("attendance")
 }
@@ -452,6 +456,7 @@ model Event {
   tickets           Ticket[]
   ticket_tiers      EventTicketTier[]
   transactions      Transaction[]
+  attendance        Attendance[]
 
   @@index([church_id, start_date])
   @@map("events")

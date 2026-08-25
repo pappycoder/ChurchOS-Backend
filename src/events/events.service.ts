@@ -36,6 +36,8 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { EventResponseDto } from './dto/event-response.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
 import { ListEventsDto } from './dto/list-events.dto';
+import { WalkInCheckInDto } from './dto/check-in.dto';
+import { AttendanceResponseDto } from '../attendance/dto/attendance-response.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -135,10 +137,11 @@ export class EventsService {
       ];
     }
 
+    const dateFilter = dto.dateFilter || dto.status;
     const now = new Date();
-    if (dto.dateFilter === 'upcoming') {
+    if (dateFilter === 'upcoming') {
       where.start_date = { gte: now };
-    } else if (dto.dateFilter === 'past') {
+    } else if (dateFilter === 'past') {
       where.start_date = { lt: now };
     }
 
@@ -155,10 +158,14 @@ export class EventsService {
       };
     }
 
+    const normalizedSortBy = dto.sortBy === 'startDate' ? 'start_date'
+      : dto.sortBy === 'createdAt' ? 'created_at'
+      : dto.sortBy ?? 'start_date';
+
     const orderBy: Prisma.EventOrderByWithRelationInput =
-      dto.sortBy === 'title'
+      normalizedSortBy === 'title'
         ? { title: dto.sortOrder ?? 'asc' }
-        : dto.sortBy === 'created_at'
+        : normalizedSortBy === 'created_at'
           ? { created_at: dto.sortOrder ?? 'desc' }
           : { start_date: dto.sortOrder ?? 'asc' };
 
@@ -915,6 +922,299 @@ export class EventsService {
     this.logger.log(`Registration cancelled: member ${memberId} ← event ${eventId}`);
   }
 
+  // ─── EVENT CHECK-IN ────────────────────────────────────────────
+
+  async checkInAttendee(
+    eventId: string,
+    memberId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<AttendanceResponseDto> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, church_id: churchId },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found');
+    }
+
+    const existing = await this.prisma.attendance.findUnique({
+      where: {
+        event_id_member_id: { event_id: eventId, member_id: memberId },
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException('Member already checked in for this event');
+    }
+
+    const attendance = await this.prisma.attendance.create({
+      data: {
+        church_id: churchId,
+        event_id: eventId,
+        member_id: memberId,
+        category: 'adult',
+        source: 'manual',
+      },
+      include: {
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    const registration = await this.prisma.eventRegistration.findUnique({
+      where: { event_id_member_id: { event_id: eventId, member_id: memberId } },
+    });
+
+    if (registration && !registration.checked_in) {
+      await this.prisma.eventRegistration.update({
+        where: { id: registration.id },
+        data: { checked_in: true, checked_in_at: new Date() },
+      });
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'attendance',
+      action: 'CREATE',
+      entityId: attendance.id,
+      newValues: { event_id: eventId, member_id: memberId },
+    });
+
+    this.logger.log(`Event check-in: member ${memberId} → event ${eventId}`);
+
+    return this.mapAttendanceToDto(attendance);
+  }
+
+  async bulkCheckInAttendees(
+    eventId: string,
+    memberIds: string[],
+    churchId: string,
+    userId: string,
+  ): Promise<{ checkedIn: number; skipped: number }> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    let checkedIn = 0;
+    let skipped = 0;
+
+    for (const memberId of memberIds) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: memberId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!member) {
+        skipped++;
+        continue;
+      }
+
+      const existing = await this.prisma.attendance.findUnique({
+        where: {
+          event_id_member_id: { event_id: eventId, member_id: memberId },
+        },
+      });
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      await this.prisma.attendance.create({
+        data: {
+          church_id: churchId,
+          event_id: eventId,
+          member_id: memberId,
+          category: 'adult',
+          source: 'manual',
+        },
+      });
+
+      const registration = await this.prisma.eventRegistration.findUnique({
+        where: { event_id_member_id: { event_id: eventId, member_id: memberId } },
+      });
+
+      if (registration && !registration.checked_in) {
+        await this.prisma.eventRegistration.update({
+          where: { id: registration.id },
+          data: { checked_in: true, checked_in_at: new Date() },
+        });
+      }
+
+      checkedIn++;
+    }
+
+    if (checkedIn > 0) {
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'attendance',
+        action: 'CREATE',
+        entityId: 'bulk-event-checkin',
+        newValues: { event_id: eventId, checkedIn, skipped },
+      });
+    }
+
+    this.logger.log(`Bulk event check-in: ${checkedIn} checked in, ${skipped} skipped`);
+
+    return { checkedIn, skipped };
+  }
+
+  async walkInCheckIn(
+    eventId: string,
+    dto: WalkInCheckInDto,
+    churchId: string,
+    userId: string,
+  ): Promise<AttendanceResponseDto> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    let member = await this.prisma.member.findFirst({
+      where: { church_id: churchId, phone: dto.phone },
+    });
+
+    if (!member) {
+      member = await this.prisma.member.create({
+        data: {
+          church_id: churchId,
+          first_name: dto.firstName,
+          last_name: dto.lastName,
+          phone: dto.phone,
+          email: dto.email || null,
+          gender: dto.gender || null,
+          status: 'active',
+        },
+      });
+    }
+
+    await this.prisma.eventRegistration.upsert({
+      where: {
+        event_id_member_id: { event_id: eventId, member_id: member.id },
+      },
+      create: {
+        church_id: churchId,
+        event_id: eventId,
+        member_id: member.id,
+        payment_status: 'paid',
+        checked_in: true,
+        checked_in_at: new Date(),
+      },
+      update: {
+        checked_in: true,
+        checked_in_at: new Date(),
+      },
+    });
+
+    const attendance = await this.prisma.attendance.create({
+      data: {
+        church_id: churchId,
+        event_id: eventId,
+        member_id: member.id,
+        category: 'adult',
+        source: 'manual',
+      },
+      include: {
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'attendance',
+      action: 'CREATE',
+      entityId: attendance.id,
+      newValues: {
+        event_id: eventId,
+        member_id: member.id,
+        walkIn: true,
+      },
+    });
+
+    this.logger.log(`Walk-in check-in: ${dto.firstName} ${dto.lastName} → event ${eventId}`);
+
+    return this.mapAttendanceToDto(attendance);
+  }
+
+  async getEventAttendance(eventId: string, churchId: string): Promise<AttendanceResponseDto[]> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const records = await this.prisma.attendance.findMany({
+      where: { event_id: eventId, church_id: churchId },
+      orderBy: { checkin_at: 'desc' },
+      include: {
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    return records.map((r) => this.mapAttendanceToDto(r));
+  }
+
+  async getEventAttendanceStats(
+    eventId: string,
+    churchId: string,
+  ): Promise<{ registered: number; attended: number; noShows: number; walkIns: number }> {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const [registered, checkedInRegistrations, attendanceCount] = await Promise.all([
+      this.prisma.eventRegistration.count({
+        where: { event_id: eventId, church_id: churchId },
+      }),
+      this.prisma.eventRegistration.count({
+        where: { event_id: eventId, church_id: churchId, checked_in: true },
+      }),
+      this.prisma.attendance.count({
+        where: { event_id: eventId, church_id: churchId },
+      }),
+    ]);
+
+    const walkIns = attendanceCount - checkedInRegistrations;
+    const noShows = registered - checkedInRegistrations;
+
+    return {
+      registered,
+      attended: attendanceCount,
+      noShows: noShows > 0 ? noShows : 0,
+      walkIns: walkIns > 0 ? walkIns : 0,
+    };
+  }
+
   // ─── HELPERS ───────────────────────────────────────────────────
 
   /**
@@ -1006,6 +1306,42 @@ export class EventsService {
       authorizationUrl: (data.authorizationUrl as string) || undefined,
       paymentReference: (data.payment_reference as string) || undefined,
       createdAt: data.created_at.toISOString(),
+    };
+  }
+
+  private mapAttendanceToDto(record: {
+    id: string;
+    church_id: string;
+    service_id: string | null;
+    event_id: string | null;
+    member_id: string | null;
+    visitor_id: string | null;
+    visitor_name: string | null;
+    category: string;
+    checkin_at: Date;
+    source: string;
+    created_at: Date;
+    service?: { name: string } | null;
+    event?: { title: string } | null;
+    member?: { first_name: string; last_name: string } | null;
+  }): AttendanceResponseDto {
+    return {
+      attendanceId: record.id,
+      churchId: record.church_id,
+      serviceId: record.service_id || undefined,
+      eventId: record.event_id || undefined,
+      memberId: record.member_id || undefined,
+      visitorId: record.visitor_id || undefined,
+      visitorName: record.visitor_name || undefined,
+      category: record.category || 'adult',
+      checkInAt: record.checkin_at.toISOString(),
+      source: record.source,
+      createdAt: record.created_at.toISOString(),
+      memberName: record.member
+        ? `${record.member.first_name} ${record.member.last_name}`
+        : undefined,
+      serviceName: record.service?.name || undefined,
+      eventName: record.event?.title || undefined,
     };
   }
 }

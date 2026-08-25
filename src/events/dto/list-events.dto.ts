@@ -55,6 +55,14 @@ export class ListEventsDto {
   @IsOptional()
   dateFilter?: string;
 
+  @ApiPropertyOptional({
+    description: 'Filter by status (alias for dateFilter)',
+    enum: ['upcoming', 'past', 'all'],
+  })
+  @IsEnum(['upcoming', 'past', 'all'] as const)
+  @IsOptional()
+  status?: string;
+
   @ApiPropertyOptional({ description: 'Start date range (ISO string)' })
   @IsDateString()
   @IsOptional()
@@ -72,12 +80,12 @@ export class ListEventsDto {
 
   @ApiPropertyOptional({
     description: 'Sort field',
-    default: 'start_date',
-    enum: ['start_date', 'created_at', 'title'],
+    default: 'startDate',
+    enum: ['start_date', 'created_at', 'title', 'startDate', 'createdAt'],
   })
-  @IsEnum(['start_date', 'created_at', 'title'] as const)
+  @IsEnum(['start_date', 'created_at', 'title', 'startDate', 'createdAt'] as const)
   @IsOptional()
-  sortBy?: 'start_date' | 'created_at' | 'title';
+  sortBy?: string;
 
   @ApiPropertyOptional({ description: 'Sort order', default: 'asc', enum: ['asc', 'desc'] })
   @IsEnum(['asc', 'desc'] as const)

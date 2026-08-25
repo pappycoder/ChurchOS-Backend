@@ -200,6 +200,16 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Events module — event attendance via Attendance model extension**:
+  - **Schema migration `20260825110000_attendance_event_id`**: `attendance.service_id` made nullable (was NOT NULL), new `attendance.event_id TEXT` FK → events (ON DELETE SET NULL), CHECK constraint ensures at least one of service_id/event_id is provided, `@@unique([event_id, member_id])` for event dedup, new composite index `[church_id, event_id, checkin_at]`. `Event` model gains `attendance Attendance[]` back-relation.
+  - **Attendance DTOs**: `RecordAttendanceDto` accepts optional `eventId`/`serviceId` with manual guard ensuring at least one; `ListAttendanceDto` already had `eventId` filter; `AttendanceResponseDto` already had `eventId`/`eventName` fields.
+  - **Attendance service**: `recordAttendance`, `recordBulkAttendance`, `recordVisitorAttendance` all handle `eventId` (event validation, `event_id_member_id` unique for duplicate check, create with `event_id`); `listAttendance` includes event relation and filters by `eventId`; `mapToAttendanceResponse` maps `event_id`/`event?.title`.
+  - **New events check-in endpoints**: `POST /events/:eventId/check-in` (bulk member check-in), `POST /events/:eventId/check-in/walk-in` (walk-in with firstName/lastName/phone/email/gender), `GET /events/:eventId/attendance` (list event attendance).
+  - **New events DTOs**: `BulkCheckInDto` (memberIds array), `WalkInCheckInDto` (firstName/lastName/phone/email/gender).
+  - **Events service**: `checkInAttendee`, `bulkCheckInAttendees`, `walkInCheckIn`, `getEventAttendance`, `getEventAttendanceStats` methods added.
+  - **Sync service**: `mapAttendance` updated for nullable `service_id` + `event_id`.
+  - **Tests**: suite green at 550 / 37 suites.
+
 - **Giving endpoints aligned with the web contracts (fixes 400s on every categories/transactions fetch)**:
   - **`GET /giving/categories` is now paginated**: `ListCategoriesDto` gains optional `page` + `limit` (`@Max(100)`); previously only `isActive` was whitelisted, so the global pipe's `forbidNonWhitelisted` rejected any `limit`/`page` query with 400. `listCategories` returns `{ data, total }` (skip/take when a page size is supplied; bare calls still return every category so legacy/mobile consumers keep their all-rows behavior) and the controller now emits the standard `{ data, meta: { total, page, limit, totalPages } }` envelope that Swagger's `@ApiPaginatedResponse` always claimed.
   - **`GET /giving/transactions` limit cap raised `@Max(100)` → `@Max(200)`**, matching visitors/attendance — the web dashboard/reports/service-detail fetch-all walks pages at 200.

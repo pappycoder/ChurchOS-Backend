@@ -35,6 +35,11 @@ export class ListAttendanceDto {
   @IsOptional()
   serviceId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by event ID' })
+  @IsString()
+  @IsOptional()
+  eventId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by member ID' })
   @IsString()
   @IsOptional()
