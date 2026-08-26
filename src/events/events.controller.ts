@@ -22,6 +22,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -47,6 +48,7 @@ import { RegisterForEventDto } from './dto/register-for-event.dto';
 import { RegistrationResponseDto } from './dto/registration-response.dto';
 import { TicketValidationResponseDto } from './dto/ticket-validation-response.dto';
 import { CreateTicketTierDto } from './dto/create-ticket-tier.dto';
+import { CreateTicketDto } from './dto/create-ticket.dto';
 import { BulkCheckInDto, WalkInCheckInDto } from './dto/check-in.dto';
 import { AttendanceResponseDto } from '../attendance/dto/attendance-response.dto';
 
@@ -102,6 +104,40 @@ export class EventsController {
   ): Promise<{ data: EventResponseDto[]; total: number }> {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.listEvents(dto, churchId);
+  }
+
+  // ─── MANAGEMENT ──────────────────────────────────────────────
+
+  /**
+   * Lists all tickets across events (management view).
+   *
+   * @param eventId - Optional filter by event UUID
+   * @param status - Optional filter by ticket status
+   * @param search - Optional search by ticket code or member name
+   * @param req - HTTP request with profile context
+   * @returns Paginated list of tickets with event and member details
+   */
+  @Get('management/tickets')
+  @ApiOperation({
+    summary: 'List all tickets',
+    description: 'Lists all tickets across events for management purposes.',
+  })
+  async listAllTickets(
+    @Query('eventId') eventId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const churchId = req?.profile?.church_id || '';
+    return this.eventsService.listAllTickets(churchId, {
+      eventId,
+      status,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
+    });
   }
 
   /**
@@ -203,6 +239,81 @@ export class EventsController {
     );
   }
 
+  /**
+   * Lists all ticket tiers for an event.
+   *
+   * @param eventId - Event UUID
+   * @param req - HTTP request with profile context
+   * @returns Array of ticket tiers
+   */
+  @Get(':eventId/tiers')
+  @ApiListEndpoint('List event ticket tiers', 'Lists all pricing tiers for an event.')
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async listTicketTiers(@Param('eventId') eventId: string, @Request() req: AuthenticatedRequest) {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.listTicketTiers(eventId, churchId);
+  }
+
+  /**
+   * Updates a ticket tier.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param dto - Update data
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Updated tier
+   */
+  @Patch(':eventId/tiers/:tierId')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiUpdateEndpoint('Update a ticket tier')
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  @ApiParam({ name: 'tierId', description: 'Tier UUID' })
+  async updateTicketTier(
+    @Param('eventId') eventId: string,
+    @Param('tierId') tierId: string,
+    @Body()
+    dto: {
+      name?: string;
+      price?: number;
+      capacity?: number | null;
+      description?: string | null;
+      displayOrder?: number;
+    },
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.updateTicketTier(eventId, tierId, dto, churchId, user.sub);
+  }
+
+  /**
+   * Deletes a ticket tier. Blocked if registrations reference it.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Delete(':eventId/tiers/:tierId')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:delete')
+  @ApiDeleteEndpoint('Delete a ticket tier')
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  @ApiParam({ name: 'tierId', description: 'Tier UUID' })
+  async deleteTicketTier(
+    @Param('eventId') eventId: string,
+    @Param('tierId') tierId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.deleteTicketTier(eventId, tierId, churchId, user.sub);
+  }
+
   // ─── REGISTRATION ──────────────────────────────────────────────
 
   /**
@@ -256,7 +367,75 @@ export class EventsController {
     return this.eventsService.listRegistrations(eventId, churchId);
   }
 
-  // ─── TICKET VALIDATION ─────────────────────────────────────────
+  /**
+   * Cancels a member's registration for an event.
+   *
+   * @param eventId - Event UUID
+   * @param memberId - Member UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Delete(':eventId/register/:memberId')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiOperation({
+    summary: 'Cancel registration',
+    description: "Cancels a member's registration for an event.",
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  @ApiParam({ name: 'memberId', description: 'Member UUID' })
+  async cancelRegistration(
+    @Param('eventId') eventId: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.cancelRegistration(eventId, memberId, churchId, user.sub);
+  }
+
+  // ─── TICKET CREATION & VALIDATION ────────────────────────────────
+
+  /**
+   * Manually creates a ticket for an event (admin-initiated).
+   *
+   * @param eventId - Event UUID
+   * @param dto - Ticket creation data (memberId, optional tierId)
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Created ticket details
+   */
+  @Post(':eventId/tickets')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:create')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a ticket',
+    description:
+      'Manually creates a ticket for a member or visitor. Used for walk-in purchases, comp tickets, or admin ticket creation.',
+  })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async createTicket(
+    @Param('eventId') eventId: string,
+    @Body() dto: CreateTicketDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    if (!dto.memberId && !dto.visitorId) {
+      throw new BadRequestException('At least one of memberId or visitorId must be provided');
+    }
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.createTicket(
+      eventId,
+      dto.memberId,
+      dto.visitorId,
+      dto.tierId,
+      churchId,
+      user.sub,
+    );
+  }
 
   /**
    * Validates a ticket code at event check-in.

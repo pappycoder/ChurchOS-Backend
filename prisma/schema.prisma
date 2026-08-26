@@ -491,6 +491,7 @@ model Ticket {
   event_id          String
   code              String       @unique
   member_id         String?
+  visitor_id        String?
   registration_id   String?      @unique
   tier_name         String?
   price_paid        Float?
@@ -504,6 +505,7 @@ model Ticket {
   event Event @relation(fields: [event_id], references: [id])
 
   @@index([event_id])
+  @@index([visitor_id])
   @@map("tickets")
 }
 

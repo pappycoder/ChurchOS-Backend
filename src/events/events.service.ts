@@ -158,9 +158,12 @@ export class EventsService {
       };
     }
 
-    const normalizedSortBy = dto.sortBy === 'startDate' ? 'start_date'
-      : dto.sortBy === 'createdAt' ? 'created_at'
-      : dto.sortBy ?? 'start_date';
+    const normalizedSortBy =
+      dto.sortBy === 'startDate'
+        ? 'start_date'
+        : dto.sortBy === 'createdAt'
+          ? 'created_at'
+          : (dto.sortBy ?? 'start_date');
 
     const orderBy: Prisma.EventOrderByWithRelationInput =
       normalizedSortBy === 'title'
@@ -308,6 +311,108 @@ export class EventsService {
     this.logger.log(`Event deleted: ${eventId}`);
   }
 
+  // ─── MANAGEMENT ──────────────────────────────────────────────
+
+  /**
+   * Lists all tickets across events for management purposes.
+   *
+   * @param churchId - Church ID for tenant scoping
+   * @param filters - Optional filters (eventId, status, search, page, limit)
+   * @returns Paginated list of tickets with event and member details
+   */
+  async listAllTickets(
+    churchId: string,
+    filters: { eventId?: string; status?: string; search?: string; page: number; limit: number },
+  ) {
+    const { eventId, status, search, page, limit } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TicketWhereInput = {
+      event: { church_id: churchId },
+    };
+
+    if (eventId) {
+      where.event_id = eventId;
+    }
+
+    if (status) {
+      where.status = status as Prisma.EnumTicketStatusFilter['equals'];
+    }
+
+    if (search) {
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { tier_name: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [tickets, total] = await Promise.all([
+      this.prisma.ticket.findMany({
+        where,
+        include: {
+          event: {
+            select: { id: true, title: true, start_date: true, location: true, type: true },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.ticket.count({ where }),
+    ]);
+
+    // Resolve member names separately (Ticket has no Prisma member relation)
+    const memberIds = [...new Set(tickets.map((t) => t.member_id).filter(Boolean))] as string[];
+    const members =
+      memberIds.length > 0
+        ? await this.prisma.member.findMany({
+            where: { id: { in: memberIds }, church_id: churchId },
+            select: { id: true, first_name: true, last_name: true },
+          })
+        : [];
+    const memberMap = new Map(members.map((m) => [m.id, `${m.first_name} ${m.last_name}`]));
+
+    // Resolve visitor names
+    const visitorIds = [...new Set(tickets.map((t) => t.visitor_id).filter(Boolean))] as string[];
+    const visitors =
+      visitorIds.length > 0
+        ? await this.prisma.visitor.findMany({
+            where: { id: { in: visitorIds }, church_id: churchId },
+            select: { id: true, first_name: true, last_name: true },
+          })
+        : [];
+    const visitorMap = new Map(
+      visitors.map((v) => [v.id, `${v.first_name} ${v.last_name ?? ''}`.trim()]),
+    );
+
+    return {
+      data: tickets.map((t) => ({
+        ticketId: t.id,
+        code: t.code,
+        eventId: t.event_id,
+        eventName: t.event.title,
+        eventDate: t.event.start_date,
+        eventLocation: t.event.location,
+        eventType: t.event.type,
+        memberId: t.member_id,
+        memberName: t.member_id ? (memberMap.get(t.member_id) ?? null) : null,
+        visitorId: t.visitor_id,
+        visitorName: t.visitor_id ? (visitorMap.get(t.visitor_id) ?? null) : null,
+        registrationId: t.registration_id,
+        tierName: t.tier_name,
+        pricePaid: t.price_paid,
+        status: t.status,
+        isUsed: t.is_used,
+        usedAt: t.used_at,
+        createdAt: t.created_at,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   // ─── TICKET TIERS ──────────────────────────────────────────────
 
   /**
@@ -367,6 +472,144 @@ export class EventsService {
 
     this.logger.log(`Ticket tier created: ${tier.id} (${name}) for event ${eventId}`);
     return { tierId: tier.id };
+  }
+
+  /**
+   * Lists all ticket tiers for an event.
+   *
+   * @param eventId - Event UUID
+   * @param churchId - Church ID for tenant scoping
+   * @returns Array of ticket tiers ordered by display_order
+   * @throws NotFoundException if event doesn't exist
+   */
+  async listTicketTiers(eventId: string, churchId: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    return this.prisma.eventTicketTier.findMany({
+      where: { event_id: eventId },
+      orderBy: { display_order: 'asc' },
+    });
+  }
+
+  /**
+   * Updates a ticket tier.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param dto - Update data
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the update (for audit)
+   * @throws NotFoundException if event or tier doesn't exist
+   */
+  async updateTicketTier(
+    eventId: string,
+    tierId: string,
+    dto: {
+      name?: string;
+      price?: number;
+      capacity?: number | null;
+      description?: string | null;
+      displayOrder?: number;
+    },
+    churchId: string,
+    userId: string,
+  ) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const tier = await this.prisma.eventTicketTier.findFirst({
+      where: { id: tierId, event_id: eventId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Ticket tier not found');
+    }
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.price !== undefined) data.price = dto.price;
+    if (dto.capacity !== undefined) data.capacity = dto.capacity;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.displayOrder !== undefined) data.display_order = dto.displayOrder;
+
+    const updated = await this.prisma.eventTicketTier.update({
+      where: { id: tierId },
+      data,
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_ticket_tier',
+      action: 'UPDATE',
+      entityId: tierId,
+      oldValues: { name: tier.name, price: tier.price },
+      newValues: data,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Deletes a ticket tier. Blocked if registrations reference it.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the deletion (for audit)
+   * @throws NotFoundException if event or tier doesn't exist
+   * @throws BadRequestException if registrations reference this tier
+   */
+  async deleteTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const tier = await this.prisma.eventTicketTier.findFirst({
+      where: { id: tierId, event_id: eventId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Ticket tier not found');
+    }
+
+    const registrationCount = await this.prisma.eventRegistration.count({
+      where: { tier_id: tierId },
+    });
+
+    if (registrationCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete tier "${tier.name}" — ${registrationCount} registration(s) reference it.`,
+      );
+    }
+
+    await this.prisma.eventTicketTier.delete({ where: { id: tierId } });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_ticket_tier',
+      action: 'DELETE',
+      entityId: tierId,
+      oldValues: { name: tier.name, price: tier.price },
+    });
+
+    this.logger.log(`Ticket tier deleted: ${tierId} (${tier.name}) from event ${eventId}`);
   }
 
   // ─── REGISTRATION ──────────────────────────────────────────────
@@ -745,6 +988,182 @@ export class EventsService {
       ticket_code: result.ticket.code,
       tier_name: result.tierName,
     });
+  }
+
+  /**
+   * Manually creates a ticket for an event (admin-initiated).
+   *
+   * Creates both the ticket and an associated registration with paid status.
+   * Used for walk-in purchases, comp tickets, or manual ticket creation.
+   * Supports both members and visitors.
+   *
+   * @param eventId - Event UUID
+   * @param memberId - Member UUID (optional if visitorId provided)
+   * @param visitorId - Visitor UUID (optional if memberId provided)
+   * @param tierId - Optional ticket tier UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - User ID for audit logging
+   * @returns Created ticket details
+   */
+  async createTicket(
+    eventId: string,
+    memberId: string | undefined,
+    visitorId: string | undefined,
+    tierId: string | undefined,
+    churchId: string,
+    userId: string,
+  ) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+      include: { ticket_tiers: { orderBy: { display_order: 'asc' } } },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // Validate at least one of memberId or visitorId
+    if (!memberId && !visitorId) {
+      throw new BadRequestException('At least one of memberId or visitorId must be provided');
+    }
+
+    // Validate member or visitor exists
+    if (memberId) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: memberId, church_id: churchId },
+      });
+      if (!member) {
+        throw new NotFoundException('Member not found');
+      }
+
+      const existingTicket = await this.prisma.ticket.findFirst({
+        where: {
+          event_id: eventId,
+          member_id: memberId,
+          status: { notIn: ['cancelled', 'refunded'] },
+        },
+      });
+      if (existingTicket) {
+        throw new BadRequestException('Member already has a ticket for this event');
+      }
+    }
+
+    if (visitorId) {
+      const visitor = await this.prisma.visitor.findFirst({
+        where: { id: visitorId, church_id: churchId },
+      });
+      if (!visitor) {
+        throw new NotFoundException('Visitor not found');
+      }
+
+      const existingTicket = await this.prisma.ticket.findFirst({
+        where: {
+          event_id: eventId,
+          visitor_id: visitorId,
+          status: { notIn: ['cancelled', 'refunded'] },
+        },
+      });
+      if (existingTicket) {
+        throw new BadRequestException('Visitor already has a ticket for this event');
+      }
+    }
+
+    let tier: (typeof event.ticket_tiers)[number] | undefined;
+    if (tierId) {
+      tier = event.ticket_tiers.find((t) => t.id === tierId);
+      if (!tier) {
+        throw new NotFoundException('Ticket tier not found');
+      }
+      if (tier.capacity != null) {
+        const usedCount = await this.prisma.ticket.count({
+          where: {
+            event_id: eventId,
+            tier_name: tier.name,
+            status: { notIn: ['cancelled', 'refunded'] },
+          },
+        });
+        if (usedCount >= tier.capacity) {
+          throw new BadRequestException(`Tier "${tier.name}" is at full capacity`);
+        }
+      }
+    } else if (event.ticket_tiers.length > 0) {
+      tier = event.ticket_tiers[0];
+    }
+
+    const ticketCode = this.generateTicketCode();
+    const tierName = tier?.name ?? 'General';
+    const pricePaid = tier?.price ?? 0;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create registration only for members (visitors don't need a registration record)
+      let registration = null;
+      if (memberId) {
+        registration = await tx.eventRegistration.create({
+          data: {
+            church_id: churchId,
+            event_id: eventId,
+            member_id: memberId,
+            custom_data: {} as unknown as Prisma.InputJsonValue,
+            payment_status: 'paid',
+            quantity: 1,
+          },
+        });
+      }
+
+      const ticket = await tx.ticket.create({
+        data: {
+          event_id: eventId,
+          code: ticketCode,
+          member_id: memberId,
+          visitor_id: visitorId,
+          registration_id: registration?.id,
+          status: 'paid',
+          tier_name: tierName,
+          price_paid: pricePaid,
+        },
+      });
+
+      if (registration) {
+        await tx.eventRegistration.update({
+          where: { id: registration.id },
+          data: { ticket_id: ticket.id },
+        });
+      }
+
+      return { registration, ticket };
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_registration',
+      action: 'CREATE',
+      entityId: result.ticket.id,
+      newValues: {
+        event_id: eventId,
+        member_id: memberId,
+        visitor_id: visitorId,
+        type: 'manual_ticket',
+        tier_name: tierName,
+      },
+    });
+
+    const assigneeType = memberId ? 'member' : 'visitor';
+    const assigneeId = memberId || visitorId;
+    this.logger.log(
+      `Manual ticket created: ${ticketCode} → ${assigneeType} ${assigneeId} for event ${eventId}`,
+    );
+
+    return {
+      ticketId: result.ticket.id,
+      code: ticketCode,
+      eventId,
+      memberId: memberId ?? null,
+      visitorId: visitorId ?? null,
+      tierName,
+      pricePaid,
+      status: 'paid' as const,
+    };
   }
 
   /**

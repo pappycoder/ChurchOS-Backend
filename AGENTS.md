@@ -200,6 +200,19 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Visitor ticket assignment.** Tickets can now be assigned to visitors (existing or newly created). Schema migration `20260826103830_ticket_visitor_id`: `tickets.visitor_id TEXT` (nullable, indexed). `CreateTicketDto` now accepts optional `memberId` and `visitorId` (at least one required, validated in controller). `createTicket` service handles both member and visitor paths — validates entity exists, checks no duplicate ticket for event, skips EventRegistration creation for visitors (registration is a member concept). `listAllTickets` resolves `visitorName` via `prisma.visitor.findMany` alongside `memberName`. Audit log includes `visitor_id` when applicable. Tests: suite green at 550 / 37 suites.
+
+- **Tickets page redesign: member resolution + event location**. `listAllTickets` now resolves member names via a separate query (Ticket model lacks a Prisma member relation) and includes `eventLocation` in the response. `memberName` and `eventLocation` fields added to the ticket list response for the assigned tickets table and PDF generation. Tests: suite green at 550 / 37 suites.
+
+- **Manual ticket creation endpoint**: `POST /events/:eventId/tickets` creates both an `EventRegistration` (status `paid`) and a `Ticket` with a generated code (`EVT-YYYYMMDD-XXXXX`). Accepts `memberId` (required) and `tierId` (optional). Validates event/member exist, no duplicate ticket, tier capacity not exceeded. Guarded `church_admin`/`branch_pastor` + `events:create`. Audit logged. Tests: suite green at 550 / 37 suites.
+
+- **Events ticketing: tier management + cancel registration + management endpoint**:
+  - **Cancel registration endpoint**: `DELETE /events/:eventId/register/:memberId` wired to existing `cancelRegistration` service method. Guarded `church_admin`/`branch_pastor` + `events:update` permission.
+  - **Ticket tier CRUD endpoints**: `GET /events/:eventId/tiers` (list all tiers for an event), `PATCH /events/:eventId/tiers/:tierId` (update name/price/capacity/description/displayOrder), `DELETE /events/:eventId/tiers/:tierId` (delete tier, blocked when registrations reference it). Write endpoints guarded `church_admin`/`branch_pastor` with `events:update`/`events:delete` permissions respectively.
+  - **Tier management service methods**: `listTicketTiers`, `updateTicketTier`, `deleteTicketTier` — all event-scoped with church_id validation, audit logging on mutations.
+  - **Management endpoint**: `GET /events/management/tickets` lists all tickets across events with optional `eventId`/`status`/`search` filters and pagination (`page`/`limit`). Returns ticket code, event details, tier name, price, status, used flag. Declared before `@Get(':eventId')` to avoid param collision.
+  - **Tests**: suite green at 550 / 37 suites.
+
 - **Events module — event attendance via Attendance model extension**:
   - **Schema migration `20260825110000_attendance_event_id`**: `attendance.service_id` made nullable (was NOT NULL), new `attendance.event_id TEXT` FK → events (ON DELETE SET NULL), CHECK constraint ensures at least one of service_id/event_id is provided, `@@unique([event_id, member_id])` for event dedup, new composite index `[church_id, event_id, checkin_at]`. `Event` model gains `attendance Attendance[]` back-relation.
   - **Attendance DTOs**: `RecordAttendanceDto` accepts optional `eventId`/`serviceId` with manual guard ensuring at least one; `ListAttendanceDto` already had `eventId` filter; `AttendanceResponseDto` already had `eventId`/`eventName` fields.
