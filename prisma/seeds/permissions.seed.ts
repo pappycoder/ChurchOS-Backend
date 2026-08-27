@@ -32,6 +32,7 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'department_head', description: 'Department leader with read-heavy access' },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
+  { name: 'cell_leader', description: 'Cell group leader with shared asset management access' },
   { name: 'member', description: 'Regular church member with read-only access' },
 ];
 
@@ -249,8 +250,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'cell_groups:create',
     'cell_groups:read',
     'cell_groups:update',
-    // Assets — read
+    // Assets — create + read + update
+    'assets:create',
     'assets:read',
+    'assets:update',
     // Families — create + read + update
     'families:create',
     'families:read',
@@ -291,6 +294,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'families:read',
     // Visitors — read
     'visitors:read',
+    // Assets — read
+    'assets:read',
   ],
 
   secretary: [
@@ -331,6 +336,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'pastoral:read',
     // Reports — read
     'reports:read',
+    // Assets — create + read + update
+    'assets:create',
+    'assets:read',
+    'assets:update',
     // Users — read
     'users:read',
   ],
@@ -342,10 +351,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'giving:update',
     // Reports — read
     'reports:read',
-    // Assets — create + read + update
+    // Assets — create + read + update + delete
     'assets:create',
     'assets:read',
     'assets:update',
+    'assets:delete',
     // Church Settings — read
     'church_settings:read',
     // Members — read
@@ -354,6 +364,19 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'analytics:read',
     // Users — read
     'users:read',
+  ],
+
+  cell_leader: [
+    // Assets — create + read + update
+    'assets:create',
+    'assets:read',
+    'assets:update',
+    // Cell Groups — read
+    'cell_groups:read',
+    // Members — read
+    'members:read',
+    // Giving — read
+    'giving:read',
   ],
 
   member: [
