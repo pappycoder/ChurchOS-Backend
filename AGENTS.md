@@ -200,6 +200,8 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Legacy `DELETE /media/:path(*)` storage delete closed** (permission-gap audit): previously auth-only — any authenticated user could delete any storage object by crafting its path. It now carries the same ceiling as the library delete — `RolesGuard` + `@RequireRoles('church_admin')` + `@RequirePermissions('media:delete')`. Media upload endpoints remain intentionally auth-only (profile photo/church logo/member upload consumers). Spec extended to assert the path-delete decorators; suite green at 565 / 39 suites (+1).
+
 - **Media library routes now carry `@RequirePermissions`** (the frontend Media Library /media pages shipped this round too — see web changelog):
   - `GET /media/library`, `GET /media/library/folders`, `GET /media/library/:assetId` → `media:read`; `PATCH /media/library/:assetId/permissions` → `media:update` and `DELETE /media/library/:assetId` → `media:delete`, both keeping the existing `RolesGuard` + `@RequireRoles('church_admin')` ceiling (permission grants add to, never widen, the role gate).
   - Upload endpoints (`POST /media/upload`, `/media/upload/image`) deliberately stay auth-only — same rationale as the sermon-media round (profile photos/church logos/member uploads served to consumers without `media:create`).

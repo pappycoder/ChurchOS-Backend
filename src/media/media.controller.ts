@@ -241,6 +241,9 @@ export class MediaController {
   }
 
   @Delete(':path(*)')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin')
+  @RequirePermissions('media:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Delete a file from storage',

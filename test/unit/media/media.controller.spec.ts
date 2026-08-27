@@ -61,6 +61,12 @@ describe('MediaController permission decorators', () => {
     expect(block).toContain("@RequireRoles('church_admin')");
   });
 
+  it('requires media:delete on the legacy DELETE /media/:path(*) storage delete', () => {
+    const block = blockBetween("@Delete(':path(*)')", 'async deleteFile(');
+    expect(block).toContain("@RequirePermissions('media:delete')");
+    expect(block).toContain("@RequireRoles('church_admin')");
+  });
+
   it('keeps upload endpoints auth-only (no media:create lock on raw uploads)', () => {
     const uploadImageBlock = blockBetween("@Post('upload/image')", 'async uploadImage(');
     const uploadFileBlock = blockBetween("@Post('upload')", 'async uploadFile(');
