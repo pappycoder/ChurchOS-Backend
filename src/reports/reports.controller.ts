@@ -20,6 +20,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { ReportsService } from './reports.service';
@@ -44,6 +45,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
+  @RequirePermissions('reports:read')
   @ApiOperation({
     summary: 'Financial report',
     description: 'Giving totals, trends, and breakdown by category.',
@@ -68,6 +70,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('reports:read')
   @ApiOperation({
     summary: 'Attendance report',
     description: 'Attendance totals, trends, and breakdown by service.',
@@ -92,6 +95,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(600)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('reports:read')
   @ApiOperation({
     summary: 'Member report',
     description: 'Member demographics, growth, and activity summary.',
@@ -109,6 +113,7 @@ export class ReportsController {
    */
   @Post('export')
   @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
+  @RequirePermissions('reports:read')
   @ApiOperation({ summary: 'Export report', description: 'Export report data as CSV.' })
   async exportReport(
     @Body() dto: ExportReportDto,

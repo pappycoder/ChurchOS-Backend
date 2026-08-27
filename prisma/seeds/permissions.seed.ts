@@ -329,6 +329,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:update',
     // Pastoral — read
     'pastoral:read',
+    // Reports — read
+    'reports:read',
     // Users — read
     'users:read',
   ],
