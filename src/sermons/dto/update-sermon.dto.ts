@@ -42,6 +42,16 @@ export class UpdateSermonDto {
   @IsOptional()
   description?: string;
 
+  @ApiPropertyOptional({ description: 'Audio file URL (uploaded or external)' })
+  @IsString()
+  @IsOptional()
+  audioUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Video file URL (uploaded or external)' })
+  @IsString()
+  @IsOptional()
+  videoUrl?: string;
+
   @ApiPropertyOptional({ description: 'Duration in seconds' })
   @IsInt()
   @Min(0)

@@ -103,8 +103,8 @@ describe('MediaService', () => {
         originalname: 'big.jpg',
         encoding: '7bit',
         mimetype: 'image/jpeg',
-        size: 10 * 1024 * 1024,
-        buffer: Buffer.alloc(10 * 1024 * 1024),
+        size: 51 * 1024 * 1024,
+        buffer: Buffer.alloc(1024),
       };
 
       await expect(service.uploadFile(bigFile as never, 'uploads', 'church-1')).rejects.toThrow(

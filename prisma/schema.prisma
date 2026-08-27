@@ -624,6 +624,7 @@ model Sermon {
   series_name        String?
   tags               String[]
   audio_url          String?
+  video_url          String?
   duration_seconds   Int?
   description        String?
   created_at         DateTime  @default(now())

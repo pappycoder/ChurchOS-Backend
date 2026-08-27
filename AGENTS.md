@@ -200,6 +200,14 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Sermon media attachments (video_url + audio/video uploads)**:
+  - Schema migration `20260827100000_sermon_video_url`: `sermons.video_url TEXT` nullable column (alongside the existing `audio_url`).
+  - **Media upload widened for audio/video**: `ALLOWED_DOC_TYPES` in `media.service.ts` now includes `audio/mpeg`, `audio/wav`, `audio/ogg`, `audio/mp4`, `audio/aac`, `audio/flac`, `video/mp4`, `video/webm`, `video/ogg`, `video/quicktime`. The general-file cap is raised from 5MB to **50MB** (`MAX_FILE_SIZE_BYTES`, kept as the image endpoint's 5MB cap via new `MAX_IMAGE_SIZE_BYTES`). `FileInterceptor` on `POST /media/upload` gains `limits: { fileSize: 50MB }` so multer no longer truncates large files at its 1MB default. Uploaded files land in `sermons` folder with a MediaAsset record (folder `sermons`) as usual.
+  - **Sermon DTOs/service**: `CreateSermonDto` and `UpdateSermonDto` gain `videoUrl?: string` (`@IsString`/`@IsOptional`); `SermonResponseDto` exposes `videoUrl?`. `createSermon` now persists `audio_url`/`video_url` (previously audio was only settable via `setAudioUrl`), `updateSermon` handles the undefined-checked `audio_url`/`video_url` writes, and the response mapper emits both.
+  - Tests updated (oversized-file fixture now exceeds the 50MB cap). Suite green at 550 / 37 suites.
+
+- **Sermons aggregation endpoints**: `GET /sermons/series` and `GET /sermons/speakers` return distinct `series_name`/`speaker` values with sermon counts and last sermon date via Prisma `groupBy`. Both declared before `:sermonId` param route to avoid collision. `listSeries` and `listSpeakers` service methods added. Tests: suite green at 550 / 37 suites.
+
 - **Visitor ticket assignment.** Tickets can now be assigned to visitors (existing or newly created). Schema migration `20260826103830_ticket_visitor_id`: `tickets.visitor_id TEXT` (nullable, indexed). `CreateTicketDto` now accepts optional `memberId` and `visitorId` (at least one required, validated in controller). `createTicket` service handles both member and visitor paths — validates entity exists, checks no duplicate ticket for event, skips EventRegistration creation for visitors (registration is a member concept). `listAllTickets` resolves `visitorName` via `prisma.visitor.findMany` alongside `memberName`. Audit log includes `visitor_id` when applicable. Tests: suite green at 550 / 37 suites.
 
 - **Tickets page redesign: member resolution + event location**. `listAllTickets` now resolves member names via a separate query (Ticket model lacks a Prisma member relation) and includes `eventLocation` in the response. `memberName` and `eventLocation` fields added to the ticket list response for the assigned tickets table and PDF generation. Tests: suite green at 550 / 37 suites.

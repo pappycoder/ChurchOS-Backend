@@ -33,9 +33,21 @@ const ALLOWED_DOC_TYPES = [
   'text/csv',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
 ];
-/** Maximum file size in bytes (5MB) */
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+/** Maximum file size for images (5MB) */
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+/** Maximum file size for general files incl. audio/video (50MB) */
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 /**
  * Interface representing a file uploaded via Multer.
@@ -444,10 +456,9 @@ export class MediaService {
       throw new BadRequestException('No file provided');
     }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException(
-        `File size exceeds maximum of ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB`,
-      );
+    const maxBytes = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+    if (file.size > maxBytes) {
+      throw new BadRequestException(`File size exceeds maximum of ${maxBytes / 1024 / 1024}MB`);
     }
 
     const allowedTypes = isImage

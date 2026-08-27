@@ -101,6 +101,36 @@ export class SermonsController {
   }
 
   /**
+   * List distinct series with counts (must be before :sermonId).
+   */
+  @Get('series')
+  @ApiOperation({
+    summary: 'List sermon series',
+    description: 'Returns distinct series names with sermon counts for the church.',
+  })
+  async listSeries(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.listSeries(churchId);
+  }
+
+  /**
+   * List distinct speakers with counts (must be before :sermonId).
+   */
+  @Get('speakers')
+  @ApiOperation({
+    summary: 'List sermon speakers',
+    description: 'Returns distinct speakers with sermon counts for the church.',
+  })
+  async listSpeakers(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.listSpeakers(churchId);
+  }
+
+  /**
    * Get a single sermon by ID.
    */
   @Get(':sermonId')

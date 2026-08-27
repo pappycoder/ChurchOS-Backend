@@ -48,6 +48,8 @@ export class SermonsService {
         scripture_reference: dto.scriptureReference,
         series_name: dto.seriesName,
         tags: dto.tags ?? [],
+        audio_url: dto.audioUrl,
+        video_url: dto.videoUrl,
         description: dto.description,
         duration_seconds: dto.durationSeconds,
       },
@@ -178,6 +180,8 @@ export class SermonsService {
     if (dto.scriptureReference !== undefined) data.scripture_reference = dto.scriptureReference;
     if (dto.seriesName !== undefined) data.series_name = dto.seriesName;
     if (dto.tags !== undefined) data.tags = dto.tags;
+    if (dto.audioUrl !== undefined) data.audio_url = dto.audioUrl;
+    if (dto.videoUrl !== undefined) data.video_url = dto.videoUrl;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.durationSeconds !== undefined) data.duration_seconds = dto.durationSeconds;
 
@@ -452,6 +456,52 @@ export class SermonsService {
     return this.mapSermonToDto(updated);
   }
 
+  // ─── AGGREGATIONS ──────────────────────────────────────────────
+
+  /**
+   * Returns distinct series names with sermon counts for the church.
+   */
+  async listSeries(churchId: string): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const rows = await this.prisma.sermon.groupBy({
+      by: ['series_name'],
+      where: { church_id: churchId, series_name: { not: null } },
+      _count: { id: true },
+      _max: { sermon_date: true },
+      orderBy: { _count: { id: 'desc' } },
+    });
+
+    return rows
+      .filter((r) => r.series_name)
+      .map((r) => ({
+        name: r.series_name!,
+        count: r._count.id,
+        lastDate: r._max.sermon_date?.toISOString() ?? '',
+      }));
+  }
+
+  /**
+   * Returns distinct speakers with sermon counts for the church.
+   */
+  async listSpeakers(
+    churchId: string,
+  ): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const rows = await this.prisma.sermon.groupBy({
+      by: ['speaker'],
+      where: { church_id: churchId, speaker: { not: null } },
+      _count: { id: true },
+      _max: { sermon_date: true },
+      orderBy: { _count: { id: 'desc' } },
+    });
+
+    return rows
+      .filter((r) => r.speaker)
+      .map((r) => ({
+        name: r.speaker!,
+        count: r._count.id,
+        lastDate: r._max.sermon_date?.toISOString() ?? '',
+      }));
+  }
+
   // ─── MAPPERS ───────────────────────────────────────────────────
 
   /**
@@ -475,6 +525,7 @@ export class SermonsService {
       seriesName: (sermon.series_name as string) || undefined,
       tags: (sermon.tags as string[]) || [],
       audioUrl: (sermon.audio_url as string) || undefined,
+      videoUrl: (sermon.video_url as string) || undefined,
       durationSeconds: (sermon.duration_seconds as number) || undefined,
       description: (sermon.description as string) || undefined,
       createdAt: sermon.created_at.toISOString(),

@@ -34,6 +34,9 @@ export class SermonResponseDto {
   @ApiPropertyOptional({ description: 'Audio file URL' })
   audioUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Video file URL' })
+  videoUrl?: string;
+
   @ApiPropertyOptional({ description: 'Duration in seconds', example: 2400 })
   durationSeconds?: number;
 
