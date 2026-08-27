@@ -224,7 +224,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'sermons:create',
     'sermons:read',
     'sermons:update',
-    // Media — read
+    // Media — create + read
+    'media:create',
     'media:read',
     // Church — read
     'church:read',

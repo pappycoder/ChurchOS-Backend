@@ -200,6 +200,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Sermons + media permission hardening**:
+  - **Every sermons route now carries `@RequirePermissions`** (matching events/visitors/families/attendance convention): `POST /sermons` → `sermons:create`, `GET /sermons`, `/series`, `/speakers`, `/:sermonId` → `sermons:read`, `PATCH /sermons/:sermonId` → `sermons:update`, `DELETE /sermons/:sermonId` → `sermons:delete`. Role guards (`church_admin`/`branch_pastor`) remain on writes; the global `PermissionsGuard` now also enforces granular permissions. Bookmark endpoints (`GET /bookmarks/me`, POST/DELETE/GET `:sermonId/bookmark`) intentionally stay auth-only (member-scoped personal data).
+  - **`media:create` added to the `branch_pastor` template** in `prisma/seeds/permissions.seed.ts` (alongside existing `media:read`) so branch pastors can upload sermon/media files, not just paste external links. Applies to the global template — existing databases must re-run `npm run prisma:seed` to pick it up; `church_admin` already held all perms. Attacking the media `POST /media/upload` backend endpoints was deliberately NOT extended here (they also serve profile-photo/church-logo uploads for members lacking `media:create`).
+  - **Tests**: new `test/unit/sermons/sermons.controller.spec.ts` (source-scan guard, mirroring the members controller-order spec) asserts the 7 route permission decorators and that bookmark routes stay ungated; suite green at 558 / 38 suites (+8).
+
 - **Sermon media attachments (video_url + audio/video uploads)**:
   - Schema migration `20260827100000_sermon_video_url`: `sermons.video_url TEXT` nullable column (alongside the existing `audio_url`).
   - **Media upload widened for audio/video**: `ALLOWED_DOC_TYPES` in `media.service.ts` now includes `audio/mpeg`, `audio/wav`, `audio/ogg`, `audio/mp4`, `audio/aac`, `audio/flac`, `video/mp4`, `video/webm`, `video/ogg`, `video/quicktime`. The general-file cap is raised from 5MB to **50MB** (`MAX_FILE_SIZE_BYTES`, kept as the image endpoint's 5MB cap via new `MAX_IMAGE_SIZE_BYTES`). `FileInterceptor` on `POST /media/upload` gains `limits: { fileSize: 50MB }` so multer no longer truncates large files at its 1MB default. Uploaded files land in `sermons` folder with a MediaAsset record (folder `sermons`) as usual.

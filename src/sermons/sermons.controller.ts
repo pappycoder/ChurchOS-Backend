@@ -26,6 +26,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import {
@@ -57,6 +58,7 @@ export class SermonsController {
   @Post()
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('sermons:create')
   @ApiCreateEndpoint('Create a sermon', 'Creates a new sermon record for the church.')
   async createSermon(
     @Body() dto: CreateSermonDto,
@@ -87,6 +89,7 @@ export class SermonsController {
    * List sermons with pagination and filters.
    */
   @Get()
+  @RequirePermissions('sermons:read')
   @ApiPaginatedResponse(SermonResponseDto)
   @ApiOperation({
     summary: 'List sermons',
@@ -104,6 +107,7 @@ export class SermonsController {
    * List distinct series with counts (must be before :sermonId).
    */
   @Get('series')
+  @RequirePermissions('sermons:read')
   @ApiOperation({
     summary: 'List sermon series',
     description: 'Returns distinct series names with sermon counts for the church.',
@@ -119,6 +123,7 @@ export class SermonsController {
    * List distinct speakers with counts (must be before :sermonId).
    */
   @Get('speakers')
+  @RequirePermissions('sermons:read')
   @ApiOperation({
     summary: 'List sermon speakers',
     description: 'Returns distinct speakers with sermon counts for the church.',
@@ -134,6 +139,7 @@ export class SermonsController {
    * Get a single sermon by ID.
    */
   @Get(':sermonId')
+  @RequirePermissions('sermons:read')
   @ApiGetEndpoint('Get sermon details')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
   async getSermon(
@@ -150,6 +156,7 @@ export class SermonsController {
   @Patch(':sermonId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('sermons:update')
   @ApiUpdateEndpoint('Update sermon details')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
   async updateSermon(
@@ -168,6 +175,7 @@ export class SermonsController {
   @Delete(':sermonId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('sermons:delete')
   @ApiDeleteEndpoint('Delete a sermon')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
   async deleteSermon(
