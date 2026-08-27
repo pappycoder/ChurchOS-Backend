@@ -200,6 +200,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Media library routes now carry `@RequirePermissions`** (the frontend Media Library /media pages shipped this round too — see web changelog):
+  - `GET /media/library`, `GET /media/library/folders`, `GET /media/library/:assetId` → `media:read`; `PATCH /media/library/:assetId/permissions` → `media:update` and `DELETE /media/library/:assetId` → `media:delete`, both keeping the existing `RolesGuard` + `@RequireRoles('church_admin')` ceiling (permission grants add to, never widen, the role gate).
+  - Upload endpoints (`POST /media/upload`, `/media/upload/image`) deliberately stay auth-only — same rationale as the sermon-media round (profile photos/church logos/member uploads served to consumers without `media:create`).
+  - **Tests**: new `test/unit/media/media.controller.spec.ts` (source-scan guard mirroring the sermons spec) asserts the 3 `media:read` decorators, the 2 write `media:update`/`media:delete` decorators (with their `church_admin` role), and that both upload endpoints stay decorator-free; suite green at 564 / 39 suites (+6).
+
 - **Sermons + media permission hardening**:
   - **Every sermons route now carries `@RequirePermissions`** (matching events/visitors/families/attendance convention): `POST /sermons` → `sermons:create`, `GET /sermons`, `/series`, `/speakers`, `/:sermonId` → `sermons:read`, `PATCH /sermons/:sermonId` → `sermons:update`, `DELETE /sermons/:sermonId` → `sermons:delete`. Role guards (`church_admin`/`branch_pastor`) remain on writes; the global `PermissionsGuard` now also enforces granular permissions. Bookmark endpoints (`GET /bookmarks/me`, POST/DELETE/GET `:sermonId/bookmark`) intentionally stay auth-only (member-scoped personal data).
   - **`media:create` added to the `branch_pastor` template** in `prisma/seeds/permissions.seed.ts` (alongside existing `media:read`) so branch pastors can upload sermon/media files, not just paste external links. Applies to the global template — existing databases must re-run `npm run prisma:seed` to pick it up; `church_admin` already held all perms. Attacking the media `POST /media/upload` backend endpoints was deliberately NOT extended here (they also serve profile-photo/church-logo uploads for members lacking `media:create`).

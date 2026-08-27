@@ -34,6 +34,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
   CurrentUser,
@@ -156,6 +157,7 @@ export class MediaController {
    * Lists media assets with pagination and filters.
    */
   @Get('library')
+  @RequirePermissions('media:read')
   @ApiPaginatedResponse(MediaAssetResponseDto)
   @ApiOperation({
     summary: 'Browse media library',
@@ -173,6 +175,7 @@ export class MediaController {
    * Gets unique folder list for the church's media library.
    */
   @Get('library/folders')
+  @RequirePermissions('media:read')
   @ApiOperation({
     summary: 'List media folders',
     description: 'Returns unique folder names used in the church media library.',
@@ -187,6 +190,7 @@ export class MediaController {
    * Gets a single media asset by ID.
    */
   @Get('library/:assetId')
+  @RequirePermissions('media:read')
   @ApiGetEndpoint('Get media asset details')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
   async getAsset(
@@ -203,6 +207,7 @@ export class MediaController {
   @Patch('library/:assetId/permissions')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('media:update')
   @ApiUpdateEndpoint('Update media permissions')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
   async updatePermissions(
@@ -221,6 +226,7 @@ export class MediaController {
   @Delete('library/:assetId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('media:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a media asset')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
