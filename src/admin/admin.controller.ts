@@ -498,7 +498,7 @@ export class AdminController {
    */
   @Post('dashboard/recalculate-scores')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin')
+  @RequirePermissions('pastoral:update')
   @ApiOperation({ summary: 'Trigger manual score recalculation' })
   async recalculateScores(@Req() req: AuthenticatedRequest) {
     // Extract church ID from the authenticated user's profile

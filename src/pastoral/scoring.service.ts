@@ -17,10 +17,14 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Prisma } from '@prisma/client';
+import { ListRiskScoresDto } from './dto/list-risk-scores.dto';
+import { ListEngagementScoresDto } from './dto/list-engagement-scores.dto';
+import { RiskScoreResponseDto } from './dto/risk-score-response.dto';
+import { EngagementScoreResponseDto } from './dto/engagement-score-response.dto';
 
 /**
  * Weight configuration for engagement score factors.
@@ -615,6 +619,266 @@ export class ScoringService {
     }
 
     return results;
+  }
+
+  // ─── Public: Score Listing & Detail ───────────────────────
+
+  /**
+   * Engagement bucket definitions keyed by bucket name.
+   */
+  private static readonly ENGAGEMENT_BUCKETS: Record<string, { gte?: number; lt?: number }> = {
+    highly_engaged: { gte: 70 },
+    moderately_engaged: { gte: 40, lt: 70 },
+    low_engagement: { gte: 20, lt: 40 },
+    disengaged: { lt: 20 },
+  };
+
+  /**
+   * Lists risk scores across all members with pagination.
+   *
+   * @param churchId - Church ID to scope queries
+   * @param query - List/filter/sort DTO
+   * @returns Paginated risk scores with member details
+   */
+  async listRiskScores(
+    churchId: string,
+    query: ListRiskScoresDto,
+  ): Promise<{
+    data: RiskScoreResponseDto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.RiskScoreWhereInput = { church_id: churchId };
+
+    if (query.level) {
+      where.level = query.level;
+    }
+
+    if (query.search?.trim()) {
+      const term = query.search.trim();
+      where.member = {
+        OR: [
+          { first_name: { contains: term, mode: 'insensitive' } },
+          { last_name: { contains: term, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const orderBy: Prisma.RiskScoreOrderByWithRelationInput[] = [];
+    const fieldMap: Record<string, Prisma.RiskScoreScalarFieldEnum> = {
+      score: 'score',
+      calculated_at: 'calculated_at',
+    };
+    if (query.sortBy && fieldMap[query.sortBy]) {
+      orderBy.push({ [fieldMap[query.sortBy]]: query.sortOrder || 'desc' });
+    } else {
+      orderBy.push({ score: 'desc' });
+    }
+
+    const [riskScores, total] = await Promise.all([
+      this.prisma.riskScore.findMany({
+        where,
+        include: {
+          member: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.riskScore.count({ where }),
+    ]);
+
+    const data: RiskScoreResponseDto[] = riskScores.map((row) => ({
+      id: row.id,
+      churchId: row.church_id,
+      memberId: row.member.id,
+      memberFirstName: row.member.first_name,
+      memberLastName: row.member.last_name,
+      memberEmail: row.member.email || undefined,
+      memberPhone: row.member.phone || undefined,
+      memberStatus: row.member.status,
+      score: row.score,
+      level: row.level,
+      factors: row.factors as Record<string, number>,
+      calculatedAt: row.calculated_at.toISOString(),
+    }));
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Lists engagement scores across all members with pagination.
+   *
+   * @param churchId - Church ID to scope queries
+   * @param query - List/filter/sort DTO
+   * @returns Paginated engagement scores with member details
+   */
+  async listEngagementScores(
+    churchId: string,
+    query: ListEngagementScoresDto,
+  ): Promise<{
+    data: EngagementScoreResponseDto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.EngagementScoreWhereInput = { church_id: churchId };
+
+    if (query.bucket) {
+      where.score = ScoringService.ENGAGEMENT_BUCKETS[query.bucket];
+    }
+
+    if (query.search?.trim()) {
+      const term = query.search.trim();
+      where.member = {
+        OR: [
+          { first_name: { contains: term, mode: 'insensitive' } },
+          { last_name: { contains: term, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const orderBy: Prisma.EngagementScoreOrderByWithRelationInput[] = [];
+    const fieldMap: Record<string, Prisma.EngagementScoreScalarFieldEnum> = {
+      score: 'score',
+      calculated_at: 'calculated_at',
+    };
+    if (query.sortBy && fieldMap[query.sortBy]) {
+      orderBy.push({ [fieldMap[query.sortBy]]: query.sortOrder || 'desc' });
+    } else {
+      orderBy.push({ score: 'desc' });
+    }
+
+    const [engagementScores, total] = await Promise.all([
+      this.prisma.engagementScore.findMany({
+        where,
+        include: {
+          member: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.engagementScore.count({ where }),
+    ]);
+
+    const data: EngagementScoreResponseDto[] = engagementScores.map((row) => ({
+      id: row.id,
+      churchId: row.church_id,
+      memberId: row.member.id,
+      memberFirstName: row.member.first_name,
+      memberLastName: row.member.last_name,
+      memberEmail: row.member.email || undefined,
+      score: row.score,
+      factors: row.factors as Record<string, number>,
+      calculatedAt: row.calculated_at.toISOString(),
+    }));
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Gets a member's combined risk + engagement scores with follow-up suggestions.
+   *
+   * @param memberId - Member ID
+   * @param churchId - Church ID for scoping
+   * @returns Risk, engagement, and follow-up suggestion data
+   * @throws NotFoundException if the member is not in this church
+   */
+  async getMemberScoring(
+    memberId: string,
+    churchId: string,
+  ): Promise<{
+    risk: {
+      score: number;
+      level: string;
+      factors: Record<string, number>;
+      calculatedAt: string;
+    } | null;
+    engagement: {
+      score: number;
+      factors: Record<string, number>;
+      calculatedAt: string;
+    } | null;
+    suggestions: string[];
+  }> {
+    // Verify the member exists and belongs to this church
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, church_id: churchId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found in this church');
+    }
+
+    const [riskScore, engagementScore] = await Promise.all([
+      this.prisma.riskScore.findUnique({ where: { member_id: memberId } }),
+      this.prisma.engagementScore.findUnique({ where: { member_id: memberId } }),
+    ]);
+
+    const risk =
+      riskScore && riskScore.church_id === churchId
+        ? {
+            score: riskScore.score,
+            level: riskScore.level,
+            factors: riskScore.factors as Record<string, number>,
+            calculatedAt: riskScore.calculated_at.toISOString(),
+          }
+        : null;
+
+    const engagement =
+      engagementScore && engagementScore.church_id === churchId
+        ? {
+            score: engagementScore.score,
+            factors: engagementScore.factors as Record<string, number>,
+            calculatedAt: engagementScore.calculated_at.toISOString(),
+          }
+        : null;
+
+    let suggestions: string[] = [];
+    if (risk) {
+      suggestions = (await this.getFollowUpSuggestions(memberId, churchId)).suggestions;
+    }
+
+    return { risk, engagement, suggestions };
   }
 
   /**

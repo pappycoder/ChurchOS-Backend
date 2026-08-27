@@ -30,6 +30,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
   SupabaseUser,
@@ -37,6 +38,7 @@ import {
 } from '../common/decorators/current-user.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 import { PastoralService } from './pastoral.service';
+import { ScoringService } from './scoring.service';
 import { CreatePastoralNoteDto } from './dto/create-pastoral-note.dto';
 import { UpdatePastoralNoteDto } from './dto/update-pastoral-note.dto';
 import { ListPastoralNotesDto } from './dto/list-pastoral-notes.dto';
@@ -44,6 +46,10 @@ import { PastoralNoteResponseDto } from './dto/pastoral-note-response.dto';
 import { CreateLifeEventDto } from './dto/create-life-event.dto';
 import { ListLifeEventsDto } from './dto/list-life-events.dto';
 import { LifeEventResponseDto } from './dto/life-event-response.dto';
+import { ListRiskScoresDto } from './dto/list-risk-scores.dto';
+import { ListEngagementScoresDto } from './dto/list-engagement-scores.dto';
+import { RiskScoreResponseDto } from './dto/risk-score-response.dto';
+import { EngagementScoreResponseDto } from './dto/engagement-score-response.dto';
 
 @ApiTags('Pastoral')
 @ApiBearerAuth('supabase-auth')
@@ -53,6 +59,8 @@ export class PastoralController {
   constructor(
     // Inject PastoralService for business logic delegation
     private readonly pastoralService: PastoralService,
+    // Inject ScoringService for risk/engagement score queries
+    private readonly scoringService: ScoringService,
   ) {}
 
   /**
@@ -66,6 +74,7 @@ export class PastoralController {
   @Post('notes')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:create')
   @ApiOperation({ summary: 'Create a new pastoral note' })
   async createNote(
     @Body() dto: CreatePastoralNoteDto,
@@ -90,6 +99,7 @@ export class PastoralController {
    */
   @Get('notes')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
   @ApiPaginatedResponse(PastoralNoteResponseDto)
   @ApiOperation({ summary: 'List pastoral notes with filters' })
   async listNotes(
@@ -114,6 +124,7 @@ export class PastoralController {
    */
   @Get('notes/:noteId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Get a pastoral note by ID' })
   async getNoteById(
@@ -139,6 +150,7 @@ export class PastoralController {
    */
   @Patch('notes/:noteId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:update')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Update a pastoral note' })
   async updateNote(
@@ -164,6 +176,7 @@ export class PastoralController {
   @Delete('notes/:noteId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('pastoral:delete')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Delete a pastoral note' })
   async deleteNote(
@@ -191,6 +204,7 @@ export class PastoralController {
   @Post('life-events')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:create')
   @ApiOperation({ summary: 'Create a new life event' })
   async createLifeEvent(
     @Body() dto: CreateLifeEventDto,
@@ -212,6 +226,7 @@ export class PastoralController {
    */
   @Get('life-events')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
   @ApiPaginatedResponse(LifeEventResponseDto)
   @ApiOperation({ summary: 'List life events with filters' })
   async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: AuthenticatedRequest) {
@@ -230,6 +245,7 @@ export class PastoralController {
    */
   @Get('life-events/upcoming')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
   @ApiOperation({ summary: 'Get upcoming life events' })
   async getUpcomingLifeEvents(
     @Query('daysAhead') daysAhead: number,
@@ -250,6 +266,7 @@ export class PastoralController {
    */
   @Get('life-events/:eventId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
   @ApiParam({ name: 'eventId', type: String })
   @ApiOperation({ summary: 'Get a life event by ID' })
   async getLifeEventById(
@@ -272,6 +289,7 @@ export class PastoralController {
   @Delete('life-events/:eventId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('pastoral:delete')
   @ApiParam({ name: 'eventId', type: String })
   @ApiOperation({ summary: 'Delete a life event' })
   async deleteLifeEvent(
@@ -283,5 +301,84 @@ export class PastoralController {
     const churchId = req.profile?.church_id || '';
     // Delegate the deletion to the pastoral service
     return this.pastoralService.deleteLifeEvent(eventId, churchId, user.sub);
+  }
+
+  // ─── Risk & Engagement Scoring ───────────────────────────
+
+  /**
+   * Lists risk scores across all members with pagination.
+   *
+   * @param query - List/filter/sort DTO
+   * @param req - Authenticated request with profile
+   * @returns Paginated risk scores
+   */
+  @Get('risk-scores')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
+  @ApiPaginatedResponse(RiskScoreResponseDto)
+  @ApiOperation({ summary: 'List member risk scores' })
+  async listRiskScores(@Query() query: ListRiskScoresDto, @Req() req: AuthenticatedRequest) {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the query to the scoring service
+    return this.scoringService.listRiskScores(churchId, query);
+  }
+
+  /**
+   * Lists engagement scores across all members with pagination.
+   *
+   * @param query - List/filter/sort DTO
+   * @param req - Authenticated request with profile
+   * @returns Paginated engagement scores
+   */
+  @Get('engagement-scores')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
+  @ApiPaginatedResponse(EngagementScoreResponseDto)
+  @ApiOperation({ summary: 'List member engagement scores' })
+  async listEngagementScores(
+    @Query() query: ListEngagementScoresDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the query to the scoring service
+    return this.scoringService.listEngagementScores(churchId, query);
+  }
+
+  /**
+   * Gets the church-wide engagement score distribution.
+   *
+   * @param req - Authenticated request with profile
+   * @returns Distribution counts by engagement bucket
+   */
+  @Get('engagement/summary')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
+  @ApiOperation({ summary: 'Get engagement score distribution' })
+  async getEngagementDistribution(@Req() req: AuthenticatedRequest) {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the query to the scoring service
+    return this.scoringService.getEngagementDistribution(churchId);
+  }
+
+  /**
+   * Gets a member's combined risk + engagement scores with follow-up suggestions.
+   *
+   * @param memberId - Member ID
+   * @param req - Authenticated request with profile
+   * @returns Member risk/engagement scores and suggestions
+   */
+  @Get('members/:memberId/scoring')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:read')
+  @ApiParam({ name: 'memberId', type: String })
+  @ApiOperation({ summary: 'Get member risk + engagement scores' })
+  async getMemberScoring(@Param('memberId') memberId: string, @Req() req: AuthenticatedRequest) {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the query to the scoring service
+    return this.scoringService.getMemberScoring(memberId, churchId);
   }
 }
