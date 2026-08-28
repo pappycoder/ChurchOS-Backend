@@ -13,7 +13,13 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { Prisma } from '@prisma/client';
@@ -378,6 +384,7 @@ export class AdminService {
       data: {
         church_id: churchId,
         name: dto.name,
+        branch_id: dto.branchId,
         leader_id: dto.leaderId,
         latitude: dto.latitude,
         longitude: dto.longitude,
@@ -413,6 +420,7 @@ export class AdminService {
     // Query all cell groups for the church ordered by name
     const groups = await this.prisma.cellGroup.findMany({
       where: { church_id: churchId },
+      include: { branch: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });
 
@@ -431,6 +439,7 @@ export class AdminService {
     // Fetch the cell group by ID scoped to the church
     const group = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
+      include: { branch: { select: { id: true, name: true } } },
     });
 
     // Throw NotFoundException if group does not exist
@@ -472,12 +481,14 @@ export class AdminService {
       where: { id: groupId },
       data: {
         ...(dto.name && { name: dto.name }),
+        ...(dto.branchId !== undefined && { branch_id: dto.branchId }),
         ...(dto.leaderId !== undefined && { leader_id: dto.leaderId }),
         ...(dto.latitude !== undefined && { latitude: dto.latitude }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
         ...(dto.meetingDay !== undefined && { meeting_day: dto.meetingDay }),
         ...(dto.meetingTime !== undefined && { meeting_time: dto.meetingTime }),
       },
+      include: { branch: { select: { id: true, name: true } } },
     });
 
     // Log the update for operational monitoring
@@ -682,13 +693,22 @@ export class AdminService {
    */
   async recordCellGroupAttendance(
     groupId: string,
-    memberId: string,
+    memberId: string | undefined,
+    visitorId: string | undefined,
+    visitorName: string | undefined,
     meetingDate: string,
     status: string,
     notes: string | undefined,
     churchId: string,
     userId: string,
   ): Promise<void> {
+    // Attendance must reference a member, a visitor, or a free-text walk-in name
+    if (!memberId && !visitorId && !visitorName) {
+      throw new BadRequestException(
+        'An attendance record requires a member, a visitor, or a visitor name',
+      );
+    }
+
     const group = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
     });
@@ -697,57 +717,105 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // Verify the member belongs to this church
-    const member = await this.prisma.member.findFirst({
-      where: { id: memberId, church_id: churchId },
-      select: { id: true },
-    });
+    let resolvedVisitorName = visitorName;
 
-    if (!member) {
-      throw new NotFoundException('Member not found in this church');
+    // Verify the member belongs to this church
+    if (memberId) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: memberId, church_id: churchId },
+        select: { id: true },
+      });
+
+      if (!member) {
+        throw new NotFoundException('Member not found in this church');
+      }
+    }
+
+    // Verify the visitor belongs to this church and resolve their name
+    if (visitorId) {
+      const visitor = await this.prisma.visitor.findFirst({
+        where: { id: visitorId, church_id: churchId },
+        select: { first_name: true, last_name: true },
+      });
+
+      if (!visitor) {
+        throw new NotFoundException('Visitor not found in this church');
+      }
+
+      resolvedVisitorName =
+        resolvedVisitorName || `${visitor.first_name} ${visitor.last_name || ''}`.trim();
     }
 
     const meetingDateObj = new Date(meetingDate);
 
-    const existing = await this.prisma.cellGroupAttendance.findUnique({
-      where: {
-        cell_group_id_member_id_meeting_date: {
-          cell_group_id: groupId,
-          member_id: memberId,
-          meeting_date: meetingDateObj,
-        },
-      },
-    });
+    const existing = memberId
+      ? await this.prisma.cellGroupAttendance.findUnique({
+          where: {
+            cell_group_id_member_id_meeting_date: {
+              cell_group_id: groupId,
+              member_id: memberId,
+              meeting_date: meetingDateObj,
+            },
+          },
+        })
+      : visitorId
+        ? await this.prisma.cellGroupAttendance.findUnique({
+            where: {
+              cell_group_id_visitor_id_meeting_date: {
+                cell_group_id: groupId,
+                visitor_id: visitorId,
+                meeting_date: meetingDateObj,
+              },
+            },
+          })
+        : null;
+
+    const subject = memberId
+      ? `member ${memberId}`
+      : visitorId
+        ? `visitor ${visitorId}`
+        : `walk-in ${visitorName || ''}`.trim();
 
     if (existing) {
       // Update existing attendance record
       await this.prisma.cellGroupAttendance.update({
-        where: {
-          cell_group_id_member_id_meeting_date: {
-            cell_group_id: groupId,
-            member_id: memberId,
-            meeting_date: meetingDateObj,
-          },
-        },
+        where: existing.member_id
+          ? {
+              cell_group_id_member_id_meeting_date: {
+                cell_group_id: groupId,
+                member_id: existing.member_id,
+                meeting_date: meetingDateObj,
+              },
+            }
+          : {
+              cell_group_id_visitor_id_meeting_date: {
+                cell_group_id: groupId,
+                visitor_id: existing.visitor_id || '',
+                meeting_date: meetingDateObj,
+              },
+            },
         data: {
           status: status || 'present',
           notes: notes ?? null,
+          ...(resolvedVisitorName !== undefined && { visitor_name: resolvedVisitorName }),
         },
       });
 
-      this.logger.log(`Cell group attendance updated: ${groupId} member ${memberId}`);
+      this.logger.log(`Cell group attendance updated: ${groupId} ${subject}`);
     } else {
       await this.prisma.cellGroupAttendance.create({
         data: {
           cell_group_id: groupId,
-          member_id: memberId,
+          member_id: memberId ?? null,
+          visitor_id: visitorId ?? null,
+          visitor_name: resolvedVisitorName ?? null,
           meeting_date: meetingDateObj,
           status: status || 'present',
           notes: notes ?? null,
         },
       });
 
-      this.logger.log(`Cell group attendance recorded: ${groupId} member ${memberId}`);
+      this.logger.log(`Cell group attendance recorded: ${groupId} ${subject}`);
     }
 
     await this.audit.log({
@@ -755,7 +823,14 @@ export class AdminService {
       churchId,
       action: 'CREATE',
       entity: 'cell_group_attendance',
-      newValues: { groupId, memberId, meetingDate, status },
+      newValues: {
+        groupId,
+        memberId,
+        visitorId,
+        visitorName: resolvedVisitorName,
+        meetingDate,
+        status,
+      },
     });
   }
 
@@ -769,9 +844,11 @@ export class AdminService {
   ): Promise<
     Array<{
       id: string;
-      memberId: string;
+      memberId: string | undefined;
       firstName: string;
       lastName: string;
+      visitorId: string | undefined;
+      visitorName: string | undefined;
       status: string;
       notes: string | null;
       meetingDate: string;
@@ -797,19 +874,28 @@ export class AdminService {
       where,
       include: {
         member: { select: { id: true, first_name: true, last_name: true } },
+        visitor: { select: { first_name: true, last_name: true } },
       },
       orderBy: [{ meeting_date: 'desc' }, { created_at: 'desc' }],
     });
 
-    return records.map((r) => ({
-      id: r.id,
-      memberId: r.member_id,
-      firstName: r.member?.first_name || '',
-      lastName: r.member?.last_name || '',
-      status: r.status,
-      notes: r.notes,
-      meetingDate: r.meeting_date.toISOString(),
-    }));
+    return records.map((r) => {
+      const visitorName =
+        r.visitor_name ||
+        (r.visitor ? `${r.visitor.first_name} ${r.visitor.last_name || ''}`.trim() : '');
+
+      return {
+        id: r.id,
+        memberId: r.member_id || undefined,
+        firstName: r.member?.first_name || '',
+        lastName: r.member?.last_name || '',
+        visitorId: r.visitor_id || undefined,
+        visitorName: visitorName || undefined,
+        status: r.status,
+        notes: r.notes,
+        meetingDate: r.meeting_date.toISOString(),
+      };
+    });
   }
 
   /**
@@ -1120,6 +1206,7 @@ export class AdminService {
   private mapCellGroupToResponseDto(group: {
     id: string;
     church_id: string;
+    branch_id: string | null;
     name: string;
     leader_id: string | null;
     latitude: number | null;
@@ -1128,6 +1215,7 @@ export class AdminService {
     meeting_time: string | null;
     created_at: Date;
     updated_at: Date;
+    branch?: { id: string; name: string } | null;
   }): CellGroupResponseDto {
     // Map the cell group fields to camelCase DTO properties
     return {
@@ -1135,6 +1223,8 @@ export class AdminService {
       churchId: group.church_id,
       name: group.name,
       leaderId: group.leader_id || undefined,
+      branchId: group.branch_id || undefined,
+      branchName: group.branch?.name,
       latitude: group.latitude || undefined,
       longitude: group.longitude || undefined,
       meetingDay: group.meeting_day || undefined,

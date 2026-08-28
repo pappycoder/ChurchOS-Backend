@@ -340,6 +340,9 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'assets:create',
     'assets:read',
     'assets:update',
+    // Cell Groups — read + create (attendance recording)
+    'cell_groups:read',
+    'cell_groups:create',
     // Users — read
     'users:read',
   ],

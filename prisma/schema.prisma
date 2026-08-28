@@ -190,6 +190,7 @@ model Branch {
   transactions    Transaction[]
   events          Event[]
   assets          Asset[]
+  cellGroups      CellGroup[]
 
   @@index([church_id])
   @@map("branches")
@@ -775,6 +776,7 @@ model DepartmentMember {
 model CellGroup {
   id          String   @id @default(uuid())
   church_id   String
+  branch_id   String?
   name        String
   leader_id   String?
   latitude    Float?
@@ -784,12 +786,14 @@ model CellGroup {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  church Church @relation(fields: [church_id], references: [id])
+  church Church  @relation(fields: [church_id], references: [id])
+  branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
 
   members   CellGroupMember[]
   attendance CellGroupAttendance[]
 
   @@index([church_id])
+  @@index([church_id, branch_id])
   @@map("cell_groups")
 }
 
@@ -812,18 +816,23 @@ model CellGroupMember {
 model CellGroupAttendance {
   id           String   @id @default(uuid())
   cell_group_id String
-  member_id    String
+  member_id    String?
+  visitor_id   String?
+  visitor_name String?
   meeting_date DateTime @default(now())
   status       String   @default("present") // present, absent, excused
   notes        String?
   created_at   DateTime @default(now())
 
   cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
-  member     Member    @relation(fields: [member_id], references: [id])
+  member     Member?   @relation(fields: [member_id], references: [id])
+  visitor    Visitor?  @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
 
   @@unique([cell_group_id, member_id, meeting_date])
+  @@unique([cell_group_id, visitor_id, meeting_date])
   @@index([cell_group_id])
   @@index([cell_group_id, meeting_date])
+  @@index([cell_group_id, visitor_id])
   @@map("cell_group_attendance")
 }
 
@@ -1069,6 +1078,7 @@ model Visitor {
   assigned_to    Profile? @relation("AssignedTo", fields: [assigned_to_id], references: [id])
   converted_member Member? @relation(fields: [converted_member_id], references: [id])
   attendance     Attendance[]
+  cellGroupAttendance CellGroupAttendance[]
 
   @@index([church_id, follow_up_status])
   @@index([church_id, assigned_to_id])

@@ -13,10 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const REPORTS_CONTROLLER_PATH = path.join(
-  __dirname,
-  '../../../src/reports/reports.controller.ts',
-);
+const REPORTS_CONTROLLER_PATH = path.join(__dirname, '../../../src/reports/reports.controller.ts');
 
 describe('ReportsController permission decorators', () => {
   const source = fs.readFileSync(REPORTS_CONTROLLER_PATH, 'utf8');

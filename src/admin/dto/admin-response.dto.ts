@@ -82,6 +82,12 @@ export class CellGroupResponseDto {
   @ApiPropertyOptional({ description: "Optional leader's last name" })
   leaderLastName?: string;
 
+  @ApiPropertyOptional({ description: 'Optional branch this cell group belongs to' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: "Optional branch's name" })
+  branchName?: string;
+
   @ApiPropertyOptional({ description: 'Optional latitude for geolocation matching' })
   latitude?: number;
 

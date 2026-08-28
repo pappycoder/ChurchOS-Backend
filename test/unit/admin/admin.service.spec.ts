@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from '../../../src/admin/admin.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('AdminService', () => {
@@ -182,6 +182,325 @@ describe('AdminService', () => {
 
       expect(result.name).toBe('Victory Cell');
       expect(result.latitude).toBe(6.5244);
+    });
+
+    it('should persist the branch id', async () => {
+      prisma.cellGroup.create.mockResolvedValue({
+        ...mockCellGroup,
+        branch_id: 'branch-1',
+      });
+
+      await service.createCellGroup(
+        { name: 'Victory Cell', branchId: 'branch-1' },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroup.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ branch_id: 'branch-1' }),
+        }),
+      );
+    });
+  });
+
+  describe('updateCellGroup', () => {
+    it('should persist the branch id and map the branch name', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.cellGroup.update.mockResolvedValue({
+        ...mockCellGroup,
+        branch_id: 'branch-1',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+
+      const result = await service.updateCellGroup(
+        mockGroupId,
+        { branchId: 'branch-1' },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroup.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ branch_id: 'branch-1' }),
+          include: { branch: { select: { id: true, name: true } } },
+        }),
+      );
+      expect(result.branchId).toBe('branch-1');
+      expect(result.branchName).toBe('Lekki Campus');
+    });
+  });
+
+  describe('listCellGroups', () => {
+    it('should map branch names on each group', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([
+        {
+          ...mockCellGroup,
+          branch_id: 'branch-1',
+          branch: { id: 'branch-1', name: 'Lekki Campus' },
+        },
+        { ...mockCellGroup, id: 'group-2', name: 'Grace Cell', branch_id: null },
+      ]);
+
+      const result = await service.listCellGroups(mockChurchId);
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: { branch: { select: { id: true, name: true } } },
+        }),
+      );
+      expect(result[0].branchName).toBe('Lekki Campus');
+      expect(result[1].branchName).toBeUndefined();
+    });
+  });
+
+  describe('recordCellGroupAttendance', () => {
+    const meetingDate = '2024-06-02T10:00:00.000Z';
+
+    it('should reject when no member, visitor, or visitor name is supplied', async () => {
+      await expect(
+        service.recordCellGroupAttendance(
+          mockGroupId,
+          undefined,
+          undefined,
+          undefined,
+          meetingDate,
+          'present',
+          undefined,
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should create a member attendance record', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+      prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
+      prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        mockMemberId,
+        undefined,
+        undefined,
+        meetingDate,
+        'present',
+        undefined,
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroupAttendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cell_group_id: mockGroupId,
+            member_id: mockMemberId,
+            visitor_id: null,
+            status: 'present',
+          }),
+        }),
+      );
+    });
+
+    it('should update an existing member attendance record', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+      prisma.cellGroupAttendance.findUnique.mockResolvedValue({
+        id: 'att-1',
+        member_id: mockMemberId,
+        visitor_id: null,
+      });
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        mockMemberId,
+        undefined,
+        undefined,
+        meetingDate,
+        'excused',
+        'Sick',
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroupAttendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'excused', notes: 'Sick' }),
+        }),
+      );
+    });
+
+    it('should reject a member from another church', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.member.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.recordCellGroupAttendance(
+          mockGroupId,
+          mockMemberId,
+          undefined,
+          undefined,
+          meetingDate,
+          'present',
+          undefined,
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should create a visitor attendance record and resolve the visitor name', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.visitor.findFirst.mockResolvedValue({
+        first_name: 'Ada',
+        last_name: 'Okafor',
+      });
+      prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
+      prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        undefined,
+        'visitor-1',
+        undefined,
+        meetingDate,
+        'present',
+        undefined,
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroupAttendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cell_group_id: mockGroupId,
+            member_id: null,
+            visitor_id: 'visitor-1',
+            visitor_name: 'Ada Okafor',
+          }),
+        }),
+      );
+    });
+
+    it('should reject a visitor from another church', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.visitor.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.recordCellGroupAttendance(
+          mockGroupId,
+          undefined,
+          'visitor-1',
+          undefined,
+          meetingDate,
+          'present',
+          undefined,
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should record a free-text walk-in', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        undefined,
+        undefined,
+        'Walk In Guest',
+        meetingDate,
+        'present',
+        undefined,
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroupAttendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cell_group_id: mockGroupId,
+            member_id: null,
+            visitor_id: null,
+            visitor_name: 'Walk In Guest',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('listCellGroupAttendance', () => {
+    it('should resolve visitor names and keep member fields nullable', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.cellGroupAttendance.findMany.mockResolvedValue([
+        {
+          id: 'att-1',
+          cell_group_id: mockGroupId,
+          member_id: mockMemberId,
+          visitor_id: null,
+          visitor_name: null,
+          meeting_date: new Date('2024-06-02T10:00:00.000Z'),
+          status: 'present',
+          notes: null,
+          created_at: new Date('2024-06-02T10:00:00.000Z'),
+          member: { id: mockMemberId, first_name: 'John', last_name: 'Doe' },
+          visitor: null,
+        },
+        {
+          id: 'att-2',
+          cell_group_id: mockGroupId,
+          member_id: null,
+          visitor_id: 'visitor-1',
+          visitor_name: 'Ada Okafor',
+          meeting_date: new Date('2024-06-02T10:00:00.000Z'),
+          status: 'present',
+          notes: null,
+          created_at: new Date('2024-06-02T10:00:00.000Z'),
+          member: null,
+          visitor: { first_name: 'Ada', last_name: 'Okafor' },
+        },
+      ]);
+
+      const result = await service.listCellGroupAttendance(mockGroupId, mockChurchId);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        memberId: mockMemberId,
+        firstName: 'John',
+        lastName: 'Doe',
+        visitorName: undefined,
+      });
+      expect(result[1]).toMatchObject({
+        memberId: undefined,
+        firstName: '',
+        visitorId: 'visitor-1',
+        visitorName: 'Ada Okafor',
+      });
+    });
+
+    it('should fall back to the linked visitor name when the snapshot is empty', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.cellGroupAttendance.findMany.mockResolvedValue([
+        {
+          id: 'att-2',
+          cell_group_id: mockGroupId,
+          member_id: null,
+          visitor_id: 'visitor-1',
+          visitor_name: null,
+          meeting_date: new Date('2024-06-02T10:00:00.000Z'),
+          status: 'present',
+          notes: null,
+          created_at: new Date('2024-06-02T10:00:00.000Z'),
+          member: null,
+          visitor: { first_name: 'Ada', last_name: 'Okafor' },
+        },
+      ]);
+
+      const result = await service.listCellGroupAttendance(mockGroupId, mockChurchId);
+
+      expect(result[0].visitorName).toBe('Ada Okafor');
     });
   });
 

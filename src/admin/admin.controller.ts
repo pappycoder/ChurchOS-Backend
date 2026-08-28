@@ -71,6 +71,7 @@ export class AdminController {
   @Post('departments')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:create')
   @ApiOperation({ summary: 'Create a new department' })
   async createDepartment(
     @Body() dto: CreateDepartmentDto,
@@ -88,6 +89,7 @@ export class AdminController {
    */
   @Get('departments')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('departments:read')
   @ApiOperation({ summary: 'List departments' })
   async listDepartments(@Req() req: AuthenticatedRequest): Promise<DepartmentResponseDto[]> {
     // Extract church ID from the authenticated user's profile
@@ -101,6 +103,7 @@ export class AdminController {
    */
   @Get('departments/:departmentId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('departments:read')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Get a department by ID' })
   async getDepartmentById(
@@ -118,6 +121,7 @@ export class AdminController {
    */
   @Patch('departments/:departmentId')
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Update a department' })
   async updateDepartment(
@@ -138,6 +142,7 @@ export class AdminController {
   @Delete('departments/:departmentId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin')
+  @RequirePermissions('departments:delete')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Delete a department (must have no members)' })
   async deleteDepartment(
@@ -157,6 +162,7 @@ export class AdminController {
   @Post('departments/:departmentId/members')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Add a member to a department' })
   async addDepartmentMember(
@@ -177,6 +183,7 @@ export class AdminController {
   @Delete('departments/:departmentId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiParam({ name: 'memberId', type: String })
   @ApiOperation({ summary: 'Remove a member from a department' })
@@ -200,6 +207,7 @@ export class AdminController {
   @Post('cell-groups')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:create')
   @ApiOperation({ summary: 'Create a new cell group' })
   async createCellGroup(
     @Body() dto: CreateCellGroupDto,
@@ -216,7 +224,8 @@ export class AdminController {
    * Lists all cell groups for the church.
    */
   @Get('cell-groups')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
+  @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'List cell groups' })
   async listCellGroups(@Req() req: AuthenticatedRequest): Promise<CellGroupResponseDto[]> {
     // Extract church ID from the authenticated user's profile
@@ -247,7 +256,8 @@ export class AdminController {
    * Gets a single cell group by ID.
    */
   @Get('cell-groups/:groupId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
+  @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Get a cell group by ID' })
   async getCellGroupById(
@@ -265,6 +275,7 @@ export class AdminController {
    */
   @Patch('cell-groups/:groupId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Update a cell group' })
   async updateCellGroup(
@@ -285,6 +296,7 @@ export class AdminController {
   @Delete('cell-groups/:groupId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('cell_groups:delete')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Delete a cell group' })
   async deleteCellGroup(
@@ -306,6 +318,7 @@ export class AdminController {
   @Post('cell-groups/:groupId/members')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Add a member to a cell group' })
   async addCellGroupMember(
@@ -330,6 +343,7 @@ export class AdminController {
   @Delete('cell-groups/:groupId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiParam({ name: 'memberId', type: String })
   @ApiOperation({ summary: 'Remove a member from a cell group' })
@@ -347,7 +361,8 @@ export class AdminController {
    * Lists members of a cell group.
    */
   @Get('cell-groups/:groupId/members')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
+  @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group members' })
   async listCellGroupMembers(@Param('groupId') groupId: string, @Req() req: AuthenticatedRequest) {
@@ -363,6 +378,7 @@ export class AdminController {
   @Post('cell-groups/:groupId/attendance')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Record cell group attendance' })
   async recordCellGroupAttendance(
@@ -375,6 +391,8 @@ export class AdminController {
     await this.adminService.recordCellGroupAttendance(
       groupId,
       dto.memberId,
+      dto.visitorId,
+      dto.visitorName,
       dto.meetingDate,
       dto.status || 'present',
       dto.notes,
@@ -387,7 +405,15 @@ export class AdminController {
    * Lists attendance records for a cell group.
    */
   @Get('cell-groups/:groupId/attendance')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequireRoles(
+    'church_admin',
+    'senior_pastor',
+    'branch_pastor',
+    'secretary',
+    'department_head',
+    'cell_leader',
+  )
+  @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group attendance' })
   async listCellGroupAttendance(
@@ -403,7 +429,15 @@ export class AdminController {
    * Gets attendance summary for a cell group.
    */
   @Get('cell-groups/:groupId/attendance/summary')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequireRoles(
+    'church_admin',
+    'senior_pastor',
+    'branch_pastor',
+    'secretary',
+    'department_head',
+    'cell_leader',
+  )
+  @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Get cell group attendance summary' })
   async getCellGroupAttendanceSummary(

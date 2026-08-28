@@ -15,10 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const ASSETS_CONTROLLER_PATH = path.join(
-  __dirname,
-  '../../../src/assets/assets.controller.ts',
-);
+const ASSETS_CONTROLLER_PATH = path.join(__dirname, '../../../src/assets/assets.controller.ts');
 
 describe('AssetsController permission decorators', () => {
   const source = fs.readFileSync(ASSETS_CONTROLLER_PATH, 'utf8');
@@ -54,7 +51,7 @@ describe('AssetsController permission decorators', () => {
   });
 
   it('requires assets:read on GET /assets/categories (list)', () => {
-    const block = blockBetween("async createCategory(\n", 'async listCategories(');
+    const block = blockBetween('async createCategory(\n', 'async listCategories(');
     expect(block).toContain("@Get('categories')");
     expect(block).toContain("@RequirePermissions('assets:read')");
   });
@@ -85,7 +82,10 @@ describe('AssetsController permission decorators', () => {
   });
 
   it('requires assets:read on GET /assets/:assetId/depreciation/summary', () => {
-    const block = blockBetween("@Get(':assetId/depreciation/summary')", 'async getDepreciationSummary(');
+    const block = blockBetween(
+      "@Get(':assetId/depreciation/summary')",
+      'async getDepreciationSummary(',
+    );
     expect(block).toContain("@RequirePermissions('assets:read')");
   });
 

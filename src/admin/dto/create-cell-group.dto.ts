@@ -20,6 +20,12 @@ export class CreateCellGroupDto {
   @MaxLength(100)
   name!: string;
 
+  // Optional branch this cell group belongs to
+  @ApiPropertyOptional({ description: 'Branch this cell group belongs to' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
   // Optional leader member ID
   @ApiPropertyOptional({ description: 'Leader member ID' })
   @IsOptional()

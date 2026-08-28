@@ -77,10 +77,24 @@ export class AddCellGroupMemberDto {
 
 // Define DTO for recording cell group attendance
 export class RecordCellGroupAttendanceDto {
-  // Member UUID attending (required)
-  @ApiProperty({ description: 'Member UUID attending' })
+  // Optional member UUID attending (required if no visitor is supplied)
+  @ApiPropertyOptional({ description: 'Member UUID attending' })
+  @IsOptional()
   @IsString()
-  memberId!: string;
+  memberId?: string;
+
+  // Optional visitor UUID attending (required if no member is supplied)
+  @ApiPropertyOptional({ description: 'Visitor UUID attending' })
+  @IsOptional()
+  @IsString()
+  visitorId?: string;
+
+  // Optional free-text visitor name for walk-ins (snapshot when visitorId is set)
+  @ApiPropertyOptional({ description: 'Free-text visitor name (walk-ins)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  visitorName?: string;
 
   // Meeting date (required, ISO string)
   @ApiProperty({ description: 'Meeting date (ISO string)', example: '2026-07-22T10:00:00.000Z' })
