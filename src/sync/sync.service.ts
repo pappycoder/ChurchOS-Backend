@@ -387,7 +387,7 @@ export class SyncService {
         this.prisma.member.findMany({ where: { church_id: churchId } }),
         this.prisma.service.findMany({ where: { church_id: churchId } }),
         this.prisma.givingCategory.findMany({ where: { church_id: churchId } }),
-        this.prisma.visitor.findMany({ where: { church_id: churchId } }),
+        this.prisma.visitor.findMany({ where: { church_id: churchId, deleted_at: null } }),
         this.prisma.attendance.findMany({ where: { church_id: churchId } }),
         this.prisma.transaction.findMany({ where: { church_id: churchId } }),
       ]);

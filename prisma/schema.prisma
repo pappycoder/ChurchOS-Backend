@@ -859,6 +859,7 @@ model Asset {
   asset_tag           String
   name                String
   description         String?
+  image_url           String?
   category_id         String?
   serial_number       String?
   brand               String?
@@ -1072,6 +1073,7 @@ model Visitor {
   custom_fields     Json     @default("{}")
   converted_member_id String? // Member ID if converted
   converted_at      DateTime?
+  deleted_at        DateTime? // Set when converted to a member (soft-delete)
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 

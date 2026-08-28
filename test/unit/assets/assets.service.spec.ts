@@ -125,9 +125,19 @@ describe('AssetsService', () => {
       prisma.asset.findUnique.mockResolvedValue(null);
       prisma.assetCategory.findFirst.mockResolvedValue(mockCategory);
       prisma.asset.create
-        .mockResolvedValueOnce({ ...mockAsset, qr_code: null })
-        .mockResolvedValueOnce(mockAsset);
-      prisma.asset.update.mockResolvedValue(mockAsset);
+        .mockResolvedValueOnce({
+          ...mockAsset,
+          qr_code: null,
+          image_url: 'https://img.example/mixer.jpg',
+        })
+        .mockResolvedValueOnce({
+          ...mockAsset,
+          image_url: 'https://img.example/mixer.jpg',
+        });
+      prisma.asset.update.mockResolvedValue({
+        ...mockAsset,
+        image_url: 'https://img.example/mixer.jpg',
+      });
 
       const result = await service.createAsset(
         mockChurchId,
@@ -137,12 +147,21 @@ describe('AssetsService', () => {
           categoryId: mockCategoryId,
           purchasePrice: 250000,
           usefulLifeYears: 5,
+          imageUrl: 'https://img.example/mixer.jpg',
         },
         mockUserId,
       );
 
       expect(result.assetTag).toBe('AUD-001');
+      expect(result.imageUrl).toBe('https://img.example/mixer.jpg');
       expect(result.qrCode).toBe(`CHURCHOS:ASSET:${mockAssetId}`);
+      expect(prisma.asset.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            image_url: 'https://img.example/mixer.jpg',
+          }),
+        }),
+      );
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'asset', action: 'CREATE' }),
       );

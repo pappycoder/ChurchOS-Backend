@@ -41,6 +41,15 @@ export class CreateAssetDto {
   description?: string;
 
   @ApiPropertyOptional({
+    description: 'Optional image URL for the asset',
+    example: 'https://example.com/assets/mixer.jpg',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
     description: 'Category ID',
     example: '11111111-1111-1111-1111-111111111111',
   })

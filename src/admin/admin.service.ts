@@ -407,8 +407,11 @@ export class AdminService {
       newValues: { name: group.name },
     });
 
+    // Resolve the assigned leader's name for the response
+    const leaders = await this.resolveCellGroupLeaders(churchId, [group]);
+
     // Map the Prisma record to a response DTO and return
-    return this.mapCellGroupToResponseDto(group);
+    return this.mapCellGroupToResponseDto({ ...group, leader: leaders.get(group.leader_id || '') });
   }
 
   /**
@@ -425,8 +428,13 @@ export class AdminService {
       orderBy: { name: 'asc' },
     });
 
+    // Resolve assigned leader names in a single batch query
+    const leaders = await this.resolveCellGroupLeaders(churchId, groups);
+
     // Map each group to a response DTO
-    return groups.map((g) => this.mapCellGroupToResponseDto(g));
+    return groups.map((g) =>
+      this.mapCellGroupToResponseDto({ ...g, leader: leaders.get(g.leader_id || '') }),
+    );
   }
 
   /**
@@ -448,8 +456,11 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    // Resolve the assigned leader's name for the response
+    const leaders = await this.resolveCellGroupLeaders(churchId, [group]);
+
     // Map and return the cell group
-    return this.mapCellGroupToResponseDto(group);
+    return this.mapCellGroupToResponseDto({ ...group, leader: leaders.get(group.leader_id || '') });
   }
 
   /**
@@ -510,8 +521,14 @@ export class AdminService {
       },
     });
 
+    // Resolve the assigned leader's name for the response
+    const leaders = await this.resolveCellGroupLeaders(churchId, [updated]);
+
     // Map and return the updated cell group
-    return this.mapCellGroupToResponseDto(updated);
+    return this.mapCellGroupToResponseDto({
+      ...updated,
+      leader: leaders.get(updated.leader_id || ''),
+    });
   }
 
   /**
@@ -967,6 +984,9 @@ export class AdminService {
       },
     });
 
+    // Resolve assigned leader names in a single batch query
+    const leaders = await this.resolveCellGroupLeaders(churchId, groups);
+
     // Calculate distance from user to each group using Haversine formula
     const groupsWithDistance = groups
       .map((group) => {
@@ -977,7 +997,10 @@ export class AdminService {
           group.longitude!,
         );
         return {
-          ...this.mapCellGroupToResponseDto(group),
+          ...this.mapCellGroupToResponseDto({
+            ...group,
+            leader: leaders.get(group.leader_id || ''),
+          }),
           distanceKm: Math.round(distance * 100) / 100,
         };
       })
@@ -1203,6 +1226,40 @@ export class AdminService {
   }
 
   /**
+   * Resolves the names of cell-group leaders via a batched member lookup.
+   *
+   * @param churchId - Church ID (scope)
+   * @param groups - Cell group rows to gather leader IDs from
+   * @returns Map of leader member ID to { first_name, last_name }
+   */
+  private async resolveCellGroupLeaders(
+    churchId: string,
+    groups: Array<{ leader_id: string | null }>,
+  ): Promise<Map<string, { first_name: string; last_name: string }>> {
+    // Collect unique non-null leader IDs
+    const leaderIds = [
+      ...new Set(groups.map((g) => g.leader_id).filter((id): id is string => !!id)),
+    ];
+
+    // Short-circuit when no leaders are assigned
+    if (leaderIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch-fetch leader member names scoped to the church
+    const leaders =
+      (await this.prisma.member.findMany({
+        where: { church_id: churchId, id: { in: leaderIds } },
+        select: { id: true, first_name: true, last_name: true },
+      })) ?? [];
+
+    // Build a lookup map keyed by member ID
+    return new Map(
+      leaders.map((m) => [m.id, { first_name: m.first_name, last_name: m.last_name }]),
+    );
+  }
+
+  /**
    * Maps a Prisma CellGroup record to a response DTO.
    */
   private mapCellGroupToResponseDto(group: {
@@ -1219,6 +1276,7 @@ export class AdminService {
     created_at: Date;
     updated_at: Date;
     branch?: { id: string; name: string } | null;
+    leader?: { first_name: string | null; last_name: string | null } | null;
   }): CellGroupResponseDto {
     // Map the cell group fields to camelCase DTO properties
     return {
@@ -1226,6 +1284,8 @@ export class AdminService {
       churchId: group.church_id,
       name: group.name,
       leaderId: group.leader_id || undefined,
+      leaderFirstName: group.leader?.first_name || undefined,
+      leaderLastName: group.leader?.last_name || undefined,
       branchId: group.branch_id || undefined,
       branchName: group.branch?.name,
       address: group.address || undefined,

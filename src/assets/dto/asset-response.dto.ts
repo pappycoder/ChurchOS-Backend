@@ -25,6 +25,9 @@ export class AssetResponseDto {
   @ApiPropertyOptional({ description: 'Asset description' })
   description?: string;
 
+  @ApiPropertyOptional({ description: 'Optional image URL for the asset' })
+  imageUrl?: string;
+
   @ApiPropertyOptional({ description: 'Category ID' })
   categoryId?: string;
 

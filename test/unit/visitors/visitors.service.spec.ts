@@ -218,6 +218,13 @@ describe('VisitorsService', () => {
       const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
       expect(arg.orderBy).toEqual([{ created_at: 'desc' }]);
     });
+
+    it('should exclude soft-deleted (converted) visitors from pulls', async () => {
+      await service.findAll(churchId, {});
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.deleted_at).toBeNull();
+      expect(arg.where.church_id).toBe(churchId);
+    });
   });
 
   describe('findOne', () => {
@@ -298,6 +305,14 @@ describe('VisitorsService', () => {
           data: expect.objectContaining({
             gender: 'female',
             custom_fields: { how_heard: 'Friend' },
+          }),
+        }),
+      );
+      expect(prismaMock.visitor.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            follow_up_status: 'converted',
+            deleted_at: expect.any(Date),
           }),
         }),
       );

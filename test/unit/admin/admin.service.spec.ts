@@ -223,6 +223,34 @@ describe('AdminService', () => {
       );
       expect(result.address).toBe('12 Adeola Odeku St, Lekki');
     });
+
+    it('should resolve the leader name on the response', async () => {
+      prisma.cellGroup.create.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: mockMemberId,
+      });
+      prisma.member.findMany.mockResolvedValue([
+        { id: mockMemberId, first_name: 'John', last_name: 'Doe' },
+      ]);
+
+      const result = await service.createCellGroup(
+        { name: 'Victory Cell', leaderId: mockMemberId },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.member.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            church_id: mockChurchId,
+            id: { in: [mockMemberId] },
+          }),
+        }),
+      );
+      expect(result.leaderId).toBe(mockMemberId);
+      expect(result.leaderFirstName).toBe('John');
+      expect(result.leaderLastName).toBe('Doe');
+    });
   });
 
   describe('updateCellGroup', () => {
@@ -277,6 +305,52 @@ describe('AdminService', () => {
       );
       expect(result[0].branchName).toBe('Lekki Campus');
       expect(result[1].branchName).toBeUndefined();
+    });
+
+    it('should resolve leader names on each group', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([
+        { ...mockCellGroup, leader_id: mockMemberId },
+        { ...mockCellGroup, id: 'group-2', name: 'Grace Cell', leader_id: null },
+      ]);
+      prisma.member.findMany.mockResolvedValue([
+        { id: mockMemberId, first_name: 'John', last_name: 'Doe' },
+      ]);
+
+      const result = await service.listCellGroups(mockChurchId);
+
+      expect(result[0].leaderFirstName).toBe('John');
+      expect(result[0].leaderLastName).toBe('Doe');
+      expect(result[1].leaderFirstName).toBeUndefined();
+      expect(result[1].leaderLastName).toBeUndefined();
+    });
+  });
+
+  describe('getCellGroupById', () => {
+    it('should return a group with its resolved leader name', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: mockMemberId,
+        branch_id: 'branch-1',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([
+        { id: mockMemberId, first_name: 'Ada', last_name: 'Okafor' },
+      ]);
+
+      const result = await service.getCellGroupById(mockGroupId, mockChurchId);
+
+      expect(result.branchId).toBe('branch-1');
+      expect(result.branchName).toBe('Lekki Campus');
+      expect(result.leaderFirstName).toBe('Ada');
+      expect(result.leaderLastName).toBe('Okafor');
+    });
+
+    it('should throw NotFoundException for a missing group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(null);
+
+      await expect(service.getCellGroupById(mockGroupId, mockChurchId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -562,6 +636,21 @@ describe('AdminService', () => {
       const result = await service.findNearestGroups(6.5, 3.37, mockChurchId, 3);
 
       expect(result).toHaveLength(3);
+    });
+
+    it('should resolve leader names in nearest results', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([
+        { ...mockCellGroup, leader_id: mockMemberId, latitude: 6.5244, longitude: 3.3792 },
+      ]);
+      prisma.member.findMany.mockResolvedValue([
+        { id: mockMemberId, first_name: 'Ada', last_name: 'Okafor' },
+      ]);
+
+      const result = await service.findNearestGroups(6.52, 3.38, mockChurchId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].leaderFirstName).toBe('Ada');
+      expect(result[0].leaderLastName).toBe('Okafor');
     });
   });
 });

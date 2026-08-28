@@ -67,7 +67,7 @@ export class VisitorsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.VisitorWhereInput = { church_id: churchId };
+    const where: Prisma.VisitorWhereInput = { church_id: churchId, deleted_at: null };
 
     if (query.followUpStatus) {
       where.follow_up_status = query.followUpStatus;
@@ -249,6 +249,9 @@ export class VisitorsService {
         follow_up_status: 'converted',
         converted_member_id: member.id,
         converted_at: new Date(),
+        // A converted visitor becomes a member and is soft-deleted so it never
+        // surfaces again in visitor pulls (list/search/follow-up board).
+        deleted_at: new Date(),
       },
       include: { assigned_to: { select: { first_name: true, last_name: true } } },
     });
