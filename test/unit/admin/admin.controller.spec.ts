@@ -30,6 +30,12 @@ describe('AdminController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
+  const collapse = (s: string): string => s.replace(/[\s,]/g, '');
+
+  const hasRequireRoles = (block: string, roles: string): void => {
+    expect(collapse(block)).toContain(collapse(`@RequireRoles(${roles})`));
+  };
+
   it('covers all 19 department/cell-group routes with a granular permission (8 departments, 11 cell groups)', () => {
     const depCreate = source.match(/@RequirePermissions\('departments:create'\)/g)?.length ?? 0;
     const depRead = source.match(/@RequirePermissions\('departments:read'\)/g)?.length ?? 0;
@@ -60,13 +66,13 @@ describe('AdminController permission decorators', () => {
   it('requires departments:create on POST /admin/departments (keeps church_admin/senior_pastor ceiling)', () => {
     const block = blockBetween("@Post('departments')", 'async createDepartment(');
     expect(block).toContain("@RequirePermissions('departments:create')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
   it('requires departments:read on GET /admin/departments', () => {
     const block = blockBetween("@Get('departments')", 'async listDepartments(');
     expect(block).toContain("@RequirePermissions('departments:read')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
   });
 
   it('requires departments:read on GET /admin/departments/:departmentId', () => {
@@ -77,13 +83,13 @@ describe('AdminController permission decorators', () => {
   it('requires departments:update on PATCH /admin/departments/:departmentId', () => {
     const block = blockBetween("@Patch('departments/:departmentId')", 'async updateDepartment(');
     expect(block).toContain("@RequirePermissions('departments:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
   it('requires departments:delete on DELETE /admin/departments/:departmentId (keeps church_admin ceiling)', () => {
     const block = blockBetween("@Delete('departments/:departmentId')", 'async deleteDepartment(');
     expect(block).toContain("@RequirePermissions('departments:delete')");
-    expect(block).toContain("@RequireRoles('church_admin')");
+    hasRequireRoles(block, "'church_admin'");
   });
 
   it('requires departments:update on POST /admin/departments/:departmentId/members', () => {
@@ -107,43 +113,43 @@ describe('AdminController permission decorators', () => {
   it('requires cell_groups:create on POST /admin/cell-groups', () => {
     const block = blockBetween("@Post('cell-groups')", 'async createCellGroup(');
     expect(block).toContain("@RequirePermissions('cell_groups:create')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups with widened read roles', () => {
     const block = blockBetween("@Get('cell-groups')\n", 'async listCellGroups(');
     expect(block).toContain("@RequirePermissions('cell_groups:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')",
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader'",
     );
   });
 
   it('leaves GET /admin/cell-groups/nearest intentionally permission-free (member-facing)', () => {
     const block = blockBetween("@Get('cell-groups/nearest')", 'async findNearestGroups(');
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'member')",
-    );
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'member'");
     expect(block).not.toContain("@RequirePermissions('cell_groups:read')");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/:groupId with widened read roles', () => {
     const block = blockBetween("@Get('cell-groups/:groupId')", 'async getCellGroupById(');
     expect(block).toContain("@RequirePermissions('cell_groups:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')",
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader'",
     );
   });
 
   it('requires cell_groups:update on PATCH /admin/cell-groups/:groupId', () => {
     const block = blockBetween("@Patch('cell-groups/:groupId')", 'async updateCellGroup(');
     expect(block).toContain("@RequirePermissions('cell_groups:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
   });
 
   it('requires cell_groups:delete on DELETE /admin/cell-groups/:groupId', () => {
     const block = blockBetween("@Delete('cell-groups/:groupId')", 'async deleteCellGroup(');
     expect(block).toContain("@RequirePermissions('cell_groups:delete')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
   it('requires cell_groups:create on POST /admin/cell-groups/:groupId/members', () => {
@@ -168,8 +174,9 @@ describe('AdminController permission decorators', () => {
       'async listCellGroupMembers(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')",
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader'",
     );
   });
 
@@ -179,9 +186,7 @@ describe('AdminController permission decorators', () => {
       'async recordCellGroupAttendance(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:create')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')",
-    );
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary'");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/:groupId/attendance with widened read roles', () => {
@@ -190,8 +195,9 @@ describe('AdminController permission decorators', () => {
       'async listCellGroupAttendance(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader')",
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader'",
     );
   });
 
@@ -201,8 +207,9 @@ describe('AdminController permission decorators', () => {
       'async getCellGroupAttendanceSummary(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader')",
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader'",
     );
   });
 });

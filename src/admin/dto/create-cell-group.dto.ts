@@ -26,6 +26,13 @@ export class CreateCellGroupDto {
   @IsString()
   branchId?: string;
 
+  // Optional meet-up address for the cell group
+  @ApiPropertyOptional({ example: '12 Adeola Odeku St, Lekki', description: 'Meet-up address' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
   // Optional leader member ID
   @ApiPropertyOptional({ description: 'Leader member ID' })
   @IsOptional()

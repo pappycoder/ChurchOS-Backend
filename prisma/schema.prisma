@@ -778,6 +778,7 @@ model CellGroup {
   church_id   String
   branch_id   String?
   name        String
+  address     String?
   leader_id   String?
   latitude    Float?
   longitude   Float?

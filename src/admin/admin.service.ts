@@ -385,6 +385,7 @@ export class AdminService {
         church_id: churchId,
         name: dto.name,
         branch_id: dto.branchId,
+        address: dto.address,
         leader_id: dto.leaderId,
         latitude: dto.latitude,
         longitude: dto.longitude,
@@ -482,6 +483,7 @@ export class AdminService {
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.branchId !== undefined && { branch_id: dto.branchId }),
+        ...(dto.address !== undefined && { address: dto.address }),
         ...(dto.leaderId !== undefined && { leader_id: dto.leaderId }),
         ...(dto.latitude !== undefined && { latitude: dto.latitude }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
@@ -1208,6 +1210,7 @@ export class AdminService {
     church_id: string;
     branch_id: string | null;
     name: string;
+    address: string | null;
     leader_id: string | null;
     latitude: number | null;
     longitude: number | null;
@@ -1225,6 +1228,7 @@ export class AdminService {
       leaderId: group.leader_id || undefined,
       branchId: group.branch_id || undefined,
       branchName: group.branch?.name,
+      address: group.address || undefined,
       latitude: group.latitude || undefined,
       longitude: group.longitude || undefined,
       meetingDay: group.meeting_day || undefined,

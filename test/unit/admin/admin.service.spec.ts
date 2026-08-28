@@ -31,6 +31,7 @@ describe('AdminService', () => {
     id: mockGroupId,
     church_id: mockChurchId,
     name: 'Victory Cell',
+    address: null,
     leader_id: null,
     latitude: 6.5244,
     longitude: 3.3792,
@@ -202,32 +203,57 @@ describe('AdminService', () => {
         }),
       );
     });
+
+    it('should persist the address and map it on the response', async () => {
+      prisma.cellGroup.create.mockResolvedValue({
+        ...mockCellGroup,
+        address: '12 Adeola Odeku St, Lekki',
+      });
+
+      const result = await service.createCellGroup(
+        { name: 'Victory Cell', address: '12 Adeola Odeku St, Lekki' },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.cellGroup.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ address: '12 Adeola Odeku St, Lekki' }),
+        }),
+      );
+      expect(result.address).toBe('12 Adeola Odeku St, Lekki');
+    });
   });
 
   describe('updateCellGroup', () => {
-    it('should persist the branch id and map the branch name', async () => {
+    it('should persist details and map them on update', async () => {
       prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
       prisma.cellGroup.update.mockResolvedValue({
         ...mockCellGroup,
         branch_id: 'branch-1',
+        address: '12 Adeola Odeku St, Lekki',
         branch: { id: 'branch-1', name: 'Lekki Campus' },
       });
 
       const result = await service.updateCellGroup(
         mockGroupId,
-        { branchId: 'branch-1' },
+        { branchId: 'branch-1', address: '12 Adeola Odeku St, Lekki' },
         mockChurchId,
         mockUserId,
       );
 
       expect(prisma.cellGroup.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ branch_id: 'branch-1' }),
+          data: expect.objectContaining({
+            branch_id: 'branch-1',
+            address: '12 Adeola Odeku St, Lekki',
+          }),
           include: { branch: { select: { id: true, name: true } } },
         }),
       );
       expect(result.branchId).toBe('branch-1');
       expect(result.branchName).toBe('Lekki Campus');
+      expect(result.address).toBe('12 Adeola Odeku St, Lekki');
     });
   });
 

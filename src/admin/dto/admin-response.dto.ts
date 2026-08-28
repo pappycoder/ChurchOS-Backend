@@ -88,6 +88,12 @@ export class CellGroupResponseDto {
   @ApiPropertyOptional({ description: "Optional branch's name" })
   branchName?: string;
 
+  @ApiPropertyOptional({
+    example: '12 Adeola Odeku St, Lekki',
+    description: 'Optional meet-up address',
+  })
+  address?: string;
+
   @ApiPropertyOptional({ description: 'Optional latitude for geolocation matching' })
   latitude?: number;
 
