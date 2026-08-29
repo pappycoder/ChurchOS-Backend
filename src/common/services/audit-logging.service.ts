@@ -16,9 +16,10 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NotificationsService } from '../../notifications/notifications.service';
+import { NOTIFICATIONS_SERVICE_TOKEN } from '../../notifications/notification-tokens';
 
 export type AuditAction =
   'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'EXPORT' | 'ARCHIVE' | 'RESTORE';
@@ -122,10 +123,20 @@ function crudNotificationText(
 @Injectable()
 export class AuditLoggingService {
   private readonly logger = new Logger(AuditLoggingService.name);
+  private notifications?: {
+    createNotification(
+      churchId: string,
+      profileId: string,
+      type: string,
+      title: string,
+      body: string,
+      data?: Record<string, unknown>,
+    ): Promise<unknown>;
+  };
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications?: NotificationsService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /**
@@ -158,7 +169,7 @@ export class AuditLoggingService {
     // Mirror every user CRUD mutation with an in-app notification for the
     // acting user. LOAD/EXPORT reads are excluded — only create, update,
     // delete (and archive/restore) notify.
-    if (this.notifications && NOTIFICATION_ACTIONS.includes(params.action)) {
+    if (NOTIFICATION_ACTIONS.includes(params.action)) {
       await this.createCrudNotification(params);
     }
   }
@@ -166,10 +177,22 @@ export class AuditLoggingService {
   /**
    * Creates an in-app notification describing a user's CRUD action. Failures
    * are swallowed so a notification issue can never break the CRUD operation.
+   *
+   * `NotificationsService` is resolved lazily through the container rather
+   * than injected directly: `NotificationsService` depends on `WhatsAppService`,
+   * which depends on `AuditLoggingService`, so a direct constructor dependency
+   * would be circular. Lazy resolution breaks that cycle while still working.
    */
   private async createCrudNotification(params: AuditLogParams): Promise<void> {
     try {
       if (!params.userId) return;
+
+      const notifications = (this.notifications ??= this.moduleRef.get(
+        NOTIFICATIONS_SERVICE_TOKEN,
+        { strict: false },
+      ));
+      if (!notifications) return;
+
       const profile = await this.prisma.profile.findUnique({
         where: { user_id: params.userId },
         select: { id: true },
@@ -180,18 +203,11 @@ export class AuditLoggingService {
       const label = resolvedName || humanizeEntity(params.entity);
       const { title, body } = crudNotificationText(params.action, params.entity, label);
 
-      await this.notifications?.createNotification(
-        params.churchId,
-        profile.id,
-        'system',
-        title,
-        body,
-        {
-          entity: params.entity,
-          entityId: params.entityId,
-          action: params.action,
-        },
-      );
+      await notifications.createNotification(params.churchId, profile.id, 'system', title, body, {
+        entity: params.entity,
+        entityId: params.entityId,
+        action: params.action,
+      });
     } catch (error) {
       this.logger.warn(
         `Failed to create CRUD notification for ${params.action} on ${params.entity}: ${

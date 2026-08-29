@@ -53,6 +53,12 @@ function createNotificationsMock() {
   };
 }
 
+function createModuleRefMock(service: unknown) {
+  return {
+    get: jest.fn().mockReturnValue(service),
+  } as unknown as import('@nestjs/core').ModuleRef;
+}
+
 const churchId = '00000000-0000-0000-0000-000000000001';
 const userId = 'auth-sub-123';
 const profileId = '22222222-2222-2222-2222-222222222222';
@@ -65,7 +71,7 @@ describe('AuditLoggingService', () => {
   beforeEach(() => {
     mocks = createPrismaMock();
     notify = createNotificationsMock();
-    service = new AuditLoggingService(mocks.prisma, notify.service);
+    service = new AuditLoggingService(mocks.prisma, createModuleRefMock(notify.service));
   });
 
   it('writes the audit log entry', async () => {
