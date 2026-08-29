@@ -35,6 +35,7 @@ describe('AttendanceService — categories & visitors', () => {
     start_time: null,
     end_time: null,
     is_active: true,
+    archived_at: null,
     created_at: new Date('2026-01-01'),
     updated_at: new Date('2026-01-01'),
   };
@@ -273,6 +274,18 @@ describe('AttendanceService — categories & visitors', () => {
         }),
       );
     });
+
+    it('should throw NotFoundException when updating an archived service', async () => {
+      model('service').findUnique.mockResolvedValue({
+        ...adultServiceRow,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateService(serviceId, { name: 'X' }, churchId, userId),
+      ).rejects.toThrow(NotFoundException);
+      expect(model('service').update).not.toHaveBeenCalled();
+    });
   });
 
   describe('getAttendanceTrends', () => {
@@ -315,6 +328,35 @@ describe('AttendanceService — categories & visitors', () => {
         }),
       );
       expect(result.data[0].attendanceCount).toBe(128);
+    });
+
+    it('should default to excluding archived services (archived_at null)', async () => {
+      model('service').findMany.mockResolvedValue([]);
+      model('service').count.mockResolvedValue(0);
+
+      await service.listServices(churchId, {});
+
+      expect(model('service').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list only archived services when archived=true and map archivedAt', async () => {
+      model('service').findMany.mockResolvedValue([
+        { ...adultServiceRow, archived_at: new Date('2026-08-01T00:00:00.000Z') },
+      ]);
+      model('service').count.mockResolvedValue(1);
+
+      const result = await service.listServices(churchId, { archived: true });
+
+      expect(model('service').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-01T00:00:00.000Z');
     });
   });
 
@@ -360,6 +402,96 @@ describe('AttendanceService — categories & visitors', () => {
       model('service').findUnique.mockResolvedValue(null);
 
       await expect(service.deleteService(serviceId, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should still delete (purge path) an archived service', async () => {
+      model('service').findUnique.mockResolvedValue({
+        ...adultServiceRow,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      model('attendance').count.mockResolvedValue(0);
+      model('transaction').count.mockResolvedValue(0);
+      model('service').delete.mockResolvedValue(adultServiceRow);
+
+      const result = await service.deleteService(serviceId, churchId, userId);
+
+      expect(result).toEqual({ success: true });
+      expect(model('service').delete).toHaveBeenCalledWith({ where: { id: serviceId } });
+    });
+  });
+
+  describe('archiveService', () => {
+    it('should archive a service and audit ARCHIVE', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      const archived = { ...adultServiceRow, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      model('service').update.mockResolvedValue(archived);
+
+      const result = await service.archiveService(serviceId, churchId, userId);
+
+      expect(model('service').update).toHaveBeenCalledWith({
+        where: { id: serviceId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-01T00:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'service', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      model('service').findUnique.mockResolvedValue({
+        ...adultServiceRow,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(service.archiveService(serviceId, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing or foreign-church', async () => {
+      model('service').findUnique.mockResolvedValue(null);
+
+      await expect(service.archiveService('nonexistent', churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreService', () => {
+    it('should restore an archived service and audit RESTORE', async () => {
+      model('service').findUnique.mockResolvedValue({
+        ...adultServiceRow,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      model('service').update.mockResolvedValue(adultServiceRow);
+
+      const result = await service.restoreService(serviceId, churchId, userId);
+
+      expect(model('service').update).toHaveBeenCalledWith({
+        where: { id: serviceId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'service', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+
+      await expect(service.restoreService(serviceId, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      model('service').findUnique.mockResolvedValue(null);
+
+      await expect(service.restoreService('nonexistent', churchId, userId)).rejects.toThrow(
         NotFoundException,
       );
     });

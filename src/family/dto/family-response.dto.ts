@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class FamilyMemberDto {
   @ApiProperty({ description: 'Unique identifier for the family member' })
@@ -43,6 +43,9 @@ export class FamilyResponseDto {
 
   @ApiProperty({ type: [FamilyMemberDto] })
   members!: FamilyMemberDto[];
+
+  @ApiPropertyOptional({ description: 'Set when the family is archived' })
+  archivedAt?: string;
 
   @ApiProperty({ description: 'Timestamp when the family record was created' })
   createdAt!: string;

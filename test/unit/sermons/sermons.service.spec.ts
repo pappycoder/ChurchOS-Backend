@@ -11,7 +11,7 @@
 import { SermonsService } from '../../../src/sermons/sermons.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('SermonsService', () => {
@@ -35,6 +35,7 @@ describe('SermonsService', () => {
     audio_url: null,
     duration_seconds: 2400,
     description: 'A sermon about faith',
+    archived_at: null,
     created_at: new Date('2026-07-20T10:00:00.000Z'),
     updated_at: new Date('2026-07-20T10:00:00.000Z'),
   };
@@ -132,6 +133,34 @@ describe('SermonsService', () => {
         }),
       );
     });
+
+    it('should default to excluding archived sermons (archived_at null)', async () => {
+      prisma.sermon.findMany.mockResolvedValue([]);
+      prisma.sermon.count.mockResolvedValue(0);
+
+      await service.listSermons({}, mockChurchId);
+
+      expect(prisma.sermon.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list only archived sermons when archived=true and map archivedAt', async () => {
+      const archived = { ...mockSermon, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      prisma.sermon.findMany.mockResolvedValue([archived]);
+      prisma.sermon.count.mockResolvedValue(1);
+
+      const result = await service.listSermons({ archived: true }, mockChurchId);
+
+      expect(prisma.sermon.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-01T00:00:00.000Z');
+    });
   });
 
   describe('getSermon', () => {
@@ -178,6 +207,18 @@ describe('SermonsService', () => {
         service.updateSermon('nonexistent', { title: 'X' }, mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should throw NotFoundException when updating an archived sermon', async () => {
+      prisma.sermon.findFirst.mockResolvedValue({
+        ...mockSermon,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateSermon(mockSermonId, { title: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.sermon.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('deleteSermon', () => {
@@ -197,6 +238,94 @@ describe('SermonsService', () => {
       prisma.sermon.findFirst.mockResolvedValue(null);
 
       await expect(service.deleteSermon('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should purge (hard delete) an archived sermon', async () => {
+      const archived = { ...mockSermon, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      prisma.sermon.findFirst.mockResolvedValue(archived);
+      prisma.sermon.delete.mockResolvedValue(archived);
+
+      await service.deleteSermon(mockSermonId, mockChurchId, mockUserId);
+
+      expect(prisma.sermon.delete).toHaveBeenCalledWith({ where: { id: mockSermonId } });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'DELETE' }),
+      );
+    });
+  });
+
+  describe('archiveSermon', () => {
+    it('should archive a sermon and audit ARCHIVE', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+      const archived = { ...mockSermon, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      prisma.sermon.update.mockResolvedValue(archived);
+
+      const result = await service.archiveSermon(mockSermonId, mockChurchId, mockUserId);
+
+      expect(prisma.sermon.update).toHaveBeenCalledWith({
+        where: { id: mockSermonId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-01T00:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.sermon.findFirst.mockResolvedValue({
+        ...mockSermon,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(service.archiveSermon(mockSermonId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveSermon('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreSermon', () => {
+    it('should restore an archived sermon and audit RESTORE', async () => {
+      prisma.sermon.findFirst.mockResolvedValue({
+        ...mockSermon,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.sermon.update.mockResolvedValue(mockSermon);
+
+      const result = await service.restoreSermon(mockSermonId, mockChurchId, mockUserId);
+
+      expect(prisma.sermon.update).toHaveBeenCalledWith({
+        where: { id: mockSermonId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'sermon', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(mockSermon);
+
+      await expect(service.restoreSermon(mockSermonId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      prisma.sermon.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreSermon('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -226,6 +355,18 @@ describe('SermonsService', () => {
       await expect(
         service.setAudioUrl('nonexistent', 'url', mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when setting audio on an archived sermon', async () => {
+      prisma.sermon.findFirst.mockResolvedValue({
+        ...mockSermon,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.setAudioUrl(mockSermonId, 'url', mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.sermon.update).not.toHaveBeenCalled();
     });
   });
 });

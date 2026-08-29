@@ -18,7 +18,13 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
@@ -91,7 +97,10 @@ export class TemplatesService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.TemplateWhereInput = { church_id: churchId };
+    const where: Prisma.TemplateWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.channel) where.channel = query.channel;
     if (query.status) where.status = query.status;
@@ -161,6 +170,10 @@ export class TemplatesService {
       throw new NotFoundException('Template not found');
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Template not found');
+    }
+
     if (existing.status === 'published') {
       throw new BadRequestException('Template is already published');
     }
@@ -209,6 +222,10 @@ export class TemplatesService {
     });
 
     if (!existing) {
+      throw new NotFoundException('Template not found');
+    }
+
+    if (existing.archived_at) {
       throw new NotFoundException('Template not found');
     }
 
@@ -278,6 +295,99 @@ export class TemplatesService {
   }
 
   /**
+   * Archives a template by setting archived_at. Archived templates drop out of
+   * active template lists (they stay reachable by ID and can be restored).
+   *
+   * @param templateId - Template UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated template response
+   * @throws NotFoundException if the template is missing or not in this church
+   * @throws ConflictException if the template is already archived
+   */
+  async archive(
+    templateId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<TemplateResponseDto> {
+    const existing = await this.prisma.template.findFirst({
+      where: { id: templateId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Template not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Template is already archived');
+    }
+
+    const updated = await this.prisma.template.update({
+      where: { id: templateId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'template',
+      action: 'ARCHIVE',
+      entityId: templateId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Template archived: ${templateId}`);
+    return this.mapToResponseDto(updated);
+  }
+
+  /**
+   * Restores an archived template by clearing archived_at.
+   *
+   * @param templateId - Template UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated template response
+   * @throws NotFoundException if the template is missing or not in this church
+   * @throws ConflictException if the template is not currently archived
+   */
+  async restore(
+    templateId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<TemplateResponseDto> {
+    const existing = await this.prisma.template.findFirst({
+      where: { id: templateId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Template not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Template is not archived');
+    }
+
+    const updated = await this.prisma.template.update({
+      where: { id: templateId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'template',
+      action: 'RESTORE',
+      entityId: templateId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Template restored: ${templateId}`);
+    return this.mapToResponseDto(updated);
+  }
+
+  /**
    * Maps raw Prisma template data to a TemplateResponseDto.
    *
    * @param template - Raw template record from Prisma
@@ -295,6 +405,7 @@ export class TemplatesService {
     variables: Prisma.JsonValue;
     external_id: string | null;
     external_status: string | null;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
   }): TemplateResponseDto {
@@ -310,6 +421,7 @@ export class TemplatesService {
       variables: Array.isArray(template.variables) ? (template.variables as string[]) : undefined,
       externalId: template.external_id ?? undefined,
       externalStatus: template.external_status ?? undefined,
+      archivedAt: template.archived_at?.toISOString(),
       createdAt: template.created_at.toISOString(),
       updatedAt: template.updated_at.toISOString(),
     };

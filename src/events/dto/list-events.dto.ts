@@ -6,6 +6,7 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -77,6 +78,15 @@ export class ListEventsDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'List archived events only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  archived?: boolean;
 
   @ApiPropertyOptional({
     description: 'Sort field',

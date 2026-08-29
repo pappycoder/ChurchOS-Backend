@@ -118,6 +118,40 @@ export class VisitorsController {
     return this.visitorsService.convertToMember(visitorId, dto, churchId, user.id);
   }
 
+  @Post(':visitorId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('visitors:update')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Archive a visitor',
+    description: 'Sets archived_at — hides the visitor from active lists until restored.',
+  })
+  async archive(
+    @Param('visitorId') visitorId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<VisitorResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.visitorsService.archive(visitorId, churchId, user.id);
+  }
+
+  @Post(':visitorId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('visitors:update')
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Restore an archived visitor',
+    description: 'Clears archived_at — brings the visitor back into active lists.',
+  })
+  async restore(
+    @Param('visitorId') visitorId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<VisitorResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.visitorsService.restore(visitorId, churchId, user.id);
+  }
+
   @Delete(':visitorId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequirePermissions('visitors:delete')

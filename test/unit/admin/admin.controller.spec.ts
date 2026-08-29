@@ -36,7 +36,7 @@ describe('AdminController permission decorators', () => {
     expect(collapse(block)).toContain(collapse(`@RequireRoles(${roles})`));
   };
 
-  it('covers all 19 department/cell-group routes with a granular permission (8 departments, 11 cell groups)', () => {
+  it('covers all 23 department/cell-group routes with a granular permission', () => {
     const depCreate = source.match(/@RequirePermissions\('departments:create'\)/g)?.length ?? 0;
     const depRead = source.match(/@RequirePermissions\('departments:read'\)/g)?.length ?? 0;
     const depUpdate = source.match(/@RequirePermissions\('departments:update'\)/g)?.length ?? 0;
@@ -47,11 +47,11 @@ describe('AdminController permission decorators', () => {
     const cgDelete = source.match(/@RequirePermissions\('cell_groups:delete'\)/g)?.length ?? 0;
     expect(depCreate).toBe(1);
     expect(depRead).toBe(2);
-    expect(depUpdate).toBe(3);
+    expect(depUpdate).toBe(5);
     expect(depDelete).toBe(1);
     expect(cgCreate).toBe(3);
     expect(cgRead).toBe(5);
-    expect(cgUpdate).toBe(2);
+    expect(cgUpdate).toBe(4);
     expect(cgDelete).toBe(1);
   });
 
@@ -106,6 +106,24 @@ describe('AdminController permission decorators', () => {
       'async removeDepartmentMember(',
     );
     expect(block).toContain("@RequirePermissions('departments:update')");
+  });
+
+  it('requires departments:update on POST /admin/departments/:departmentId/archive', () => {
+    const block = blockBetween(
+      "@Post('departments/:departmentId/archive')",
+      'async archiveDepartment(',
+    );
+    expect(block).toContain("@RequirePermissions('departments:update')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
+  });
+
+  it('requires departments:update on POST /admin/departments/:departmentId/restore', () => {
+    const block = blockBetween(
+      "@Post('departments/:departmentId/restore')",
+      'async restoreDepartment(',
+    );
+    expect(block).toContain("@RequirePermissions('departments:update')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
   // ─── Cell Groups ───────────────────────────────
@@ -166,6 +184,18 @@ describe('AdminController permission decorators', () => {
       'async removeCellGroupMember(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:update')");
+  });
+
+  it('requires cell_groups:update on POST /admin/cell-groups/:groupId/archive', () => {
+    const block = blockBetween("@Post('cell-groups/:groupId/archive')", 'async archiveCellGroup(');
+    expect(block).toContain("@RequirePermissions('cell_groups:update')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
+  });
+
+  it('requires cell_groups:update on POST /admin/cell-groups/:groupId/restore', () => {
+    const block = blockBetween("@Post('cell-groups/:groupId/restore')", 'async restoreCellGroup(');
+    expect(block).toContain("@RequirePermissions('cell_groups:update')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/:groupId/members with widened read roles', () => {

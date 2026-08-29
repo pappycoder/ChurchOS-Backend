@@ -94,6 +94,9 @@ export class AssetResponseDto {
   @ApiPropertyOptional({ description: 'Additional notes' })
   notes?: string;
 
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: string;
 

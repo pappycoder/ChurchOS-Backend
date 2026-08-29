@@ -44,6 +44,7 @@ describe('MembersService', () => {
     photo_url: null,
     custom_fields: {},
     notes: null,
+    archived_at: null,
     created_at: new Date('2024-01-15T10:30:00'),
     updated_at: new Date('2024-06-20T14:15:00'),
   };
@@ -282,6 +283,33 @@ describe('MembersService', () => {
         }),
       );
     });
+
+    it('should exclude archived members by default', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      model('member').count.mockResolvedValue(0);
+
+      await service.listMembers(mockChurchId, {});
+
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+    });
+
+    it('should list only archived members when archived=true', async () => {
+      model('member').findMany.mockResolvedValue([
+        { ...mockMember, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      model('member').count.mockResolvedValue(1);
+
+      const result = await service.listMembers(mockChurchId, { archived: true });
+
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
   });
 
   describe('updateMember', () => {
@@ -337,6 +365,17 @@ describe('MembersService', () => {
       expect(result.memberId).toBe(mockMemberId);
       expect(model('member').update).not.toHaveBeenCalled();
     });
+
+    it('should throw NotFoundException when updating an archived member', async () => {
+      model('member').findUnique.mockResolvedValue({
+        ...mockMember,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateMember(mockMemberId, { firstName: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('softDeleteMember', () => {
@@ -363,6 +402,113 @@ describe('MembersService', () => {
 
       await expect(
         service.softDeleteMember('nonexistent-id', mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('archiveMember', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      model('member').findUnique.mockResolvedValue(mockMember);
+      model('member').update.mockResolvedValue({ ...mockMember, archived_at: archivedAt });
+
+      const result = await service.archiveMember(mockMemberId, mockChurchId, mockUserId);
+
+      expect(model('member').update).toHaveBeenCalledWith({
+        where: { id: mockMemberId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'member' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      model('member').findUnique.mockResolvedValue({
+        ...mockMember,
+        archived_at: new Date(),
+      });
+
+      await expect(service.archiveMember(mockMemberId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException if member not found', async () => {
+      model('member').findUnique.mockResolvedValue(null);
+
+      await expect(service.archiveMember(mockMemberId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreArchivedMember', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      model('member').findUnique.mockResolvedValue({
+        ...mockMember,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      model('member').update.mockResolvedValue(mockMember);
+
+      const result = await service.restoreArchivedMember(mockMemberId, mockChurchId, mockUserId);
+
+      expect(model('member').update).toHaveBeenCalledWith({
+        where: { id: mockMemberId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'member' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      model('member').findUnique.mockResolvedValue(mockMember);
+
+      await expect(
+        service.restoreArchivedMember(mockMemberId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException if member not found', async () => {
+      model('member').findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.restoreArchivedMember(mockMemberId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('purge (soft-delete) on archived member', () => {
+    it('should still allow soft-delete on an archived member', async () => {
+      model('member').findUnique.mockResolvedValue({
+        ...mockMember,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+      model('member').update.mockResolvedValue({});
+
+      await service.softDeleteMember(mockMemberId, mockChurchId, mockUserId);
+
+      expect(model('member').update).toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DELETE', entity: 'member' }),
+      );
+    });
+  });
+
+  describe('mutation guard on archived members', () => {
+    it('should throw NotFoundException when adding a note to an archived member', async () => {
+      model('member').findUnique.mockResolvedValue({
+        id: mockMemberId,
+        church_id: mockChurchId,
+        notes: null,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.addMemberNote(mockMemberId, 'hello', mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
     });
   });

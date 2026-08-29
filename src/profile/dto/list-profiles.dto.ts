@@ -6,7 +6,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
@@ -90,4 +90,13 @@ export class ListProfilesDto {
   @IsEnum(['asc', 'desc'] as const)
   @IsOptional()
   sortOrder?: 'asc' | 'desc';
+
+  @ApiPropertyOptional({
+    description: 'List archived profiles only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

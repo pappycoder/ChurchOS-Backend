@@ -53,6 +53,7 @@ import {
   CreateMaintenanceDto,
   DepreciationResponseDto,
   DepreciationSummaryResponseDto,
+  ListAssetCategoriesDto,
   ListAssetsDto,
   LoanResponseDto,
   MaintenanceResponseDto,
@@ -105,8 +106,11 @@ export class AssetsController {
   @Get('categories')
   @RequirePermissions('assets:read')
   @ApiListEndpoint('List asset categories')
-  async listCategories(@Request() req: AuthenticatedRequest): Promise<AssetCategoryResponseDto[]> {
-    return this.assetsService.listCategories(this.getChurchId(req));
+  async listCategories(
+    @Query() query: ListAssetCategoriesDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetCategoryResponseDto[]> {
+    return this.assetsService.listCategories(this.getChurchId(req), query.archived === true);
   }
 
   /**
@@ -144,6 +148,42 @@ export class AssetsController {
   ): Promise<{ success: boolean }> {
     await this.assetsService.deleteCategory(this.getChurchId(req), categoryId, user.sub);
     return { success: true };
+  }
+
+  /**
+   * Archives an asset category.
+   */
+  @Post('categories/:categoryId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('assets:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Archive an asset category')
+  @ApiParam({ name: 'categoryId', description: 'Asset category UUID' })
+  async archiveCategory(
+    @Param('categoryId') categoryId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetCategoryResponseDto> {
+    return this.assetsService.archiveCategory(this.getChurchId(req), categoryId, user.sub);
+  }
+
+  /**
+   * Restores an archived asset category.
+   */
+  @Post('categories/:categoryId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('assets:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Restore an archived asset category')
+  @ApiParam({ name: 'categoryId', description: 'Asset category UUID' })
+  async restoreCategory(
+    @Param('categoryId') categoryId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetCategoryResponseDto> {
+    return this.assetsService.restoreCategory(this.getChurchId(req), categoryId, user.sub);
   }
 
   /**
@@ -239,6 +279,42 @@ export class AssetsController {
   ): Promise<{ success: boolean }> {
     await this.assetsService.deleteAsset(this.getChurchId(req), assetId, user.sub);
     return { success: true };
+  }
+
+  /**
+   * Archives an asset.
+   */
+  @Post(':assetId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('assets:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Archive an asset')
+  @ApiParam({ name: 'assetId', description: 'Asset UUID' })
+  async archiveAsset(
+    @Param('assetId') assetId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetResponseDto> {
+    return this.assetsService.archiveAsset(this.getChurchId(req), assetId, user.sub);
+  }
+
+  /**
+   * Restores an archived asset.
+   */
+  @Post(':assetId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('assets:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Restore an archived asset')
+  @ApiParam({ name: 'assetId', description: 'Asset UUID' })
+  async restoreAsset(
+    @Param('assetId') assetId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetResponseDto> {
+    return this.assetsService.restoreAsset(this.getChurchId(req), assetId, user.sub);
   }
 
   /**

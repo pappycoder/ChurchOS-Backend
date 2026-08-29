@@ -187,6 +187,44 @@ export class SermonsController {
     return this.sermonsService.deleteSermon(sermonId, churchId, user.sub);
   }
 
+  /**
+   * Archive a sermon.
+   */
+  @Post(':sermonId/archive')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('sermons:update')
+  @ApiUpdateEndpoint('Archive a sermon')
+  @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
+  async archiveSermon(
+    @Param('sermonId') sermonId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<SermonResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.archiveSermon(sermonId, churchId, user.sub);
+  }
+
+  /**
+   * Restore an archived sermon.
+   */
+  @Post(':sermonId/restore')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('sermons:update')
+  @ApiUpdateEndpoint('Restore an archived sermon')
+  @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
+  async restoreSermon(
+    @Param('sermonId') sermonId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<SermonResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.sermonsService.restoreSermon(sermonId, churchId, user.sub);
+  }
+
   // ─── BOOKMARKS ──────────────────────────────────────────────────
 
   /**

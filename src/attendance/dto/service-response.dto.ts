@@ -50,4 +50,7 @@ export class ServiceResponseDto {
 
   @ApiPropertyOptional({ description: 'Attendance count for today' })
   attendanceCount?: number;
+
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
 }

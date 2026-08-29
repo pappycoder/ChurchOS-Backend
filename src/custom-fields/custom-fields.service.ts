@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateCustomFieldDto } from './dto/create-custom-field.dto';
 import { UpdateCustomFieldDto } from './dto/update-custom-field.dto';
+import { ListCustomFieldsDto } from './dto/list-custom-fields.dto';
 import { CustomFieldResponseDto } from './dto/custom-field-response.dto';
 
 const VALID_FIELD_TYPES = ['text', 'number', 'date', 'dropdown', 'checkbox', 'textarea'];
@@ -70,9 +71,15 @@ export class CustomFieldsService {
     return this.toResponseDto(field);
   }
 
-  async findAll(churchId: string): Promise<CustomFieldResponseDto[]> {
+  async findAll(
+    churchId: string,
+    query: ListCustomFieldsDto = {},
+  ): Promise<CustomFieldResponseDto[]> {
     const fields = await this.prisma.customFieldDefinition.findMany({
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        archived_at: query.archived === true ? { not: null } : null,
+      },
       orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
     });
 
@@ -98,6 +105,10 @@ export class CustomFieldsService {
     const existing = await this.prisma.customFieldDefinition.findUnique({ where: { id } });
 
     if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Custom field not found');
+    }
+
+    if (existing.archived_at) {
       throw new NotFoundException('Custom field not found');
     }
 
@@ -170,6 +181,89 @@ export class CustomFieldsService {
     this.logger.log(`Custom field deleted: ${id}`);
   }
 
+  /**
+   * Archives a custom field by setting archived_at. Archived fields drop out of
+   * active lists but stay reachable by ID, and can be restored or purged.
+   *
+   * @param id - Custom field UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated CustomFieldResponseDto
+   * @throws NotFoundException if the field is missing or not in this church
+   * @throws ConflictException if the field is already archived
+   */
+  async archive(id: string, churchId: string, userId: string): Promise<CustomFieldResponseDto> {
+    const existing = await this.prisma.customFieldDefinition.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Custom field not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Custom field is already archived');
+    }
+
+    const field = await this.prisma.customFieldDefinition.update({
+      where: { id },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'custom_field_definition',
+      action: 'ARCHIVE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: field.archived_at },
+    });
+
+    this.logger.log(`Custom field archived: ${id}`);
+
+    return this.toResponseDto(field);
+  }
+
+  /**
+   * Restores an archived custom field by clearing archived_at.
+   *
+   * @param id - Custom field UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated CustomFieldResponseDto
+   * @throws NotFoundException if the field is missing or not in this church
+   * @throws ConflictException if the field is not currently archived
+   */
+  async restore(id: string, churchId: string, userId: string): Promise<CustomFieldResponseDto> {
+    const existing = await this.prisma.customFieldDefinition.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Custom field not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Custom field is not archived');
+    }
+
+    const field = await this.prisma.customFieldDefinition.update({
+      where: { id },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'custom_field_definition',
+      action: 'RESTORE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Custom field restored: ${id}`);
+
+    return this.toResponseDto(field);
+  }
+
   private toResponseDto(field: {
     id: string;
     church_id: string;
@@ -179,6 +273,7 @@ export class CustomFieldsService {
     is_required: boolean;
     display_order: number;
     is_active: boolean;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
   }): CustomFieldResponseDto {
@@ -191,6 +286,7 @@ export class CustomFieldsService {
       isRequired: field.is_required,
       displayOrder: field.display_order,
       isActive: field.is_active,
+      archivedAt: field.archived_at?.toISOString(),
       createdAt: field.created_at.toISOString(),
       updatedAt: field.updated_at.toISOString(),
     };

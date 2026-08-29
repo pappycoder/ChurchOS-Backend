@@ -229,4 +229,50 @@ export class FamilyController {
     const churchId = req.profile?.church_id || '';
     return this.familyService.removeMember(familyId, memberId, churchId, user.sub);
   }
+
+  /**
+   * Archives a family. Archived families drop out of active lists.
+   *
+   * @param familyId - Family UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Updated family response
+   */
+  @Post(':familyId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:update')
+  @ApiOperation({ summary: 'Archive a family' })
+  @ApiParam({ name: 'familyId', description: 'Family UUID' })
+  async archive(
+    @Param('familyId') familyId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FamilyResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.familyService.archive(familyId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived family.
+   *
+   * @param familyId - Family UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   * @returns Updated family response
+   */
+  @Post(':familyId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('families:update')
+  @ApiOperation({ summary: 'Restore an archived family' })
+  @ApiParam({ name: 'familyId', description: 'Family UUID' })
+  async restore(
+    @Param('familyId') familyId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FamilyResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.familyService.restore(familyId, churchId, user.sub);
+  }
 }

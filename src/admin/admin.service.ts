@@ -101,10 +101,16 @@ export class AdminService {
    * @param churchId - Church ID
    * @returns List of departments with member counts
    */
-  async listDepartments(churchId: string): Promise<DepartmentResponseDto[]> {
+  async listDepartments(
+    churchId: string,
+    archived: boolean = false,
+  ): Promise<DepartmentResponseDto[]> {
     // Query all departments for the church with their members
     const departments = await this.prisma.department.findMany({
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        archived_at: archived ? { not: null } : null,
+      },
       include: {
         department_members: {
           include: {
@@ -173,6 +179,10 @@ export class AdminService {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Department is archived');
+    }
+
     // Apply partial updates to the department record
     const updated = await this.prisma.department.update({
       where: { id: departmentId },
@@ -208,6 +218,114 @@ export class AdminService {
     });
 
     // Map and return the updated department
+    return this.mapDepartmentToResponseDto(updated, updated.department_members);
+  }
+
+  /**
+   * Archives a department by setting archived_at. Archived departments drop out
+   * of active lists (which filter archived_at: null) but stay reachable by ID
+   * and can be restored or permanently deleted.
+   *
+   * @param departmentId - Department ID
+   * @param churchId - Church ID
+   * @param userId - User performing the action
+   * @returns Updated department
+   * @throws NotFoundException if the department is missing or not in this church
+   * @throws ConflictException if the department is already archived
+   */
+  async archiveDepartment(
+    departmentId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<DepartmentResponseDto> {
+    const existing = await this.prisma.department.findFirst({
+      where: { id: departmentId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Department ${departmentId} not found`);
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Department is already archived');
+    }
+
+    const updated = await this.prisma.department.update({
+      where: { id: departmentId },
+      data: { archived_at: new Date() },
+      include: {
+        department_members: {
+          include: {
+            member: { select: { id: true, first_name: true, last_name: true } },
+          },
+        },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'ARCHIVE',
+      entity: 'department',
+      entityId: departmentId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Department archived: ${departmentId}`);
+    return this.mapDepartmentToResponseDto(updated, updated.department_members);
+  }
+
+  /**
+   * Restores an archived department by clearing archived_at.
+   *
+   * @param departmentId - Department ID
+   * @param churchId - Church ID
+   * @param userId - User performing the action
+   * @returns Updated department
+   * @throws NotFoundException if the department is missing or not in this church
+   * @throws ConflictException if the department is not currently archived
+   */
+  async restoreDepartment(
+    departmentId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<DepartmentResponseDto> {
+    const existing = await this.prisma.department.findFirst({
+      where: { id: departmentId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Department ${departmentId} not found`);
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Department is not archived');
+    }
+
+    const updated = await this.prisma.department.update({
+      where: { id: departmentId },
+      data: { archived_at: null },
+      include: {
+        department_members: {
+          include: {
+            member: { select: { id: true, first_name: true, last_name: true } },
+          },
+        },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'RESTORE',
+      entity: 'department',
+      entityId: departmentId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Department restored: ${departmentId}`);
     return this.mapDepartmentToResponseDto(updated, updated.department_members);
   }
 
@@ -275,6 +393,11 @@ export class AdminService {
 
     // Throw NotFoundException if department does not exist
     if (!department) {
+      throw new NotFoundException(`Department ${departmentId} not found`);
+    }
+
+    // Reject mutations against an archived department
+    if (department.archived_at) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
@@ -418,12 +541,19 @@ export class AdminService {
    * Lists cell groups for a church.
    *
    * @param churchId - Church ID
+   * @param archived - Whether to list archived groups only (default: active only)
    * @returns List of cell groups
    */
-  async listCellGroups(churchId: string): Promise<CellGroupResponseDto[]> {
+  async listCellGroups(
+    churchId: string,
+    archived: boolean = false,
+  ): Promise<CellGroupResponseDto[]> {
     // Query all cell groups for the church ordered by name
     const groups = await this.prisma.cellGroup.findMany({
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        archived_at: archived ? { not: null } : null,
+      },
       include: { branch: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });
@@ -488,6 +618,10 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
     // Apply partial updates to the cell group record
     const updated = await this.prisma.cellGroup.update({
       where: { id: groupId },
@@ -525,6 +659,111 @@ export class AdminService {
     const leaders = await this.resolveCellGroupLeaders(churchId, [updated]);
 
     // Map and return the updated cell group
+    return this.mapCellGroupToResponseDto({
+      ...updated,
+      leader: leaders.get(updated.leader_id || ''),
+    });
+  }
+
+  /**
+   * Archives a cell group by setting archived_at. Archived groups drop out of
+   * active lists but stay reachable by ID and can be restored or purged.
+   *
+   * @param groupId - Cell group ID
+   * @param churchId - Church ID
+   * @param userId - User performing the action
+   * @returns Updated cell group
+   * @throws NotFoundException if the group is missing or not in this church
+   * @throws ConflictException if the group is already archived
+   */
+  async archiveCellGroup(
+    groupId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<CellGroupResponseDto> {
+    const existing = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Cell group is already archived');
+    }
+
+    const updated = await this.prisma.cellGroup.update({
+      where: { id: groupId },
+      data: { archived_at: new Date() },
+      include: { branch: { select: { id: true, name: true } } },
+    });
+
+    const leaders = await this.resolveCellGroupLeaders(churchId, [updated]);
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'ARCHIVE',
+      entity: 'cell_group',
+      entityId: groupId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Cell group archived: ${groupId}`);
+    return this.mapCellGroupToResponseDto({
+      ...updated,
+      leader: leaders.get(updated.leader_id || ''),
+    });
+  }
+
+  /**
+   * Restores an archived cell group by clearing archived_at.
+   *
+   * @param groupId - Cell group ID
+   * @param churchId - Church ID
+   * @param userId - User performing the action
+   * @returns Updated cell group
+   * @throws NotFoundException if the group is missing or not in this church
+   * @throws ConflictException if the group is not currently archived
+   */
+  async restoreCellGroup(
+    groupId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<CellGroupResponseDto> {
+    const existing = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Cell group is not archived');
+    }
+
+    const updated = await this.prisma.cellGroup.update({
+      where: { id: groupId },
+      data: { archived_at: null },
+      include: { branch: { select: { id: true, name: true } } },
+    });
+
+    const leaders = await this.resolveCellGroupLeaders(churchId, [updated]);
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'RESTORE',
+      entity: 'cell_group',
+      entityId: groupId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Cell group restored: ${groupId}`);
     return this.mapCellGroupToResponseDto({
       ...updated,
       leader: leaders.get(updated.leader_id || ''),
@@ -583,6 +822,10 @@ export class AdminService {
     });
 
     if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    if (group.archived_at) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
@@ -733,6 +976,10 @@ export class AdminService {
     });
 
     if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    if (group.archived_at) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
@@ -1061,6 +1308,7 @@ export class AdminService {
       name: string;
       description: string | null;
       parent_id: string | null;
+      archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
     },
@@ -1090,6 +1338,7 @@ export class AdminService {
       })),
       // Set the total member count
       memberCount: members.length,
+      archivedAt: dept.archived_at?.toISOString(),
       // Convert timestamp fields to ISO strings
       createdAt: dept.created_at.toISOString(),
       updatedAt: dept.updated_at.toISOString(),
@@ -1273,6 +1522,7 @@ export class AdminService {
     longitude: number | null;
     meeting_day: string | null;
     meeting_time: string | null;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
     branch?: { id: string; name: string } | null;
@@ -1293,6 +1543,7 @@ export class AdminService {
       longitude: group.longitude || undefined,
       meetingDay: group.meeting_day || undefined,
       meetingTime: group.meeting_time || undefined,
+      archivedAt: group.archived_at?.toISOString(),
       // Convert timestamp fields to ISO strings
       createdAt: group.created_at.toISOString(),
       updatedAt: group.updated_at.toISOString(),

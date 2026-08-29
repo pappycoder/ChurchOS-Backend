@@ -7,7 +7,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AssetCondition, AssetStatus } from '@prisma/client';
 
@@ -56,4 +56,13 @@ export class ListAssetsDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'List archived records only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

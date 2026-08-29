@@ -53,6 +53,12 @@ export class EventResponseDto {
   @ApiProperty({ description: 'Number of registrations', example: 45 })
   registrationCount!: number;
 
+  @ApiPropertyOptional({
+    description: 'Archive timestamp — set when the event is archived',
+    example: '2026-08-28T10:30:00.000Z',
+  })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Creation date', example: '2026-07-20T10:00:00.000Z' })
   createdAt!: string;
 

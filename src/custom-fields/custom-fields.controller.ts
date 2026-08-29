@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -15,6 +16,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { CustomFieldsService } from './custom-fields.service';
 import { CreateCustomFieldDto } from './dto/create-custom-field.dto';
 import { UpdateCustomFieldDto } from './dto/update-custom-field.dto';
+import { ListCustomFieldsDto } from './dto/list-custom-fields.dto';
 import { CustomFieldResponseDto } from './dto/custom-field-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
@@ -40,10 +42,13 @@ export class CustomFieldsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all custom fields for this church' })
-  async findAll(@Request() req: AuthenticatedRequest): Promise<CustomFieldResponseDto[]> {
+  @ApiOperation({ summary: 'List custom fields for this church' })
+  async findAll(
+    @Query() query: ListCustomFieldsDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CustomFieldResponseDto[]> {
     const churchId = req.profile?.church_id || '';
-    return this.customFieldsService.findAll(churchId);
+    return this.customFieldsService.findAll(churchId, query);
   }
 
   @Get(':fieldId')
@@ -78,5 +83,29 @@ export class CustomFieldsController {
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
     await this.customFieldsService.remove(fieldId, churchId, user.id);
+  }
+
+  @Post(':fieldId/archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Archive a custom field definition' })
+  async archive(
+    @Param('fieldId') fieldId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CustomFieldResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.customFieldsService.archive(fieldId, churchId, user.id);
+  }
+
+  @Post(':fieldId/restore')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restore an archived custom field definition' })
+  async restore(
+    @Param('fieldId') fieldId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CustomFieldResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.customFieldsService.restore(fieldId, churchId, user.id);
   }
 }

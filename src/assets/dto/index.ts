@@ -8,6 +8,7 @@
 
 export * from './create-asset-category.dto';
 export * from './update-asset-category.dto';
+export * from './list-asset-categories.dto';
 export * from './asset-category-response.dto';
 export * from './create-asset.dto';
 export * from './update-asset.dto';

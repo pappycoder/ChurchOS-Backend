@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -68,9 +68,15 @@ export class WebhooksService {
   /**
    * List all webhook subscriptions for a church.
    */
-  async listSubscriptions(churchId: string): Promise<WebhookSubscriptionResponseDto[]> {
+  async listSubscriptions(
+    churchId: string,
+    archived = false,
+  ): Promise<WebhookSubscriptionResponseDto[]> {
     const subscriptions = await this.prisma.webhookSubscription.findMany({
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        archived_at: archived === true ? { not: null } : null,
+      },
       orderBy: { created_at: 'desc' },
     });
 
@@ -90,6 +96,10 @@ export class WebhooksService {
     });
 
     if (!subscription) {
+      throw new NotFoundException('Webhook subscription not found');
+    }
+
+    if (subscription.archived_at) {
       throw new NotFoundException('Webhook subscription not found');
     }
 
@@ -226,12 +236,109 @@ export class WebhooksService {
     return { queued };
   }
 
+  /**
+   * Archives a webhook subscription by setting archived_at. Archived
+   * subscriptions drop out of active lists but stay reachable and can be
+   * restored or purged.
+   *
+   * @param subscriptionId - Subscription UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated subscription response
+   * @throws NotFoundException if the subscription is missing or not in this church
+   * @throws ConflictException if the subscription is already archived
+   */
+  async archiveSubscription(
+    subscriptionId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<WebhookSubscriptionResponseDto> {
+    const subscription = await this.prisma.webhookSubscription.findFirst({
+      where: { id: subscriptionId, church_id: churchId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Webhook subscription not found');
+    }
+
+    if (subscription.archived_at) {
+      throw new ConflictException('Webhook subscription is already archived');
+    }
+
+    const updated = await this.prisma.webhookSubscription.update({
+      where: { id: subscriptionId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'webhook_subscription',
+      action: 'ARCHIVE',
+      entityId: subscriptionId,
+      oldValues: { archived_at: subscription.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Webhook subscription archived: ${subscriptionId}`);
+
+    return this.mapSubscriptionToDto(updated);
+  }
+
+  /**
+   * Restores an archived webhook subscription by clearing archived_at.
+   *
+   * @param subscriptionId - Subscription UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated subscription response
+   * @throws NotFoundException if the subscription is missing or not in this church
+   * @throws ConflictException if the subscription is not currently archived
+   */
+  async restoreSubscription(
+    subscriptionId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<WebhookSubscriptionResponseDto> {
+    const subscription = await this.prisma.webhookSubscription.findFirst({
+      where: { id: subscriptionId, church_id: churchId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Webhook subscription not found');
+    }
+
+    if (!subscription.archived_at) {
+      throw new ConflictException('Webhook subscription is not archived');
+    }
+
+    const updated = await this.prisma.webhookSubscription.update({
+      where: { id: subscriptionId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'webhook_subscription',
+      action: 'RESTORE',
+      entityId: subscriptionId,
+      oldValues: { archived_at: subscription.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Webhook subscription restored: ${subscriptionId}`);
+
+    return this.mapSubscriptionToDto(updated);
+  }
+
   private mapSubscriptionToDto(sub: Record<string, unknown>): WebhookSubscriptionResponseDto {
     return {
       id: sub.id as string,
       url: sub.url as string,
       events: sub.events as string[],
       isActive: sub.is_active as boolean,
+      archivedAt: (sub.archived_at as Date | null | undefined)?.toISOString() ?? undefined,
       createdAt: (sub.created_at as Date).toISOString(),
     };
   }

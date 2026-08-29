@@ -113,7 +113,7 @@ export class GivingService {
     userId: string,
   ): Promise<CategoryResponseDto> {
     const existing = await this.prisma.givingCategory.findFirst({
-      where: { church_id: churchId, name: dto.name },
+      where: { church_id: churchId, name: dto.name, archived_at: null },
     });
 
     if (existing) {
@@ -153,8 +153,12 @@ export class GivingService {
     isActive?: boolean,
     page?: number,
     limit?: number,
+    archived?: boolean,
   ): Promise<{ data: CategoryResponseDto[]; total: number }> {
-    const where: Prisma.GivingCategoryWhereInput = { church_id: churchId };
+    const where: Prisma.GivingCategoryWhereInput = {
+      church_id: churchId,
+      archived_at: archived === true ? { not: null } : null,
+    };
     if (isActive !== undefined) {
       where.is_active = isActive;
     }
@@ -203,10 +207,14 @@ export class GivingService {
       throw new NotFoundException('Giving category not found');
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Giving category is archived');
+    }
+
     // Check name uniqueness if changing name
     if (dto.name && dto.name !== existing.name) {
       const duplicate = await this.prisma.givingCategory.findFirst({
-        where: { church_id: churchId, name: dto.name, id: { not: categoryId } },
+        where: { church_id: churchId, name: dto.name, id: { not: categoryId }, archived_at: null },
       });
       if (duplicate) {
         throw new ConflictException(`Category "${dto.name}" already exists`);
@@ -269,6 +277,101 @@ export class GivingService {
     });
 
     this.logger.log(`Giving category deactivated: ${categoryId}`);
+  }
+
+  /**
+   * Archives a giving category by setting archived_at. Archived categories drop
+   * out of active lists (listCategories filters archived_at: null) and no longer
+   * participate in the app-level duplicate-name check, but their details stay
+   * reachable by ID and they can be restored.
+   *
+   * @param categoryId - Category UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated CategoryResponseDto
+   * @throws NotFoundException if the category is missing or not in this church
+   * @throws ConflictException if the category is already archived
+   */
+  async archiveCategory(
+    categoryId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<CategoryResponseDto> {
+    const existing = await this.prisma.givingCategory.findUnique({
+      where: { id: categoryId },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Giving category not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Giving category is already archived');
+    }
+
+    const updated = await this.prisma.givingCategory.update({
+      where: { id: categoryId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'giving_category',
+      action: 'ARCHIVE',
+      entityId: categoryId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Giving category archived: ${categoryId}`);
+    return this.mapCategoryToDto(updated);
+  }
+
+  /**
+   * Restores an archived giving category by clearing archived_at.
+   *
+   * @param categoryId - Category UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated CategoryResponseDto
+   * @throws NotFoundException if the category is missing or not in this church
+   * @throws ConflictException if the category is not currently archived
+   */
+  async restoreCategory(
+    categoryId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<CategoryResponseDto> {
+    const existing = await this.prisma.givingCategory.findUnique({
+      where: { id: categoryId },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Giving category not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Giving category is not archived');
+    }
+
+    const updated = await this.prisma.givingCategory.update({
+      where: { id: categoryId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'giving_category',
+      action: 'RESTORE',
+      entityId: categoryId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Giving category restored: ${categoryId}`);
+    return this.mapCategoryToDto(updated);
   }
 
   // ─── DIGITAL GIVING ──────────────────────────────────────────────
@@ -1507,6 +1610,7 @@ export class GivingService {
     display_order: number;
     is_recurring: boolean;
     is_active: boolean;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
   }): CategoryResponseDto {
@@ -1518,6 +1622,7 @@ export class GivingService {
       displayOrder: category.display_order,
       isRecurring: category.is_recurring,
       isActive: category.is_active,
+      archivedAt: category.archived_at?.toISOString(),
       createdAt: category.created_at.toISOString(),
       updatedAt: category.updated_at.toISOString(),
     };

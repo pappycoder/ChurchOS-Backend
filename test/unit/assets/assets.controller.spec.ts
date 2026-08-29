@@ -28,14 +28,14 @@ describe('AssetsController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('covers all 21 routes with a granular assets permission (9 read, 5 create, 5 update, 2 delete)', () => {
+  it('covers all 25 routes with a granular assets permission (9 read, 5 create, 9 update, 2 delete)', () => {
     const readCount = source.match(/@RequirePermissions\('assets:read'\)/g)?.length ?? 0;
     const createCount = source.match(/@RequirePermissions\('assets:create'\)/g)?.length ?? 0;
     const updateCount = source.match(/@RequirePermissions\('assets:update'\)/g)?.length ?? 0;
     const deleteCount = source.match(/@RequirePermissions\('assets:delete'\)/g)?.length ?? 0;
     expect(readCount).toBe(9);
     expect(createCount).toBe(5);
-    expect(updateCount).toBe(5);
+    expect(updateCount).toBe(9);
     expect(deleteCount).toBe(2);
   });
 
@@ -168,5 +168,33 @@ describe('AssetsController permission decorators', () => {
     const block = blockBetween("@Delete('categories/:categoryId')", 'async deleteCategory(');
     expect(block).toContain("@RequirePermissions('assets:delete')");
     expect(block).toContain("@RequireRoles('church_admin', 'treasurer')");
+  });
+
+  it('requires assets:update on POST /assets/:assetId/archive', () => {
+    const block = blockBetween("@Post(':assetId/archive')", 'async archiveAsset(');
+    expect(block).toContain("@RequirePermissions('assets:update')");
+    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).toContain('@HttpCode(HttpStatus.OK)');
+  });
+
+  it('requires assets:update on POST /assets/:assetId/restore', () => {
+    const block = blockBetween("@Post(':assetId/restore')", 'async restoreAsset(');
+    expect(block).toContain("@RequirePermissions('assets:update')");
+    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).toContain('@HttpCode(HttpStatus.OK)');
+  });
+
+  it('requires assets:update on POST /assets/categories/:categoryId/archive', () => {
+    const block = blockBetween("@Post('categories/:categoryId/archive')", 'async archiveCategory(');
+    expect(block).toContain("@RequirePermissions('assets:update')");
+    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).toContain('@HttpCode(HttpStatus.OK)');
+  });
+
+  it('requires assets:update on POST /assets/categories/:categoryId/restore', () => {
+    const block = blockBetween("@Post('categories/:categoryId/restore')", 'async restoreCategory(');
+    expect(block).toContain("@RequirePermissions('assets:update')");
+    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 });

@@ -156,6 +156,40 @@ export class FormsController {
   }
 
   /**
+   * Archives a form.
+   */
+  @Post(':formId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Archive a form')
+  @ApiParam({ name: 'formId', description: 'Form UUID' })
+  async archiveForm(
+    @Param('formId') formId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FormResponseDto> {
+    return this.formsService.archiveForm(this.getChurchId(req), formId, user.sub);
+  }
+
+  /**
+   * Restores an archived form.
+   */
+  @Post(':formId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Restore a form')
+  @ApiParam({ name: 'formId', description: 'Form UUID' })
+  async restoreForm(
+    @Param('formId') formId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FormResponseDto> {
+    return this.formsService.restoreForm(this.getChurchId(req), formId, user.sub);
+  }
+
+  /**
    * Clones a form into a new draft form.
    */
   @Post(':formId/clone')

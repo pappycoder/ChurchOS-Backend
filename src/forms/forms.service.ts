@@ -12,7 +12,12 @@
  * @since 1.0.0
  */
 
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Form, FormSubmission, FormStatus, Prisma, SubmissionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -107,7 +112,10 @@ export class FormsService {
     const limit = query.limit && query.limit > 0 ? query.limit : 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.FormWhereInput = { church_id: churchId };
+    const where: Prisma.FormWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.status) where.status = query.status;
     if (query.isTemplate !== undefined) where.is_template = query.isTemplate;
@@ -165,6 +173,10 @@ export class FormsService {
   ): Promise<FormResponseDto> {
     const existing = await this.findFormOrFail(churchId, formId);
     const oldValues = this.formToPlain(existing);
+
+    if (existing.archived_at) {
+      throw new NotFoundException('Form is archived');
+    }
 
     if (dto.fields) {
       this.validateFieldDefinitions(dto.fields);
@@ -244,6 +256,10 @@ export class FormsService {
   async cloneForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
     const source = await this.findFormOrFail(churchId, formId);
 
+    if (source.archived_at) {
+      throw new NotFoundException('Form is archived');
+    }
+
     const form = await this.prisma.form.create({
       data: {
         church_id: churchId,
@@ -264,6 +280,77 @@ export class FormsService {
       action: 'CREATE',
       entityId: form.id,
       newValues: this.formToPlain(form),
+    });
+
+    return this.mapForm(form);
+  }
+
+  /**
+   * Archives a form by setting archived_at. Archived forms drop out of active
+   * lists but stay reachable by ID, and can be restored or purged.
+   *
+   * @param churchId - Church ID
+   * @param formId - Form ID
+   * @param userId - User performing the action
+   * @returns Updated form response
+   * @throws NotFoundException if the form is missing or not in this church
+   * @throws ConflictException if the form is already archived
+   */
+  async archiveForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
+    const existing = await this.findFormOrFail(churchId, formId);
+
+    if (existing.archived_at) {
+      throw new ConflictException('Form is already archived');
+    }
+
+    const form = await this.prisma.form.update({
+      where: { id: formId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'form',
+      action: 'ARCHIVE',
+      entityId: formId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: form.archived_at },
+    });
+
+    return this.mapForm(form);
+  }
+
+  /**
+   * Restores an archived form by clearing archived_at.
+   *
+   * @param churchId - Church ID
+   * @param formId - Form ID
+   * @param userId - User performing the action
+   * @returns Updated form response
+   * @throws NotFoundException if the form is missing or not in this church
+   * @throws ConflictException if the form is not currently archived
+   */
+  async restoreForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
+    const existing = await this.findFormOrFail(churchId, formId);
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Form is not archived');
+    }
+
+    const form = await this.prisma.form.update({
+      where: { id: formId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'form',
+      action: 'RESTORE',
+      entityId: formId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
     });
 
     return this.mapForm(form);
@@ -685,6 +772,7 @@ export class FormsService {
       isTemplate: form.is_template,
       isPublic: form.is_public,
       publicToken: form.public_token ?? undefined,
+      archivedAt: form.archived_at?.toISOString(),
       createdAt: form.created_at,
       updatedAt: form.updated_at,
     };

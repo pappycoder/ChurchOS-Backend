@@ -52,6 +52,12 @@ export class VisitorResponseDto {
   @ApiPropertyOptional({ description: 'Conversion date' })
   convertedAt?: string;
 
+  @ApiPropertyOptional({
+    description: 'Archive timestamp — set when the visitor is archived',
+    example: '2026-08-28T10:30:00.000Z',
+  })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Created timestamp' })
   createdAt!: string;
 

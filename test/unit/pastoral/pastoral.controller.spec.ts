@@ -104,6 +104,42 @@ describe('PastoralController permission decorators', () => {
       "@RequirePermissions('pastoral:read')",
     );
   });
+
+  it('requires pastoral:update on POST /pastoral/notes/:noteId/archive', () => {
+    expect(blockBetween("@Post('notes/:noteId/archive')", 'async archiveNote(')).toContain(
+      "@RequirePermissions('pastoral:update')",
+    );
+    expect(blockBetween("@Post('notes/:noteId/archive')", 'async archiveNote(')).toContain(
+      '@HttpCode(HttpStatus.OK)',
+    );
+  });
+
+  it('requires pastoral:update on POST /pastoral/notes/:noteId/restore', () => {
+    expect(blockBetween("@Post('notes/:noteId/restore')", 'async restoreNote(')).toContain(
+      "@RequirePermissions('pastoral:update')",
+    );
+    expect(blockBetween("@Post('notes/:noteId/restore')", 'async restoreNote(')).toContain(
+      '@HttpCode(HttpStatus.OK)',
+    );
+  });
+
+  it('requires pastoral:update on POST /pastoral/life-events/:lifeEventId/archive', () => {
+    expect(
+      blockBetween("@Post('life-events/:lifeEventId/archive')", 'async archiveLifeEvent('),
+    ).toContain("@RequirePermissions('pastoral:update')");
+    expect(
+      blockBetween("@Post('life-events/:lifeEventId/archive')", 'async archiveLifeEvent('),
+    ).toContain('@HttpCode(HttpStatus.OK)');
+  });
+
+  it('requires pastoral:update on POST /pastoral/life-events/:lifeEventId/restore', () => {
+    expect(
+      blockBetween("@Post('life-events/:lifeEventId/restore')", 'async restoreLifeEvent('),
+    ).toContain("@RequirePermissions('pastoral:update')");
+    expect(
+      blockBetween("@Post('life-events/:lifeEventId/restore')", 'async restoreLifeEvent('),
+    ).toContain('@HttpCode(HttpStatus.OK)');
+  });
 });
 
 describe('AdminController recalculate-scores permission decorator', () => {

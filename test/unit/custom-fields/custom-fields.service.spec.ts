@@ -111,6 +111,28 @@ describe('CustomFieldsService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('Occupation');
     });
+
+    it('should exclude archived fields by default', async () => {
+      await service.findAll(churchId);
+      expect(prismaMock.customFieldDefinition.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list only archived fields when archived=true', async () => {
+      (prismaMock.customFieldDefinition.findMany as jest.Mock).mockResolvedValue([
+        { ...mockField, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      const result = await service.findAll(churchId, { archived: true });
+      expect(prismaMock.customFieldDefinition.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
   });
 
   describe('findOne', () => {
@@ -149,6 +171,93 @@ describe('CustomFieldsService', () => {
         service.update(mockField.id, { name: 'Other Field' }, churchId, userId),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('should throw NotFoundException when updating an archived field', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue({
+        ...mockField,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+      await expect(service.update(mockField.id, { name: 'Job' }, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('archive', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue(mockField);
+      (prismaMock.customFieldDefinition.update as jest.Mock).mockResolvedValue({
+        ...mockField,
+        archived_at: new Date('2026-08-28T12:00:00.000Z'),
+      });
+
+      const result = await service.archive(mockField.id, churchId, userId);
+
+      expect(prismaMock.customFieldDefinition.update).toHaveBeenCalledWith({
+        where: { id: mockField.id },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-28T12:00:00.000Z');
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'custom_field_definition' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue({
+        ...mockField,
+        archived_at: new Date(),
+      });
+
+      await expect(service.archive(mockField.id, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.archive(mockField.id, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restore', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue({
+        ...mockField,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      (prismaMock.customFieldDefinition.update as jest.Mock).mockResolvedValue(mockField);
+
+      const result = await service.restore(mockField.id, churchId, userId);
+
+      expect(prismaMock.customFieldDefinition.update).toHaveBeenCalledWith({
+        where: { id: mockField.id },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'custom_field_definition' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue(mockField);
+
+      await expect(service.restore(mockField.id, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.restore(mockField.id, churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   describe('remove', () => {
@@ -162,6 +271,16 @@ describe('CustomFieldsService', () => {
       await expect(service.remove('nonexistent', churchId, userId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('should still hard-delete (purge) an archived field', async () => {
+      (prismaMock.customFieldDefinition.findUnique as jest.Mock).mockResolvedValue({
+        ...mockField,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await service.remove(mockField.id, churchId, userId);
+      expect(prismaMock.customFieldDefinition.delete).toHaveBeenCalled();
     });
   });
 });

@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { IsEnum, IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsInt, Min, Max, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -80,4 +80,13 @@ export class ListMembersDto {
   @IsEnum(['asc', 'desc'] as const)
   @IsOptional()
   sortOrder?: 'asc' | 'desc';
+
+  @ApiPropertyOptional({
+    description: 'List archived records only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

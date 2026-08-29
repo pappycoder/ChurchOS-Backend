@@ -9,7 +9,8 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsIn, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsInt, Min, Max, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ListTemplatesDto {
   @ApiPropertyOptional({ default: 1 })
@@ -41,4 +42,13 @@ export class ListTemplatesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'List archived templates only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

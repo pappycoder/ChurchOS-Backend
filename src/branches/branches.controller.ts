@@ -162,4 +162,40 @@ export class BranchesController {
     const churchId = req.profile?.church_id || '';
     return this.branchesService.remove(branchId, churchId, user.id);
   }
+
+  @Post(':branchId/archive')
+  @RequireRoles('church_admin', 'super_admin')
+  /**
+   * Archives a branch. Archived branches drop out of active lists.
+   * @param branchId - Branch UUID
+   * @param user - Current authenticated user
+   * @param req - Authenticated request with user profile
+   * @returns Updated BranchResponseDto
+   */
+  async archive(
+    @Param('branchId') branchId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<BranchResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.branchesService.archive(branchId, churchId, user.id);
+  }
+
+  @Post(':branchId/restore')
+  @RequireRoles('church_admin', 'super_admin')
+  /**
+   * Restores an archived branch.
+   * @param branchId - Branch UUID
+   * @param user - Current authenticated user
+   * @param req - Authenticated request with user profile
+   * @returns Updated BranchResponseDto
+   */
+  async restore(
+    @Param('branchId') branchId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<BranchResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.branchesService.restore(branchId, churchId, user.id);
+  }
 }

@@ -48,4 +48,7 @@ export class SermonResponseDto {
 
   @ApiProperty({ description: 'Last update date', example: '2026-07-20T10:00:00.000Z' })
   updatedAt!: string;
+
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
 }

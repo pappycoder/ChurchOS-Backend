@@ -36,6 +36,9 @@ export class LifeEventResponseDto {
   @ApiProperty({ description: 'Whether a greeting notification was sent' })
   notified!: boolean;
 
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Record creation timestamp' })
   createdAt!: string;
 }

@@ -347,6 +347,24 @@ describe('SyncService', () => {
       expect(result.changes[0].data).toBeNull();
     });
 
+    it('should tombstone changes whose record is archived', async () => {
+      mockDevice();
+      model('syncQueue').findMany.mockResolvedValue([
+        {
+          entity: 'member',
+          entity_id: mockMemberId,
+          action: 'update',
+          data: {},
+          created_at: new Date('2026-07-22T10:00:00Z'),
+        },
+      ]);
+      model('member').findUnique.mockResolvedValue({ ...memberRow, archived_at: new Date() });
+
+      const result = await service.pullChanges(mockChurchId, 'device-1');
+
+      expect(result.changes[0].data).toBeNull();
+    });
+
     it('should detect hasMore when limit exceeded', async () => {
       mockDevice();
       const items = Array.from({ length: 11 }, (_, i) => ({
@@ -421,6 +439,32 @@ describe('SyncService', () => {
         memberSince: '2026-01-01T10:00:00.000Z',
       });
       expect(result.collections.services).toEqual([]);
+    });
+
+    it('should scope all archivable bootstrap collections to active rows', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      model('service').findMany.mockResolvedValue([]);
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('visitor').findMany.mockResolvedValue([]);
+      model('attendance').findMany.mockResolvedValue([]);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.bootstrap(mockChurchId);
+
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(model('service').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(model('visitor').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ deleted_at: null, archived_at: null }),
+        }),
+      );
     });
   });
 

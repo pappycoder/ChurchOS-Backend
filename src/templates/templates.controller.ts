@@ -175,6 +175,48 @@ export class TemplatesController {
     return this.templatesService.update(templateId, dto, churchId, user.sub);
   }
 
+  @Post(':templateId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Archive a template',
+    description: 'Sets archived_at — hides the template from active lists until restored.',
+  })
+  @ApiParam({ name: 'templateId', description: 'Template UUID' })
+  @ApiResponse({ status: 200, description: 'Template archived successfully' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  @ApiResponse({ status: 409, description: 'Template is already archived' })
+  async archive(
+    @Param('templateId') templateId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TemplateResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.templatesService.archive(templateId, churchId, user.sub);
+  }
+
+  @Post(':templateId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restore an archived template',
+    description: 'Clears archived_at — brings the template back into active lists.',
+  })
+  @ApiParam({ name: 'templateId', description: 'Template UUID' })
+  @ApiResponse({ status: 200, description: 'Template restored successfully' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  @ApiResponse({ status: 409, description: 'Template is not archived' })
+  async restore(
+    @Param('templateId') templateId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TemplateResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.templatesService.restore(templateId, churchId, user.sub);
+  }
+
   /**
    * Deletes a template permanently.
    *

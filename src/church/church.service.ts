@@ -216,6 +216,78 @@ export class ChurchService {
   }
 
   /**
+   * Archives a church by setting its archived_at timestamp. Once archived, the
+   * request-context middleware rejects every request from the church's profiles
+   * except the restore route, so this effectively takes the church offline.
+   * @param churchId - The church UUID
+   * @param userId - User performing the archive (for audit log)
+   * @returns Updated ChurchResponseDto
+   * @throws NotFoundException if church not found
+   * @throws ConflictException if the church is already archived
+   */
+  async archiveChurch(churchId: string, userId: string): Promise<ChurchResponseDto> {
+    const existing = await this.prisma.church.findUnique({ where: { id: churchId } });
+
+    if (!existing) {
+      throw new NotFoundException('Church not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Church is already archived');
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'church',
+      action: 'ARCHIVE',
+      entityId: churchId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: new Date() },
+    });
+
+    this.logger.log(`Church archived: ${churchId} by user ${userId}`);
+
+    return this.getChurch(churchId);
+  }
+
+  /**
+   * Restores an archived church by clearing its archived_at timestamp. This is
+   * the one request the request-context middleware allows through for profiles
+   * whose church is archived, so an admin session can bring the church back.
+   * @param churchId - The church UUID
+   * @param userId - User performing the restore (for audit log)
+   * @returns Updated ChurchResponseDto
+   * @throws NotFoundException if church not found
+   * @throws ConflictException if the church is not archived
+   */
+  async restoreChurch(churchId: string, userId: string): Promise<ChurchResponseDto> {
+    const existing = await this.prisma.church.findUnique({ where: { id: churchId } });
+
+    if (!existing) {
+      throw new NotFoundException('Church not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Church is not archived');
+    }
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'church',
+      action: 'RESTORE',
+      entityId: churchId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Church restored: ${churchId} by user ${userId}`);
+
+    return this.getChurch(churchId);
+  }
+
+  /**
    * Retrieves all configuration key-value pairs for a church.
    * @param churchId - The church UUID
    * @returns ChurchConfigResponseDto with all config values
@@ -617,6 +689,7 @@ export class ChurchService {
     logo_url: string | null;
     created_at: Date;
     updated_at: Date;
+    archived_at: Date | null;
     _count?: { branches: number; members: number };
   }): ChurchResponseDto {
     return {
@@ -633,6 +706,7 @@ export class ChurchService {
       logoUrl: church.logo_url || undefined,
       branchCount: church._count?.branches ?? 0,
       memberCount: church._count?.members ?? 0,
+      archivedAt: church.archived_at?.toISOString(),
       createdAt: church.created_at.toISOString(),
       updatedAt: church.updated_at.toISOString(),
     };

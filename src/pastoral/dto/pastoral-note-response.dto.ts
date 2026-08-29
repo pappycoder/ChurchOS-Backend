@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PastoralNoteResponseDto {
   @ApiProperty({ description: 'Unique identifier for the pastoral note' })
@@ -47,6 +47,9 @@ export class PastoralNoteResponseDto {
 
   @ApiProperty({ description: 'Categorization tags', type: [String] })
   tags!: string[];
+
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
 
   @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: string;

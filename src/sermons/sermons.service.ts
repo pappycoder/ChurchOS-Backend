@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateSermonDto } from './dto/create-sermon.dto';
@@ -81,6 +81,7 @@ export class SermonsService {
 
     const where: Prisma.SermonWhereInput = {
       church_id: churchId,
+      archived_at: dto.archived === true ? { not: null } : null,
     };
 
     if (dto.speaker) {
@@ -172,6 +173,10 @@ export class SermonsService {
       throw new NotFoundException(`Sermon not found`);
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Sermon is archived');
+    }
+
     const data: Prisma.SermonUpdateInput = {};
 
     if (dto.title !== undefined) data.title = dto.title;
@@ -227,6 +232,100 @@ export class SermonsService {
     });
 
     this.logger.log(`Sermon deleted: ${sermonId}`);
+  }
+
+  /**
+   * Archives a sermon by setting archived_at. Archived sermons drop out of
+   * active lists (listSermons filters archived_at: null) but their details stay
+   * reachable by ID and they can be restored or permanently deleted.
+   *
+   * @param sermonId - Sermon UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated SermonResponseDto
+   * @throws NotFoundException if the sermon is missing or not in this church
+   * @throws ConflictException if the sermon is already archived
+   */
+  async archiveSermon(
+    sermonId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<SermonResponseDto> {
+    const existing = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Sermon not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Sermon is already archived');
+    }
+
+    const updated = await this.prisma.sermon.update({
+      where: { id: sermonId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'sermon',
+      action: 'ARCHIVE',
+      entityId: sermonId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Sermon archived: ${sermonId}`);
+    return this.mapSermonToDto(updated);
+  }
+
+  /**
+   * Restores an archived sermon by clearing archived_at.
+   *
+   * @param sermonId - Sermon UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated SermonResponseDto
+   * @throws NotFoundException if the sermon is missing or not in this church
+   * @throws ConflictException if the sermon is not currently archived
+   */
+  async restoreSermon(
+    sermonId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<SermonResponseDto> {
+    const existing = await this.prisma.sermon.findFirst({
+      where: { id: sermonId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Sermon not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Sermon is not archived');
+    }
+
+    const updated = await this.prisma.sermon.update({
+      where: { id: sermonId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'sermon',
+      action: 'RESTORE',
+      entityId: sermonId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Sermon restored: ${sermonId}`);
+    return this.mapSermonToDto(updated);
   }
 
   // ─── BOOKMARKS ──────────────────────────────────────────────────
@@ -447,6 +546,10 @@ export class SermonsService {
       throw new NotFoundException(`Sermon not found`);
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Sermon is archived');
+    }
+
     const updated = await this.prisma.sermon.update({
       where: { id: sermonId },
       data: { audio_url: audioUrl },
@@ -464,7 +567,11 @@ export class SermonsService {
   async listSeries(churchId: string): Promise<{ name: string; count: number; lastDate: string }[]> {
     const rows = await this.prisma.sermon.groupBy({
       by: ['series_name'],
-      where: { church_id: churchId, series_name: { not: null } },
+      where: {
+        church_id: churchId,
+        series_name: { not: null },
+        archived_at: null,
+      },
       _count: { id: true },
       _max: { sermon_date: true },
       orderBy: { _count: { id: 'desc' } },
@@ -487,7 +594,11 @@ export class SermonsService {
   ): Promise<{ name: string; count: number; lastDate: string }[]> {
     const rows = await this.prisma.sermon.groupBy({
       by: ['speaker'],
-      where: { church_id: churchId, speaker: { not: null } },
+      where: {
+        church_id: churchId,
+        speaker: { not: null },
+        archived_at: null,
+      },
       _count: { id: true },
       _max: { sermon_date: true },
       orderBy: { _count: { id: 'desc' } },
@@ -513,6 +624,7 @@ export class SermonsService {
       sermon_date: Date;
       created_at: Date;
       updated_at: Date;
+      archived_at: Date | null;
     },
   ): SermonResponseDto {
     return {
@@ -528,6 +640,7 @@ export class SermonsService {
       videoUrl: (sermon.video_url as string) || undefined,
       durationSeconds: (sermon.duration_seconds as number) || undefined,
       description: (sermon.description as string) || undefined,
+      archivedAt: sermon.archived_at?.toISOString(),
       createdAt: sermon.created_at.toISOString(),
       updatedAt: sermon.updated_at.toISOString(),
     };

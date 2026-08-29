@@ -7,7 +7,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FOLLOW_UP_STATUSES } from './create-visitor.dto';
 
@@ -44,6 +44,15 @@ export class ListVisitorsDto {
   @IsString()
   @IsOptional()
   assignedToId?: string;
+
+  @ApiPropertyOptional({
+    description: 'List archived visitors only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  archived?: boolean;
 
   @ApiPropertyOptional({
     description: 'Sort field',

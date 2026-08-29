@@ -81,7 +81,10 @@ export class FamilyService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.FamilyWhereInput = { church_id: churchId };
+    const where: Prisma.FamilyWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.search) {
       where.name = { contains: query.search, mode: 'insensitive' };
@@ -162,6 +165,10 @@ export class FamilyService {
     });
 
     if (!existing) {
+      throw new NotFoundException('Family not found');
+    }
+
+    if (existing.archived_at) {
       throw new NotFoundException('Family not found');
     }
 
@@ -249,6 +256,10 @@ export class FamilyService {
       throw new NotFoundException('Family not found');
     }
 
+    if (family.archived_at) {
+      throw new NotFoundException('Family not found');
+    }
+
     const member = await this.prisma.member.findFirst({
       where: { id: dto.memberId, church_id: churchId },
     });
@@ -311,6 +322,10 @@ export class FamilyService {
       throw new NotFoundException('Family not found');
     }
 
+    if (family.archived_at) {
+      throw new NotFoundException('Family not found');
+    }
+
     const link = await this.prisma.familyMember.findUnique({
       where: { family_id_member_id: { family_id: familyId, member_id: memberId } },
     });
@@ -337,6 +352,91 @@ export class FamilyService {
   }
 
   /**
+   * Archives a family by setting archived_at. Archived families drop out of
+   * active family lists (they stay reachable by ID and can be restored).
+   *
+   * @param familyId - Family UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated family response
+   * @throws NotFoundException if the family is missing or not in this church
+   * @throws ConflictException if the family is already archived
+   */
+  async archive(familyId: string, churchId: string, userId: string): Promise<FamilyResponseDto> {
+    const existing = await this.prisma.family.findFirst({
+      where: { id: familyId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Family not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Family is already archived');
+    }
+
+    await this.prisma.family.update({
+      where: { id: familyId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'family',
+      action: 'ARCHIVE',
+      entityId: familyId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: new Date() },
+    });
+
+    this.logger.log(`Family archived: ${familyId}`);
+    return this.getFamilyById(familyId, churchId);
+  }
+
+  /**
+   * Restores an archived family by clearing archived_at.
+   *
+   * @param familyId - Family UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated family response
+   * @throws NotFoundException if the family is missing or not in this church
+   * @throws ConflictException if the family is not currently archived
+   */
+  async restore(familyId: string, churchId: string, userId: string): Promise<FamilyResponseDto> {
+    const existing = await this.prisma.family.findFirst({
+      where: { id: familyId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Family not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Family is not archived');
+    }
+
+    await this.prisma.family.update({
+      where: { id: familyId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'family',
+      action: 'RESTORE',
+      entityId: familyId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Family restored: ${familyId}`);
+    return this.getFamilyById(familyId, churchId);
+  }
+
+  /**
    * Maps raw Prisma family + member data to a FamilyResponseDto.
    *
    * @param family - Raw family record from Prisma
@@ -349,6 +449,7 @@ export class FamilyService {
       church_id: string;
       name: string;
       head_id: string | null;
+      archived_at: Date | null;
       created_at: Date;
     },
     members: Array<{
@@ -372,6 +473,7 @@ export class FamilyService {
         relationship: m.relationship,
         isHead: m.is_head,
       })),
+      archivedAt: family.archived_at?.toISOString(),
       createdAt: family.created_at.toISOString(),
     };
   }

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VisitorsService } from '../../../src/visitors/visitors.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 
 describe('VisitorsService', () => {
   let service: VisitorsService;
@@ -225,6 +225,26 @@ describe('VisitorsService', () => {
       expect(arg.where.deleted_at).toBeNull();
       expect(arg.where.church_id).toBe(churchId);
     });
+
+    it('should exclude archived visitors by default', async () => {
+      await service.findAll(churchId, {});
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.archived_at).toBeNull();
+    });
+
+    it('should list only archived visitors when archived=true', async () => {
+      await service.findAll(churchId, { archived: true });
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.archived_at).toEqual({ not: null });
+    });
+
+    it('should map archivedAt in responses', async () => {
+      (prismaMock.visitor.findMany as jest.Mock).mockResolvedValueOnce([
+        { ...mockVisitor, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      const result = await service.findAll(churchId, { archived: true });
+      expect(result.data[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
   });
 
   describe('findOne', () => {
@@ -358,6 +378,110 @@ describe('VisitorsService', () => {
       await expect(service.remove('nonexistent', churchId, userId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('archive', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      (prismaMock.visitor.update as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: archivedAt,
+      });
+
+      const result = await service.archive(mockVisitor.id, churchId, userId);
+      expect(prismaMock.visitor.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archived_at: expect.any(Date) } }),
+      );
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'visitor' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: new Date(),
+      });
+      await expect(service.archive(mockVisitor.id, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException for missing visitor', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce(null);
+      await expect(service.archive('nonexistent', churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restore', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      (prismaMock.visitor.update as jest.Mock).mockResolvedValueOnce(mockVisitor);
+
+      const result = await service.restore(mockVisitor.id, churchId, userId);
+      expect(prismaMock.visitor.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archived_at: null } }),
+      );
+      expect(result.archivedAt).toBeUndefined();
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'visitor' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      await expect(service.restore(mockVisitor.id, churchId, userId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException for missing visitor', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce(null);
+      await expect(service.restore('nonexistent', churchId, userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('archived-row guards', () => {
+    it('should reject update of an archived visitor with NotFoundException', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: new Date(),
+      });
+      await expect(
+        service.update(mockVisitor.id, { notes: 'x' }, churchId, userId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject converting an archived visitor with NotFoundException', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: new Date(),
+      });
+      await expect(
+        service.convertToMember(
+          mockVisitor.id,
+          { firstName: 'Amina', lastName: 'Okafor' },
+          churchId,
+          userId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should still allow hard delete (purge) of an archived visitor', async () => {
+      (prismaMock.visitor.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...mockVisitor,
+        archived_at: new Date(),
+      });
+      await expect(service.remove(mockVisitor.id, churchId, userId)).resolves.toBeUndefined();
+      expect(prismaMock.visitor.delete).toHaveBeenCalled();
     });
   });
 });

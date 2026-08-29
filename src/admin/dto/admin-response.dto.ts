@@ -55,6 +55,9 @@ export class DepartmentResponseDto {
   @ApiProperty({ description: 'Total count of members in the department' })
   memberCount!: number;
 
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'ISO timestamp of when the department was created' })
   createdAt!: string;
 
@@ -105,6 +108,9 @@ export class CellGroupResponseDto {
 
   @ApiPropertyOptional({ description: 'Optional meeting time in HH:MM format' })
   meetingTime?: string;
+
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
 
   @ApiProperty({ description: 'ISO timestamp of when the cell group was created' })
   createdAt!: string;

@@ -260,6 +260,46 @@ export class MembersController {
   }
 
   /**
+   * Archive a member.
+   */
+  @Post(':memberId/archive')
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Archive a member',
+    description: 'Sets archived_at — hides the member from active lists until restored.',
+  })
+  async archive(
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.archiveMember(memberId, churchId, user.id);
+  }
+
+  /**
+   * Restore an archived member.
+   */
+  @Post(':memberId/restore-archive')
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('members:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restore an archived member',
+    description: 'Clears archived_at — brings the member back into active lists.',
+  })
+  async restoreArchive(
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<MemberResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.membersService.restoreArchivedMember(memberId, churchId, user.id);
+  }
+
+  /**
    * Bulk import members from CSV/JSON data.
    */
   @Post('bulk-import')

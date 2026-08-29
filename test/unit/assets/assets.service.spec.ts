@@ -13,7 +13,7 @@ import { AssetsService } from '../../../src/assets/assets.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import {
   AssetCondition,
   AssetStatus,
@@ -117,6 +117,114 @@ describe('AssetsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe(mockCategoryId);
+    });
+
+    it('should exclude archived categories from the default (active-only) list', async () => {
+      prisma.assetCategory.findMany.mockResolvedValue([]);
+
+      await service.listCategories(mockChurchId);
+
+      expect(prisma.assetCategory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list archived categories only when archived is true', async () => {
+      prisma.assetCategory.findMany.mockResolvedValue([
+        { ...mockCategory, archived_at: new Date('2026-07-25T10:00:00.000Z') },
+      ]);
+
+      const result = await service.listCategories(mockChurchId, true);
+
+      expect(prisma.assetCategory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result[0].archivedAt).toBeDefined();
+    });
+  });
+
+  describe('archiveCategory', () => {
+    it('should archive a category and audit the ARCHIVE action', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue(mockCategory);
+      prisma.assetCategory.update.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      const result = await service.archiveCategory(mockChurchId, mockCategoryId, mockUserId);
+
+      expect(result.archivedAt).toBeDefined();
+      expect(prisma.assetCategory.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockCategoryId },
+          data: expect.objectContaining({ archived_at: expect.any(Date) }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'asset_category', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw NotFoundException if category is missing or not in this church', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.archiveCategory(mockChurchId, mockCategoryId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException if category is already archived', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.archiveCategory(mockChurchId, mockCategoryId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('restoreCategory', () => {
+    it('should restore an archived category and audit the RESTORE action', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+      prisma.assetCategory.update.mockResolvedValue(mockCategory);
+
+      const result = await service.restoreCategory(mockChurchId, mockCategoryId, mockUserId);
+
+      expect(result.archivedAt).toBeUndefined();
+      expect(prisma.assetCategory.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockCategoryId },
+          data: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'asset_category', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw NotFoundException if category is missing or not in this church', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.restoreCategory(mockChurchId, mockCategoryId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException if category is not archived', async () => {
+      prisma.assetCategory.findFirst.mockResolvedValue(mockCategory);
+
+      await expect(
+        service.restoreCategory(mockChurchId, mockCategoryId, mockUserId),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -248,6 +356,87 @@ describe('AssetsService', () => {
       const result = await service.generateQrCode(mockChurchId, mockAssetId);
 
       expect(result.qrData).toBe(`CHURCHOS:ASSET:${mockAssetId}`);
+    });
+  });
+
+  describe('archiveAsset', () => {
+    it('should archive an asset and audit the ARCHIVE action', async () => {
+      prisma.asset.findFirst.mockResolvedValue(mockAsset);
+      prisma.asset.update.mockResolvedValue({
+        ...mockAsset,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      const result = await service.archiveAsset(mockChurchId, mockAssetId, mockUserId);
+
+      expect(result.archivedAt).toBeDefined();
+      expect(prisma.asset.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockAssetId },
+          data: expect.objectContaining({ archived_at: expect.any(Date) }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'asset', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw NotFoundException if asset is missing or not in this church', async () => {
+      prisma.asset.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveAsset(mockChurchId, mockAssetId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ConflictException if asset is already archived', async () => {
+      prisma.asset.findFirst.mockResolvedValue({
+        ...mockAsset,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(service.archiveAsset(mockChurchId, mockAssetId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+  });
+
+  describe('restoreAsset', () => {
+    it('should restore an archived asset and audit the RESTORE action', async () => {
+      prisma.asset.findFirst.mockResolvedValue({
+        ...mockAsset,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+      prisma.asset.update.mockResolvedValue(mockAsset);
+
+      const result = await service.restoreAsset(mockChurchId, mockAssetId, mockUserId);
+
+      expect(result.archivedAt).toBeUndefined();
+      expect(prisma.asset.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockAssetId },
+          data: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'asset', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw NotFoundException if asset is missing or not in this church', async () => {
+      prisma.asset.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreAsset(mockChurchId, mockAssetId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ConflictException if asset is not archived', async () => {
+      prisma.asset.findFirst.mockResolvedValue(mockAsset);
+
+      await expect(service.restoreAsset(mockChurchId, mockAssetId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -465,6 +654,23 @@ describe('AssetsService', () => {
 
       expect(result.status).toBe(AssetLoanStatus.returned);
       expect(result.conditionAfter).toBe(AssetCondition.good);
+    });
+
+    it('should throw NotFoundException when returning a loan against an archived asset', async () => {
+      prisma.asset.findFirst.mockResolvedValue({
+        ...mockAsset,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.returnLoan(
+          mockChurchId,
+          mockAssetId,
+          'loan-1',
+          { conditionAfter: AssetCondition.good },
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

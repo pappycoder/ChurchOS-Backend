@@ -9,7 +9,12 @@
  * @since 1.0.0
  */
 
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   Asset,
   AssetCategory,
@@ -109,11 +114,15 @@ export class AssetsService {
    * Lists asset categories for a church.
    *
    * @param churchId - Church ID
+   * @param archived - When true, lists archived categories only (default: active only)
    * @returns Array of category responses
    */
-  async listCategories(churchId: string): Promise<AssetCategoryResponseDto[]> {
+  async listCategories(churchId: string, archived = false): Promise<AssetCategoryResponseDto[]> {
     const categories = await this.prisma.assetCategory.findMany({
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        archived_at: archived ? { not: null } : null,
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -136,6 +145,10 @@ export class AssetsService {
     userId: string,
   ): Promise<AssetCategoryResponseDto> {
     const category = await this.getCategoryById(churchId, categoryId);
+
+    if (category.archived_at) {
+      throw new NotFoundException('Asset category is archived');
+    }
 
     if (dto.name && dto.name !== category.name) {
       const existing = await this.prisma.assetCategory.findUnique({
@@ -195,6 +208,86 @@ export class AssetsService {
       entityId: categoryId,
       oldValues: category as unknown as Record<string, unknown>,
     });
+  }
+
+  /**
+   * Archives an asset category by setting archived_at. Archived categories
+   * drop out of active category lists (they stay reachable by ID and can be
+   * restored or permanently deleted).
+   *
+   * @param churchId - Church ID
+   * @param categoryId - Category ID
+   * @param userId - User ID
+   * @returns Updated category response
+   * @throws NotFoundException if the category is missing or not in this church
+   * @throws ConflictException if the category is already archived
+   */
+  async archiveCategory(
+    churchId: string,
+    categoryId: string,
+    userId: string,
+  ): Promise<AssetCategoryResponseDto> {
+    const existing = await this.getCategoryById(churchId, categoryId);
+
+    if (existing.archived_at) {
+      throw new ConflictException('Asset category is already archived');
+    }
+
+    const updated = await this.prisma.assetCategory.update({
+      where: { id: categoryId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'asset_category',
+      action: 'ARCHIVE',
+      entityId: categoryId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    return this.mapCategory(updated);
+  }
+
+  /**
+   * Restores an archived asset category by clearing archived_at.
+   *
+   * @param churchId - Church ID
+   * @param categoryId - Category ID
+   * @param userId - User ID
+   * @returns Updated category response
+   * @throws NotFoundException if the category is missing or not in this church
+   * @throws ConflictException if the category is not currently archived
+   */
+  async restoreCategory(
+    churchId: string,
+    categoryId: string,
+    userId: string,
+  ): Promise<AssetCategoryResponseDto> {
+    const existing = await this.getCategoryById(churchId, categoryId);
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Asset category is not archived');
+    }
+
+    const updated = await this.prisma.assetCategory.update({
+      where: { id: categoryId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'asset_category',
+      action: 'RESTORE',
+      entityId: categoryId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    return this.mapCategory(updated);
   }
 
   /**
@@ -293,7 +386,10 @@ export class AssetsService {
     const limit = dto.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.AssetWhereInput = { church_id: churchId };
+    const where: Prisma.AssetWhereInput = {
+      church_id: churchId,
+      archived_at: dto.archived === true ? { not: null } : null,
+    };
 
     if (dto.status) where.status = dto.status;
     if (dto.condition) where.condition = dto.condition;
@@ -381,6 +477,10 @@ export class AssetsService {
 
     if (!asset) {
       throw new NotFoundException('Asset not found');
+    }
+
+    if (asset.archived_at) {
+      throw new NotFoundException('Asset is archived');
     }
 
     await this.validateAssetRelations(churchId, dto);
@@ -475,6 +575,102 @@ export class AssetsService {
       oldValues: asset as unknown as Record<string, unknown>,
       newValues: updated as unknown as Record<string, unknown>,
     });
+  }
+
+  /**
+   * Archives an asset by setting archived_at. Archived assets drop out of
+   * active asset lists (they stay reachable by ID and can be restored) while
+   * their transactional history (maintenance, depreciation, loans) is kept.
+   *
+   * @param churchId - Church ID
+   * @param assetId - Asset ID
+   * @param userId - User ID
+   * @returns Updated asset response
+   * @throws NotFoundException if the asset is missing or not in this church
+   * @throws ConflictException if the asset is already archived
+   */
+  async archiveAsset(churchId: string, assetId: string, userId: string): Promise<AssetResponseDto> {
+    const existing = await this.prisma.asset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Asset is already archived');
+    }
+
+    const updated = await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { archived_at: new Date() },
+      include: {
+        category: true,
+        branch: { select: { name: true } },
+        department: { select: { name: true } },
+        custodian: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'asset',
+      action: 'ARCHIVE',
+      entityId: assetId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    return this.mapAsset(updated as AssetWithRelations);
+  }
+
+  /**
+   * Restores an archived asset by clearing archived_at.
+   *
+   * @param churchId - Church ID
+   * @param assetId - Asset ID
+   * @param userId - User ID
+   * @returns Updated asset response
+   * @throws NotFoundException if the asset is missing or not in this church
+   * @throws ConflictException if the asset is not currently archived
+   */
+  async restoreAsset(churchId: string, assetId: string, userId: string): Promise<AssetResponseDto> {
+    const existing = await this.prisma.asset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Asset is not archived');
+    }
+
+    const updated = await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { archived_at: null },
+      include: {
+        category: true,
+        branch: { select: { name: true } },
+        department: { select: { name: true } },
+        custodian: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'asset',
+      action: 'RESTORE',
+      entityId: assetId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    return this.mapAsset(updated as AssetWithRelations);
   }
 
   /**
@@ -749,6 +945,10 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
+    if (asset.archived_at) {
+      throw new NotFoundException('Asset is archived');
+    }
+
     if (!asset.purchase_price || !asset.useful_life_years) {
       throw new BadRequestException(
         'Asset must have purchase price and useful life years to calculate depreciation',
@@ -879,6 +1079,10 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
+    if (asset.archived_at) {
+      throw new NotFoundException('Asset is archived');
+    }
+
     const activeLoan = await this.prisma.assetLoan.findFirst({
       where: {
         asset_id: assetId,
@@ -968,7 +1172,17 @@ export class AssetsService {
     dto: UpdateLoanDto,
     userId: string,
   ): Promise<LoanResponseDto> {
-    await this.getAsset(churchId, assetId);
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    if (asset.archived_at) {
+      throw new NotFoundException('Asset is archived');
+    }
 
     const loan = await this.prisma.assetLoan.findFirst({
       where: { id: loanId, asset_id: assetId },
@@ -1100,6 +1314,7 @@ export class AssetsService {
       churchId: category.church_id,
       name: category.name,
       description: category.description ?? undefined,
+      archivedAt: category.archived_at?.toISOString() ?? undefined,
       createdAt: category.created_at.toISOString(),
       updatedAt: category.updated_at.toISOString(),
     };
@@ -1140,6 +1355,7 @@ export class AssetsService {
       location: asset.location ?? undefined,
       qrCode: asset.qr_code ?? undefined,
       notes: asset.notes ?? undefined,
+      archivedAt: asset.archived_at?.toISOString() ?? undefined,
       createdAt: asset.created_at.toISOString(),
       updatedAt: asset.updated_at.toISOString(),
     };

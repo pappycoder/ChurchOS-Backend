@@ -104,7 +104,10 @@ export class BranchesService {
     const limit = Math.min(query.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.BranchWhereInput = { church_id: churchId };
+    const where: Prisma.BranchWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.search) {
       const searchTerm = query.search;
@@ -182,6 +185,10 @@ export class BranchesService {
     const existing = await this.prisma.branch.findUnique({ where: { id } });
 
     if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    if (existing.archived_at) {
       throw new NotFoundException('Branch not found');
     }
 
@@ -286,6 +293,91 @@ export class BranchesService {
   }
 
   /**
+   * Archives a branch by setting archived_at. Archived branches drop out of
+   * active branch lists (they stay reachable by ID and can be restored).
+   * @param id - Branch UUID
+   * @param churchId - The church UUID for multi-tenant isolation
+   * @param userId - User performing the archival (for audit log)
+   * @returns Updated BranchResponseDto
+   * @throws NotFoundException if branch not found or doesn't belong to church
+   * @throws ConflictException if the branch is already archived
+   */
+  async archive(id: string, churchId: string, userId: string): Promise<BranchResponseDto> {
+    const existing = await this.prisma.branch.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Branch is already archived');
+    }
+
+    const branch = await this.prisma.branch.update({
+      where: { id },
+      data: { archived_at: new Date() },
+      include: {
+        _count: { select: { members: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'branch',
+      action: 'ARCHIVE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: branch.archived_at },
+    });
+
+    this.logger.log(`Branch archived: ${id}`);
+    return this.mapToResponseDto(branch, branch._count.members);
+  }
+
+  /**
+   * Restores an archived branch by clearing archived_at.
+   * @param id - Branch UUID
+   * @param churchId - The church UUID for multi-tenant isolation
+   * @param userId - User performing the restoration (for audit log)
+   * @returns Updated BranchResponseDto
+   * @throws NotFoundException if branch not found or doesn't belong to church
+   * @throws ConflictException if the branch is not currently archived
+   */
+  async restore(id: string, churchId: string, userId: string): Promise<BranchResponseDto> {
+    const existing = await this.prisma.branch.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Branch is not archived');
+    }
+
+    const branch = await this.prisma.branch.update({
+      where: { id },
+      data: { archived_at: null },
+      include: {
+        _count: { select: { members: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'branch',
+      action: 'RESTORE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Branch restored: ${id}`);
+    return this.mapToResponseDto(branch, branch._count.members);
+  }
+
+  /**
    * Maps a Prisma Branch object to a BranchResponseDto.
    * @param branch - Prisma Branch object
    * @param memberCount - Number of members in the branch
@@ -304,6 +396,7 @@ export class BranchesService {
       phone: string | null;
       email: string | null;
       photo_url: string | null;
+      archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
     },
@@ -322,6 +415,7 @@ export class BranchesService {
       email: branch.email || undefined,
       photoUrl: branch.photo_url || undefined,
       memberCount,
+      archivedAt: branch.archived_at?.toISOString(),
       createdAt: branch.created_at.toISOString(),
       updatedAt: branch.updated_at.toISOString(),
     };

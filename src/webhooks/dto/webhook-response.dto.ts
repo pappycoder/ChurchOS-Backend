@@ -21,6 +21,9 @@ export class WebhookSubscriptionResponseDto {
   @ApiProperty({ description: 'Whether the subscription is active' })
   isActive!: boolean;
 
+  @ApiPropertyOptional({ description: 'Set when the subscription is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: string;
 }

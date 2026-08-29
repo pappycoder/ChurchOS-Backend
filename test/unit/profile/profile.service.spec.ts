@@ -17,7 +17,12 @@ import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../src/redis/redis.service';
 import { PermissionsService } from '../../../src/auth/services/permissions.service';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 
 jest.mock('otplib', () => ({
   generateSecret: jest.fn().mockReturnValue('JBSWY3DPEHPK3PXP'),
@@ -162,6 +167,7 @@ describe('ProfileService', () => {
     phone: '+234 803 456 7890',
     avatar_url: null,
     mfa_enabled: false,
+    archived_at: null,
     created_at: new Date('2026-07-15T10:00:00.000Z'),
     updated_at: new Date('2026-07-19T14:30:00.000Z'),
     assigned_roles: [{ role_name: 'church_admin' }],
@@ -554,6 +560,35 @@ describe('ProfileService', () => {
           take: 20,
         }),
       );
+    });
+
+    it('should exclude archived profiles by default', async () => {
+      model(prisma, 'profile').findMany.mockResolvedValue([]);
+      model(prisma, 'profile').count.mockResolvedValue(0);
+
+      await service.listProfiles(mockChurchId, {});
+
+      expect(model(prisma, 'profile').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list only archived profiles when archived=true', async () => {
+      model(prisma, 'profile').findMany.mockResolvedValue([
+        { ...mockProfileWithRelations, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      model(prisma, 'profile').count.mockResolvedValue(1);
+
+      const result = await service.listProfiles(mockChurchId, { archived: true });
+
+      expect(model(prisma, 'profile').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
     });
   });
 
@@ -1016,6 +1051,131 @@ describe('ProfileService', () => {
       await expect(
         service.softDeleteProfile(mockProfileId, mockChurchId, mockAdminUserId),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // ─── ARCHIVE PROFILE ───────────────────────────────────────────────
+
+  describe('archiveProfile', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(mockProfileWithRelations);
+      model(prisma, 'profile').update.mockResolvedValue({});
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...mockProfileWithRelations,
+        archived_at: new Date('2026-08-28T12:00:00.000Z'),
+      });
+
+      const result = await service.archiveProfile(mockProfileId, mockChurchId, mockAdminUserId);
+
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-28T12:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'profile' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        ...mockProfileWithRelations,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.archiveProfile(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException if profile not found', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.archiveProfile(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── RESTORE ARCHIVED PROFILE ──────────────────────────────────────
+
+  describe('restoreArchivedProfile', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        ...mockProfileWithRelations,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      model(prisma, 'profile').update.mockResolvedValue({});
+      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfileWithRelations);
+
+      const result = await service.restoreArchivedProfile(
+        mockProfileId,
+        mockChurchId,
+        mockAdminUserId,
+      );
+
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'profile' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(mockProfileWithRelations);
+
+      await expect(
+        service.restoreArchivedProfile(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException if profile not found', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.restoreArchivedProfile(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── MUTATION GUARD ON ARCHIVED PROFILE ────────────────────────────
+
+  describe('mutation guard on archived profiles', () => {
+    it('should throw NotFoundException when updating the role of an archived profile', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        role: ['member'],
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateProfileRole(
+          mockProfileId,
+          { role: 'secretary' },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should allow reactivation (status soft-delete restore) of an archived profile', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        ...mockProfileWithRelations,
+        status: 'inactive',
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+      model(prisma, 'profile').update.mockResolvedValue({});
+      model(prisma, 'profile').findUnique.mockResolvedValue(mockProfileWithRelations);
+
+      const result = await service.reactivateProfile(mockProfileId, mockChurchId, mockAdminUserId);
+
+      expect(result.profileId).toBe(mockProfileId);
     });
   });
 });

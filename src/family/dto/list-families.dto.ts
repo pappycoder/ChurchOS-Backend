@@ -7,7 +7,8 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ListFamiliesDto {
   @ApiPropertyOptional({ default: 1 })
@@ -27,4 +28,13 @@ export class ListFamiliesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'List archived families only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  archived?: boolean;
 }

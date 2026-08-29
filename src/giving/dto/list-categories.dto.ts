@@ -29,4 +29,13 @@ export class ListCategoriesDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'List archived records only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

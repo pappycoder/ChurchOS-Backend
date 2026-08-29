@@ -25,6 +25,8 @@ export interface AuthenticatedRequest extends Request {
     /** All roles held, ordered by rank descending */
     roles?: string[];
     status?: string;
+    /** Set when the profile's church is archived (ISO string) */
+    church_archived_at?: string;
     permissions?: string[];
   };
 }

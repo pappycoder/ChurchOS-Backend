@@ -24,6 +24,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
@@ -164,7 +165,10 @@ export class PastoralService {
     const skip = (page - 1) * limit;
 
     // Build the base where clause scoped to the church
-    const where: Prisma.PastoralNoteWhereInput = { church_id: churchId };
+    const where: Prisma.PastoralNoteWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     // Apply optional member filter
     if (query.memberId) {
@@ -300,6 +304,11 @@ export class PastoralService {
       throw new NotFoundException(`Pastoral note ${noteId} not found`);
     }
 
+    // Archived notes are hidden from update-style mutations (purge via delete only)
+    if (existing.archived_at) {
+      throw new NotFoundException(`Pastoral note ${noteId} not found`);
+    }
+
     // Enforce that only the author or admin/pastor can update
     if (existing.author_id !== memberId && !['church_admin', 'senior_pastor'].includes(userRole)) {
       throw new ForbiddenException('Only the author or admin can update this note');
@@ -412,6 +421,107 @@ export class PastoralService {
       entityId: noteId,
       newValues: { memberId: existing.member_id },
     });
+  }
+
+  /**
+   * Archives a pastoral note by setting archived_at. Archived notes drop out
+   * of active note lists (they stay reachable by ID and can be restored).
+   *
+   * @param noteId - Pastoral note ID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - User performing the archive
+   * @returns Archived note with decrypted content
+   * @throws NotFoundException if the note is missing or not in this church
+   * @throws ConflictException if the note is already archived
+   */
+  async archiveNote(
+    noteId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<PastoralNoteResponseDto> {
+    const existing = await this.prisma.pastoralNote.findFirst({
+      where: { id: noteId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Pastoral note ${noteId} not found`);
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Pastoral note is already archived');
+    }
+
+    const updated = await this.prisma.pastoralNote.update({
+      where: { id: noteId },
+      data: { archived_at: new Date() },
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+        author: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'ARCHIVE',
+      entity: 'pastoral_note',
+      entityId: noteId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Pastoral note archived: ${noteId}`);
+    return this.mapToResponseDto(updated, this.decrypt(updated.content));
+  }
+
+  /**
+   * Restores an archived pastoral note by clearing archived_at.
+   *
+   * @param noteId - Pastoral note ID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - User performing the restore
+   * @returns Restored note with decrypted content
+   * @throws NotFoundException if the note is missing or not in this church
+   * @throws ConflictException if the note is not currently archived
+   */
+  async restoreNote(
+    noteId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<PastoralNoteResponseDto> {
+    const existing = await this.prisma.pastoralNote.findFirst({
+      where: { id: noteId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Pastoral note ${noteId} not found`);
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Pastoral note is not archived');
+    }
+
+    const updated = await this.prisma.pastoralNote.update({
+      where: { id: noteId },
+      data: { archived_at: null },
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+        author: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'RESTORE',
+      entity: 'pastoral_note',
+      entityId: noteId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Pastoral note restored: ${noteId}`);
+    return this.mapToResponseDto(updated, this.decrypt(updated.content));
   }
 
   // ─── Member ID Resolution ────────────────────────────────
@@ -641,6 +751,7 @@ export class PastoralService {
       author_id: string;
       confidentiality: string;
       tags: string[];
+      archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
       member?: { first_name: string; last_name: string } | null;
@@ -661,6 +772,7 @@ export class PastoralService {
       content: decryptedContent,
       confidentiality: note.confidentiality,
       tags: note.tags || [],
+      archivedAt: note.archived_at?.toISOString(),
       createdAt: note.created_at.toISOString(),
       updatedAt: note.updated_at.toISOString(),
     };
@@ -741,7 +853,10 @@ export class PastoralService {
     const skip = (page - 1) * limit;
 
     // Build the base where clause scoped to the church
-    const where: Prisma.LifeEventWhereInput = { church_id: churchId };
+    const where: Prisma.LifeEventWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     // Apply optional member filter
     if (query.memberId) {
@@ -845,6 +960,106 @@ export class PastoralService {
   }
 
   /**
+   * Archives a life event by setting archived_at. Archived events drop out of
+   * active life-event lists and upcoming-greeting pulls (they stay reachable
+   * by ID and can be restored).
+   *
+   * @param eventId - Life event ID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - User performing the archive
+   * @returns Archived life event
+   * @throws NotFoundException if the event is missing or not in this church
+   * @throws ConflictException if the event is already archived
+   */
+  async archiveLifeEvent(
+    eventId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<LifeEventResponseDto> {
+    const existing = await this.prisma.lifeEvent.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Life event ${eventId} not found`);
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Life event is already archived');
+    }
+
+    const updated = await this.prisma.lifeEvent.update({
+      where: { id: eventId },
+      data: { archived_at: new Date() },
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'ARCHIVE',
+      entity: 'life_event',
+      entityId: eventId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Life event archived: ${eventId}`);
+    return this.mapLifeEventToResponseDto(updated);
+  }
+
+  /**
+   * Restores an archived life event by clearing archived_at.
+   *
+   * @param eventId - Life event ID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - User performing the restore
+   * @returns Restored life event
+   * @throws NotFoundException if the event is missing or not in this church
+   * @throws ConflictException if the event is not currently archived
+   */
+  async restoreLifeEvent(
+    eventId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<LifeEventResponseDto> {
+    const existing = await this.prisma.lifeEvent.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Life event ${eventId} not found`);
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Life event is not archived');
+    }
+
+    const updated = await this.prisma.lifeEvent.update({
+      where: { id: eventId },
+      data: { archived_at: null },
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'RESTORE',
+      entity: 'life_event',
+      entityId: eventId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Life event restored: ${eventId}`);
+    return this.mapLifeEventToResponseDto(updated);
+  }
+
+  /**
    * Gets upcoming life events for the next N days.
    * Used for automated birthday/bereavement greetings.
    *
@@ -862,6 +1077,7 @@ export class PastoralService {
     const events = await this.prisma.lifeEvent.findMany({
       where: {
         church_id: churchId,
+        archived_at: null,
         date: { gte: now, lte: futureDate },
         notified: false,
       },
@@ -905,6 +1121,7 @@ export class PastoralService {
     date: Date;
     details: Prisma.JsonValue;
     notified: boolean;
+    archived_at: Date | null;
     created_at: Date;
     member?: { first_name: string; last_name: string } | null;
   }): LifeEventResponseDto {
@@ -919,6 +1136,7 @@ export class PastoralService {
       date: event.date.toISOString(),
       details: (event.details || {}) as Record<string, unknown>,
       notified: event.notified,
+      archivedAt: event.archived_at?.toISOString(),
       createdAt: event.created_at.toISOString(),
     };
   }

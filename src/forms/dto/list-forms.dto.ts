@@ -38,4 +38,13 @@ export class ListFormsDto {
   @Type(() => Number)
   @IsOptional()
   limit?: number;
+
+  @ApiPropertyOptional({
+    description: 'List archived forms only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

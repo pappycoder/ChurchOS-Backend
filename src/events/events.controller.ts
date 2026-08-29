@@ -183,6 +183,50 @@ export class EventsController {
   }
 
   /**
+   * Archives an event.
+   *
+   * @param eventId - Event UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Post(':eventId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiOperation({ summary: 'Archive an event' })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async archiveEvent(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<EventResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.archiveEvent(eventId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived event.
+   *
+   * @param eventId - Event UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Post(':eventId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiOperation({ summary: 'Restore an archived event' })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  async restoreEvent(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<EventResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.restoreEvent(eventId, churchId, user.sub);
+  }
+
+  /**
    * Deletes an event. Blocked if registrations exist.
    *
    * @param eventId - Event UUID
@@ -287,6 +331,56 @@ export class EventsController {
   ) {
     const churchId = req.profile?.church_id || '';
     return this.eventsService.updateTicketTier(eventId, tierId, dto, churchId, user.sub);
+  }
+
+  /**
+   * Archives a ticket tier.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Post(':eventId/tiers/:tierId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiOperation({ summary: 'Archive a ticket tier' })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  @ApiParam({ name: 'tierId', description: 'Tier UUID' })
+  async archiveTicketTier(
+    @Param('eventId') eventId: string,
+    @Param('tierId') tierId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.archiveTicketTier(eventId, tierId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived ticket tier.
+   *
+   * @param eventId - Event UUID
+   * @param tierId - Tier UUID
+   * @param user - Authenticated Supabase user
+   * @param req - HTTP request with profile context
+   */
+  @Post(':eventId/tiers/:tierId/restore')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
+  @ApiOperation({ summary: 'Restore an archived ticket tier' })
+  @ApiParam({ name: 'eventId', description: 'Event UUID' })
+  @ApiParam({ name: 'tierId', description: 'Tier UUID' })
+  async restoreTicketTier(
+    @Param('eventId') eventId: string,
+    @Param('tierId') tierId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const churchId = req.profile?.church_id || '';
+    return this.eventsService.restoreTicketTier(eventId, tierId, churchId, user.sub);
   }
 
   /**

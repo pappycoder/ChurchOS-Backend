@@ -25,8 +25,11 @@ export class CustomFieldResponseDto {
   @ApiProperty({ description: 'Display order' })
   displayOrder!: number;
 
-  @ApiProperty({ description: 'Whether the field is active' })
+  @ApiPropertyOptional({ description: 'Whether the field is active' })
   isActive!: boolean;
+
+  @ApiPropertyOptional({ description: 'Set when the custom field is archived' })
+  archivedAt?: string;
 
   @ApiProperty({ description: 'Created timestamp' })
   createdAt!: string;

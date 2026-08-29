@@ -82,6 +82,30 @@ describe('BranchesService', () => {
       expect(result.total).toBe(1);
       expect(result.data[0].memberCount).toBe(50);
     });
+
+    it('should exclude archived branches by default', async () => {
+      prisma.branch.findMany.mockResolvedValue([]);
+      prisma.branch.count.mockResolvedValue(0);
+
+      await service.findAll('church-1', {});
+
+      expect(prisma.branch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+    });
+
+    it('should list only archived branches when archived=true', async () => {
+      prisma.branch.findMany.mockResolvedValue([
+        { ...mockBranch, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      prisma.branch.count.mockResolvedValue(1);
+      const result = await service.findAll('church-1', { archived: true });
+
+      expect(prisma.branch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: { not: null } }) }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
   });
 
   describe('findOne', () => {
@@ -218,6 +242,104 @@ describe('BranchesService', () => {
       await service.remove('branch-1', 'church-1', 'user-1');
 
       expect(mediaDelete).toHaveBeenCalledWith('https://photo.jpg');
+    });
+
+    it('should still allow hard delete (purge) of an archived branch', async () => {
+      prisma.branch.findUnique.mockResolvedValue({
+        ...mockBranch,
+        archived_at: new Date(),
+        _count: { members: 0 },
+      });
+      prisma.branch.delete.mockResolvedValue({});
+
+      await expect(service.remove('branch-1', 'church-1', 'user-1')).resolves.toEqual({
+        success: true,
+      });
+      expect(prisma.branch.delete).toHaveBeenCalled();
+    });
+  });
+
+  describe('archive', () => {
+    const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+
+    it('should set archived_at and audit ARCHIVE', async () => {
+      prisma.branch.findUnique.mockResolvedValue(mockBranch);
+      prisma.branch.update.mockResolvedValue({ ...mockBranch, archived_at: archivedAt });
+
+      const result = await service.archive('branch-1', 'church-1', 'user-1');
+
+      expect(prisma.branch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archived_at: expect.any(Date) } }),
+      );
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'branch' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.branch.findUnique.mockResolvedValue({ ...mockBranch, archived_at: archivedAt });
+
+      await expect(service.archive('branch-1', 'church-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException for missing branch', async () => {
+      prisma.branch.findUnique.mockResolvedValue(null);
+
+      await expect(service.archive('branch-1', 'church-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restore', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.branch.findUnique.mockResolvedValue({
+        ...mockBranch,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.branch.update.mockResolvedValue(mockBranch);
+
+      const result = await service.restore('branch-1', 'church-1', 'user-1');
+
+      expect(prisma.branch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archived_at: null } }),
+      );
+      expect(result.archivedAt).toBeUndefined();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'branch' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.branch.findUnique.mockResolvedValue(mockBranch);
+
+      await expect(service.restore('branch-1', 'church-1', 'user-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException for missing branch', async () => {
+      prisma.branch.findUnique.mockResolvedValue(null);
+
+      await expect(service.restore('branch-1', 'church-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('archived-row guards', () => {
+    it('should reject update of an archived branch with NotFoundException', async () => {
+      prisma.branch.findUnique.mockResolvedValue({
+        ...mockBranch,
+        archived_at: new Date(),
+      });
+
+      await expect(service.update('branch-1', { name: 'X' }, 'church-1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

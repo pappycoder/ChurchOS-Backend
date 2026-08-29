@@ -135,6 +135,40 @@ export class AttendanceController {
     return this.attendanceService.deleteService(serviceId, churchId, user.id);
   }
 
+  /**
+   * Archive a service.
+   */
+  @Post('services/:serviceId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('attendance:update')
+  @UseGuards(RolesGuard)
+  @ApiUpdateEndpoint('Archive a service', 'Archives a service.')
+  async archiveService(
+    @Param('serviceId') serviceId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ServiceResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.attendanceService.archiveService(serviceId, churchId, user.id);
+  }
+
+  /**
+   * Restore an archived service.
+   */
+  @Post('services/:serviceId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('attendance:update')
+  @UseGuards(RolesGuard)
+  @ApiUpdateEndpoint('Restore a service', 'Restores an archived service.')
+  async restoreService(
+    @Param('serviceId') serviceId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ServiceResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.attendanceService.restoreService(serviceId, churchId, user.id);
+  }
+
   // ─── Attendance Endpoints ───────────────────────────────
 
   @Get('attendance')

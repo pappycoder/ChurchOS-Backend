@@ -9,7 +9,7 @@ import { WebhooksService } from '../../../src/webhooks/webhooks.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { CreateWebhookSubscriptionDto } from '../../../src/webhooks/dto/create-webhook-subscription.dto';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { Queue } from 'bullmq';
 
 describe('WebhooksService', () => {
@@ -106,11 +106,41 @@ describe('WebhooksService', () => {
       const result = await service.listSubscriptions(mockChurchId);
 
       expect(prisma.webhookSubscription.findMany).toHaveBeenCalledWith({
-        where: { church_id: mockChurchId },
+        where: { church_id: mockChurchId, archived_at: null },
         orderBy: { created_at: 'desc' },
       });
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ id: mockSubId, isActive: true });
+    });
+
+    it('should exclude archived subscriptions by default', async () => {
+      prisma.webhookSubscription.findMany.mockResolvedValue([]);
+
+      await service.listSubscriptions(mockChurchId);
+
+      expect(prisma.webhookSubscription.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+    });
+
+    it('should list only archived subscriptions when archived=true', async () => {
+      prisma.webhookSubscription.findMany.mockResolvedValue([
+        {
+          id: mockSubId,
+          url: 'https://example.com/hook',
+          events: ['member.created'],
+          is_active: true,
+          archived_at: new Date('2026-08-28T10:00:00.000Z'),
+          created_at: new Date('2026-07-22T10:00:00Z'),
+        },
+      ]);
+
+      const result = await service.listSubscriptions(mockChurchId, true);
+
+      expect(prisma.webhookSubscription.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: { not: null } }) }),
+      );
+      expect(result[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
     });
   });
 
@@ -133,6 +163,18 @@ describe('WebhooksService', () => {
 
     it('should throw NotFound when subscription does not belong to the church', async () => {
       prisma.webhookSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deactivateSubscription(mockSubId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFound when deactivating an archived subscription', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue({
+        id: mockSubId,
+        is_active: true,
+        archived_at: new Date(),
+      });
 
       await expect(
         service.deactivateSubscription(mockSubId, mockChurchId, mockUserId),
@@ -236,6 +278,106 @@ describe('WebhooksService', () => {
 
       expect(result).toEqual({ queued: 0 });
       expect(webhookQueue.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('archiveSubscription', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue({
+        id: mockSubId,
+        url: 'https://example.com/hook',
+        events: ['member.created'],
+        is_active: true,
+        created_at: new Date('2026-07-22T10:00:00Z'),
+      });
+      prisma.webhookSubscription.update.mockResolvedValue({
+        id: mockSubId,
+        url: 'https://example.com/hook',
+        events: ['member.created'],
+        is_active: true,
+        archived_at: new Date('2026-08-28T12:00:00.000Z'),
+        created_at: new Date('2026-07-22T10:00:00Z'),
+      });
+
+      const result = await service.archiveSubscription(mockSubId, mockChurchId, mockUserId);
+
+      expect(prisma.webhookSubscription.update).toHaveBeenCalledWith({
+        where: { id: mockSubId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-28T12:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'webhook_subscription' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue({
+        id: mockSubId,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.archiveSubscription(mockSubId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.archiveSubscription(mockSubId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('restoreSubscription', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue({
+        id: mockSubId,
+        url: 'https://example.com/hook',
+        events: ['member.created'],
+        is_active: true,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+        created_at: new Date('2026-07-22T10:00:00Z'),
+      });
+      prisma.webhookSubscription.update.mockResolvedValue({
+        id: mockSubId,
+        url: 'https://example.com/hook',
+        events: ['member.created'],
+        is_active: true,
+        created_at: new Date('2026-07-22T10:00:00Z'),
+      });
+
+      const result = await service.restoreSubscription(mockSubId, mockChurchId, mockUserId);
+
+      expect(prisma.webhookSubscription.update).toHaveBeenCalledWith({
+        where: { id: mockSubId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'webhook_subscription' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue({
+        id: mockSubId,
+        is_active: true,
+      });
+
+      await expect(
+        service.restoreSubscription(mockSubId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      prisma.webhookSubscription.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.restoreSubscription(mockSubId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

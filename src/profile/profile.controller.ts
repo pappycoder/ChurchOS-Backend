@@ -409,6 +409,50 @@ export class ProfileController {
   }
 
   /**
+   * Archive a user profile.
+   */
+  @Post(':profileId/archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Archive user',
+    'Sets archived_at — hides the profile from active lists until restored.',
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async archiveUser(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.archiveProfile(profileId, churchId, user.sub);
+  }
+
+  /**
+   * Restore an archived user profile.
+   */
+  @Post(':profileId/restore-archive')
+  @UseGuards(RolesGuard)
+  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiCreateEndpoint(
+    'Restore user from archive',
+    'Clears archived_at — brings the profile back into active lists.',
+  )
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async restoreArchiveUser(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProfileResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.profileService.restoreArchivedProfile(profileId, churchId, user.sub);
+  }
+
+  /**
    * Reset a user's password.
    */
   @Post(':profileId/reset-password')

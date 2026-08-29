@@ -123,6 +123,50 @@ export class ChurchController {
     return this.churchService.updateChurchEmail(churchId, user.id, dto);
   }
 
+  @Post('archive')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church:update')
+  @ApiUpdateEndpoint(
+    'Archive church',
+    "Sets archived_at on the church. Every request from this church's profiles is then rejected (except restore).",
+  )
+  /**
+   * Archives the current church.
+   * @param user - Current authenticated user
+   * @param req - Authenticated request with user profile
+   * @returns Updated ChurchResponseDto
+   */
+  async archiveChurch(
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ChurchResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.churchService.archiveChurch(churchId, user.id);
+  }
+
+  @Post('restore')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church:update')
+  @ApiUpdateEndpoint(
+    'Restore archived church',
+    'Clears archived_at. The one request the middleware lets through for profiles of an archived church.',
+  )
+  /**
+   * Restores an archived church.
+   * @param user - Current authenticated user
+   * @param req - Authenticated request with user profile
+   * @returns Updated ChurchResponseDto
+   */
+  async restoreChurch(
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ChurchResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.churchService.restoreChurch(churchId, user.id);
+  }
+
   @Get('config')
   @RequireRoles('church_admin', 'super_admin')
   @ApiGetEndpoint(

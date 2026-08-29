@@ -120,6 +120,7 @@ export class EventsService {
 
     const where: Prisma.EventWhereInput = {
       church_id: churchId,
+      archived_at: dto.archived === true ? { not: null } : null,
     };
 
     if (dto.branchId) {
@@ -237,6 +238,10 @@ export class EventsService {
       throw new NotFoundException('Event not found');
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Event not found');
+    }
+
     const data: Prisma.EventUpdateInput = {};
 
     if (dto.title !== undefined) data.title = dto.title;
@@ -269,6 +274,94 @@ export class EventsService {
     });
 
     this.logger.log(`Event updated: ${eventId}`);
+    return this.mapEventToDto(updated, updated._count.registrations);
+  }
+
+  /**
+   * Archives an event by setting archived_at. Archived events drop out of
+   * active lists (which filter archived_at: null) but stay reachable by ID on
+   * the detail view and can be restored or permanently deleted.
+   *
+   * @param eventId - Event UUID to archive
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the action (for audit)
+   * @returns Updated event response
+   * @throws NotFoundException if the event is missing or not in this church
+   * @throws ConflictException if the event is already archived
+   */
+  async archiveEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
+    const existing = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Event is already archived');
+    }
+
+    const updated = await this.prisma.event.update({
+      where: { id: eventId },
+      data: { archived_at: new Date() },
+      include: { _count: { select: { registrations: true } } },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event',
+      action: 'ARCHIVE',
+      entityId: eventId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Event archived: ${eventId}`);
+    return this.mapEventToDto(updated, updated._count.registrations);
+  }
+
+  /**
+   * Restores an archived event by clearing archived_at.
+   *
+   * @param eventId - Event UUID to restore
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the action (for audit)
+   * @returns Updated event response
+   * @throws NotFoundException if the event is missing or not in this church
+   * @throws ConflictException if the event is not currently archived
+   */
+  async restoreEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
+    const existing = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Event is not archived');
+    }
+
+    const updated = await this.prisma.event.update({
+      where: { id: eventId },
+      data: { archived_at: null },
+      include: { _count: { select: { registrations: true } } },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event',
+      action: 'RESTORE',
+      entityId: eventId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Event restored: ${eventId}`);
     return this.mapEventToDto(updated, updated._count.registrations);
   }
 
@@ -492,7 +585,7 @@ export class EventsService {
     }
 
     return this.prisma.eventTicketTier.findMany({
-      where: { event_id: eventId },
+      where: { event_id: eventId, archived_at: null },
       orderBy: { display_order: 'asc' },
     });
   }
@@ -536,6 +629,10 @@ export class EventsService {
       throw new NotFoundException('Ticket tier not found');
     }
 
+    if (tier.archived_at) {
+      throw new NotFoundException('Ticket tier not found');
+    }
+
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.price !== undefined) data.price = dto.price;
@@ -558,6 +655,110 @@ export class EventsService {
       newValues: data,
     });
 
+    return updated;
+  }
+
+  /**
+   * Archives a ticket tier by setting archived_at. Archived tiers drop out of
+   * active tier lists (which filter archived_at: null) but can be restored or
+   * permanently deleted.
+   *
+   * @param eventId - Event UUID for scope
+   * @param tierId - Tier UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the action (for audit)
+   * @returns Updated tier
+   * @throws NotFoundException if the event or tier is missing or not in this church
+   * @throws ConflictException if the tier is already archived
+   */
+  async archiveTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const tier = await this.prisma.eventTicketTier.findFirst({
+      where: { id: tierId, event_id: eventId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Ticket tier not found');
+    }
+
+    if (tier.archived_at) {
+      throw new ConflictException('Ticket tier is already archived');
+    }
+
+    const updated = await this.prisma.eventTicketTier.update({
+      where: { id: tierId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_ticket_tier',
+      action: 'ARCHIVE',
+      entityId: tierId,
+      oldValues: { archived_at: tier.archived_at },
+      newValues: { archived_at: updated.archived_at },
+    });
+
+    this.logger.log(`Ticket tier archived: ${tierId} for event ${eventId}`);
+    return updated;
+  }
+
+  /**
+   * Restores an archived ticket tier by clearing archived_at.
+   *
+   * @param eventId - Event UUID for scope
+   * @param tierId - Tier UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - ID of the user performing the action (for audit)
+   * @returns Updated tier
+   * @throws NotFoundException if the event or tier is missing or not in this church
+   * @throws ConflictException if the tier is not currently archived
+   */
+  async restoreTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, church_id: churchId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const tier = await this.prisma.eventTicketTier.findFirst({
+      where: { id: tierId, event_id: eventId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Ticket tier not found');
+    }
+
+    if (!tier.archived_at) {
+      throw new ConflictException('Ticket tier is not archived');
+    }
+
+    const updated = await this.prisma.eventTicketTier.update({
+      where: { id: tierId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'event_ticket_tier',
+      action: 'RESTORE',
+      entityId: tierId,
+      oldValues: { archived_at: tier.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Ticket tier restored: ${tierId} for event ${eventId}`);
     return updated;
   }
 
@@ -1695,6 +1896,7 @@ export class EventsService {
       isFree: event.is_free as boolean,
       price: (event.price as number) || undefined,
       registrationCount,
+      archivedAt: (event.archived_at as Date | null)?.toISOString(),
       createdAt: event.created_at.toISOString(),
       updatedAt: event.updated_at.toISOString(),
     };

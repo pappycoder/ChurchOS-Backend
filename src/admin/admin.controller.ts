@@ -91,11 +91,14 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @RequirePermissions('departments:read')
   @ApiOperation({ summary: 'List departments' })
-  async listDepartments(@Req() req: AuthenticatedRequest): Promise<DepartmentResponseDto[]> {
+  async listDepartments(
+    @Query('archived') archived: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<DepartmentResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to list all departments
-    return this.adminService.listDepartments(churchId);
+    return this.adminService.listDepartments(churchId, archived === 'true');
   }
 
   /**
@@ -134,6 +137,42 @@ export class AdminController {
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to update the department
     return this.adminService.updateDepartment(departmentId, dto, churchId, user.sub);
+  }
+
+  /**
+   * Archives a department.
+   */
+  @Post('departments/:departmentId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:update')
+  @ApiParam({ name: 'departmentId', type: String })
+  @ApiOperation({ summary: 'Archive a department' })
+  async archiveDepartment(
+    @Param('departmentId') departmentId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<DepartmentResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.archiveDepartment(departmentId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived department.
+   */
+  @Post('departments/:departmentId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor')
+  @RequirePermissions('departments:update')
+  @ApiParam({ name: 'departmentId', type: String })
+  @ApiOperation({ summary: 'Restore an archived department' })
+  async restoreDepartment(
+    @Param('departmentId') departmentId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<DepartmentResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.restoreDepartment(departmentId, churchId, user.sub);
   }
 
   /**
@@ -227,11 +266,14 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'List cell groups' })
-  async listCellGroups(@Req() req: AuthenticatedRequest): Promise<CellGroupResponseDto[]> {
+  async listCellGroups(
+    @Query('archived') archived: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CellGroupResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to list all cell groups
-    return this.adminService.listCellGroups(churchId);
+    return this.adminService.listCellGroups(churchId, archived === 'true');
   }
 
   /**
@@ -288,6 +330,42 @@ export class AdminController {
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to update the cell group
     return this.adminService.updateCellGroup(groupId, dto, churchId, user.sub);
+  }
+
+  /**
+   * Archives a cell group.
+   */
+  @Post('cell-groups/:groupId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:update')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'Archive a cell group' })
+  async archiveCellGroup(
+    @Param('groupId') groupId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CellGroupResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.archiveCellGroup(groupId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived cell group.
+   */
+  @Post('cell-groups/:groupId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('cell_groups:update')
+  @ApiParam({ name: 'groupId', type: String })
+  @ApiOperation({ summary: 'Restore an archived cell group' })
+  async restoreCellGroup(
+    @Param('groupId') groupId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CellGroupResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.adminService.restoreCellGroup(groupId, churchId, user.sub);
   }
 
   /**

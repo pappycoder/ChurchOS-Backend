@@ -12,7 +12,7 @@ import { TemplatesService } from '../../../src/templates/templates.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -141,6 +141,31 @@ describe('TemplatesService', () => {
         }),
       );
     });
+
+    it('should exclude archived templates by default', async () => {
+      prisma.template.findMany.mockResolvedValue([]);
+      prisma.template.count.mockResolvedValue(0);
+
+      await service.findAll(mockChurchId, {});
+
+      expect(prisma.template.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+    });
+
+    it('should list only archived templates when archived=true', async () => {
+      prisma.template.findMany.mockResolvedValue([
+        { ...mockTemplate, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+      prisma.template.count.mockResolvedValue(1);
+
+      const result = await service.findAll(mockChurchId, { archived: true });
+
+      expect(prisma.template.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: { not: null } }) }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
   });
 
   describe('update', () => {
@@ -168,6 +193,17 @@ describe('TemplatesService', () => {
         service.update(mockTemplateId, { name: 'X' }, mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should throw NotFoundException when updating an archived template', async () => {
+      prisma.template.findFirst.mockResolvedValue({
+        ...mockTemplate,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.update(mockTemplateId, { name: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('delete', () => {
@@ -179,6 +215,17 @@ describe('TemplatesService', () => {
       expect(prisma.template.delete).toHaveBeenCalledWith({
         where: { id: mockTemplateId },
       });
+    });
+
+    it('should still hard-delete (purge) an archived template', async () => {
+      prisma.template.findFirst.mockResolvedValue({
+        ...mockTemplate,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await service.delete(mockTemplateId, mockChurchId, mockUserId);
+
+      expect(prisma.template.delete).toHaveBeenCalled();
     });
   });
 
@@ -224,6 +271,95 @@ describe('TemplatesService', () => {
 
     it('should throw NotFoundException if template not found', async () => {
       prisma.template.findFirst.mockResolvedValue(null);
+
+      await expect(service.publish(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('archive', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      prisma.template.findFirst.mockResolvedValue(mockTemplate);
+      prisma.template.update.mockResolvedValue({ ...mockTemplate, archived_at: archivedAt });
+
+      const result = await service.archive(mockTemplateId, mockChurchId, mockUserId);
+
+      expect(prisma.template.update).toHaveBeenCalledWith({
+        where: { id: mockTemplateId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'template' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.template.findFirst.mockResolvedValue({
+        ...mockTemplate,
+        archived_at: new Date(),
+      });
+
+      await expect(service.archive(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException if template not found', async () => {
+      prisma.template.findFirst.mockResolvedValue(null);
+
+      await expect(service.archive(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restore', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.template.findFirst.mockResolvedValue({
+        ...mockTemplate,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.template.update.mockResolvedValue(mockTemplate);
+
+      const result = await service.restore(mockTemplateId, mockChurchId, mockUserId);
+
+      expect(prisma.template.update).toHaveBeenCalledWith({
+        where: { id: mockTemplateId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'template' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.template.findFirst.mockResolvedValue(mockTemplate);
+
+      await expect(service.restore(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException if template not found', async () => {
+      prisma.template.findFirst.mockResolvedValue(null);
+
+      await expect(service.restore(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('publish guard on archived templates', () => {
+    it('should throw NotFoundException when publishing an archived template', async () => {
+      prisma.template.findFirst.mockResolvedValue({
+        ...mockTemplate,
+        status: 'draft',
+        archived_at: new Date(),
+      });
 
       await expect(service.publish(mockTemplateId, mockChurchId, mockUserId)).rejects.toThrow(
         NotFoundException,

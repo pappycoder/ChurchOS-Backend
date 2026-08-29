@@ -653,4 +653,282 @@ describe('AdminService', () => {
       expect(result[0].leaderLastName).toBe('Okafor');
     });
   });
+
+  describe('archiveDepartment', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.department.update.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: archivedAt,
+        department_members: [],
+      });
+
+      const result = await service.archiveDepartment(mockDepartmentId, mockChurchId, mockUserId);
+
+      expect(prisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockDepartmentId },
+          data: { archived_at: expect.any(Date) },
+        }),
+      );
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'department' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.archiveDepartment(mockDepartmentId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when department is missing', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.archiveDepartment(mockDepartmentId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('restoreDepartment', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.department.update.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: null,
+        department_members: [],
+      });
+
+      const result = await service.restoreDepartment(mockDepartmentId, mockChurchId, mockUserId);
+
+      expect(prisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: mockDepartmentId }, data: { archived_at: null } }),
+      );
+      expect(result.archivedAt).toBeUndefined();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'department' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.department.findFirst.mockResolvedValue(mockDepartment);
+
+      await expect(
+        service.restoreDepartment(mockDepartmentId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when department is missing', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.restoreDepartment(mockDepartmentId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('department list & purge archive behavior', () => {
+    it('should exclude archived departments by default', async () => {
+      prisma.department.findMany.mockResolvedValue([mockDepartment]);
+
+      const result = await service.listDepartments(mockChurchId);
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(result[0].archivedAt).toBeUndefined();
+    });
+
+    it('should list only archived departments when archived=true', async () => {
+      const archivedAt = new Date('2026-08-28T10:00:00.000Z');
+      prisma.department.findMany.mockResolvedValue([
+        { ...mockDepartment, archived_at: archivedAt },
+      ]);
+
+      const result = await service.listDepartments(mockChurchId, true);
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result[0].archivedAt).toBe(archivedAt.toISOString());
+    });
+
+    it('should still hard-delete (purge) an archived department', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: new Date(),
+        _count: { department_members: 0 },
+      });
+      prisma.department.delete.mockResolvedValue(mockDepartment);
+
+      await service.deleteDepartment(mockDepartmentId, mockChurchId, mockUserId);
+
+      expect(prisma.department.delete).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when adding a member to an archived department', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.addDepartmentMember(
+          mockDepartmentId,
+          { memberId: mockMemberId },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('archiveCellGroup', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.cellGroup.update.mockResolvedValue({
+        ...mockCellGroup,
+        archived_at: archivedAt,
+        branch: null,
+      });
+
+      const result = await service.archiveCellGroup(mockGroupId, mockChurchId, mockUserId);
+
+      expect(prisma.cellGroup.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockGroupId },
+          data: { archived_at: expect.any(Date) },
+        }),
+      );
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'cell_group' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, archived_at: new Date() });
+
+      await expect(service.archiveCellGroup(mockGroupId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when group is missing', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveCellGroup(mockGroupId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreCellGroup', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.cellGroup.update.mockResolvedValue({
+        ...mockCellGroup,
+        archived_at: null,
+        branch: null,
+      });
+
+      const result = await service.restoreCellGroup(mockGroupId, mockChurchId, mockUserId);
+
+      expect(prisma.cellGroup.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: mockGroupId }, data: { archived_at: null } }),
+      );
+      expect(result.archivedAt).toBeUndefined();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'cell_group' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+
+      await expect(service.restoreCellGroup(mockGroupId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when group is missing', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreCellGroup(mockGroupId, mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('cell group list & purge archive behavior', () => {
+    it('should exclude archived cell groups by default', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([mockCellGroup]);
+
+      const result = await service.listCellGroups(mockChurchId);
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(result[0].archivedAt).toBeUndefined();
+    });
+
+    it('should list only archived cell groups when archived=true', async () => {
+      const archivedAt = new Date('2026-08-28T10:00:00.000Z');
+      prisma.cellGroup.findMany.mockResolvedValue([{ ...mockCellGroup, archived_at: archivedAt }]);
+
+      const result = await service.listCellGroups(mockChurchId, true);
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result[0].archivedAt).toBe(archivedAt.toISOString());
+    });
+
+    it('should still hard-delete (purge) an archived cell group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        archived_at: new Date(),
+      });
+      prisma.cellGroup.delete.mockResolvedValue(mockCellGroup);
+
+      await service.deleteCellGroup(mockGroupId, mockChurchId, mockUserId);
+
+      expect(prisma.cellGroup.delete).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when updating an archived cell group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, archived_at: new Date() });
+
+      await expect(
+        service.updateCellGroup(mockGroupId, { name: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when adding a member to an archived cell group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, archived_at: new Date() });
+
+      await expect(
+        service.addCellGroupMember(mockGroupId, mockMemberId, 'member', mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });

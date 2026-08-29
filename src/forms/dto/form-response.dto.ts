@@ -60,6 +60,9 @@ export class FormResponseDto {
   @ApiPropertyOptional({ description: 'Public submission token' })
   publicToken?: string;
 
+  @ApiPropertyOptional({ description: 'Set when the form is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: Date;
 

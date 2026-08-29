@@ -427,4 +427,246 @@ describe('EventsService', () => {
       expect(result.ticketCode).toBe(paidTicket.code);
     });
   });
+
+  describe('listEvents archived filter', () => {
+    it('should exclude archived events by default', async () => {
+      prisma.event.findMany.mockResolvedValue([{ ...mockEvent, _count: { registrations: 0 } }]);
+      prisma.event.count.mockResolvedValue(1);
+
+      const result = await service.listEvents({}, mockChurchId);
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+      expect(result.data[0].archivedAt).toBeUndefined();
+    });
+
+    it('should list only archived events when archived=true', async () => {
+      const archivedAt = new Date('2026-08-28T10:00:00.000Z');
+      prisma.event.findMany.mockResolvedValue([
+        { ...mockEvent, archived_at: archivedAt, _count: { registrations: 0 } },
+      ]);
+      prisma.event.count.mockResolvedValue(1);
+
+      const result = await service.listEvents({ archived: true }, mockChurchId);
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe(archivedAt.toISOString());
+    });
+  });
+
+  describe('archiveEvent', () => {
+    it('should set archived_at, emit archivedAt, and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.event.update.mockResolvedValue({
+        ...mockEvent,
+        archived_at: archivedAt,
+        _count: { registrations: 0 },
+      });
+
+      const result = await service.archiveEvent(mockEventId, mockChurchId, mockUserId);
+
+      expect(prisma.event.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockEventId },
+          data: { archived_at: expect.any(Date) },
+        }),
+      );
+      expect(result.archivedAt).toBe(archivedAt.toISOString());
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'event' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, archived_at: new Date() });
+
+      await expect(service.archiveEvent(mockEventId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when event is missing', async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveEvent('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreEvent', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.event.update.mockResolvedValue({
+        ...mockEvent,
+        archived_at: null,
+        _count: { registrations: 0 },
+      });
+
+      const result = await service.restoreEvent(mockEventId, mockChurchId, mockUserId);
+
+      expect(prisma.event.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: mockEventId }, data: { archived_at: null } }),
+      );
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'event' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+
+      await expect(service.restoreEvent(mockEventId, mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when event is missing', async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreEvent('nonexistent', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('event purge & mutation guards', () => {
+    it('should still hard-delete (purge) an archived event', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        archived_at: new Date(),
+        _count: { registrations: 0 },
+      });
+      prisma.event.delete.mockResolvedValue(mockEvent);
+
+      await service.deleteEvent(mockEventId, mockChurchId, mockUserId);
+
+      expect(prisma.event.delete).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when updating an archived event', async () => {
+      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, archived_at: new Date() });
+
+      await expect(
+        service.updateEvent(mockEventId, { title: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('ticket tier list & archive/restore', () => {
+    const mockTier = {
+      id: 'tier-1',
+      event_id: mockEventId,
+      name: 'General',
+      price: 5000,
+      capacity: 100,
+      display_order: 1,
+      description: null,
+      created_at: new Date('2026-07-20T10:00:00.000Z'),
+      updated_at: new Date('2026-07-20T10:00:00.000Z'),
+    };
+
+    it('should exclude archived tiers when listing tiers', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findMany.mockResolvedValue([mockTier]);
+
+      await service.listTicketTiers(mockEventId, mockChurchId);
+
+      expect(prisma.eventTicketTier.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { event_id: mockEventId, archived_at: null } }),
+      );
+    });
+
+    it('should archive a ticket tier and audit ARCHIVE', async () => {
+      const archivedAt = new Date('2026-08-28T12:00:00.000Z');
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findFirst.mockResolvedValue(mockTier);
+      prisma.eventTicketTier.update.mockResolvedValue({ ...mockTier, archived_at: archivedAt });
+
+      const result = await service.archiveTicketTier(
+        mockEventId,
+        'tier-1',
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.eventTicketTier.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'tier-1' },
+          data: { archived_at: expect.any(Date) },
+        }),
+      );
+      expect(result.archived_at).toBe(archivedAt);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'event_ticket_tier' }),
+      );
+    });
+
+    it('should throw ConflictException when archiving an already-archived tier', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findFirst.mockResolvedValue({
+        ...mockTier,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.archiveTicketTier(mockEventId, 'tier-1', mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should restore a ticket tier and audit RESTORE', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findFirst.mockResolvedValue({
+        ...mockTier,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.eventTicketTier.update.mockResolvedValue({ ...mockTier, archived_at: null });
+
+      const result = await service.restoreTicketTier(
+        mockEventId,
+        'tier-1',
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.eventTicketTier.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'tier-1' }, data: { archived_at: null } }),
+      );
+      expect(result.archived_at).toBeNull();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'event_ticket_tier' }),
+      );
+    });
+
+    it('should throw ConflictException when restoring a non-archived tier', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findFirst.mockResolvedValue(mockTier);
+
+      await expect(
+        service.restoreTicketTier(mockEventId, 'tier-1', mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when updating an archived tier', async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+      prisma.eventTicketTier.findFirst.mockResolvedValue({
+        ...mockTier,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.updateTicketTier(mockEventId, 'tier-1', { name: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });

@@ -97,7 +97,10 @@ export class AttendanceService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ServiceWhereInput = { church_id: churchId };
+    const where: Prisma.ServiceWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.branchId) {
       where.branch_id = query.branchId;
@@ -150,6 +153,10 @@ export class AttendanceService {
 
     if (!existing || existing.church_id !== churchId) {
       throw new NotFoundException('Service not found');
+    }
+
+    if (existing.archived_at) {
+      throw new NotFoundException('Service is archived');
     }
 
     const updateData: Prisma.ServiceUpdateInput = {};
@@ -223,6 +230,88 @@ export class AttendanceService {
     this.logger.log(`Service deleted: ${existing.name} (${id})`);
 
     return { success: true };
+  }
+
+  /**
+   * Archives a service by setting archived_at. Archived services drop out of
+   * the active service list (listServices filters archived_at: null) but their
+   * details stay reachable by ID and they can be restored.
+   *
+   * @param id - Service UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated ServiceResponseDto
+   * @throws NotFoundException if the service is missing or not in this church
+   * @throws ConflictException if the service is already archived
+   */
+  async archiveService(id: string, churchId: string, userId: string): Promise<ServiceResponseDto> {
+    const existing = await this.prisma.service.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Service not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Service is already archived');
+    }
+
+    const service = await this.prisma.service.update({
+      where: { id },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'service',
+      action: 'ARCHIVE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: service.archived_at },
+    });
+
+    this.logger.log(`Service archived: ${id}`);
+    return this.mapToServiceResponse(service);
+  }
+
+  /**
+   * Restores an archived service by clearing archived_at.
+   *
+   * @param id - Service UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated ServiceResponseDto
+   * @throws NotFoundException if the service is missing or not in this church
+   * @throws ConflictException if the service is not currently archived
+   */
+  async restoreService(id: string, churchId: string, userId: string): Promise<ServiceResponseDto> {
+    const existing = await this.prisma.service.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Service not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Service is not archived');
+    }
+
+    const service = await this.prisma.service.update({
+      where: { id },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'service',
+      action: 'RESTORE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Service restored: ${id}`);
+    return this.mapToServiceResponse(service);
   }
 
   // ─── Attendance Recording ───────────────────────────────
@@ -826,6 +915,7 @@ export class AttendanceService {
     start_time: Date | null;
     end_time: Date | null;
     is_active: boolean;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
     _count?: { attendance: number } | null;
@@ -841,6 +931,7 @@ export class AttendanceService {
       endTime: service.end_time?.toISOString() || undefined,
       isActive: service.is_active,
       attendanceCount: service._count?.attendance ?? 0,
+      archivedAt: service.archived_at?.toISOString(),
       createdAt: service.created_at.toISOString(),
       updatedAt: service.updated_at.toISOString(),
     };

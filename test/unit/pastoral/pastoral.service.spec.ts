@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PastoralService } from '../../../src/pastoral/pastoral.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('PastoralService', () => {
@@ -285,6 +285,23 @@ describe('PastoralService', () => {
         ),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('should throw NotFoundException when updating an archived note', async () => {
+      prisma.pastoralNote.findFirst.mockResolvedValue({
+        ...mockNote,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateNote(
+          'note-1',
+          { content: 'Attempted update' },
+          mockChurchId,
+          mockUserId,
+          'church_admin',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('deleteNote', () => {
@@ -324,6 +341,228 @@ describe('PastoralService', () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.meta.total).toBe(1);
+    });
+
+    it('should exclude archived notes from the default (active-only) list', async () => {
+      prisma.pastoralNote.findMany.mockResolvedValue([]);
+      prisma.pastoralNote.count.mockResolvedValue(0);
+
+      await service.listNotes({ page: 1, limit: 10 }, mockChurchId, 'branch_pastor', mockUserId);
+
+      expect(prisma.pastoralNote.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list archived notes only when archived is true', async () => {
+      prisma.pastoralNote.findMany.mockResolvedValue([
+        { ...mockNote, archived_at: new Date('2026-07-25T10:00:00.000Z') },
+      ]);
+      prisma.pastoralNote.count.mockResolvedValue(1);
+
+      const result = await service.listNotes(
+        { page: 1, limit: 10, archived: true },
+        mockChurchId,
+        'branch_pastor',
+        mockUserId,
+      );
+
+      expect(prisma.pastoralNote.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBeDefined();
+    });
+  });
+
+  describe('archiveNote', () => {
+    it('should archive a note and audit the ARCHIVE action', async () => {
+      const plaintext = 'Note to archive';
+      prisma.pastoralNote.findFirst.mockResolvedValue({
+        ...mockNote,
+        content: service.encrypt(plaintext),
+      });
+      prisma.pastoralNote.update.mockResolvedValue({
+        ...mockNote,
+        content: service.encrypt(plaintext),
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      const result = await service.archiveNote('note-1', mockChurchId, mockUserId);
+
+      expect(result.archivedAt).toBeDefined();
+      expect(result.content).toBe(plaintext);
+      expect(prisma.pastoralNote.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'note-1' },
+          data: expect.objectContaining({ archived_at: expect.any(Date) }),
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'pastoral_note', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw NotFoundException if note is missing or not in this church', async () => {
+      prisma.pastoralNote.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveNote('note-1', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ConflictException if note is already archived', async () => {
+      prisma.pastoralNote.findFirst.mockResolvedValue({
+        ...mockNote,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(service.archiveNote('note-1', mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+  });
+
+  describe('restoreNote', () => {
+    it('should restore an archived note and audit the RESTORE action', async () => {
+      const plaintext = 'Note to restore';
+      prisma.pastoralNote.findFirst.mockResolvedValue({
+        ...mockNote,
+        content: service.encrypt(plaintext),
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+      prisma.pastoralNote.update.mockResolvedValue({
+        ...mockNote,
+        content: service.encrypt(plaintext),
+      });
+
+      const result = await service.restoreNote('note-1', mockChurchId, mockUserId);
+
+      expect(result.archivedAt).toBeUndefined();
+      expect(result.content).toBe(plaintext);
+      expect(prisma.pastoralNote.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'note-1' },
+          data: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'pastoral_note', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw NotFoundException if note is missing or not in this church', async () => {
+      prisma.pastoralNote.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreNote('note-1', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ConflictException if note is not archived', async () => {
+      prisma.pastoralNote.findFirst.mockResolvedValue(mockNote);
+
+      await expect(service.restoreNote('note-1', mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+  });
+
+  describe('life-event archive', () => {
+    const mockLifeEvent = {
+      id: 'event-1',
+      church_id: mockChurchId,
+      member_id: mockMemberId,
+      type: 'birthday',
+      date: new Date('2026-08-01'),
+      details: {},
+      notified: false,
+      created_at: new Date('2026-07-01'),
+      member: { first_name: 'John', last_name: 'Doe' },
+    };
+
+    it('should archive a life event and audit the ARCHIVE action', async () => {
+      prisma.lifeEvent.findFirst.mockResolvedValue(mockLifeEvent);
+      prisma.lifeEvent.update.mockResolvedValue({
+        ...mockLifeEvent,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      const result = await service.archiveLifeEvent('event-1', mockChurchId, mockUserId);
+
+      expect(result.archivedAt).toBeDefined();
+      expect(prisma.lifeEvent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'event-1' },
+          data: expect.objectContaining({ archived_at: expect.any(Date) }),
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'life_event', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw NotFoundException if life event is missing', async () => {
+      prisma.lifeEvent.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveLifeEvent('event-1', mockChurchId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ConflictException if life event is already archived', async () => {
+      prisma.lifeEvent.findFirst.mockResolvedValue({
+        ...mockLifeEvent,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+
+      await expect(service.archiveLifeEvent('event-1', mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should restore a life event and audit the RESTORE action', async () => {
+      prisma.lifeEvent.findFirst.mockResolvedValue({
+        ...mockLifeEvent,
+        archived_at: new Date('2026-07-25T10:00:00.000Z'),
+      });
+      prisma.lifeEvent.update.mockResolvedValue(mockLifeEvent);
+
+      const result = await service.restoreLifeEvent('event-1', mockChurchId, mockUserId);
+
+      expect(result.archivedAt).toBeUndefined();
+      expect(prisma.lifeEvent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'event-1' },
+          data: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'life_event', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw ConflictException if life event is not archived', async () => {
+      prisma.lifeEvent.findFirst.mockResolvedValue(mockLifeEvent);
+
+      await expect(service.restoreLifeEvent('event-1', mockChurchId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should filter archived life events out of getUpcomingLifeEvents', async () => {
+      prisma.lifeEvent.findMany.mockResolvedValue([]);
+
+      await service.getUpcomingLifeEvents(mockChurchId, 30);
+
+      expect(prisma.lifeEvent.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
     });
   });
 });

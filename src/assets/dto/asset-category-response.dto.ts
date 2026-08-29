@@ -21,6 +21,9 @@ export class AssetCategoryResponseDto {
   @ApiPropertyOptional({ description: 'Category description', example: 'Microphones and speakers' })
   description?: string;
 
+  @ApiPropertyOptional({ description: 'Set when the record is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Creation timestamp' })
   createdAt!: string;
 

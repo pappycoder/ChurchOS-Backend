@@ -85,6 +85,7 @@ describe('GivingService', () => {
     display_order: 1,
     is_recurring: true,
     is_active: true,
+    archived_at: null,
     created_at: new Date('2026-07-01T10:00:00.000Z'),
     updated_at: new Date('2026-07-01T10:00:00.000Z'),
   };
@@ -167,6 +168,23 @@ describe('GivingService', () => {
         service.createCategory({ name: 'Tithe' }, mockChurchId, mockUserId),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('should scope the duplicate-name check to active rows (archived_at null)', async () => {
+      model('givingCategory').findFirst.mockResolvedValue(null);
+      model('givingCategory').create.mockResolvedValue(mockCategory);
+
+      await service.createCategory({ name: 'Tithe' }, mockChurchId, mockUserId);
+
+      expect(model('givingCategory').findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            church_id: mockChurchId,
+            name: 'Tithe',
+            archived_at: null,
+          }),
+        }),
+      );
+    });
   });
 
   describe('listCategories', () => {
@@ -219,6 +237,40 @@ describe('GivingService', () => {
         }),
       );
       expect(result.total).toBe(12);
+    });
+
+    it('should default to excluding archived categories (archived_at null)', async () => {
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('givingCategory').count.mockResolvedValue(0);
+
+      await service.listCategories(mockChurchId);
+
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should list only archived categories when archived=true and map archivedAt', async () => {
+      const archived = { ...mockCategory, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      model('givingCategory').findMany.mockResolvedValue([archived]);
+      model('givingCategory').count.mockResolvedValue(1);
+
+      const result = await service.listCategories(
+        mockChurchId,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: { not: null } }),
+        }),
+      );
+      expect(result.data[0].archivedAt).toBe('2026-08-01T00:00:00.000Z');
     });
   });
 
@@ -294,6 +346,32 @@ describe('GivingService', () => {
       expect(result.name).toBe('Tithe');
       expect(model('givingCategory').update).not.toHaveBeenCalled();
     });
+
+    it('should scope the rename duplicate check to active rows (archived_at null)', async () => {
+      model('givingCategory').findUnique.mockResolvedValueOnce(mockCategory);
+      model('givingCategory').findFirst.mockResolvedValueOnce(null);
+      model('givingCategory').update.mockResolvedValue({ ...mockCategory, name: 'Offering' });
+
+      await service.updateCategory(mockCategoryId, { name: 'Offering' }, mockChurchId, mockUserId);
+
+      expect(model('givingCategory').findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ archived_at: null }),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when updating an archived category', async () => {
+      model('givingCategory').findUnique.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateCategory(mockCategoryId, { name: 'X' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(model('givingCategory').update).not.toHaveBeenCalled();
+    });
   });
 
   describe('deleteCategory', () => {
@@ -313,6 +391,95 @@ describe('GivingService', () => {
 
       await expect(
         service.deleteCategory(mockCategoryId, mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should still deactivate (purge path) an archived category', async () => {
+      model('givingCategory').findUnique.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      model('givingCategory').update.mockResolvedValue({});
+
+      await service.deleteCategory(mockCategoryId, mockChurchId, mockUserId);
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'giving_category', action: 'DELETE' }),
+      );
+    });
+  });
+
+  describe('archiveCategory', () => {
+    it('should archive a category and audit ARCHIVE', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      const archived = { ...mockCategory, archived_at: new Date('2026-08-01T00:00:00.000Z') };
+      model('givingCategory').update.mockResolvedValue(archived);
+
+      const result = await service.archiveCategory(mockCategoryId, mockChurchId, mockUserId);
+
+      expect(model('givingCategory').update).toHaveBeenCalledWith({
+        where: { id: mockCategoryId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-01T00:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'giving_category', action: 'ARCHIVE' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      model('givingCategory').findUnique.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.archiveCategory(mockCategoryId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when missing or foreign-church', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.archiveCategory('nonexistent', mockChurchId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('restoreCategory', () => {
+    it('should restore an archived category and audit RESTORE', async () => {
+      model('givingCategory').findUnique.mockResolvedValue({
+        ...mockCategory,
+        archived_at: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      model('givingCategory').update.mockResolvedValue(mockCategory);
+
+      const result = await service.restoreCategory(mockCategoryId, mockChurchId, mockUserId);
+
+      expect(model('givingCategory').update).toHaveBeenCalledWith({
+        where: { id: mockCategoryId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'giving_category', action: 'RESTORE' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+
+      await expect(
+        service.restoreCategory(mockCategoryId, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw NotFoundException when missing', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.restoreCategory('nonexistent', mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
     });
   });

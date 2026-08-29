@@ -174,6 +174,12 @@ export class ProfileResponseDto {
   updatedAt!: string;
 
   @ApiPropertyOptional({
+    description: 'Archive timestamp — set when the profile is archived',
+    example: '2026-08-28T10:30:00.000Z',
+  })
+  archivedAt?: string;
+
+  @ApiPropertyOptional({
     description: 'Church details',
     example: {
       churchId: '00000000-0000-0000-0000-000000000001',

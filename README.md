@@ -175,6 +175,21 @@ The database schema is defined in `prisma/schema.prisma`. Key models include:
 
 All queries are scoped by `church_id` to ensure multi-tenant data isolation. This is enforced via Prisma middleware and NestJS guards.
 
+### Archive Lifecycle (soft-delete)
+
+Archivable entities carry `archived_at` and move through **Archive → Restore → Purge**:
+
+- **Archive** sets `archived_at`; the row exits active lists (list endpoints filter `archived_at: null` by default) but its data is kept. Each module exposes `POST /<entity>/:id/archive`.
+- **Restore** clears `archived_at` via `POST /<entity>/:id/restore`. Members and profiles use `POST /members/:memberId/restore-archive` / `POST /profiles/:profileId/restore-archive` because their plain `restore` routes are the legacy soft-delete undelete.
+- **Purge** is the existing hard `DELETE /<entity>/:id` — it still works on archived rows (this is intentional; it is how archived rows are permanently removed). Deletes are deliberately un-guarded against the archived state in every module.
+- `GET /<entity>/:id` (detail) stays unfiltered so archived rows remain reachable by ID; update-style mutations 404 an archived row.
+- List endpoints accept `?archived=true` to show archived-only rows.
+- Every archive/restore is audit-logged with `AuditAction` `ARCHIVE`/`RESTORE` and a snake_case `entity`.
+- `churches` is archivable; the request-context middleware rejects requests from a profile whose church is archived, except `POST /church/restore` so an admin can always restore their own church.
+- Offline sync (`SyncService`): bootstrap pulls filter `archived_at: null`, and `hydrateChange` returns a tombstone (`data: null`) for rows whose `archived_at` is set — archived rows reach mobile clients as deletions.
+
+The 21 archivable models are members, profiles, visitors, families, events, event ticket tiers, services, sermons, giving categories, departments, cell groups, branches, assets, asset categories, pastoral notes, life events, templates, custom field definitions, forms, webhook subscriptions, and churches. Transactional/join rows (transactions, recurring giving, asset loans/maintenance/depreciation/scans, media, sync queue, form submissions, attendance) are not archived.
+
 ## GitHub Project Automation
 
 This repo includes a GitHub Actions workflow that automatically creates issues from `churchos_github_projects_import.csv` and adds them to the central ChurchOS GitHub Project.

@@ -105,6 +105,7 @@ export class GivingController {
       query.isActive,
       query.page,
       query.limit,
+      query.archived,
     );
     // Without a limit all rows are returned; report that as a single page.
     const effectiveLimit = query.limit || result.total || 1;
@@ -164,6 +165,42 @@ export class GivingController {
     const churchId = req.profile?.church_id || '';
     await this.givingService.deleteCategory(categoryId, churchId, user.sub);
     return { success: true };
+  }
+
+  /**
+   * Archive a giving category.
+   */
+  @Post('categories/:categoryId/archive')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'treasurer', 'secretary')
+  @RequirePermissions('giving:update')
+  @ApiUpdateEndpoint('Archive a giving category', 'Archives a giving category.')
+  async archiveCategory(
+    @Param('categoryId') categoryId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CategoryResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.archiveCategory(categoryId, churchId, user.sub);
+  }
+
+  /**
+   * Restore an archived giving category.
+   */
+  @Post('categories/:categoryId/restore')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'treasurer', 'secretary')
+  @RequirePermissions('giving:update')
+  @ApiUpdateEndpoint('Restore a giving category', 'Restores an archived giving category.')
+  async restoreCategory(
+    @Param('categoryId') categoryId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CategoryResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.restoreCategory(categoryId, churchId, user.sub);
   }
 
   // ─── DIGITAL GIVING ──────────────────────────────────────────────

@@ -69,6 +69,18 @@ describe('SermonsController permission decorators', () => {
     );
   });
 
+  it('guards POST /sermons/:sermonId/archive with role + sermons:update', () => {
+    const block = blockBetween("@Post(':sermonId/archive')", 'async archiveSermon(');
+    expect(block).toContain("@RequirePermissions('sermons:update')");
+    expect(block).toContain("@RequireRoles('church_admin', 'branch_pastor')");
+  });
+
+  it('guards POST /sermons/:sermonId/restore with role + sermons:update', () => {
+    const block = blockBetween("@Post(':sermonId/restore')", 'async restoreSermon(');
+    expect(block).toContain("@RequirePermissions('sermons:update')");
+    expect(block).toContain("@RequireRoles('church_admin', 'branch_pastor')");
+  });
+
   it('keeps bookmark endpoints auth-only (no permission leak to admin reads)', () => {
     const bookmarksStart = source.indexOf('// ─── BOOKMARKS');
     expect(bookmarksStart).toBeGreaterThan(-1);

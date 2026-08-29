@@ -384,10 +384,18 @@ export class SyncService {
   async bootstrap(churchId: string): Promise<BootstrapResult> {
     const [members, services, givingCategories, visitors, attendance, transactions] =
       await Promise.all([
-        this.prisma.member.findMany({ where: { church_id: churchId } }),
-        this.prisma.service.findMany({ where: { church_id: churchId } }),
-        this.prisma.givingCategory.findMany({ where: { church_id: churchId } }),
-        this.prisma.visitor.findMany({ where: { church_id: churchId, deleted_at: null } }),
+        this.prisma.member.findMany({
+          where: { church_id: churchId, archived_at: null },
+        }),
+        this.prisma.service.findMany({
+          where: { church_id: churchId, archived_at: null },
+        }),
+        this.prisma.givingCategory.findMany({
+          where: { church_id: churchId, archived_at: null },
+        }),
+        this.prisma.visitor.findMany({
+          where: { church_id: churchId, deleted_at: null, archived_at: null },
+        }),
         this.prisma.attendance.findMany({ where: { church_id: churchId } }),
         this.prisma.transaction.findMany({ where: { church_id: churchId } }),
       ]);
@@ -555,6 +563,13 @@ export class SyncService {
 
     const record = await delegate.findUnique({ where: { id: row.entity_id } });
     if (!record) {
+      return { ...base, data: null };
+    }
+
+    // Archived records are delivered as tombstones so connected clients drop
+    // them locally. The server-side archive/restore endpoints emit outbox rows
+    // via the DB triggers on UPDATE, so restore re-delivers the live row.
+    if (record.archived_at) {
       return { ...base, data: null };
     }
 

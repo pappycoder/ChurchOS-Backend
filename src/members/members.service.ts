@@ -167,6 +167,7 @@ export class MembersService {
 
     const where: Prisma.MemberWhereInput = {
       church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
     };
 
     // Apply status filter
@@ -237,6 +238,10 @@ export class MembersService {
     });
 
     if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (existing.archived_at) {
       throw new NotFoundException('Member not found');
     }
 
@@ -383,6 +388,98 @@ export class MembersService {
     });
 
     this.logger.log(`Member restored: ${id}`);
+
+    return this.mapToResponseDto(member);
+  }
+
+  /**
+   * Archives a member by setting archived_at. Archived members drop out of
+   * active member lists (active lists filter archived_at: null) but their
+   * details stay reachable, and they can be restored or permanently deleted.
+   *
+   * @param id - Member UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated member response
+   * @throws NotFoundException if the member is missing or not in this church
+   * @throws ConflictException if the member is already archived
+   */
+  async archiveMember(id: string, churchId: string, userId: string): Promise<MemberResponseDto> {
+    const existing = await this.prisma.member.findUnique({
+      where: { id },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Member is already archived');
+    }
+
+    const member = await this.prisma.member.update({
+      where: { id },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'member',
+      action: 'ARCHIVE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: member.archived_at },
+    });
+
+    this.logger.log(`Member archived: ${id}`);
+
+    return this.mapToResponseDto(member);
+  }
+
+  /**
+   * Restores an archived member by clearing archived_at.
+   *
+   * @param id - Member UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated member response
+   * @throws NotFoundException if the member is missing or not in this church
+   * @throws ConflictException if the member is not currently archived
+   */
+  async restoreArchivedMember(
+    id: string,
+    churchId: string,
+    userId: string,
+  ): Promise<MemberResponseDto> {
+    const existing = await this.prisma.member.findUnique({
+      where: { id },
+    });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Member is not archived');
+    }
+
+    const member = await this.prisma.member.update({
+      where: { id },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'member',
+      action: 'RESTORE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Member restored from archive: ${id}`);
 
     return this.mapToResponseDto(member);
   }
@@ -917,10 +1014,14 @@ export class MembersService {
   ): Promise<{ success: boolean }> {
     const member = await this.prisma.member.findUnique({
       where: { id },
-      select: { id: true, church_id: true, notes: true },
+      select: { id: true, church_id: true, notes: true, archived_at: true },
     });
 
     if (!member || member.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (member.archived_at) {
       throw new NotFoundException('Member not found');
     }
 
@@ -975,6 +1076,7 @@ export class MembersService {
       photo_url: string | null;
       custom_fields: Prisma.JsonValue;
       notes: string | null;
+      archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
     },
@@ -1008,6 +1110,7 @@ export class MembersService {
           ? (member.custom_fields as Record<string, unknown>)
           : undefined,
       notes: hasSensitiveAccess ? member.notes || undefined : undefined,
+      archivedAt: member.archived_at?.toISOString(),
       createdAt: member.created_at.toISOString(),
       updatedAt: member.updated_at.toISOString(),
     };

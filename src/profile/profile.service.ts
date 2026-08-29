@@ -262,7 +262,10 @@ export class ProfileService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProfileWhereInput = { church_id: churchId };
+    const where: Prisma.ProfileWhereInput = {
+      church_id: churchId,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     // Apply search filter
     if (query.search) {
@@ -561,6 +564,10 @@ export class ProfileService {
       throw new NotFoundException('Profile not found');
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Profile not found');
+    }
+
     const requestedRoles = Array.from(new Set(dto.roles));
 
     // Validate every requested role exists and is visible to this church
@@ -823,6 +830,102 @@ export class ProfileService {
     });
 
     this.logger.log(`Profile reactivated: ${profileId} by ${adminUserId}`);
+
+    return this.getProfileById(profileId, churchId);
+  }
+
+  /**
+   * Archives a profile by setting archived_at. Archived profiles drop out of
+   * active profile lists (active lists filter archived_at: null) but remain
+   * reachable by ID and can be restored.
+   *
+   * @param profileId - Profile UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated profile response
+   * @throws NotFoundException if the profile is missing or not in this church
+   * @throws ConflictException if the profile is already archived
+   */
+  async archiveProfile(
+    profileId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<ProfileResponseDto> {
+    const existing = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Profile not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Profile is already archived');
+    }
+
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { archived_at: new Date() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'profile',
+      action: 'ARCHIVE',
+      entityId: profileId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: new Date() },
+    });
+
+    this.logger.log(`Profile archived: ${profileId} by ${userId}`);
+
+    return this.getProfileById(profileId, churchId);
+  }
+
+  /**
+   * Restores an archived profile by clearing archived_at.
+   *
+   * @param profileId - Profile UUID
+   * @param churchId - Church ID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated profile response
+   * @throws NotFoundException if the profile is missing or not in this church
+   * @throws ConflictException if the profile is not currently archived
+   */
+  async restoreArchivedProfile(
+    profileId: string,
+    churchId: string,
+    userId: string,
+  ): Promise<ProfileResponseDto> {
+    const existing = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Profile not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Profile is not archived');
+    }
+
+    await this.prisma.profile.update({
+      where: { id: profileId },
+      data: { archived_at: null },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'profile',
+      action: 'RESTORE',
+      entityId: profileId,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Profile restored from archive: ${profileId} by ${userId}`);
 
     return this.getProfileById(profileId, churchId);
   }
@@ -1262,6 +1365,7 @@ export class ProfileService {
       phone: string | null;
       avatar_url: string | null;
       mfa_enabled: boolean;
+      archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
       church?: {
@@ -1310,6 +1414,7 @@ export class ProfileService {
       status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),
+      archivedAt: profile.archived_at?.toISOString(),
       church: profile.church
         ? {
             churchId: profile.church.id,

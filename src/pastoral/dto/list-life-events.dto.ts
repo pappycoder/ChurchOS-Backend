@@ -7,7 +7,8 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsInt, Min, Max, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min, Max, IsIn, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ListLifeEventsDto {
   // Default page number starting at 1
@@ -67,4 +68,14 @@ export class ListLifeEventsDto {
   @IsOptional()
   @IsString()
   sortOrder?: 'asc' | 'desc';
+
+  // List archived events only when true (default: active only)
+  @ApiPropertyOptional({
+    description: 'List archived records only (default: active only)',
+    default: false,
+  })
+  @Type(() => Boolean)
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

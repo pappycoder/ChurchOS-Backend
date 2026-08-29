@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { FormStatus, Prisma, SubmissionStatus } from '@prisma/client';
 import { FormsService } from '../../../src/forms/forms.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -161,6 +161,31 @@ describe('FormsService', () => {
       expect(result.limit).toBe(10);
     });
 
+    it('should exclude archived forms by default', async () => {
+      prisma.form.count.mockResolvedValue(0);
+      prisma.form.findMany.mockResolvedValue([]);
+
+      await service.listForms(mockChurchId, {});
+
+      expect(prisma.form.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
+      );
+    });
+
+    it('should list only archived forms when archived=true', async () => {
+      prisma.form.count.mockResolvedValue(1);
+      prisma.form.findMany.mockResolvedValue([
+        { ...mockForm, archived_at: new Date('2026-08-28T10:00:00.000Z') },
+      ]);
+
+      const result = await service.listForms(mockChurchId, { archived: true });
+
+      expect(prisma.form.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ archived_at: { not: null } }) }),
+      );
+      expect(result.items[0].archivedAt).toBe('2026-08-28T10:00:00.000Z');
+    });
+
     it('should apply search filter', async () => {
       prisma.form.count.mockResolvedValue(0);
       prisma.form.findMany.mockResolvedValue([]);
@@ -210,6 +235,17 @@ describe('FormsService', () => {
         expect.objectContaining({ entity: 'form', action: 'UPDATE' }),
       );
     });
+
+    it('should throw NotFoundException when updating an archived form', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateForm(mockChurchId, mockFormId, { title: 'Updated' }, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('deleteForm', () => {
@@ -223,6 +259,19 @@ describe('FormsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'form', action: 'DELETE' }),
       );
+    });
+
+    it('should still work (purge/close path) on an archived form', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+      prisma.form.update.mockResolvedValue({ ...mockForm, status: FormStatus.closed });
+
+      const result = await service.deleteForm(mockChurchId, mockFormId, mockUserId);
+
+      expect(result.success).toBe(true);
+      expect(prisma.form.update).toHaveBeenCalled();
     });
   });
 
@@ -243,6 +292,94 @@ describe('FormsService', () => {
       expect(result.status).toBe(FormStatus.draft);
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'form', action: 'CREATE' }),
+      );
+    });
+
+    it('should throw NotFoundException when cloning an archived form', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date('2026-08-28T10:00:00.000Z'),
+      });
+
+      await expect(service.cloneForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('archiveForm', () => {
+    it('should set archived_at and audit ARCHIVE', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+      prisma.form.update.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date('2026-08-28T12:00:00.000Z'),
+      });
+
+      const result = await service.archiveForm(mockChurchId, mockFormId, mockUserId);
+
+      expect(prisma.form.update).toHaveBeenCalledWith({
+        where: { id: mockFormId },
+        data: { archived_at: expect.any(Date) },
+      });
+      expect(result.archivedAt).toBe('2026-08-28T12:00:00.000Z');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ARCHIVE', entity: 'form' }),
+      );
+    });
+
+    it('should throw ConflictException when already archived', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date(),
+      });
+
+      await expect(service.archiveForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when form is missing', async () => {
+      prisma.form.findFirst.mockResolvedValue(null);
+
+      await expect(service.archiveForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restoreForm', () => {
+    it('should clear archived_at and audit RESTORE', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date('2026-08-27T12:00:00.000Z'),
+      });
+      prisma.form.update.mockResolvedValue(mockForm);
+
+      const result = await service.restoreForm(mockChurchId, mockFormId, mockUserId);
+
+      expect(prisma.form.update).toHaveBeenCalledWith({
+        where: { id: mockFormId },
+        data: { archived_at: null },
+      });
+      expect(result.archivedAt).toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'RESTORE', entity: 'form' }),
+      );
+    });
+
+    it('should throw ConflictException when not archived', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+
+      await expect(service.restoreForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw NotFoundException when form is missing', async () => {
+      prisma.form.findFirst.mockResolvedValue(null);
+
+      await expect(service.restoreForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        NotFoundException,
       );
     });
   });

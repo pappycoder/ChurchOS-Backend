@@ -51,7 +51,7 @@ export class WebhooksController {
   })
   async list(@Req() req: AuthenticatedRequest): Promise<WebhookSubscriptionResponseDto[]> {
     const churchId = req.profile?.church_id || '';
-    return this.webhooksService.listSubscriptions(churchId);
+    return this.webhooksService.listSubscriptions(churchId, req.query.archived === 'true');
   }
 
   /**
@@ -100,5 +100,39 @@ export class WebhooksController {
   ): Promise<{ deliveryId: string }> {
     const churchId = req.profile?.church_id || '';
     return this.webhooksService.testDelivery(webhookId, churchId);
+  }
+
+  /**
+   * Archive a webhook subscription.
+   */
+  @Post(':webhookId/archive')
+  @RequireRoles('church_admin')
+  @ApiOperation({
+    summary: 'Archive webhook',
+    description: 'Set archived_at — hides the subscription from active lists until restored.',
+  })
+  async archive(
+    @Param('webhookId') webhookId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<WebhookSubscriptionResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.webhooksService.archiveSubscription(webhookId, churchId, req.user?.sub || '');
+  }
+
+  /**
+   * Restore an archived webhook subscription.
+   */
+  @Post(':webhookId/restore')
+  @RequireRoles('church_admin')
+  @ApiOperation({
+    summary: 'Restore webhook',
+    description: 'Clears archived_at — brings the subscription back into active lists.',
+  })
+  async restore(
+    @Param('webhookId') webhookId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<WebhookSubscriptionResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.webhooksService.restoreSubscription(webhookId, churchId, req.user?.sub || '');
   }
 }

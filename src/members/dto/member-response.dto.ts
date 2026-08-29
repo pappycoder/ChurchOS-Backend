@@ -131,4 +131,10 @@ export class MemberResponseDto {
     example: '2024-06-20T14:15:00.000Z',
   })
   updatedAt!: string;
+
+  @ApiPropertyOptional({
+    description: 'Set when the record is archived',
+    example: '2026-08-28T10:30:00.000Z',
+  })
+  archivedAt?: string;
 }

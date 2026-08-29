@@ -49,6 +49,9 @@ export class BranchResponseDto {
   @ApiProperty({ description: 'Number of members in this branch', example: 50 })
   memberCount!: number;
 
+  @ApiPropertyOptional({ description: 'Set when the branch is archived' })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'Created timestamp', example: '2024-01-15T10:30:00.000Z' })
   createdAt!: string;
 

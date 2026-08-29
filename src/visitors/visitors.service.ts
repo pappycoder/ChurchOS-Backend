@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { CreateVisitorDto } from './dto/create-visitor.dto';
@@ -67,7 +73,11 @@ export class VisitorsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.VisitorWhereInput = { church_id: churchId, deleted_at: null };
+    const where: Prisma.VisitorWhereInput = {
+      church_id: churchId,
+      deleted_at: null,
+      archived_at: query.archived === true ? { not: null } : null,
+    };
 
     if (query.followUpStatus) {
       where.follow_up_status = query.followUpStatus;
@@ -143,6 +153,10 @@ export class VisitorsService {
       throw new NotFoundException('Visitor not found');
     }
 
+    if (existing.archived_at) {
+      throw new NotFoundException('Visitor not found');
+    }
+
     const updateData: Prisma.VisitorUpdateInput = {};
     if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
     if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
@@ -192,6 +206,9 @@ export class VisitorsService {
       throw new NotFoundException('Visitor not found');
     }
 
+    // Hard delete stays available on archived rows — this is the "purge" path
+    // invoked from the archived view.
+
     await this.prisma.visitor.delete({ where: { id } });
 
     await this.audit.log({
@@ -206,6 +223,92 @@ export class VisitorsService {
     this.logger.log(`Visitor deleted: ${id}`);
   }
 
+  /**
+   * Archives a visitor by setting archived_at. Archived visitors drop out of
+   * list/search/board pulls (active lists filter archived_at: null) but their
+   * details stay reachable, and they can be restored or permanently deleted.
+   *
+   * @param id - Visitor UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated VisitorResponseDto
+   * @throws NotFoundException if the visitor is missing or not in this church
+   * @throws ConflictException if the visitor is already archived
+   */
+  async archive(id: string, churchId: string, userId: string): Promise<VisitorResponseDto> {
+    const existing = await this.prisma.visitor.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Visitor not found');
+    }
+
+    if (existing.archived_at) {
+      throw new ConflictException('Visitor is already archived');
+    }
+
+    const visitor = await this.prisma.visitor.update({
+      where: { id },
+      data: { archived_at: new Date() },
+      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'visitor',
+      action: 'ARCHIVE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: visitor.archived_at },
+    });
+
+    this.logger.log(`Visitor archived: ${id}`);
+
+    return this.toResponseDto(visitor);
+  }
+
+  /**
+   * Restores an archived visitor by clearing archived_at.
+   *
+   * @param id - Visitor UUID
+   * @param churchId - Church UUID for tenant scoping
+   * @param userId - Acting user ID for audit logging
+   * @returns Updated VisitorResponseDto
+   * @throws NotFoundException if the visitor is missing or not in this church
+   * @throws ConflictException if the visitor is not currently archived
+   */
+  async restore(id: string, churchId: string, userId: string): Promise<VisitorResponseDto> {
+    const existing = await this.prisma.visitor.findUnique({ where: { id } });
+
+    if (!existing || existing.church_id !== churchId) {
+      throw new NotFoundException('Visitor not found');
+    }
+
+    if (!existing.archived_at) {
+      throw new ConflictException('Visitor is not archived');
+    }
+
+    const visitor = await this.prisma.visitor.update({
+      where: { id },
+      data: { archived_at: null },
+      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'visitor',
+      action: 'RESTORE',
+      entityId: id,
+      oldValues: { archived_at: existing.archived_at },
+      newValues: { archived_at: null },
+    });
+
+    this.logger.log(`Visitor restored: ${id}`);
+
+    return this.toResponseDto(visitor);
+  }
+
   async convertToMember(
     id: string,
     dto: ConvertVisitorDto,
@@ -215,6 +318,10 @@ export class VisitorsService {
     const visitor = await this.prisma.visitor.findUnique({ where: { id } });
 
     if (!visitor || visitor.church_id !== churchId) {
+      throw new NotFoundException('Visitor not found');
+    }
+
+    if (visitor.archived_at) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -313,6 +420,7 @@ export class VisitorsService {
     custom_fields: Prisma.JsonValue;
     converted_member_id: string | null;
     converted_at: Date | null;
+    archived_at: Date | null;
     created_at: Date;
     updated_at: Date;
   }): VisitorResponseDto {
@@ -338,6 +446,7 @@ export class VisitorsService {
           : undefined,
       convertedMemberId: visitor.converted_member_id || undefined,
       convertedAt: visitor.converted_at?.toISOString(),
+      archivedAt: visitor.archived_at?.toISOString(),
       createdAt: visitor.created_at.toISOString(),
       updatedAt: visitor.updated_at.toISOString(),
     };

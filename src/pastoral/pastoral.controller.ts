@@ -191,6 +191,56 @@ export class PastoralController {
     return this.pastoralService.deleteNote(noteId, churchId, user.sub, role);
   }
 
+  /**
+   * Archives a pastoral note. Archived notes drop out of active lists.
+   *
+   * @param noteId - Pastoral note ID
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Archived pastoral note
+   */
+  @Post('notes/:noteId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:update')
+  @ApiParam({ name: 'noteId', type: String })
+  @ApiOperation({ summary: 'Archive a pastoral note' })
+  async archiveNote(
+    @Param('noteId') noteId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<PastoralNoteResponseDto> {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the archive to the pastoral service
+    return this.pastoralService.archiveNote(noteId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived pastoral note.
+   *
+   * @param noteId - Pastoral note ID
+   * @param user - Authenticated user
+   * @param req - Authenticated request with profile
+   * @returns Restored pastoral note
+   */
+  @Post('notes/:noteId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:update')
+  @ApiParam({ name: 'noteId', type: String })
+  @ApiOperation({ summary: 'Restore an archived pastoral note' })
+  async restoreNote(
+    @Param('noteId') noteId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<PastoralNoteResponseDto> {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the restore to the pastoral service
+    return this.pastoralService.restoreNote(noteId, churchId, user.sub);
+  }
+
   // ─── Life Events ──────────────────────────────────────────
 
   /**
@@ -301,6 +351,54 @@ export class PastoralController {
     const churchId = req.profile?.church_id || '';
     // Delegate the deletion to the pastoral service
     return this.pastoralService.deleteLifeEvent(eventId, churchId, user.sub);
+  }
+
+  /**
+   * Archives a life event. Archived events drop out of active lists.
+   *
+   * @param eventId - Life event ID
+   * @param req - Authenticated request with profile
+   * @returns Archived life event
+   */
+  @Post('life-events/:lifeEventId/archive')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:update')
+  @ApiParam({ name: 'lifeEventId', type: String })
+  @ApiOperation({ summary: 'Archive a life event' })
+  async archiveLifeEvent(
+    @Param('lifeEventId') eventId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LifeEventResponseDto> {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the archive to the pastoral service
+    return this.pastoralService.archiveLifeEvent(eventId, churchId, user.sub);
+  }
+
+  /**
+   * Restores an archived life event.
+   *
+   * @param eventId - Life event ID
+   * @param req - Authenticated request with profile
+   * @returns Restored life event
+   */
+  @Post('life-events/:lifeEventId/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:update')
+  @ApiParam({ name: 'lifeEventId', type: String })
+  @ApiOperation({ summary: 'Restore an archived life event' })
+  async restoreLifeEvent(
+    @Param('lifeEventId') eventId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<LifeEventResponseDto> {
+    // Extract the church ID from the authenticated user's profile
+    const churchId = req.profile?.church_id || '';
+    // Delegate the restore to the pastoral service
+    return this.pastoralService.restoreLifeEvent(eventId, churchId, user.sub);
   }
 
   // ─── Risk & Engagement Scoring ───────────────────────────

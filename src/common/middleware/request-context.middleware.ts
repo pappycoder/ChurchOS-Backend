@@ -78,7 +78,14 @@ export class RequestContextMiddleware implements NestMiddleware {
     if (!authReq.profile) {
       const profile = await this.prisma.profile.findUnique({
         where: { user_id: sub },
-        select: { id: true, church_id: true, branch_id: true, role: true, status: true },
+        select: {
+          id: true,
+          church_id: true,
+          branch_id: true,
+          role: true,
+          status: true,
+          church: { select: { archived_at: true } },
+        },
       });
       if (profile) {
         authReq.profile = {
@@ -88,6 +95,7 @@ export class RequestContextMiddleware implements NestMiddleware {
           role: profile.role[0] ?? 'member',
           roles: profile.role,
           status: profile.status,
+          church_archived_at: profile.church?.archived_at?.toISOString(),
         };
       }
     }
@@ -97,6 +105,14 @@ export class RequestContextMiddleware implements NestMiddleware {
     // Reject requests from deactivated accounts before they reach any handler
     if (profile && profile.status === 'inactive') {
       next(new ForbiddenException('Account deactivated. Contact your church administrator.'));
+      return;
+    }
+
+    // Reject requests from accounts whose church has been archived, except the
+    // restore route — an admin session must be able to restore their own church.
+    const isChurchRestore = req.method === 'POST' && req.path.endsWith('/church/restore');
+    if (profile && profile.church_archived_at && !isChurchRestore) {
+      next(new ForbiddenException('This church has been archived.'));
       return;
     }
 

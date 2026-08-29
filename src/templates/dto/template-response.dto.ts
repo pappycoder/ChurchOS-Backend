@@ -51,6 +51,12 @@ export class TemplateResponseDto {
   @ApiPropertyOptional({ description: 'Approval or sync status reported by the external provider' })
   externalStatus?: string;
 
+  @ApiPropertyOptional({
+    description: 'Archive timestamp — set when the template is archived',
+    example: '2026-08-28T10:30:00.000Z',
+  })
+  archivedAt?: string;
+
   @ApiProperty({ description: 'ISO 8601 timestamp when the template was created' })
   createdAt!: string;
 
