@@ -315,6 +315,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:update',
     // Church — read
     'church:read',
+    // Branches — read
+    'branches:read',
     // Profiles — read
     'profiles:read',
     // Forms — create + read + update

@@ -24,6 +24,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
   SupabaseUser,
@@ -62,6 +63,7 @@ export class BranchesController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('branches:create')
   @ApiCreateEndpoint(
     'Create a branch',
     'Creates a new branch for the church. Only one headquarters branch is allowed.',
@@ -84,6 +86,7 @@ export class BranchesController {
 
   @Get()
   @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('branches:read')
   @ApiPaginatedResponse(BranchResponseDto)
   @ApiListEndpoint('List branches', 'Returns a paginated list of branches for the church.')
   /**
@@ -102,6 +105,7 @@ export class BranchesController {
 
   @Get(':branchId')
   @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('branches:read')
   @ApiGetEndpoint('Get branch', 'Retrieves a single branch by ID with member count.')
   /**
    * Retrieves a single branch by ID.
@@ -119,6 +123,7 @@ export class BranchesController {
 
   @Patch(':branchId')
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('branches:update')
   @ApiUpdateEndpoint(
     'Update a branch',
     'Updates branch details. If photoUrl changes, the old image is deleted from storage.',
@@ -143,6 +148,7 @@ export class BranchesController {
 
   @Delete(':branchId')
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('branches:delete')
   @ApiDeleteEndpoint(
     'Delete a branch',
     'Deletes a branch. Cannot delete if it has members assigned.',
@@ -164,7 +170,9 @@ export class BranchesController {
   }
 
   @Post(':branchId/archive')
+  @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('branches:update')
   /**
    * Archives a branch. Archived branches drop out of active lists.
    * @param branchId - Branch UUID
@@ -182,7 +190,9 @@ export class BranchesController {
   }
 
   @Post(':branchId/restore')
+  @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('branches:update')
   /**
    * Restores an archived branch.
    * @param branchId - Branch UUID

@@ -200,6 +200,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Branches controller hardened with `@RequirePermissions`** (closes the last module-wide guard gap — the web branch pages had been gating Archive/Delete Forever on `branches:delete` and Restore on `branches:update` while the API enforced roles only):
+  - Every one of the 7 `BranchesController` routes now also carries `@RequirePermissions`: `POST /branches` → `branches:create`, `GET /branches` + `GET /branches/:branchId` → `branches:read`, `PATCH /branches/:branchId` + `POST /branches/:branchId/archive|restore` → `branches:update`, `DELETE /branches/:branchId` → `branches:delete`. Role ceilings unchanged (writes church_admin/super_admin; reads additionally branch_pastor/secretary). `@HttpCode(HttpStatus.OK)` added to the archive/restore endpoints, matching every other archive route.
+  - **Seed**: `branches:read` added to the `secretary` template — secretaries could read branches by role but held no permission, so the hardened `GET` routes required the grant to avoid a read regression (church_admin already had full branch perms; branch_pastor already had `branches:read`). Existing DBs need `npm run prisma:seed`.
+  - **Tests**: new `test/unit/branches/branches.controller.spec.ts` (source-scan, 9 tests) asserting all 7 routes' permission decorators + unchanged role ceilings + the archive/restore `@HttpCode(OK)`. Full suite: **46 suites / 878 tests green** (was 45/869); `npm run build` + `npm run lint` clean.
+
 - **Sync respects the archive lifecycle** (closes the archive rollout; web surfaces shipped this round, see web changelog):
   - `SyncService.bootstrap` now excludes archived rows from every archivable pull: members, services, giving categories, and life events filter `archived_at: null` (visitors also `deleted_at: null` for converted). `hydrateChange` returns a **tombstone** (`data: null`) for any create/update whose hydrated `record.archived_at` is set — so archived rows flow to offline clients as deletions and stay removed.
   - **Tests**: `sync.service.spec.ts` +2 (bootstrap archived filter assertions + hydrateChange tombstone-on-archived) = 18 passing. Full suite: **45 suites / 869 tests green**; `npm run build` + `npm run lint` clean.
