@@ -130,7 +130,7 @@ export class MediaService {
 
     const metadata = await sharp(optimized.buffer).metadata();
 
-    await this.prisma.mediaAsset.create({
+    const asset = await this.prisma.mediaAsset.create({
       data: {
         church_id: churchId,
         filename,
@@ -148,12 +148,13 @@ export class MediaService {
         churchId,
         entity: 'media_asset',
         action: 'CREATE',
-        entityId: filename,
+        entityId: asset.id,
         newValues: { filename, folder, mime_type: 'image/webp', size: optimized.buffer.length },
       });
     }
 
     return {
+      assetId: asset.id,
       url: urlData.publicUrl,
       path,
       width: metadata.width,
@@ -199,7 +200,7 @@ export class MediaService {
 
     const { data: urlData } = this.supabase.client.storage.from(this.bucket).getPublicUrl(path);
 
-    await this.prisma.mediaAsset.create({
+    const asset = await this.prisma.mediaAsset.create({
       data: {
         church_id: churchId,
         filename,
@@ -217,12 +218,13 @@ export class MediaService {
         churchId,
         entity: 'media_asset',
         action: 'CREATE',
-        entityId: filename,
+        entityId: asset.id,
         newValues: { filename, folder, mime_type: file.mimetype, size: file.buffer.length },
       });
     }
 
     return {
+      assetId: asset.id,
       url: urlData.publicUrl,
       path,
       size: file.buffer.length,

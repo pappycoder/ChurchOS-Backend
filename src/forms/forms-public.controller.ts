@@ -27,12 +27,11 @@ export class FormsPublicController {
   @Get(':publicToken/meta')
   @ApiOperation({
     summary: 'Get public form metadata',
-    description: 'Returns the title, description, and field definitions needed to render a public form. No auth required.',
+    description:
+      'Returns the title, description, and field definitions needed to render a public form. No auth required.',
   })
   @ApiParam({ name: 'publicToken', description: 'Public form token' })
-  async getPublicFormMeta(
-    @Param('publicToken') publicToken: string,
-  ): Promise<PublicFormMetaDto> {
+  async getPublicFormMeta(@Param('publicToken') publicToken: string): Promise<PublicFormMetaDto> {
     return this.formsService.getPublicFormMeta(publicToken);
   }
 

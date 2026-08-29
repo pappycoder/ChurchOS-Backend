@@ -207,6 +207,40 @@ export class FormsController {
   }
 
   /**
+   * Closes a form, stopping further submissions.
+   */
+  @Post(':formId/close')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Close a form')
+  @ApiParam({ name: 'formId', description: 'Form UUID' })
+  async closeForm(
+    @Param('formId') formId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FormResponseDto> {
+    return this.formsService.closeForm(this.getChurchId(req), formId, user.sub);
+  }
+
+  /**
+   * Reopens a closed form back to draft.
+   */
+  @Post(':formId/reopen')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Reopen a closed form')
+  @ApiParam({ name: 'formId', description: 'Form UUID' })
+  async reopenForm(
+    @Param('formId') formId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FormResponseDto> {
+    return this.formsService.reopenForm(this.getChurchId(req), formId, user.sub);
+  }
+
+  /**
    * Clones a form into a new draft form.
    */
   @Post(':formId/clone')

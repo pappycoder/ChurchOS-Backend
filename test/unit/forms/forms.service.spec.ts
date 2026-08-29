@@ -434,6 +434,58 @@ describe('FormsService', () => {
     });
   });
 
+  describe('closeForm', () => {
+    it('should close a published form', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+      prisma.form.update.mockResolvedValue({ ...mockForm, status: FormStatus.closed });
+
+      const result = await service.closeForm(mockChurchId, mockFormId, mockUserId);
+
+      expect(result.status).toBe(FormStatus.closed);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'UPDATE', entity: 'form', entityId: mockFormId }),
+      );
+    });
+
+    it('should reject closing an already-closed form', async () => {
+      prisma.form.findFirst.mockResolvedValue({ ...mockForm, status: FormStatus.closed });
+
+      await expect(service.closeForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.form.update).not.toHaveBeenCalled();
+    });
+
+    it('should reject closing an archived form', async () => {
+      prisma.form.findFirst.mockResolvedValue({ ...mockForm, archived_at: new Date() });
+
+      await expect(service.closeForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.form.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reopenForm', () => {
+    it('should reopen a closed form back to draft', async () => {
+      prisma.form.findFirst.mockResolvedValue({ ...mockForm, status: FormStatus.closed });
+      prisma.form.update.mockResolvedValue({ ...mockForm, status: FormStatus.draft });
+
+      const result = await service.reopenForm(mockChurchId, mockFormId, mockUserId);
+
+      expect(result.status).toBe(FormStatus.draft);
+    });
+
+    it('should reject reopening a form that is not closed', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+
+      await expect(service.reopenForm(mockChurchId, mockFormId, mockUserId)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.form.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('submitForm', () => {
     it('should create a submission with valid data', async () => {
       prisma.form.findFirst.mockResolvedValue(mockForm);
@@ -627,6 +679,97 @@ describe('FormsService', () => {
         }),
       ).rejects.toThrow(ConflictException);
       expect(prisma.formSubmission.create).not.toHaveBeenCalled();
+    });
+
+    it('should persist file attachments on a public submission', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'public-token',
+        submission_limit: 0,
+      });
+      prisma.mediaAsset.findMany.mockResolvedValue([mockMediaAsset]);
+      prisma.formSubmission.create.mockResolvedValue({
+        ...mockSubmission,
+        submitted_by: null,
+        attachments: [
+          {
+            assetId: mockAssetId,
+            url: mockMediaAsset.url,
+            filename: mockMediaAsset.filename,
+            mimeType: mockMediaAsset.mime_type,
+          },
+        ],
+      });
+
+      const result = await service.submitByPublicToken('public-token', {
+        data: { name: 'Jane Doe', gender: 'Female' },
+        attachmentAssetIds: [mockAssetId],
+      });
+
+      expect(prisma.mediaAsset.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [mockAssetId] }, church_id: mockChurchId },
+      });
+      expect(result.attachments).toEqual([
+        {
+          assetId: mockAssetId,
+          url: mockMediaAsset.url,
+          filename: mockMediaAsset.filename,
+          mimeType: mockMediaAsset.mime_type,
+        },
+      ]);
+    });
+  });
+
+  describe('getPublicFormMeta', () => {
+    it('should return public metadata for a published, public form', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'public-token',
+        description: 'A public form',
+      });
+
+      const result = await service.getPublicFormMeta('public-token');
+
+      expect(result).toEqual({
+        title: 'Test Form',
+        description: 'A public form',
+        fields: mockFields,
+      });
+    });
+
+    it('should reject an invalid or missing public token', async () => {
+      prisma.form.findUnique.mockResolvedValue(null);
+
+      await expect(service.getPublicFormMeta('bad-token')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject a non-public form', async () => {
+      prisma.form.findUnique.mockResolvedValue(mockForm);
+
+      await expect(service.getPublicFormMeta('token')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject a non-published form', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        status: FormStatus.draft,
+      });
+
+      await expect(service.getPublicFormMeta('token')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject an archived form', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'public-token',
+        archived_at: new Date(),
+      });
+
+      await expect(service.getPublicFormMeta('public-token')).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -135,6 +135,7 @@ export class FormsService {
         orderBy: { updated_at: 'desc' },
         skip,
         take: limit,
+        include: { _count: { select: { submissions: true } } },
       }),
     ]);
 
@@ -361,6 +362,80 @@ export class FormsService {
   }
 
   /**
+   * Closes a form by setting its status to closed, stopping further submissions.
+   *
+   * @param churchId - Church ID
+   * @param formId - Form ID
+   * @param userId - User performing the action
+   * @returns Updated form response
+   * @throws NotFoundException if the form is missing or not in this church
+   * @throws ConflictException if the form is already closed or archived
+   */
+  async closeForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
+    const existing = await this.findFormOrFail(churchId, formId);
+
+    if (existing.status === FormStatus.closed) {
+      throw new ConflictException('Form is already closed');
+    }
+    if (existing.archived_at) {
+      throw new ConflictException('Form is archived');
+    }
+
+    const form = await this.prisma.form.update({
+      where: { id: formId },
+      data: { status: FormStatus.closed },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'form',
+      action: 'UPDATE',
+      entityId: formId,
+      oldValues: { status: existing.status },
+      newValues: { status: form.status },
+    });
+
+    return this.mapForm(form);
+  }
+
+  /**
+   * Reopens a closed form by returning it to draft so it can be edited and
+   * re-published.
+   *
+   * @param churchId - Church ID
+   * @param formId - Form ID
+   * @param userId - User performing the action
+   * @returns Updated form response
+   * @throws NotFoundException if the form is missing or not in this church
+   * @throws ConflictException if the form is not currently closed
+   */
+  async reopenForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
+    const existing = await this.findFormOrFail(churchId, formId);
+
+    if (existing.status !== FormStatus.closed) {
+      throw new ConflictException('Only a closed form can be reopened');
+    }
+
+    const form = await this.prisma.form.update({
+      where: { id: formId },
+      data: { status: FormStatus.draft },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'form',
+      action: 'UPDATE',
+      entityId: formId,
+      oldValues: { status: existing.status },
+      newValues: { status: form.status },
+    });
+
+    return this.mapForm(form);
+  }
+
+  /**
    * Regenerates the public submission token, invalidating any previously
    * shared link. The form must be public to have a token.
    *
@@ -549,6 +624,8 @@ export class FormsService {
       }
     }
 
+    const attachments = await this.resolveAttachments(form.church_id, dto.attachmentAssetIds);
+
     const submission = await this.prisma.formSubmission.create({
       data: {
         form_id: form.id,
@@ -556,7 +633,7 @@ export class FormsService {
         data: dto.data as Prisma.InputJsonValue,
         submitted_by: null,
         status: SubmissionStatus.pending,
-        attachments: [] as unknown as Prisma.InputJsonValue,
+        attachments: attachments as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -692,9 +769,13 @@ export class FormsService {
   /**
    * Finds a form scoped to a church or throws NotFoundException.
    */
-  private async findFormOrFail(churchId: string, formId: string): Promise<Form> {
+  private async findFormOrFail(
+    churchId: string,
+    formId: string,
+  ): Promise<Form & { _count?: { submissions: number } }> {
     const form = await this.prisma.form.findFirst({
       where: { id: formId, church_id: churchId },
+      include: { _count: { select: { submissions: true } } },
     });
 
     if (!form) {
@@ -880,7 +961,7 @@ export class FormsService {
   /**
    * Maps a Prisma Form record to a FormResponseDto.
    */
-  private mapForm(form: Form): FormResponseDto {
+  private mapForm(form: Form & { _count?: { submissions: number } }): FormResponseDto {
     return {
       id: form.id,
       churchId: form.church_id,
@@ -893,6 +974,7 @@ export class FormsService {
       publicToken: form.public_token ?? undefined,
       uniqueField: form.unique_field ?? undefined,
       submissionLimit: form.submission_limit,
+      submissionCount: form._count?.submissions ?? 0,
       archivedAt: form.archived_at?.toISOString(),
       createdAt: form.created_at,
       updatedAt: form.updated_at,

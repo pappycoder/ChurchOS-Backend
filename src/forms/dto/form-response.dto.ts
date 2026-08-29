@@ -68,6 +68,9 @@ export class FormResponseDto {
   @ApiProperty({ description: 'Maximum submissions (0 = unlimited)', default: 0 })
   submissionLimit!: number;
 
+  @ApiProperty({ description: 'Number of submissions received for this form', default: 0 })
+  submissionCount!: number;
+
   @ApiPropertyOptional({ description: 'Set when the form is archived' })
   archivedAt?: string;
 

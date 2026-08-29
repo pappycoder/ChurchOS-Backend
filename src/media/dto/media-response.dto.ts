@@ -14,6 +14,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  */
 export class MediaResponseDto {
   @ApiProperty({
+    description: 'ID of the created MediaAsset record',
+    example: '11111111-1111-1111-1111-111111111111',
+  })
+  assetId!: string;
+
+  @ApiProperty({
     description: 'Public URL of the uploaded file',
     example: 'https://xxx.supabase.co/storage/v1/object/public/media/churches/abc/logo.webp',
   })
