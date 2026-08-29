@@ -47,20 +47,32 @@ export class AnalyticsService {
   // ─── Helpers ────────────────────────────────────────────
 
   /**
-   * Resolves an optional date range, defaulting to the last 30 days.
+   * Resolves an optional date range. When neither bound is supplied the range
+   * is unbounded ("all time") — callers must then omit the date predicates
+   * entirely so no accidental 30-day window is applied.
    */
   private getDateRange(query: AnalyticsDateRangeDto): {
-    start: Date;
-    end: Date;
-    startStr?: string;
-    endStr?: string;
+    start?: Date;
+    end?: Date;
   } {
-    const now = new Date();
-    const start = query.startDate
-      ? new Date(query.startDate)
-      : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const end = query.endDate ? new Date(query.endDate) : now;
-    return { start, end, startStr: query.startDate, endStr: query.endDate };
+    const start = query.startDate ? new Date(query.startDate) : undefined;
+    const end = query.endDate ? new Date(query.endDate) : undefined;
+    return { start, end };
+  }
+
+  /**
+   * Builds an optional { gte, lte } date predicate for an ISO-8601 column.
+   * Returns `undefined` when the range is unbounded (all time).
+   */
+  private dateRangeFilter(
+    start?: Date,
+    end?: Date,
+  ): { gte?: Date; lte?: Date } | undefined {
+    if (!start && !end) return undefined;
+    return {
+      ...(start ? { gte: start } : {}),
+      ...(end ? { lte: end } : {}),
+    };
   }
 
   /**
@@ -100,6 +112,10 @@ export class AnalyticsService {
     query: AnalyticsDateRangeDto,
   ): Promise<DashboardResponseDto> {
     const { start, end } = this.getDateRange(query);
+    const memberSinceFilter = this.dateRangeFilter(start, end);
+    const attendanceFilter = this.dateRangeFilter(start, end);
+    const givingFilter = this.dateRangeFilter(start, end);
+    const upcomingEndFilter = end ? { lte: end } : undefined;
 
     const [
       totalMembers,
@@ -116,21 +132,34 @@ export class AnalyticsService {
       this.prisma.member.count({ where: { church_id: churchId } }),
       this.prisma.member.count({ where: { church_id: churchId, status: 'active' } }),
       this.prisma.member.count({
-        where: { church_id: churchId, member_since: { gte: start, lte: end } },
+        where: {
+          church_id: churchId,
+          ...(memberSinceFilter ? { member_since: memberSinceFilter } : {}),
+        },
       }),
       this.prisma.branch.count({ where: { church_id: churchId } }),
       this.prisma.attendance.count({
-        where: { church_id: churchId, checkin_at: { gte: start, lte: end } },
+        where: {
+          church_id: churchId,
+          ...(attendanceFilter ? { checkin_at: attendanceFilter } : {}),
+        },
       }),
       this.prisma.transaction.aggregate({
-        where: { church_id: churchId, status: 'success', created_at: { gte: start, lte: end } },
+        where: {
+          church_id: churchId,
+          status: 'success',
+          ...(givingFilter ? { created_at: givingFilter } : {}),
+        },
         _sum: { amount: true },
       }),
       this.prisma.riskScore.count({
         where: { church_id: churchId, level: { in: ['high', 'critical'] } },
       }),
       this.prisma.event.count({
-        where: { church_id: churchId, start_date: { gte: new Date(), lte: end } },
+        where: {
+          church_id: churchId,
+          start_date: { gte: new Date(), ...(upcomingEndFilter ? upcomingEndFilter : {}) },
+        },
       }),
       this.prisma.formSubmission.count({ where: { church_id: churchId, status: 'pending' } }),
       this.getEngagementDistribution(churchId),
@@ -180,9 +209,11 @@ export class AnalyticsService {
     const { start, end } = this.getDateRange(query);
     const branchId = query.branchId;
 
+    const createdFilter = this.dateRangeFilter(start, end);
+
     const baseWhere: Prisma.TransactionWhereInput = {
       church_id: churchId,
-      created_at: { gte: start, lte: end },
+      ...(createdFilter ? { created_at: createdFilter } : {}),
     };
 
     if (branchId) {
@@ -350,9 +381,11 @@ export class AnalyticsService {
     const { start, end } = this.getDateRange(query);
     const branchId = query.branchId;
 
+    const checkinFilter = this.dateRangeFilter(start, end);
+
     const baseWhere: Prisma.AttendanceWhereInput = {
       church_id: churchId,
-      checkin_at: { gte: start, lte: end },
+      ...(checkinFilter ? { checkin_at: checkinFilter } : {}),
     };
 
     if (branchId) {
@@ -448,12 +481,25 @@ export class AnalyticsService {
 
   /**
    * Counts visitors whose first check-in ever falls within the date range.
+   * When the range is unbounded (all time) every visitor's first check-in
+   * counts, so the earlier-occurrence check is skipped.
    */
   private async getFirstTimeVisitorCount(
     churchId: string,
-    start: Date,
-    end: Date,
+    start?: Date,
+    end?: Date,
   ): Promise<number> {
+    if (!start && !end) {
+      const result = await this.prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(DISTINCT a.visitor_name) as count
+        FROM attendance a
+        WHERE a.church_id = ${churchId}
+          AND a.member_id IS NULL
+          AND a.visitor_name IS NOT NULL
+      `;
+      return Number(result[0]?.count || 0);
+    }
+
     const result = await this.prisma.$queryRaw<{ count: number }[]>`
       SELECT COUNT(DISTINCT a.visitor_name) as count
       FROM attendance a
@@ -564,11 +610,12 @@ export class AnalyticsService {
     query: AnalyticsDateRangeDto,
   ): Promise<EventAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
+    const startDateFilter = this.dateRangeFilter(start, end);
 
     const events = await this.prisma.event.findMany({
       where: {
         church_id: churchId,
-        start_date: { gte: start, lte: end },
+        ...(startDateFilter ? { start_date: startDateFilter } : {}),
       },
       include: {
         registrations: {
@@ -587,7 +634,10 @@ export class AnalyticsService {
 
     const tickets = await this.prisma.ticket.findMany({
       where: {
-        event: { church_id: churchId, start_date: { gte: start, lte: end } },
+        event: {
+          church_id: churchId,
+          ...(startDateFilter ? { start_date: startDateFilter } : {}),
+        },
       },
       select: { id: true, tier_name: true, price_paid: true, status: true },
     });
@@ -677,10 +727,11 @@ export class AnalyticsService {
     query: AnalyticsDateRangeDto,
   ): Promise<CommunicationAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
+    const createdFilter = this.dateRangeFilter(start, end);
 
     const messageWhere: Prisma.MessageWhereInput = {
       church_id: churchId,
-      created_at: { gte: start, lte: end },
+      ...(createdFilter ? { created_at: createdFilter } : {}),
     };
 
     const [messageStats, broadcasts] = await Promise.all([
@@ -690,7 +741,10 @@ export class AnalyticsService {
         _count: { id: true },
       }),
       this.prisma.broadcast.findMany({
-        where: { church_id: churchId, created_at: { gte: start, lte: end } },
+        where: {
+          church_id: churchId,
+          ...(createdFilter ? { created_at: createdFilter } : {}),
+        },
         select: { status: true, total_recipients: true },
       }),
     ]);

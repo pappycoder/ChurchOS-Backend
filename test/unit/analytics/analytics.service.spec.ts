@@ -127,7 +127,7 @@ describe('AnalyticsService', () => {
       });
     });
 
-    it('should default to last 30 days when no dates provided', async () => {
+    it('should treat an absent range as all time (no date predicates)', async () => {
       prisma.member.count.mockResolvedValue(0);
       prisma.branch.count.mockResolvedValue(0);
       prisma.attendance.count.mockResolvedValue(0);
@@ -141,6 +141,13 @@ describe('AnalyticsService', () => {
 
       expect(result.totalMembers).toBe(0);
       expect(prisma.member.count).toHaveBeenCalledTimes(3);
+      // Member-since count for new members carries NO date predicate when absent.
+      const newMembersCall = prisma.member.count.mock.calls.at(-1)?.[0];
+      expect(newMembersCall).toBeDefined();
+      // attendance + giving also run without date filters.
+      expect(prisma.attendance.count).toHaveBeenCalledTimes(1);
+      const attendanceCall = prisma.attendance.count.mock.calls[0][0];
+      expect(attendanceCall?.where).not.toHaveProperty('checkin_at');
     });
   });
 
@@ -241,6 +248,26 @@ describe('AnalyticsService', () => {
       expect(result.firstTimeVisitors).toBe(5);
       expect(result.returningVisitors).toBe(25);
       expect(result.trend).toHaveLength(1);
+    });
+
+    it('should treat an absent range as all time and count every first-time visitor', async () => {
+      prisma.attendance.count
+        .mockResolvedValueOnce(150) // total
+        .mockResolvedValueOnce(120) // members
+        .mockResolvedValueOnce(30); // visitors
+      prisma.attendance.groupBy.mockResolvedValue([{ source: 'manual', _count: { id: 100 } }]);
+      prisma.attendance.findMany.mockResolvedValue([]);
+      prisma.$queryRaw.mockResolvedValue([{ count: 30 }]); // all-time firstTimeVisitors
+
+      const result = await service.getAttendanceAnalytics(churchId, {});
+
+      expect(result.total).toBe(150);
+      expect(result.visitors).toBe(30);
+      expect(result.firstTimeVisitors).toBe(30);
+      expect(result.returningVisitors).toBe(0);
+      // No date predicate is applied to the base attendance filter.
+      const attendanceCall = prisma.attendance.count.mock.calls[0][0];
+      expect(attendanceCall?.where).not.toHaveProperty('checkin_at');
     });
   });
 

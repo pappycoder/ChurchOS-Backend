@@ -200,6 +200,16 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Analytics date range: absent range now means ALL time (fixes "All time" showing 0).** Previously `AnalyticsService.getDateRange()` defaulted a missing `startDate`/`endDate` to the **last 30 days**, so the web Overview (`/analytics`), Attendance (`/analytics/attendance`) and Giving ("All time" preset) all silently scoped totals to the past 30 days — showing 0 when real data predated that window. Now an absent range is **unbounded (all time)**: `getDateRange` returns `{ start?, end? }` (both `undefined` when omitted) and a new `dateRangeFilter(start, end)` helper emits `{ gte?, lte? }` or `undefined`; every caller applies the date predicate **only when supplied**:
+  - `getDashboard` (new-members `member_since`, attendance `checkin_at`, giving `created_at`; upcoming events keep `start_date >= now` plus an optional `lte: end`),
+  - `getGivingAnalytics` (`baseWhere.created_at`), `getAttendanceAnalytics` (`baseWhere.checkin_at`),
+  - `getEventAnalytics` (event `start_date` + nested ticket filter), `getCommunicationAnalytics` (message `created_at` + broadcasts),
+  - `getFirstTimeVisitorCount` now accepts optional bounds and, when unbounded, runs a dedicated no-date `COUNT(DISTINCT visitor_name)` query (every visitor's first check-in counts).
+  - `getMemberAnalytics` already ignores dates (unchanged).
+  - **Tests**: analytics.service.spec updated the "30-day default" dashboard test to assert the all-time no-date-predicate behavior and added an all-time `getAttendanceAnalytics` test covering the unbounded first-time-visitor branch. Full suite: **46 suites / 896 tests green**; `npm run build` + `npm run lint` clean. (Web side needed no changes — the pages/controls already send no params for "All time" / default views.)
+
+- **No backend changes this round** — the Reports module was converted into a single client-side **report-export generator** (web-only; the `POST /reports/export` endpoint is unchanged, still returning `{ data, format }` JSON, and remains unused since exports are generated entirely client-side via jspdf/xlsx in `ChurchOS-Web/src/lib/export-utils.ts`). Analytics stays a separate visualization module. Full backend suite/`build`/`lint` unaffected. See web changelog.
+
 - **`cell_leader` is now an assignable role on the profile role DTOs** (the web Analytics/role-dashboard rollout surfaces it as a real role — see web changelog). `cell_leader` already existed as a seeded role template and in `@RequireRoles` guards + the `list-profiles.dto.ts` role filter, but the assignable `VALID_ROLES` lists omitted it. Added `'cell_leader'` to `src/profile/dto/update-role.dto.ts` (single-role PATCH), `src/profile/dto/update-roles.dto.ts` (multi-role replace), and `src/profile/dto/invite-user.dto.ts` (staff invite) so admins can now assign the role directly (the invite list still intentionally excludes `super_admin`). No schema/service/guard changes; `npm run build` + lint clean.
 
 - **Forms double-submission guard + shareable-link regeneration** (the web dynamic Form Builder /forms + public submit pages shipped this round too — see web changelog):
