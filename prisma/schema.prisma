@@ -1004,6 +1004,8 @@ model Form {
   is_template  Boolean    @default(false)
   is_public    Boolean    @default(false)
   public_token String?    @unique
+  unique_field String? // Field key (e.g. "email") used to detect duplicate public submissions
+  submission_limit Int   @default(0) // 0 = unlimited; >0 caps total submissions
   created_at   DateTime   @default(now())
   updated_at   DateTime   @updatedAt
   archived_at  DateTime? // Set when archived

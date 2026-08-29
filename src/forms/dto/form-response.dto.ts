@@ -60,6 +60,14 @@ export class FormResponseDto {
   @ApiPropertyOptional({ description: 'Public submission token' })
   publicToken?: string;
 
+  @ApiPropertyOptional({
+    description: 'Field key used to detect duplicate public submissions',
+  })
+  uniqueField?: string;
+
+  @ApiProperty({ description: 'Maximum submissions (0 = unlimited)', default: 0 })
+  submissionLimit!: number;
+
   @ApiPropertyOptional({ description: 'Set when the form is archived' })
   archivedAt?: string;
 
@@ -68,6 +76,22 @@ export class FormResponseDto {
 
   @ApiProperty({ description: 'Last update timestamp' })
   updatedAt!: Date;
+}
+
+/**
+ * Response shape for the public-facing metadata used to render a form for
+ * anonymous respondents (no church or submission data).
+ */
+export class PublicFormMetaDto {
+  @ApiProperty({ description: 'Form title' })
+  title!: string;
+
+  @ApiPropertyOptional({ description: 'Form description' })
+  description?: string;
+
+  @ApiProperty({ description: 'Field definitions', type: [FormFieldDto] })
+  @Type(() => FormFieldDto)
+  fields!: FormFieldDto[];
 }
 
 /**

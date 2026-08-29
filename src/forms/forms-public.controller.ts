@@ -9,17 +9,32 @@
  * @since 1.0.0
  */
 
-import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { FormsService } from './forms.service';
-import { CreateFormSubmissionDto, FormSubmissionResponseDto } from './dto';
+import { CreateFormSubmissionDto, FormSubmissionResponseDto, PublicFormMetaDto } from './dto';
 
 @ApiTags('Forms')
 @SkipRateLimit()
 @Controller('forms/public')
 export class FormsPublicController {
   constructor(private readonly formsService: FormsService) {}
+
+  /**
+   * Returns public form metadata for rendering an anonymous submission form.
+   */
+  @Get(':publicToken/meta')
+  @ApiOperation({
+    summary: 'Get public form metadata',
+    description: 'Returns the title, description, and field definitions needed to render a public form. No auth required.',
+  })
+  @ApiParam({ name: 'publicToken', description: 'Public form token' })
+  async getPublicFormMeta(
+    @Param('publicToken') publicToken: string,
+  ): Promise<PublicFormMetaDto> {
+    return this.formsService.getPublicFormMeta(publicToken);
+  }
 
   /**
    * Submits a form using a public token.

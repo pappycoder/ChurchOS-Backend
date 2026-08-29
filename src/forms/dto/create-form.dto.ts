@@ -12,10 +12,12 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { FormStatus } from '@prisma/client';
@@ -54,4 +56,23 @@ export class CreateFormDto {
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Field key (e.g. "email") whose value must be unique across public submissions — blocks duplicate submissions',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  uniqueField?: string;
+
+  @ApiPropertyOptional({
+    description: 'Maximum number of submissions (0 = unlimited)',
+    default: 0,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  submissionLimit?: number;
 }

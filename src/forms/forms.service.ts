@@ -82,6 +82,8 @@ export class FormsService {
         is_template: dto.isTemplate ?? false,
         is_public: dto.isPublic ?? false,
         public_token: dto.isPublic ? randomUUID() : null,
+        unique_field: dto.uniqueField ?? null,
+        submission_limit: dto.submissionLimit ?? 0,
       },
     });
 
@@ -197,6 +199,8 @@ export class FormsService {
         is_template: dto.isTemplate,
         is_public: dto.isPublic,
         public_token: publicToken,
+        unique_field: dto.uniqueField !== undefined ? dto.uniqueField : undefined,
+        submission_limit: dto.submissionLimit !== undefined ? dto.submissionLimit : undefined,
       },
     });
 
@@ -356,6 +360,49 @@ export class FormsService {
     return this.mapForm(form);
   }
 
+  /**
+   * Regenerates the public submission token, invalidating any previously
+   * shared link. The form must be public to have a token.
+   *
+   * @param churchId - Church ID
+   * @param formId - Form ID
+   * @param userId - User performing the action
+   * @returns Updated form response
+   * @throws ConflictException if the form is not public
+   */
+  async regeneratePublicToken(
+    churchId: string,
+    formId: string,
+    userId: string,
+  ): Promise<FormResponseDto> {
+    const existing = await this.findFormOrFail(churchId, formId);
+
+    if (existing.archived_at) {
+      throw new NotFoundException('Form is archived');
+    }
+
+    if (!existing.is_public) {
+      throw new ConflictException('Form is not public');
+    }
+
+    const form = await this.prisma.form.update({
+      where: { id: formId },
+      data: { public_token: randomUUID() },
+    });
+
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'form',
+      action: 'UPDATE',
+      entityId: formId,
+      oldValues: { public_token: existing.public_token },
+      newValues: { public_token: form.public_token },
+    });
+
+    return this.mapForm(form);
+  }
+
   // ─── Submissions ──────────────────────────────────────────
 
   /**
@@ -375,6 +422,14 @@ export class FormsService {
   ): Promise<FormSubmissionResponseDto> {
     const form = await this.findFormOrFail(churchId, formId);
     this.ensureFormAcceptsSubmissions(form);
+
+    // Reject duplicate submissions by the same authenticated user.
+    const existingSubmission = await this.prisma.formSubmission.findFirst({
+      where: { form_id: formId, church_id: churchId, submitted_by: submittedBy },
+    });
+    if (existingSubmission) {
+      throw new ConflictException('You have already submitted this form');
+    }
 
     const fields = this.parseFields(form.fields);
     this.validateSubmissionData(fields, dto.data);
@@ -405,6 +460,36 @@ export class FormsService {
   }
 
   /**
+   * Returns the public-facing details of a published public form (unauthenticated).
+   *
+   * Only exposes what a respondent needs to fill the form — title, description,
+   * and field definitions. No church or submission data is returned.
+   *
+   * @param publicToken - Form public token
+   * @returns Public form metadata
+   * @throws NotFoundException if no such public form exists
+   */
+  async getPublicFormMeta(publicToken: string): Promise<{
+    title: string;
+    description?: string;
+    fields: FormFieldDto[];
+  }> {
+    const form = await this.prisma.form.findUnique({
+      where: { public_token: publicToken },
+    });
+
+    if (!form?.is_public || form.status !== FormStatus.published || form.archived_at) {
+      throw new NotFoundException('Form not found');
+    }
+
+    return {
+      title: form.title,
+      description: form.description ?? undefined,
+      fields: this.parseFields(form.fields),
+    };
+  }
+
+  /**
    * Submits a form using a public token (unauthenticated).
    *
    * @param publicToken - Form public token
@@ -429,6 +514,40 @@ export class FormsService {
 
     const fields = this.parseFields(form.fields);
     this.validateSubmissionData(fields, dto.data);
+
+    // Enforce the submission-level cap (0 = unlimited).
+    if (form.submission_limit > 0) {
+      const submissionCount = await this.prisma.formSubmission.count({
+        where: { form_id: form.id, church_id: form.church_id },
+      });
+      if (submissionCount >= form.submission_limit) {
+        throw new ConflictException(
+          `This form has reached its maximum of ${form.submission_limit} submissions`,
+        );
+      }
+    }
+
+    // Enforce unique-field dedupe on public submissions (e.g. email).
+    if (form.unique_field) {
+      const value = dto.data[form.unique_field];
+      if (value !== undefined && value !== null && value !== '') {
+        const submissions = await this.prisma.formSubmission.findMany({
+          where: { form_id: form.id, church_id: form.church_id },
+          select: { data: true },
+        });
+        const duplicate = submissions.some(
+          (s) =>
+            String((s.data as Record<string, unknown>)[form.unique_field as string] ?? '') ===
+            String(value),
+        );
+        if (duplicate) {
+          const label = fields.find((f) => f.key === form.unique_field)?.label ?? form.unique_field;
+          throw new ConflictException(
+            `This form has already been submitted with that ${label.toLowerCase()}`,
+          );
+        }
+      }
+    }
 
     const submission = await this.prisma.formSubmission.create({
       data: {
@@ -772,6 +891,8 @@ export class FormsService {
       isTemplate: form.is_template,
       isPublic: form.is_public,
       publicToken: form.public_token ?? undefined,
+      uniqueField: form.unique_field ?? undefined,
+      submissionLimit: form.submission_limit,
       archivedAt: form.archived_at?.toISOString(),
       createdAt: form.created_at,
       updatedAt: form.updated_at,
@@ -811,6 +932,8 @@ export class FormsService {
       is_template: form.is_template,
       is_public: form.is_public,
       public_token: form.public_token,
+      unique_field: form.unique_field,
+      submission_limit: form.submission_limit,
     };
   }
 

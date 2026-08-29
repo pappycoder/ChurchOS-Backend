@@ -53,6 +53,8 @@ const mockForm = {
   is_template: false,
   is_public: false,
   public_token: null,
+  unique_field: null,
+  submission_limit: 0,
   created_at: new Date(),
   updated_at: new Date(),
 };
@@ -384,6 +386,54 @@ describe('FormsService', () => {
     });
   });
 
+  describe('regeneratePublicToken', () => {
+    it('should regenerate a new public token', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'old-token',
+      });
+      prisma.form.update.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'new-token',
+      });
+
+      const result = await service.regeneratePublicToken(mockChurchId, mockFormId, mockUserId);
+
+      expect(result.publicToken).toBe('new-token');
+      expect(prisma.form.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ public_token: expect.any(String) }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'form', action: 'UPDATE' }),
+      );
+    });
+
+    it('should throw ConflictException when the form is not public', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+
+      await expect(
+        service.regeneratePublicToken(mockChurchId, mockFormId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.form.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException for an archived form', async () => {
+      prisma.form.findFirst.mockResolvedValue({
+        ...mockForm,
+        archived_at: new Date(),
+      });
+
+      await expect(
+        service.regeneratePublicToken(mockChurchId, mockFormId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.form.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('submitForm', () => {
     it('should create a submission with valid data', async () => {
       prisma.form.findFirst.mockResolvedValue(mockForm);
@@ -400,6 +450,21 @@ describe('FormsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'form_submission', action: 'CREATE' }),
       );
+    });
+
+    it('should reject a duplicate submission by the same user', async () => {
+      prisma.form.findFirst.mockResolvedValue(mockForm);
+      prisma.formSubmission.findFirst.mockResolvedValue(mockSubmission);
+
+      await expect(
+        service.submitForm(
+          mockChurchId,
+          mockFormId,
+          { data: { name: 'John Doe', age: 30, gender: 'Male' } },
+          mockUserId,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.formSubmission.create).not.toHaveBeenCalled();
     });
 
     it('should reject submission to a draft form', async () => {
@@ -526,6 +591,42 @@ describe('FormsService', () => {
       await expect(
         service.submitByPublicToken('token', { data: { name: 'Jane Doe' } }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject when the submission limit is reached', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'public-token',
+        submission_limit: 2,
+      });
+      prisma.formSubmission.count.mockResolvedValue(2);
+
+      await expect(
+        service.submitByPublicToken('public-token', {
+          data: { name: 'Jane Doe', gender: 'Female' },
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.formSubmission.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject a public submission duplicating the unique field value', async () => {
+      prisma.form.findUnique.mockResolvedValue({
+        ...mockForm,
+        is_public: true,
+        public_token: 'public-token',
+        unique_field: 'email',
+        submission_limit: 0,
+      });
+      prisma.formSubmission.count.mockResolvedValue(0);
+      prisma.formSubmission.findMany.mockResolvedValue([{ data: { email: 'jane@example.com' } }]);
+
+      await expect(
+        service.submitByPublicToken('public-token', {
+          data: { name: 'Jane Doe', gender: 'Female', email: 'jane@example.com' },
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.formSubmission.create).not.toHaveBeenCalled();
     });
   });
 

@@ -190,6 +190,23 @@ export class FormsController {
   }
 
   /**
+   * Regenerates the public submission link (invalidates any previously shared link).
+   */
+  @Post(':formId/regenerate-link')
+  @UseGuards(RolesGuard)
+  @RequireRoles(...WRITE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Regenerate the public submission link')
+  @ApiParam({ name: 'formId', description: 'Form UUID' })
+  async regenerateLink(
+    @Param('formId') formId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<FormResponseDto> {
+    return this.formsService.regeneratePublicToken(this.getChurchId(req), formId, user.sub);
+  }
+
+  /**
    * Clones a form into a new draft form.
    */
   @Post(':formId/clone')
