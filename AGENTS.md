@@ -200,6 +200,8 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **`cell_leader` is now an assignable role on the profile role DTOs** (the web Analytics/role-dashboard rollout surfaces it as a real role — see web changelog). `cell_leader` already existed as a seeded role template and in `@RequireRoles` guards + the `list-profiles.dto.ts` role filter, but the assignable `VALID_ROLES` lists omitted it. Added `'cell_leader'` to `src/profile/dto/update-role.dto.ts` (single-role PATCH), `src/profile/dto/update-roles.dto.ts` (multi-role replace), and `src/profile/dto/invite-user.dto.ts` (staff invite) so admins can now assign the role directly (the invite list still intentionally excludes `super_admin`). No schema/service/guard changes; `npm run build` + lint clean.
+
 - **Forms double-submission guard + shareable-link regeneration** (the web dynamic Form Builder /forms + public submit pages shipped this round too — see web changelog):
   - **Schema/migration `20260829125446_form_dedupe_fields`**: `forms.unique_field TEXT` nullable (field key, e.g. `email`, used to detect duplicate public submissions) and `forms.submission_limit INTEGER NOT NULL DEFAULT 0` (0 = unlimited, >0 caps total submissions).
   - **DTOs**: `CreateFormDto.uniqueField?`/`submissionLimit?` (`@Max(100)` / `@Type(Number)` + `@IsInt` + `@Min(0)`), `UpdateFormDto` inherits them, `FormResponseDto` emits `uniqueField?` + `submissionLimit`.
