@@ -127,6 +127,49 @@ export class NotificationsService {
   }
 
   /**
+   * Get a single notification scoped to a profile.
+   */
+  async getOne(
+    notificationId: string,
+    churchId: string,
+    profileId: string,
+  ): Promise<NotificationResponseDto> {
+    const notification = await this.prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        church_id: churchId,
+        profile_id: profileId,
+      },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    return this.mapNotificationToDto(notification);
+  }
+
+  /**
+   * Permanently delete a notification scoped to a profile (hard delete).
+   */
+  async remove(notificationId: string, churchId: string, profileId: string): Promise<void> {
+    const notification = await this.prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        church_id: churchId,
+        profile_id: profileId,
+      },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    await this.prisma.notification.delete({ where: { id: notificationId } });
+    this.logger.log(`Notification ${notificationId} deleted for profile ${profileId}`);
+  }
+
+  /**
    * Create a notification (internal use by other services).
    */
   async createNotification(

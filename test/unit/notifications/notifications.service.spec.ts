@@ -150,6 +150,55 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('getOne', () => {
+    it('should return a notification scoped to the profile', async () => {
+      model('notification').findFirst.mockResolvedValue(mockNotification);
+
+      const result = await service.getOne(mockNotificationId, mockChurchId, mockProfileId);
+
+      expect(result.id).toBe(mockNotificationId);
+      expect(model('notification').findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: mockNotificationId,
+            church_id: mockChurchId,
+            profile_id: mockProfileId,
+          }),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when the notification is not the profile’s', async () => {
+      model('notification').findFirst.mockResolvedValue(null);
+
+      await expect(service.getOne(mockNotificationId, mockChurchId, mockProfileId)).rejects.toThrow(
+        'Notification not found',
+      );
+    });
+  });
+
+  describe('remove', () => {
+    it('should hard-delete a notification scoped to the profile', async () => {
+      model('notification').findFirst.mockResolvedValue(mockNotification);
+      model('notification').delete.mockResolvedValue(mockNotification);
+
+      await service.remove(mockNotificationId, mockChurchId, mockProfileId);
+
+      expect(model('notification').delete).toHaveBeenCalledWith({
+        where: { id: mockNotificationId },
+      });
+    });
+
+    it('should throw NotFoundException when the notification is not the profile’s', async () => {
+      model('notification').findFirst.mockResolvedValue(null);
+
+      await expect(service.remove(mockNotificationId, mockChurchId, mockProfileId)).rejects.toThrow(
+        'Notification not found',
+      );
+      expect(model('notification').delete).not.toHaveBeenCalled();
+    });
+  });
+
   describe('createNotification', () => {
     it('should create a notification', async () => {
       model('notification').create.mockResolvedValue(mockNotification);

@@ -64,10 +64,7 @@ export class AnalyticsService {
    * Builds an optional { gte, lte } date predicate for an ISO-8601 column.
    * Returns `undefined` when the range is unbounded (all time).
    */
-  private dateRangeFilter(
-    start?: Date,
-    end?: Date,
-  ): { gte?: Date; lte?: Date } | undefined {
+  private dateRangeFilter(start?: Date, end?: Date): { gte?: Date; lte?: Date } | undefined {
     if (!start && !end) return undefined;
     return {
       ...(start ? { gte: start } : {}),

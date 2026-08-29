@@ -6,11 +6,20 @@
  * @since 1.0.0
  */
 
-import { Controller, Get, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Delete,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { SupabaseJwtPayload } from '../auth/strategies/jwt.strategy';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 import {
   ApiGetEndpoint,
@@ -67,13 +76,23 @@ export class NotificationsController {
     summary: 'Get unread count',
     description: 'Returns the number of unread notifications.',
   })
-  async getUnreadCount(
-    @CurrentUser() user: SupabaseJwtPayload,
-    @Request() req: Record<string, unknown>,
-  ): Promise<{ count: number }> {
+  async getUnreadCount(@Request() req: Record<string, unknown>): Promise<{ count: number }> {
     const profile = this.getProfile(req);
-    const count = await this.notificationsService.getUnreadCount(profile.church_id, user.sub);
+    const count = await this.notificationsService.getUnreadCount(profile.church_id, profile.id);
     return { count };
+  }
+
+  /**
+   * Get a single notification by ID (scoped to the current user).
+   */
+  @Get(':notificationId')
+  @ApiGetEndpoint('Get notification', 'Returns a single notification for the current user.')
+  async getOne(
+    @Param('notificationId') notificationId: string,
+    @Request() req: Record<string, unknown>,
+  ): Promise<NotificationResponseDto> {
+    const profile = this.getProfile(req);
+    return this.notificationsService.getOne(notificationId, profile.church_id, profile.id);
   }
 
   /**
@@ -83,11 +102,10 @@ export class NotificationsController {
   @ApiUpdateEndpoint('Mark as read', 'Marks a single notification as read.')
   async markAsRead(
     @Param('notificationId') notificationId: string,
-    @CurrentUser() user: SupabaseJwtPayload,
     @Request() req: Record<string, unknown>,
   ): Promise<NotificationResponseDto> {
     const profile = this.getProfile(req);
-    return this.notificationsService.markAsRead(notificationId, profile.church_id, user.sub);
+    return this.notificationsService.markAsRead(notificationId, profile.church_id, profile.id);
   }
 
   /**
@@ -95,11 +113,23 @@ export class NotificationsController {
    */
   @Patch('read-all')
   @ApiUpdateEndpoint('Mark all as read', 'Marks all notifications as read for the current user.')
-  async markAllAsRead(
-    @CurrentUser() user: SupabaseJwtPayload,
-    @Request() req: Record<string, unknown>,
-  ): Promise<{ updated: number }> {
+  async markAllAsRead(@Request() req: Record<string, unknown>): Promise<{ updated: number }> {
     const profile = this.getProfile(req);
-    return this.notificationsService.markAllAsRead(profile.church_id, user.sub);
+    return this.notificationsService.markAllAsRead(profile.church_id, profile.id);
+  }
+
+  /**
+   * Permanently delete a notification (hard delete).
+   */
+  @Delete(':notificationId')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Delete notification', 'Permanently deletes a notification.')
+  async remove(
+    @Param('notificationId') notificationId: string,
+    @Request() req: Record<string, unknown>,
+  ): Promise<{ success: boolean }> {
+    const profile = this.getProfile(req);
+    await this.notificationsService.remove(notificationId, profile.church_id, profile.id);
+    return { success: true };
   }
 }
