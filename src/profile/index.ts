@@ -16,5 +16,4 @@ export * from './dto/update-profile.dto';
 export * from './dto/update-role.dto';
 export * from './dto/list-profiles.dto';
 export * from './dto/profile-response.dto';
-export * from './dto/verify-mfa.dto';
-export * from './dto/mfa-secret-response.dto';
+export * from './dto/verify-otp.dto';

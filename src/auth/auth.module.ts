@@ -16,6 +16,7 @@ import { PermissionsController } from './permissions.controller';
 import { SupabaseModule } from '../supabase/supabase.module';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { PermissionsModule } from './permissions.module';
+import { CommunicationModule } from '../communication/communication.module';
 
 /**
  * Auth module providing authentication infrastructure.
@@ -37,7 +38,7 @@ import { PermissionsModule } from './permissions.module';
  * ```
  */
 @Module({
-  imports: [SupabaseModule, PermissionsModule],
+  imports: [SupabaseModule, PermissionsModule, CommunicationModule],
   controllers: [AuthController, PermissionsController],
   providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService],
   exports: [AuthService, JwtAuthGuard, JwksService, PermissionsModule],

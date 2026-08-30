@@ -6,11 +6,26 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  * @module auth/dto/session-response.dto
  */
 export class LoginResponseDto {
-  @ApiProperty({
-    description: 'JWT access token',
+  @ApiPropertyOptional({
+    description:
+      'JWT access token. Absent when two-factor authentication is required — call /auth/login/2fa with the emailed code to complete sign-in.',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
-  accessToken!: string;
+  accessToken?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Set to true when the account requires email-OTP two-factor authentication and therefore has no accessToken yet.',
+    example: true,
+  })
+  requiresTwoFactor?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Masked address (e.g. j***@example.com) the code is sent to when requiresTwoFactor is true.',
+    example: 'j***@example.com',
+  })
+  twoFactorEmail?: string;
 
   @ApiPropertyOptional({
     description: 'Refresh token (if Supabase returns one)',
@@ -18,11 +33,11 @@ export class LoginResponseDto {
   })
   refreshToken?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Token expiry timestamp (Unix seconds)',
     example: 1700003600,
   })
-  expiresAt!: number;
+  expiresAt?: number;
 
   @ApiProperty({
     description: 'Supabase Auth user ID',
@@ -30,11 +45,11 @@ export class LoginResponseDto {
   })
   userId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'User email',
     example: 'pastor@demo.com',
   })
-  email!: string;
+  email?: string;
 
   @ApiPropertyOptional({
     description: 'ChurchOS profile',

@@ -164,6 +164,9 @@ export class ProfileResponseDto {
   @ApiProperty({ description: 'MFA enabled', example: false })
   mfaEnabled!: boolean;
 
+  @ApiProperty({ description: 'Email-OTP two-factor authentication enabled', example: false })
+  twoFactorEnabled!: boolean;
+
   @ApiProperty({ description: 'Profile status', example: 'active' })
   status!: string;
 

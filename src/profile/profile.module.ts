@@ -10,6 +10,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { MediaModule } from '../media/media.module';
 import { RedisModule } from '../redis/redis.module';
+import { CommunicationModule } from '../communication/communication.module';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 
@@ -29,7 +30,7 @@ import { ProfileService } from './profile.service';
  * ```
  */
 @Module({
-  imports: [AuthModule, MediaModule, RedisModule],
+  imports: [AuthModule, MediaModule, RedisModule, CommunicationModule],
   controllers: [ProfileController],
   providers: [ProfileService],
   exports: [ProfileService],

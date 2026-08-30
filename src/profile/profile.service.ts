@@ -16,6 +16,8 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,10 +36,15 @@ import { UpdateRolesDto } from './dto/update-roles.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
-import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
-import { generateSecret, generateURI, verify } from 'otplib';
+import {
+  verifyTwoFactorCode,
+  generateTwoFactorCode,
+  hashTwoFactorCode,
+  maskTwoFactorEmail,
+} from './two-factor.util';
 import { Prisma } from '@prisma/client';
 import { RedisService } from '../redis/redis.service';
+import { ResendService } from '../communication/resend.service';
 
 /**
  * Rank of each role for privilege-escalation checks. A user may only assign
@@ -64,6 +71,11 @@ const ROLE_RANK: Record<string, number> = {
 export class ProfileService {
   private readonly logger = new Logger(ProfileService.name);
 
+  // Email-OTP two-factor authentication configuration.
+  private readonly TWO_FACTOR_TTL_SECONDS = 600; // 10 minutes
+  private readonly TWO_FACTOR_COOLDOWN_MS = 30_000; // 30s between sends
+  private readonly TWO_FACTOR_MAX_ATTEMPTS = 5;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -72,6 +84,7 @@ export class ProfileService {
     private readonly supabase: SupabaseService,
     private readonly redis: RedisService,
     private readonly permissionsService: PermissionsService,
+    private readonly resend: ResendService,
   ) {}
 
   /**
@@ -931,18 +944,43 @@ export class ProfileService {
   }
 
   /**
-   * Generates a TOTP secret for the user's MFA setup.
-   *
-   * Returns the secret and otpauth URL for QR code generation.
-   * Stores the secret in an audit log for later verification during enableMfa.
-   * MFA must not already be enabled for this user.
+   * Returns whether email-OTP 2FA is currently enabled for the user.
    *
    * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @returns Secret string and otpauth URL for authenticator app setup
+   * @returns True when two-factor authentication is enabled
    * @throws NotFoundException if no profile exists for this user
-   * @throws BadRequestException if MFA is already enabled
    */
-  async generateMfaSecret(userId: string): Promise<MfaSecretResponseDto> {
+  async getTwoFactorEnabled(userId: string): Promise<boolean> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: { two_factor_enabled: true },
+    });
+    if (!profile) {
+      throw new NotFoundException('User profile not found');
+    }
+    return profile.two_factor_enabled;
+  }
+
+  /**
+   * Sends a 6-digit email-OTP to the profile's email for a 2FA lifecycle action.
+   *
+   * Used when a user enables or disables email-OTP 2FA. The code is stored in
+   * Redis as a SHA-256 digest with a short TTL and an attempt/cooldown budget.
+   * Emails are delivered via Resend and logged to the Message table.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @param purpose - 'enable' or 'disable'
+   * @param force - Allow resending even during the cooldown window (resend endpoint)
+   * @returns The masked recipient email (never the code)
+   * @throws NotFoundException if no profile exists for this user
+   * @throws BadRequestException if 2FA state is incompatible with the purpose
+   * @throws TooManyRequestsException if the resend cooldown is still active
+   */
+  async sendTwoFactorCode(
+    userId: string,
+    purpose: 'enable' | 'disable',
+    force = false,
+  ): Promise<{ email: string }> {
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: userId },
       include: { church: { select: { name: true } } },
@@ -952,53 +990,92 @@ export class ProfileService {
       throw new NotFoundException('User profile not found');
     }
 
-    if (profile.mfa_enabled) {
-      throw new BadRequestException('MFA is already enabled. Disable it first.');
+    if (purpose === 'enable' && profile.two_factor_enabled) {
+      throw new BadRequestException('Two-factor authentication is already enabled');
+    }
+    if (purpose === 'disable' && !profile.two_factor_enabled) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
     }
 
-    const secret = generateSecret();
-    const otpauthUrl = generateURI({
-      secret,
-      label: `${profile.first_name} ${profile.last_name}`,
-      issuer: profile.church.name,
-    });
+    const recipient = profile.email?.trim();
+    if (!recipient) {
+      throw new BadRequestException(
+        'No email address on record. Contact your church admin to enable two-factor authentication.',
+      );
+    }
 
-    // Store the secret temporarily (not yet enabled)
-    await this.prisma.profile.update({
-      where: { user_id: userId },
-      data: { mfa_enabled: false },
-    });
+    const key = this.getTwoFactorKey(userId, purpose);
+    const code = generateTwoFactorCode();
+    const digest = hashTwoFactorCode(code);
 
-    await this.redis.set(this.getMfaSecretKey(userId), secret, 600);
+    if (!force) {
+      const existing = await this.redis.get<{ lastSentAt?: number }>(key);
+      const waitMs = (existing?.lastSentAt ?? 0) + this.TWO_FACTOR_COOLDOWN_MS - Date.now();
+      if (waitMs > 0) {
+        throw new HttpException(
+          `Please wait a moment before requesting another code (${Math.ceil(waitMs / 1000)}s).`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
 
-    await this.audit.log({
-      userId,
-      churchId: profile.church_id,
-      entity: 'profile',
-      action: 'CREATE',
-      entityId: profile.id,
-      newValues: { mfa_setup_started: true },
-    });
+    await this.redis.set(
+      key,
+      JSON.stringify({ digest, attempts: 0, lastSentAt: Date.now() }),
+      this.TWO_FACTOR_TTL_SECONDS,
+    );
 
-    this.logger.log(`MFA secret generated for user: ${userId}`);
+    const churchName = profile.church?.name ?? 'ChurchOS';
+    const appUrl = this.config.get<string>('WEB_URL') ?? '';
+    const html = [
+      `<p>Hello ${profile.first_name},</p>`,
+      `<p>Your ${churchName} two-factor authentication code is:</p>`,
+      `<p style="font-size:28px;letter-spacing:4px;font-weight:bold;margin:16px 0;">${code}</p>`,
+      `<p>Enter this code to ${purpose === 'enable' ? 'enable' : 'disable'} two-factor authentication.</p>`,
+      `<p>It expires in ${Math.floor(this.TWO_FACTOR_TTL_SECONDS / 60)} minutes. If you didn't request this, you can safely ignore this email.</p>`,
+      `<p>— ${churchName}</p>`,
+      appUrl
+        ? `<p style="color:#6b7280;font-size:12px;"><a href="${appUrl}">${appUrl}</a></p>`
+        : '',
+    ].join('');
 
-    return { secret, otpauthUrl };
+    try {
+      await this.resend.sendEmail(
+        recipient,
+        purpose === 'enable'
+          ? 'Your ChurchOS two-factor authentication code'
+          : 'Confirm disabling two-factor authentication',
+        html,
+        profile.church_id,
+      );
+    } catch (err) {
+      throw new BadRequestException(
+        `Failed to send the verification code: ${(err as Error).message}`,
+      );
+    }
+
+    this.logger.log(`2FA ${purpose} code sent for user: ${userId}`);
+
+    return { email: maskTwoFactorEmail(recipient) };
   }
 
   /**
-   * Verifies a TOTP code against the stored secret and enables MFA.
-   *
-   * Retrieves the secret from the most recent audit log entry created by
-   * generateMfaSecret, validates the provided code, and enables MFA on the profile.
+   * Verifies a submitted code against the stored digest and, on success,
+   * toggles the profile's two_factor_enabled flag.
    *
    * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @param code - 6-digit TOTP code from authenticator app
-   * @returns Updated profile response with MFA enabled
+   * @param purpose - 'enable' or 'disable'
+   * @param code - The 6-digit code emailed to the user
+   * @returns The updated profile response
    * @throws NotFoundException if no profile exists for this user
-   * @throws BadRequestException if MFA is already enabled or no secret is found
-   * @throws BadRequestException if the provided code is invalid
+   * @throws BadRequestException if 2FA state is incompatible, the code was not requested,
+   *         or the code is wrong/exhausted its attempts
    */
-  async enableMfa(userId: string, code: string): Promise<ProfileResponseDto> {
+  async toggleTwoFactor(
+    userId: string,
+    purpose: 'enable' | 'disable',
+    code: string,
+  ): Promise<ProfileResponseDto> {
     const profile = await this.prisma.profile.findUnique({
       where: { user_id: userId },
     });
@@ -1007,28 +1084,48 @@ export class ProfileService {
       throw new NotFoundException('User profile not found');
     }
 
-    if (profile.mfa_enabled) {
-      throw new BadRequestException('MFA is already enabled');
+    if (purpose === 'enable' && profile.two_factor_enabled) {
+      throw new BadRequestException('Two-factor authentication is already enabled');
+    }
+    if (purpose === 'disable' && !profile.two_factor_enabled) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
     }
 
-    const secret = await this.redis.get<string>(this.getMfaSecretKey(userId));
-
-    if (!secret) {
-      throw new BadRequestException('No MFA secret found. Run /mfa/generate first.');
+    const key = this.getTwoFactorKey(userId, purpose);
+    const raw = await this.redis.get<string>(key);
+    if (!raw) {
+      throw new BadRequestException('No verification code found. Request a new code first.');
     }
 
-    const isValid = verify({ token: code, secret });
-
-    if (!isValid) {
-      throw new BadRequestException('Invalid MFA code');
+    let record: { digest: string; attempts: number };
+    try {
+      record = JSON.parse(raw) as { digest: string; attempts: number };
+    } catch {
+      throw new BadRequestException('Invalid verification code. Request a new one.');
     }
+
+    if (!verifyTwoFactorCode(code.trim(), record.digest)) {
+      const attempts = (record.attempts ?? 0) + 1;
+      if (attempts >= this.TWO_FACTOR_MAX_ATTEMPTS) {
+        await this.redis.del(key);
+        throw new BadRequestException('Too many incorrect attempts. Request a new code.');
+      }
+      await this.redis.set(
+        key,
+        JSON.stringify({ ...record, attempts }),
+        this.TWO_FACTOR_TTL_SECONDS,
+      );
+      throw new BadRequestException(
+        `Invalid verification code. ${this.TWO_FACTOR_MAX_ATTEMPTS - attempts} attempt(s) remaining.`,
+      );
+    }
+
+    await this.redis.del(key);
 
     await this.prisma.profile.update({
       where: { user_id: userId },
-      data: { mfa_enabled: true },
+      data: { two_factor_enabled: purpose === 'enable' },
     });
-
-    await this.redis.del(this.getMfaSecretKey(userId));
 
     await this.audit.log({
       userId,
@@ -1036,69 +1133,10 @@ export class ProfileService {
       entity: 'profile',
       action: 'UPDATE',
       entityId: profile.id,
-      newValues: { mfa_enabled: true },
+      newValues: { two_factor_enabled: purpose === 'enable' },
     });
 
-    this.logger.log(`MFA enabled for user: ${userId}`);
-
-    return this.getMyProfile(userId);
-  }
-
-  /**
-   * Disables MFA for the user after verifying a valid TOTP code.
-   *
-   * Requires the user to provide their current TOTP code to confirm identity
-   * before disabling MFA protection on their account.
-   *
-   * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @param code - 6-digit TOTP code from authenticator app to confirm identity
-   * @returns Updated profile response with MFA disabled
-   * @throws NotFoundException if no profile exists for this user
-   * @throws BadRequestException if MFA is not currently enabled
-   * @throws BadRequestException if the provided code is invalid
-   */
-  async disableMfa(userId: string, code: string): Promise<ProfileResponseDto> {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-    });
-
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    if (!profile.mfa_enabled) {
-      throw new BadRequestException('MFA is not enabled');
-    }
-
-    const secret = await this.redis.get<string>(this.getMfaSecretKey(userId));
-
-    if (!secret) {
-      throw new BadRequestException('MFA secret not found. Re-enable MFA.');
-    }
-
-    const isValid = verify({ token: code, secret });
-
-    if (!isValid) {
-      throw new BadRequestException('Invalid MFA code');
-    }
-
-    await this.prisma.profile.update({
-      where: { user_id: userId },
-      data: { mfa_enabled: false },
-    });
-
-    await this.redis.del(this.getMfaSecretKey(userId));
-
-    await this.audit.log({
-      userId,
-      churchId: profile.church_id,
-      entity: 'profile',
-      action: 'UPDATE',
-      entityId: profile.id,
-      newValues: { mfa_enabled: false },
-    });
-
-    this.logger.log(`MFA disabled for user: ${userId}`);
+    this.logger.log(`2FA ${purpose}d for user: ${userId}`);
 
     return this.getMyProfile(userId);
   }
@@ -1340,8 +1378,8 @@ export class ProfileService {
     return { signedOut: true };
   }
 
-  private getMfaSecretKey(userId: string): string {
-    return `mfa:${userId}`;
+  private getTwoFactorKey(userId: string, purpose: 'enable' | 'disable'): string {
+    return `2fa:${purpose}:${userId}`;
   }
 
   /**
@@ -1365,6 +1403,7 @@ export class ProfileService {
       phone: string | null;
       avatar_url: string | null;
       mfa_enabled: boolean;
+      two_factor_enabled: boolean;
       archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
@@ -1411,6 +1450,7 @@ export class ProfileService {
       phone: profile.phone || undefined,
       avatarUrl: profile.avatar_url || undefined,
       mfaEnabled: profile.mfa_enabled,
+      twoFactorEnabled: profile.two_factor_enabled,
       status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),

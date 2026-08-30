@@ -211,8 +211,9 @@ model Profile {
   email       String?
   phone       String?
   avatar_url  String?
-  mfa_enabled Boolean   @default(false)
-  created_at  DateTime  @default(now())
+  mfa_enabled         Boolean   @default(false)
+  two_factor_enabled  Boolean   @default(false) // email-OTP 2FA (per-profile, self-service)
+  created_at          DateTime  @default(now())
   updated_at  DateTime  @updatedAt
   archived_at DateTime? // Set when archived
 

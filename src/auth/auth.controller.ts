@@ -32,6 +32,7 @@ import {
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { Login2faDto } from './dto/login-2fa.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -87,6 +88,28 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
   async login(@Body() dto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(dto);
+  }
+
+  /**
+   * Complete an email-OTP two-factor sign-in.
+   *
+   * Verifies the 6-digit code emailed during `login` and, on success, returns
+   * the full session (access token, refresh token, profile) that was withheld
+   * until this point. This is a public endpoint.
+   */
+  @Post('login/2fa')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete 2FA sign-in with emailed code',
+    description:
+      'Verifies the 6-digit code emailed after a login that required two-factor authentication, then returns the full session.',
+  })
+  @ApiOkResponse({ description: '2FA sign-in successful', type: LoginResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired code' })
+  async completeTwoFactorLogin(@Body() dto: Login2faDto): Promise<LoginResponseDto> {
+    return this.authService.completeTwoFactorLogin(dto);
   }
 
   /**

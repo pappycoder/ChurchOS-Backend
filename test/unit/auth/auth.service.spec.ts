@@ -16,9 +16,11 @@ import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { RedisService } from '../../../src/redis/redis.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ConfigService } from '@nestjs/config';
+import { ResendService } from '../../../src/communication/resend.service';
 import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { RegisterDto } from '../../../src/auth/dto/register.dto';
 import { LoginDto } from '../../../src/auth/dto/login.dto';
+import { hashTwoFactorCode } from '../../../src/profile/two-factor.util';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -31,7 +33,8 @@ describe('AuthService', () => {
   let refreshSessionMock: jest.Mock;
   let resetPasswordForEmailMock: jest.Mock;
   let signOutMock: jest.Mock;
-  let redis: { set: jest.Mock; get: jest.Mock };
+  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let resend: { sendEmail: jest.Mock };
   let audit: { log: jest.Mock };
   let config: { get: jest.Mock };
 
@@ -76,7 +79,12 @@ describe('AuthService', () => {
   beforeEach(() => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
-    redis = { set: jest.fn().mockResolvedValue(undefined), get: jest.fn().mockResolvedValue(null) };
+    redis = {
+      set: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(null),
+      del: jest.fn().mockResolvedValue(undefined),
+    };
+    resend = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     config = { get: jest.fn().mockReturnValue('http://localhost:3000') };
 
     signUpMock = jest.fn();
@@ -109,6 +117,7 @@ describe('AuthService', () => {
       redis as unknown as RedisService,
       audit as unknown as AuditLoggingService,
       config as unknown as ConfigService,
+      resend as unknown as ResendService,
     );
   });
 
@@ -306,6 +315,128 @@ describe('AuthService', () => {
 
       expect(result.accessToken).toBe('jwt-access-token');
       expect(result.profile).toBeUndefined();
+    });
+
+    it('should withhold the session and email an OTP when 2FA is enabled', async () => {
+      signInMock.mockResolvedValue({
+        data: {
+          user: { id: mockUserId, email: loginDto.email },
+          session: {
+            access_token: 'jwt-access-token',
+            refresh_token: 'jwt-refresh-token',
+            expires_at: 1700000000,
+          },
+        },
+        error: null,
+      });
+
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        first_name: 'Adebayo',
+        last_name: 'Ogundimu',
+        email: loginDto.email,
+        two_factor_enabled: true,
+        church: { name: 'Grace Community Church' },
+      });
+
+      const result = await service.login(loginDto);
+
+      expect(result.requiresTwoFactor).toBe(true);
+      expect(result.accessToken).toBeUndefined();
+      expect(result.refreshToken).toBeUndefined();
+      expect(resend.sendEmail).toHaveBeenCalledWith(
+        loginDto.email,
+        expect.stringContaining('sign-in code'),
+        expect.stringContaining('<p>'),
+        '',
+      );
+      expect(redis.set).toHaveBeenCalledWith(
+        expect.stringContaining('2fa:login:pending:'),
+        expect.stringContaining('jwt-access-token'),
+        600,
+      );
+    });
+  });
+
+  // ─── TWO-FACTOR SIGN-IN ───────────────────────────────────────────
+
+  describe('completeTwoFactorLogin', () => {
+    it('should return the withheld session when the OTP matches', async () => {
+      const digest = hashTwoFactorCode('123456');
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+      });
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          session: {
+            accessToken: 'jwt-access-token',
+            refreshToken: 'jwt-refresh-token',
+            expiresAt: 1700000000,
+          },
+          user: {
+            userId: mockUserId,
+            email: 'pastor@gracecommunity.com',
+            profile: { profileId: mockProfileId, churchId: mockChurchId },
+          },
+          digest,
+          attempts: 0,
+        }),
+      );
+
+      const result = await service.completeTwoFactorLogin({
+        email: 'pastor@gracecommunity.com',
+        code: '123456',
+      });
+
+      expect(result.accessToken).toBe('jwt-access-token');
+      expect(result.refreshToken).toBe('jwt-refresh-token');
+      expect(result.userId).toBe(mockUserId);
+      expect(redis.del).toHaveBeenCalledWith(`2fa:login:pending:${mockUserId}`);
+    });
+
+    it('should throw UnauthorizedException when the OTP is wrong', async () => {
+      const digest = hashTwoFactorCode('123456');
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+      });
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          session: { accessToken: 'jwt-access-token' },
+          user: { userId: mockUserId, email: 'pastor@gracecommunity.com' },
+          digest,
+          attempts: 0,
+        }),
+      );
+
+      await expect(
+        service.completeTwoFactorLogin({
+          email: 'pastor@gracecommunity.com',
+          code: '999999',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when there is no pending sign-in', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+      });
+      redis.get.mockResolvedValue(null);
+
+      await expect(
+        service.completeTwoFactorLogin({
+          email: 'pastor@gracecommunity.com',
+          code: '123456',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

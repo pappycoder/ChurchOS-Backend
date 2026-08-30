@@ -61,8 +61,7 @@ import { UpdateRolesDto } from './dto/update-roles.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
-import { VerifyMfaDto } from './dto/verify-mfa.dto';
-import { MfaSecretResponseDto } from './dto/mfa-secret-response.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { MulterFile } from '../media/media.service';
 
 /**
@@ -147,49 +146,78 @@ export class ProfileController {
   /**
    * Generate a TOTP secret for MFA setup.
    */
-  @Post('me/mfa/generate')
+  @Post('me/2fa/enable-code')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Generate MFA secret',
-    description: 'Generates a TOTP secret and returns an otpauth:// URI for QR code scanning.',
+    summary: 'Send a 2FA enable code',
+    description: 'Emails a 6-digit code to the profile address to start enabling email-OTP 2FA.',
   })
   @ApiNotFoundResponse({ description: 'Profile not found' })
-  async generateMfa(@CurrentUser() user: SupabaseUser): Promise<MfaSecretResponseDto> {
-    return this.profileService.generateMfaSecret(user.sub);
+  async sendEnableCode(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
+    return this.profileService.sendTwoFactorCode(user.sub, 'enable');
   }
 
   /**
-   * Enable MFA after verifying the TOTP code.
+   * Enable 2FA after verifying the emailed code.
    */
-  @Post('me/mfa/enable')
+  @Post('me/2fa/enable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Enable MFA',
-    description: 'Verifies the TOTP code and enables MFA on the account.',
+    summary: 'Enable 2FA',
+    description: 'Verifies the emailed code and enables email-OTP 2FA on the account.',
   })
   @ApiNotFoundResponse({ description: 'Profile not found' })
-  async enableMfa(
+  async enableTwoFactor(
     @CurrentUser() user: SupabaseUser,
-    @Body() dto: VerifyMfaDto,
+    @Body() dto: VerifyOtpDto,
   ): Promise<ProfileResponseDto> {
-    return this.profileService.enableMfa(user.sub, dto.code);
+    return this.profileService.toggleTwoFactor(user.sub, 'enable', dto.code);
   }
 
   /**
-   * Disable MFA after verifying the TOTP code.
+   * Send a 2FA disable code.
    */
-  @Post('me/mfa/disable')
+  @Post('me/2fa/disable-code')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Disable MFA',
-    description: 'Verifies the current TOTP code and disables MFA on the account.',
+    summary: 'Send a 2FA disable code',
+    description: 'Emails a 6-digit code to the profile address to confirm disabling email-OTP 2FA.',
   })
   @ApiNotFoundResponse({ description: 'Profile not found' })
-  async disableMfa(
+  async sendDisableCode(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
+    return this.profileService.sendTwoFactorCode(user.sub, 'disable');
+  }
+
+  /**
+   * Disable 2FA after verifying the emailed code.
+   */
+  @Post('me/2fa/disable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Disable 2FA',
+    description: 'Verifies the emailed code and disables email-OTP 2FA on the account.',
+  })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async disableTwoFactor(
     @CurrentUser() user: SupabaseUser,
-    @Body() dto: VerifyMfaDto,
+    @Body() dto: VerifyOtpDto,
   ): Promise<ProfileResponseDto> {
-    return this.profileService.disableMfa(user.sub, dto.code);
+    return this.profileService.toggleTwoFactor(user.sub, 'disable', dto.code);
+  }
+
+  /**
+   * Resend a 2FA code, bypassing the cooldown.
+   */
+  @Post('me/2fa/resend')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend 2FA code',
+    description: 'Re-sends the emailed code for the current 2FA action (enable or disable).',
+  })
+  @ApiNotFoundResponse({ description: 'Profile not found' })
+  async resendTwoFactor(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
+    const enabled = await this.profileService.getTwoFactorEnabled(user.sub);
+    return this.profileService.sendTwoFactorCode(user.sub, enabled ? 'disable' : 'enable', true);
   }
 
   /**

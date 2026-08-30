@@ -17,20 +17,14 @@ import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../src/redis/redis.service';
 import { PermissionsService } from '../../../src/auth/services/permissions.service';
+import { ResendService } from '../../../src/communication/resend.service';
+import { hashTwoFactorCode } from '../../../src/profile/two-factor.util';
 import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-
-jest.mock('otplib', () => ({
-  generateSecret: jest.fn().mockReturnValue('JBSWY3DPEHPK3PXP'),
-  generateURI: jest
-    .fn()
-    .mockReturnValue('otpauth://totp/test:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=test'),
-  verify: jest.fn().mockReturnValue(true),
-}));
 
 describe('ProfileService', () => {
   let service: ProfileService;
@@ -52,6 +46,7 @@ describe('ProfileService', () => {
     };
   };
   let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let resend: { sendEmail: jest.Mock };
   let permissionsService: {
     getRolePermissions: jest.Mock;
     getAllPermissions: jest.Mock;
@@ -128,6 +123,9 @@ describe('ProfileService', () => {
       get: jest.fn().mockResolvedValue(null),
       del: jest.fn().mockResolvedValue(undefined),
     };
+    resend = {
+      sendEmail: jest.fn().mockResolvedValue(undefined),
+    };
     permissionsService = {
       getRolePermissions: jest.fn().mockRejectedValue(new Error('Role not found')),
       getAllPermissions: jest.fn().mockResolvedValue([]),
@@ -152,6 +150,7 @@ describe('ProfileService', () => {
       supabase as unknown as SupabaseService,
       redis as unknown as RedisService,
       permissionsService as unknown as PermissionsService,
+      resend as unknown as ResendService,
     );
   });
 
@@ -167,6 +166,7 @@ describe('ProfileService', () => {
     phone: '+234 803 456 7890',
     avatar_url: null,
     mfa_enabled: false,
+    two_factor_enabled: false,
     archived_at: null,
     created_at: new Date('2026-07-15T10:00:00.000Z'),
     updated_at: new Date('2026-07-19T14:30:00.000Z'),
@@ -455,39 +455,76 @@ describe('ProfileService', () => {
 
   // ─── LIST PROFILES ─────────────────────────────────────────────────
 
-  describe('MFA secret storage', () => {
-    it('should store generated MFA secrets in Redis for later verification', async () => {
+  describe('Two-factor (2FA) lifecycle', () => {
+    it('should send an email-OTP code and store its digest for later verification', async () => {
       model(prisma, 'profile').findUnique.mockResolvedValue({
         ...mockProfileWithRelations,
         church: { name: 'Grace Community Church' },
       });
-      model(prisma, 'profile').update.mockResolvedValue({});
+      redis.get.mockResolvedValue(null);
 
-      await service.generateMfaSecret(mockUserId);
+      const result = await service.sendTwoFactorCode(mockUserId, 'enable');
 
+      expect(result.email).toContain('***');
       expect(redis.set).toHaveBeenCalledWith(
-        expect.stringContaining('mfa:'),
+        expect.stringContaining('2fa:enable:'),
         expect.any(String),
         600,
       );
+      expect(resend.sendEmail).toHaveBeenCalledWith(
+        'pastor@demo.com',
+        expect.stringContaining('two-factor'),
+        expect.stringContaining('<p>'),
+        mockChurchId,
+      );
     });
 
-    it('should verify MFA using the Redis-stored secret', async () => {
+    it('should enable 2FA after verifying the emailed code', async () => {
+      const digest = hashTwoFactorCode('123456');
       model(prisma, 'profile')
         .findUnique.mockResolvedValueOnce({
           ...mockProfileWithRelations,
-          mfa_enabled: false,
+          two_factor_enabled: false,
         })
         .mockResolvedValueOnce({
           ...mockProfileWithRelations,
-          mfa_enabled: true,
+          two_factor_enabled: true,
         });
-      redis.get.mockResolvedValue('JBSWY3DPEHPK3PXP');
+      redis.get.mockResolvedValue(JSON.stringify({ digest, attempts: 0 }));
 
-      const result = await service.enableMfa(mockUserId, '123456');
+      const result = await service.toggleTwoFactor(mockUserId, 'enable', '123456');
 
-      expect(result.mfaEnabled).toBe(true);
-      expect(redis.get).toHaveBeenCalledWith(expect.stringContaining('mfa:'));
+      expect(redis.del).toHaveBeenCalledWith(expect.stringContaining('2fa:enable:'));
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { two_factor_enabled: true } }),
+      );
+      expect(result.twoFactorEnabled).toBe(true);
+    });
+
+    it('should reject an incorrect code and keep 2FA disabled', async () => {
+      const digest = hashTwoFactorCode('123456');
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...mockProfileWithRelations,
+        two_factor_enabled: false,
+      });
+      redis.get.mockResolvedValue(JSON.stringify({ digest, attempts: 0 }));
+
+      await expect(service.toggleTwoFactor(mockUserId, 'enable', '999999')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
+    });
+
+    it('getTwoFactorEnabled returns the stored flag', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        two_factor_enabled: true,
+      });
+      await expect(service.getTwoFactorEnabled(mockUserId)).resolves.toBe(true);
+    });
+
+    it('getTwoFactorEnabled throws when no profile exists', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue(null);
+      await expect(service.getTwoFactorEnabled(mockUserId)).rejects.toThrow(NotFoundException);
     });
   });
 

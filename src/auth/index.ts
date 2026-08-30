@@ -6,6 +6,7 @@ export * from './strategies';
 export * from './dto/register.dto';
 export * from './dto/auth-response.dto';
 export * from './dto/login.dto';
+export * from './dto/login-2fa.dto';
 export * from './dto/forgot-password.dto';
 export * from './dto/reset-password.dto';
 export * from './dto/change-password.dto';
