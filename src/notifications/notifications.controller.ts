@@ -10,7 +10,9 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Delete,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -27,6 +29,7 @@ import {
 } from '../common/decorators/api-standard-responses.decorator';
 import { NotificationsService } from './notifications.service';
 import { NotificationResponseDto } from './dto/notification-response.dto';
+import { BulkNotificationsDto } from './dto/bulk-notifications.dto';
 
 @ApiTags('Notifications')
 @ApiBearerAuth('supabase-auth')
@@ -52,6 +55,9 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('type') type?: string,
+    @Query('read') read?: 'all' | 'unread',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
     @Request() req?: Record<string, unknown>,
   ): Promise<{ data: NotificationResponseDto[]; total: number; unreadCount: number }> {
     const profile = req ? this.getProfile(req) : { church_id: '', id: '' };
@@ -61,6 +67,9 @@ export class NotificationsController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       type,
+      read,
+      startDate,
+      endDate,
     );
   }
 
@@ -80,6 +89,36 @@ export class NotificationsController {
     const profile = this.getProfile(req);
     const count = await this.notificationsService.getUnreadCount(profile.church_id, profile.id);
     return { count };
+  }
+
+  /**
+   * Mark multiple notifications as read (bulk).
+   */
+  @Patch('bulk-read')
+  @ApiUpdateEndpoint(
+    'Bulk mark as read',
+    'Marks multiple notifications as read for the current user.',
+  )
+  async bulkMarkAsRead(
+    @Body() dto: BulkNotificationsDto,
+    @Request() req: Record<string, unknown>,
+  ): Promise<{ updated: number }> {
+    const profile = this.getProfile(req);
+    return this.notificationsService.bulkMarkAsRead(profile.church_id, profile.id, dto.ids);
+  }
+
+  /**
+   * Permanently delete multiple notifications (bulk hard delete).
+   */
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiUpdateEndpoint('Bulk delete', 'Permanently deletes multiple notifications.')
+  async bulkRemove(
+    @Body() dto: BulkNotificationsDto,
+    @Request() req: Record<string, unknown>,
+  ): Promise<{ deleted: number }> {
+    const profile = this.getProfile(req);
+    return this.notificationsService.bulkRemove(profile.church_id, profile.id, dto.ids);
   }
 
   /**

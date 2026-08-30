@@ -35,6 +35,9 @@ export class NotificationsService {
     page = 1,
     limit = 20,
     type?: string,
+    read?: 'all' | 'unread',
+    startDate?: string,
+    endDate?: string,
   ): Promise<{ data: NotificationResponseDto[]; total: number; unreadCount: number }> {
     const skip = (page - 1) * limit;
 
@@ -45,6 +48,21 @@ export class NotificationsService {
 
     if (type) {
       where.type = type;
+    }
+
+    if (read === 'unread') {
+      where.read_at = null;
+    }
+
+    const createdAt: Prisma.DateTimeFilter | undefined = {};
+    if (startDate) {
+      createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
+    }
+    if (endDate) {
+      createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
+    if (startDate || endDate) {
+      where.created_at = createdAt;
     }
 
     const [notifications, total, unreadCount] = await Promise.all([
@@ -124,6 +142,48 @@ export class NotificationsService {
     this.logger.log(`Marked ${result.count} notifications as read for profile ${profileId}`);
 
     return { updated: result.count };
+  }
+
+  /**
+   * Mark multiple notifications as read (bulk), scoped to a profile.
+   */
+  async bulkMarkAsRead(
+    churchId: string,
+    profileId: string,
+    ids: string[],
+  ): Promise<{ updated: number }> {
+    const result = await this.prisma.notification.updateMany({
+      where: {
+        id: { in: ids },
+        church_id: churchId,
+        profile_id: profileId,
+        read_at: null,
+      },
+      data: { read_at: new Date() },
+    });
+
+    this.logger.log(`Bulk marked ${result.count} notifications as read for profile ${profileId}`);
+    return { updated: result.count };
+  }
+
+  /**
+   * Permanently delete multiple notifications (bulk hard delete), scoped to a profile.
+   */
+  async bulkRemove(
+    churchId: string,
+    profileId: string,
+    ids: string[],
+  ): Promise<{ deleted: number }> {
+    const result = await this.prisma.notification.deleteMany({
+      where: {
+        id: { in: ids },
+        church_id: churchId,
+        profile_id: profileId,
+      },
+    });
+
+    this.logger.log(`Bulk deleted ${result.count} notifications for profile ${profileId}`);
+    return { deleted: result.count };
   }
 
   /**

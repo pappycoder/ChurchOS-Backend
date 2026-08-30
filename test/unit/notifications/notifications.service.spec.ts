@@ -21,6 +21,7 @@ function createPrismaMock() {
           update: jest.fn(),
           updateMany: jest.fn(),
           delete: jest.fn(),
+          deleteMany: jest.fn(),
           count: jest.fn(),
           aggregate: jest.fn(),
           groupBy: jest.fn(),
@@ -101,6 +102,46 @@ describe('NotificationsService', () => {
         }),
       );
     });
+
+    it('should filter unread only', async () => {
+      model('notification').findMany.mockResolvedValue([]);
+      model('notification').count.mockResolvedValue(0);
+
+      await service.listNotifications(mockChurchId, mockProfileId, 1, 20, undefined, 'unread');
+
+      expect(model('notification').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ read_at: null }),
+        }),
+      );
+    });
+
+    it('should apply date range bounds to created_at', async () => {
+      model('notification').findMany.mockResolvedValue([]);
+      model('notification').count.mockResolvedValue(0);
+
+      await service.listNotifications(
+        mockChurchId,
+        mockProfileId,
+        1,
+        20,
+        undefined,
+        undefined,
+        '2026-07-01',
+        '2026-07-31',
+      );
+
+      expect(model('notification').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            created_at: {
+              gte: new Date('2026-07-01T00:00:00.000Z'),
+              lte: new Date('2026-07-31T23:59:59.999Z'),
+            },
+          }),
+        }),
+      );
+    });
   });
 
   describe('getUnreadCount', () => {
@@ -147,6 +188,46 @@ describe('NotificationsService', () => {
       const result = await service.markAllAsRead(mockChurchId, mockProfileId);
 
       expect(result.updated).toBe(10);
+    });
+  });
+
+  describe('bulkMarkAsRead', () => {
+    it('should update only unread rows scoped to the profile', async () => {
+      model('notification').updateMany.mockResolvedValue({ count: 3 });
+
+      const result = await service.bulkMarkAsRead(mockChurchId, mockProfileId, [
+        'id-1',
+        'id-2',
+        'id-3',
+      ]);
+
+      expect(result.updated).toBe(3);
+      expect(model('notification').updateMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['id-1', 'id-2', 'id-3'] },
+          church_id: mockChurchId,
+          profile_id: mockProfileId,
+          read_at: null,
+        },
+        data: expect.objectContaining({ read_at: expect.any(Date) }),
+      });
+    });
+  });
+
+  describe('bulkRemove', () => {
+    it('should hard-delete rows scoped to the profile', async () => {
+      model('notification').deleteMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.bulkRemove(mockChurchId, mockProfileId, ['id-1', 'id-2']);
+
+      expect(result.deleted).toBe(2);
+      expect(model('notification').deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['id-1', 'id-2'] },
+          church_id: mockChurchId,
+          profile_id: mockProfileId,
+        },
+      });
     });
   });
 
