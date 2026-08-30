@@ -200,6 +200,7 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **No backend changes this round** — the `/dashboard` page was converted into a role-aware dashboard (web-only; see web changelog). It reuses the existing `/analytics/*` endpoints (unchanged role ceilings: `/analytics/dashboard|attendance|members|events|communication` → church_admin/senior_pastor/branch_pastor, `/analytics/giving` → + treasurer) plus the existing list endpoints, each gated by the appropriate permission so no new backend surface or 403s were introduced. Full suite / `build` / `lint` unaffected.
 - **Email-OTP two-factor authentication (2FA) replacing TOTP MFA, with per-profile self-service + login gating.** Two-factor is now a **per-user** setting managed ONLY on the `/profile` page (the web admin Security Settings tab will drop its static MFA badge — see web changelog). Login for an enabled account is staged: the API issues **no token** until an emailed 6-digit code is verified via a dedicated endpoint.
   - **Schema/migration `20260830092603_two_factor_email`**: `profiles.two_factor_enabled Boolean @default(false)` added (legacy `mfa_enabled` kept but unused by the new flow).
   - **New util** `src/profile/two-factor.util.ts`: `generateTwoFactorCode()` (6 digits), `hashTwoFactorCode()` (SHA-256), `verifyTwoFactorCode()` (timing-safe compare), `maskTwoFactorEmail()`.
