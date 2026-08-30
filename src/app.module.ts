@@ -52,6 +52,7 @@ import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 import { VisitorsModule } from './visitors/visitors.module';
 
 import { NotificationsModule } from './notifications/notifications.module';
+import { EmailModule } from './email/email.module';
 import { SyncModule } from './sync/sync.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -187,6 +188,9 @@ import { PermissionsModule } from './auth/permissions.module';
 
     // Import NotificationsModule for in-app notification management.
     NotificationsModule,
+
+    // Import EmailModule for internal in-app email messaging.
+    EmailModule,
 
     // Import SyncModule for offline data synchronization.
     SyncModule,

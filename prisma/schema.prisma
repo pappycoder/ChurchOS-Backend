@@ -1231,6 +1231,40 @@ model Notification {
   @@map("notifications")
 }
 
+// Internal in-app email: a message body (email_messages) with per-recipient
+// copies (email_recipients). Sender/recipient references are Profile ids.
+// Trash is a soft-delete: EmailMessage.deleted_at for the Sent copy,
+// EmailRecipient.deleted_at for each Inbox copy. Hard delete removes rows.
+model EmailMessage {
+  id          String    @id @default(uuid())
+  church_id   String
+  sender_id   String   // sender Profile.id
+  sender_name String? // denormalized for list display
+  subject     String
+  body        String
+  reply_to_id String? // reply threading
+  deleted_at  DateTime? // set when the sender trashes their Sent copy
+  created_at  DateTime  @default(now())
+  recipients  EmailRecipient[]
+
+  @@index([church_id, created_at])
+  @@map("email_messages")
+}
+
+model EmailRecipient {
+  id         String       @id @default(uuid())
+  message_id String
+  profile_id String       // recipient Profile.id
+  read_at    DateTime?
+  deleted_at DateTime?    // set when the recipient trashes their Inbox copy
+  created_at DateTime     @default(now())
+  message    EmailMessage @relation(fields: [message_id], references: [id], onDelete: Cascade)
+
+  @@index([profile_id, read_at])
+  @@index([message_id])
+  @@map("email_recipients")
+}
+
 model WebhookSubscription {
   id          String    @id @default(uuid())
   church_id   String

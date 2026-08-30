@@ -2,7 +2,7 @@
  * @file permissions.seed.ts
  * @description Default roles, permissions, and role-permission mappings seed data.
  *
- * Seeds 8 roles and ~88 permissions (22 resources x 4 actions) with
+ * Seeds 8 roles and ~96 permissions (24 resources x 4 actions) with
  * default role-permission assignments. Churches start with these defaults
  * and can customize via the church_admin permissions API.
  *
@@ -62,6 +62,7 @@ export const RESOURCES = [
   'church_settings',
   'visitors',
   'users',
+  'emails',
 ] as const;
 
 export type Resource = (typeof RESOURCES)[number];
@@ -200,6 +201,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'users:read',
     'users:update',
     'users:delete',
+    // Emails — full access
+    'emails:create',
+    'emails:read',
+    'emails:update',
+    'emails:delete',
   ],
 
   church_admin: [
@@ -272,6 +278,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:update',
     // Users — read
     'users:read',
+    // Emails — full access
+    'emails:create',
+    'emails:read',
+    'emails:update',
   ],
 
   department_head: [
@@ -296,6 +306,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:read',
     // Assets — read
     'assets:read',
+    // Emails — read
+    'emails:read',
   ],
 
   secretary: [
@@ -347,6 +359,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'cell_groups:create',
     // Users — read
     'users:read',
+    // Emails — full access
+    'emails:create',
+    'emails:read',
+    'emails:update',
   ],
 
   treasurer: [
@@ -369,6 +385,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'analytics:read',
     // Users — read
     'users:read',
+    // Emails — read
+    'emails:read',
   ],
 
   cell_leader: [
@@ -382,6 +400,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'members:read',
     // Giving — read
     'giving:read',
+    // Emails — read
+    'emails:read',
   ],
 
   member: [

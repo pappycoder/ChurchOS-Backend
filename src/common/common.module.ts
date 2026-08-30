@@ -6,6 +6,11 @@
  * The LoggingInterceptor is registered globally in main.ts instead of here
  * because interceptors don't need DI to be globally applied.
  *
+ * Imports AuthModule so the AuditLogsController's JwtAuthGuard can resolve its
+ * JwksService/RedisService dependencies (mirrors the CustomFieldsModule /
+ * VisitorsModule fix for the same "can't resolve dependencies of the
+ * JwtAuthGuard" boot error).
+ *
  * @module common/common.module
  * @since 1.0.0
  */
@@ -13,12 +18,14 @@
 import { Module, Global, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
+import { AuthModule } from '../auth/auth.module';
 import { AuditLoggingService } from './services/audit-logging.service';
 import { RequestContextService } from './services/request-context.service';
 import { BranchScopeService } from './services/branch-scope.service';
 import { RequestContextMiddleware } from './middleware/request-context.middleware';
 import { CacheInterceptor } from './interceptors/cache.interceptor';
 import { CacheVersionInterceptor } from './interceptors/cache-version.interceptor';
+import { AuditLogsController } from './audit-logs.controller';
 
 /**
  * Global module providing shared services and middleware.
@@ -32,6 +39,8 @@ import { CacheVersionInterceptor } from './interceptors/cache-version.intercepto
  */
 @Global()
 @Module({
+  imports: [AuthModule],
+  controllers: [AuditLogsController],
   providers: [
     AuditLoggingService,
     RequestContextService,
