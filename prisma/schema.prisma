@@ -1265,6 +1265,34 @@ model EmailRecipient {
   @@map("email_recipients")
 }
 
+// Appointment / booking registry pairing a secretary with a pastor.
+// secretary_id/pastor_id are free-form Profile ids (resolved to names at read
+// time, matching the email/leader_id convention). Access rule: a branch
+// secretary books with pastor-role profiles in the same branch; an HQ
+// secretary (is_admin_hq or seated at the HQ branch) books church-wide.
+// Status: pending | confirmed | completed | cancelled. Archived rows are
+// hidden from active lists; Restore brings them back; Delete purges them.
+model Appointment {
+  id           String    @id @default(uuid())
+  church_id    String
+  branch_id    String?   // resolved birth context (counterpart's branch)
+  secretary_id String    // secretary Profile.id
+  pastor_id    String    // pastor Profile.id (branch_pastor | church_admin | senior_pastor)
+  title        String
+  scheduled_at DateTime
+  location     String?
+  notes        String?
+  status       String    @default("pending") // pending, confirmed, completed, cancelled
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  archived_at  DateTime? // set when archived
+
+  @@index([church_id, scheduled_at])
+  @@index([secretary_id])
+  @@index([pastor_id])
+  @@map("appointments")
+}
+
 model WebhookSubscription {
   id          String    @id @default(uuid())
   church_id   String

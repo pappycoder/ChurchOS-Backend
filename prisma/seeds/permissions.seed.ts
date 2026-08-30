@@ -2,7 +2,7 @@
  * @file permissions.seed.ts
  * @description Default roles, permissions, and role-permission mappings seed data.
  *
- * Seeds 8 roles and ~96 permissions (24 resources x 4 actions) with
+ * Seeds 8 roles and ~100 permissions (25 resources x 4 actions) with
  * default role-permission assignments. Churches start with these defaults
  * and can customize via the church_admin permissions API.
  *
@@ -63,6 +63,7 @@ export const RESOURCES = [
   'visitors',
   'users',
   'emails',
+  'appointments',
 ] as const;
 
 export type Resource = (typeof RESOURCES)[number];
@@ -206,6 +207,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'emails:read',
     'emails:update',
     'emails:delete',
+    // Appointments — full access
+    'appointments:create',
+    'appointments:read',
+    'appointments:update',
+    'appointments:delete',
   ],
 
   church_admin: [
@@ -282,6 +288,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'emails:create',
     'emails:read',
     'emails:update',
+    // Appointments — full access
+    'appointments:create',
+    'appointments:read',
+    'appointments:update',
+    'appointments:delete',
   ],
 
   department_head: [
@@ -363,6 +374,11 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'emails:create',
     'emails:read',
     'emails:update',
+    // Appointments — full access
+    'appointments:create',
+    'appointments:read',
+    'appointments:update',
+    'appointments:delete',
   ],
 
   treasurer: [

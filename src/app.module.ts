@@ -53,6 +53,7 @@ import { VisitorsModule } from './visitors/visitors.module';
 
 import { NotificationsModule } from './notifications/notifications.module';
 import { EmailModule } from './email/email.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 import { SyncModule } from './sync/sync.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -191,6 +192,9 @@ import { PermissionsModule } from './auth/permissions.module';
 
     // Import EmailModule for internal in-app email messaging.
     EmailModule,
+
+    // Import AppointmentsModule for the appointment/booking registry.
+    AppointmentsModule,
 
     // Import SyncModule for offline data synchronization.
     SyncModule,
