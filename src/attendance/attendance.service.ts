@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
@@ -40,6 +41,7 @@ export class AttendanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   // ─── Service CRUD ──────────────────────────────────────
@@ -76,7 +78,11 @@ export class AttendanceService {
     return this.mapToServiceResponse(service);
   }
 
-  async getServiceById(id: string, churchId: string): Promise<ServiceResponseDto> {
+  async getServiceById(
+    id: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<ServiceResponseDto> {
     const service = await this.prisma.service.findUnique({
       where: { id },
       include: { _count: { select: { attendance: true } } },
@@ -86,12 +92,17 @@ export class AttendanceService {
       throw new NotFoundException('Service not found');
     }
 
+    if (!this.branchScope.isVisible(viewer, service.branch_id)) {
+      throw new NotFoundException('Service not found');
+    }
+
     return this.mapToServiceResponse(service);
   }
 
   async listServices(
     churchId: string,
     query: ListServicesDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: ServiceResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -102,7 +113,11 @@ export class AttendanceService {
       archived_at: query.archived === true ? { not: null } : null,
     };
 
-    if (query.branchId) {
+    // Scoped to the viewer's own branch unless they hold the admin-hq override.
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    } else if (query.branchId && scope.churchOnly) {
       where.branch_id = query.branchId;
     }
 
@@ -702,12 +717,24 @@ export class AttendanceService {
   async listAttendance(
     churchId: string,
     query: ListAttendanceDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: AttendanceResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.AttendanceWhereInput = { church_id: churchId };
+
+    // Attendance rows have no branch column — their branch comes from the linked
+    // service/event. Restrict non-HQ viewers to records whose service OR event
+    // belongs to their branch.
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.OR = [
+        { service: { branch_id: scope.branchId } },
+        { event: { branch_id: scope.branchId } },
+      ];
+    }
 
     if (query.serviceId) where.service_id = query.serviceId;
     if (query.eventId) where.event_id = query.eventId;

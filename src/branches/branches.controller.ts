@@ -100,7 +100,7 @@ export class BranchesController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: BranchResponseDto[]; total: number }> {
     const churchId = req.profile?.church_id || '';
-    return this.branchesService.findAll(churchId, query);
+    return this.branchesService.findAll(churchId, query, req.profile);
   }
 
   @Get(':branchId')

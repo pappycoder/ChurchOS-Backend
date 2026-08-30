@@ -140,6 +140,16 @@ describe('AuthService', () => {
         error: null,
       });
 
+      const profileCreate = jest.fn().mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        role: 'church_admin',
+        first_name: validDto.firstName,
+        last_name: validDto.lastName,
+        phone: validDto.phone,
+      });
+
       prisma.$transaction.mockImplementation(
         async (cb: (tx: Record<string, Record<string, jest.Mock>>) => Promise<unknown>) => {
           return cb({
@@ -151,15 +161,7 @@ describe('AuthService', () => {
               }),
             },
             profile: {
-              create: jest.fn().mockResolvedValue({
-                id: mockProfileId,
-                user_id: mockUserId,
-                church_id: mockChurchId,
-                role: 'church_admin',
-                first_name: validDto.firstName,
-                last_name: validDto.lastName,
-                phone: validDto.phone,
-              }),
+              create: profileCreate,
             },
           });
         },
@@ -174,6 +176,13 @@ describe('AuthService', () => {
         churchId: mockChurchId,
         churchName: validDto.churchName,
         role: 'church_admin',
+      });
+
+      expect(profileCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          role: ['church_admin'],
+          is_admin_hq: true,
+        }),
       });
 
       expect(audit.log).toHaveBeenCalledWith(

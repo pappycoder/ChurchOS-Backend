@@ -11,6 +11,7 @@
 import { GivingService } from '../../../src/giving/giving.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { PaymentGatewayProvider } from '../../../src/giving/services/payment-gateway.interface';
 import { ReceiptService } from '../../../src/giving/services/receipt.service';
 import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
@@ -123,6 +124,7 @@ describe('GivingService - Recurring Giving', () => {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
+      new BranchScopeService(),
     );
   });
 

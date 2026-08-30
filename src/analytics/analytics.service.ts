@@ -12,6 +12,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
 import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto } from './dto/analytics-date-range.dto';
 import {
@@ -40,7 +41,10 @@ import {
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly branchScope: BranchScopeService,
+  ) {
     this.logger.log('AnalyticsService initialized');
   }
 
@@ -107,12 +111,35 @@ export class AnalyticsService {
   async getDashboard(
     churchId: string,
     query: AnalyticsDateRangeDto,
+    viewer?: ViewerScope | null,
   ): Promise<DashboardResponseDto> {
     const { start, end } = this.getDateRange(query);
     const memberSinceFilter = this.dateRangeFilter(start, end);
     const attendanceFilter = this.dateRangeFilter(start, end);
     const givingFilter = this.dateRangeFilter(start, end);
     const upcomingEndFilter = end ? { lte: end } : undefined;
+
+    const scope = this.branchScope.resolve(viewer);
+    const memberWhere: Prisma.MemberWhereInput = {
+      church_id: churchId,
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
+    const attendanceWhere: Prisma.AttendanceWhereInput = {
+      church_id: churchId,
+      ...(attendanceFilter ? { checkin_at: attendanceFilter } : {}),
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
+    const givingWhere: Prisma.TransactionWhereInput = {
+      church_id: churchId,
+      status: 'success',
+      ...(givingFilter ? { created_at: givingFilter } : {}),
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
+    const eventWhere: Prisma.EventWhereInput = {
+      church_id: churchId,
+      start_date: { gte: new Date(), ...(upcomingEndFilter ? upcomingEndFilter : {}) },
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
 
     const [
       totalMembers,
@@ -126,40 +153,35 @@ export class AnalyticsService {
       pendingSubmissions,
       engagementCounts,
     ] = await Promise.all([
-      this.prisma.member.count({ where: { church_id: churchId } }),
-      this.prisma.member.count({ where: { church_id: churchId, status: 'active' } }),
+      this.prisma.member.count({ where: memberWhere }),
+      this.prisma.member.count({ where: { ...memberWhere, status: 'active' } }),
       this.prisma.member.count({
         where: {
-          church_id: churchId,
+          ...memberWhere,
           ...(memberSinceFilter ? { member_since: memberSinceFilter } : {}),
         },
       }),
-      this.prisma.branch.count({ where: { church_id: churchId } }),
-      this.prisma.attendance.count({
+      this.prisma.branch.count({
         where: {
           church_id: churchId,
-          ...(attendanceFilter ? { checkin_at: attendanceFilter } : {}),
+          ...(scope.branchId ? { id: scope.branchId } : {}),
         },
       }),
+      this.prisma.attendance.count({ where: attendanceWhere }),
       this.prisma.transaction.aggregate({
-        where: {
-          church_id: churchId,
-          status: 'success',
-          ...(givingFilter ? { created_at: givingFilter } : {}),
-        },
+        where: givingWhere,
         _sum: { amount: true },
       }),
       this.prisma.riskScore.count({
-        where: { church_id: churchId, level: { in: ['high', 'critical'] } },
-      }),
-      this.prisma.event.count({
         where: {
           church_id: churchId,
-          start_date: { gte: new Date(), ...(upcomingEndFilter ? upcomingEndFilter : {}) },
+          level: { in: ['high', 'critical'] },
+          ...(scope.branchId ? { member: { branch_id: scope.branchId } } : {}),
         },
       }),
+      this.prisma.event.count({ where: eventWhere }),
       this.prisma.formSubmission.count({ where: { church_id: churchId, status: 'pending' } }),
-      this.getEngagementDistribution(churchId),
+      this.getEngagementDistribution(churchId, scope.branchId),
     ]);
 
     return {
@@ -179,16 +201,21 @@ export class AnalyticsService {
   /**
    * Buckets engagement scores into standard ranges.
    */
-  private async getEngagementDistribution(churchId: string): Promise<Record<string, number>> {
+  private async getEngagementDistribution(
+    churchId: string,
+    branchId?: string,
+  ): Promise<Record<string, number>> {
+    const where = (score: { gte?: number; lt?: number }) =>
+      ({
+        church_id: churchId,
+        score,
+        ...(branchId ? { member: { branch_id: branchId } } : {}),
+      }) as Prisma.EngagementScoreWhereInput;
     const [highly, moderately, low, disengaged] = await Promise.all([
-      this.prisma.engagementScore.count({ where: { church_id: churchId, score: { gte: 80 } } }),
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { gte: 50, lt: 80 } },
-      }),
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { gte: 20, lt: 50 } },
-      }),
-      this.prisma.engagementScore.count({ where: { church_id: churchId, score: { lt: 20 } } }),
+      this.prisma.engagementScore.count({ where: where({ gte: 80 }) }),
+      this.prisma.engagementScore.count({ where: where({ gte: 50, lt: 80 }) }),
+      this.prisma.engagementScore.count({ where: where({ gte: 20, lt: 50 }) }),
+      this.prisma.engagementScore.count({ where: where({ lt: 20 }) }),
     ]);
 
     return { highlyEngaged: highly, moderatelyEngaged: moderately, lowEngaged: low, disengaged };
@@ -202,19 +229,23 @@ export class AnalyticsService {
   async getGivingAnalytics(
     churchId: string,
     query: AnalyticsTrendQueryDto,
+    viewer?: ViewerScope | null,
   ): Promise<GivingAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
     const branchId = query.branchId;
 
     const createdFilter = this.dateRangeFilter(start, end);
 
+    const scope = this.branchScope.resolve(viewer);
     const baseWhere: Prisma.TransactionWhereInput = {
       church_id: churchId,
       ...(createdFilter ? { created_at: createdFilter } : {}),
     };
 
-    if (branchId) {
+    if (branchId && scope.churchOnly) {
       baseWhere.branch_id = branchId;
+    } else if (!scope.churchOnly && scope.branchId) {
+      baseWhere.branch_id = scope.branchId;
     }
 
     const successWhere: Prisma.TransactionWhereInput = { ...baseWhere, status: 'success' };
@@ -374,19 +405,23 @@ export class AnalyticsService {
   async getAttendanceAnalytics(
     churchId: string,
     query: AnalyticsTrendQueryDto,
+    viewer?: ViewerScope | null,
   ): Promise<AttendanceAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
     const branchId = query.branchId;
 
     const checkinFilter = this.dateRangeFilter(start, end);
 
+    const scope = this.branchScope.resolve(viewer);
     const baseWhere: Prisma.AttendanceWhereInput = {
       church_id: churchId,
       ...(checkinFilter ? { checkin_at: checkinFilter } : {}),
     };
 
-    if (branchId) {
+    if (branchId && scope.churchOnly) {
       baseWhere.service = { branch_id: branchId };
+    } else if (!scope.churchOnly && scope.branchId) {
+      baseWhere.service = { branch_id: scope.branchId };
     }
 
     const [total, members, visitors, bySourceRaw, attendanceRecords] = await Promise.all([
@@ -520,20 +555,28 @@ export class AnalyticsService {
   /**
    * Returns member demographics and growth analytics.
    */
-  async getMemberAnalytics(churchId: string): Promise<MemberAnalyticsResponseDto> {
+  async getMemberAnalytics(
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<MemberAnalyticsResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
+    const where: Prisma.MemberWhereInput = {
+      church_id: churchId,
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
     const [members, statusCounts, genderCounts] = await Promise.all([
       this.prisma.member.findMany({
-        where: { church_id: churchId },
+        where,
         select: { id: true, status: true, gender: true, date_of_birth: true, member_since: true },
       }),
       this.prisma.member.groupBy({
         by: ['status'],
-        where: { church_id: churchId },
+        where,
         _count: { id: true },
       }),
       this.prisma.member.groupBy({
         by: ['gender'],
-        where: { church_id: churchId },
+        where,
         _count: { id: true },
       }),
     ]);
@@ -605,15 +648,20 @@ export class AnalyticsService {
   async getEventAnalytics(
     churchId: string,
     query: AnalyticsDateRangeDto,
+    viewer?: ViewerScope | null,
   ): Promise<EventAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
     const startDateFilter = this.dateRangeFilter(start, end);
 
+    const scope = this.branchScope.resolve(viewer);
+    const eventWhere: Prisma.EventWhereInput = {
+      church_id: churchId,
+      ...(startDateFilter ? { start_date: startDateFilter } : {}),
+      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+    };
+
     const events = await this.prisma.event.findMany({
-      where: {
-        church_id: churchId,
-        ...(startDateFilter ? { start_date: startDateFilter } : {}),
-      },
+      where: eventWhere,
       include: {
         registrations: {
           select: {
@@ -631,10 +679,7 @@ export class AnalyticsService {
 
     const tickets = await this.prisma.ticket.findMany({
       where: {
-        event: {
-          church_id: churchId,
-          ...(startDateFilter ? { start_date: startDateFilter } : {}),
-        },
+        event: eventWhere,
       },
       select: { id: true, tier_name: true, price_paid: true, status: true },
     });
@@ -722,11 +767,18 @@ export class AnalyticsService {
   async getCommunicationAnalytics(
     churchId: string,
     query: AnalyticsDateRangeDto,
+    viewer?: ViewerScope | null,
   ): Promise<CommunicationAnalyticsResponseDto> {
     const { start, end } = this.getDateRange(query);
     const createdFilter = this.dateRangeFilter(start, end);
 
+    const scope = this.branchScope.resolve(viewer);
     const messageWhere: Prisma.MessageWhereInput = {
+      church_id: churchId,
+      ...(createdFilter ? { created_at: createdFilter } : {}),
+      ...(scope.branchId ? { member: { branch_id: scope.branchId } } : {}),
+    };
+    const broadcastWhere = {
       church_id: churchId,
       ...(createdFilter ? { created_at: createdFilter } : {}),
     };
@@ -738,10 +790,7 @@ export class AnalyticsService {
         _count: { id: true },
       }),
       this.prisma.broadcast.findMany({
-        where: {
-          church_id: churchId,
-          ...(createdFilter ? { created_at: createdFilter } : {}),
-        },
+        where: broadcastWhere,
         select: { status: true, total_recipients: true },
       }),
     ]);

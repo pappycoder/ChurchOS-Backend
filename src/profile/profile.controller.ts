@@ -233,7 +233,7 @@ export class ProfileController {
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   async findAll(@Query() query: ListProfilesDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.profileService.listProfiles(churchId, query);
+    const result = await this.profileService.listProfiles(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {

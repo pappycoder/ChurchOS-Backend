@@ -12,6 +12,7 @@
 import { EventsService } from '../../../src/events/events.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
@@ -72,6 +73,7 @@ describe('EventsService', () => {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
+      new BranchScopeService(),
     );
   });
 

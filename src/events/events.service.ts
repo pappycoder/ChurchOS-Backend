@@ -26,6 +26,7 @@ import {
 import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   PaymentGatewayProvider,
@@ -56,6 +57,7 @@ export class EventsService {
     @Inject(PAYMENT_GATEWAY_REGISTRY)
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly notifications: NotificationsService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   // ─── EVENT CRUD ────────────────────────────────────────────────
@@ -113,6 +115,7 @@ export class EventsService {
   async listEvents(
     dto: ListEventsDto,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: EventResponseDto[]; total: number }> {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
@@ -123,7 +126,11 @@ export class EventsService {
       archived_at: dto.archived === true ? { not: null } : null,
     };
 
-    if (dto.branchId) {
+    // Scoped to the viewer's own branch unless they hold the admin-hq override.
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    } else if (dto.branchId && scope.churchOnly) {
       where.branch_id = dto.branchId;
     }
 

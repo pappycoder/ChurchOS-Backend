@@ -103,7 +103,7 @@ export class EventsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: EventResponseDto[]; total: number }> {
     const churchId = req.profile?.church_id || '';
-    return this.eventsService.listEvents(dto, churchId);
+    return this.eventsService.listEvents(dto, churchId, req.profile);
   }
 
   // ─── MANAGEMENT ──────────────────────────────────────────────

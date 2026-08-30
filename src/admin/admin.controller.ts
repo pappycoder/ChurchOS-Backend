@@ -272,8 +272,9 @@ export class AdminController {
   ): Promise<CellGroupResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to list all cell groups
-    return this.adminService.listCellGroups(churchId, archived === 'true');
+    // Delegate to AdminService to list the scoped cell groups (admin-hq sees all;
+    // cell_leader sees only their own; others see their own branch's groups)
+    return this.adminService.listCellGroups(churchId, archived === 'true', req.profile);
   }
 
   /**
@@ -308,8 +309,8 @@ export class AdminController {
   ): Promise<CellGroupResponseDto> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to fetch the cell group by ID
-    return this.adminService.getCellGroupById(groupId, churchId);
+    // Delegate to AdminService to fetch the cell group by ID (enforces scoping)
+    return this.adminService.getCellGroupById(groupId, churchId, req.profile);
   }
 
   /**

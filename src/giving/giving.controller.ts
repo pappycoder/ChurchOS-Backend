@@ -438,7 +438,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.givingService.listTransactions(churchId, query);
+    const result = await this.givingService.listTransactions(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {
@@ -460,7 +460,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<TransactionResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.getTransactionById(transactionId, churchId);
+    return this.givingService.getTransactionById(transactionId, churchId, req.profile);
   }
 
   /**
@@ -477,7 +477,11 @@ export class GivingController {
     @Res() res: Response,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    const { buffer, filename } = await this.givingService.generateReceipt(transactionId, churchId);
+    const { buffer, filename } = await this.givingService.generateReceipt(
+      transactionId,
+      churchId,
+      req.profile,
+    );
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -498,6 +502,6 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean; message: string }> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.sendReceipt(transactionId, churchId, channel);
+    return this.givingService.sendReceipt(transactionId, churchId, channel, req.profile);
   }
 }

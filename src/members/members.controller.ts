@@ -89,6 +89,7 @@ export class MembersController {
       churchId,
       query,
       req.profile?.permissions || [],
+      req.profile,
     );
     return {
       data: result.data,
@@ -127,6 +128,7 @@ export class MembersController {
       searchTerm,
       limit || 20,
       req.profile?.permissions || [],
+      req.profile,
     );
     return { data };
   }
@@ -155,6 +157,7 @@ export class MembersController {
       status,
       branchId,
       req.profile?.permissions || [],
+      req.profile,
     );
     res.send(csv);
   }
@@ -183,6 +186,7 @@ export class MembersController {
       status,
       branchId,
       req.profile?.permissions || [],
+      req.profile,
     );
     res.send(buffer);
   }
@@ -197,7 +201,12 @@ export class MembersController {
     @Request() req: AuthenticatedRequest,
   ): Promise<MemberResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.membersService.getMemberById(memberId, churchId, req.profile?.permissions || []);
+    return this.membersService.getMemberById(
+      memberId,
+      churchId,
+      req.profile?.permissions || [],
+      req.profile,
+    );
   }
 
   /**

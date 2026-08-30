@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { MediaService } from '../media/media.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
@@ -40,6 +41,7 @@ export class BranchesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
     private readonly media: MediaService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -99,6 +101,7 @@ export class BranchesService {
   async findAll(
     churchId: string,
     query: ListBranchesDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: BranchResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = Math.min(query.limit || 20, 100);
@@ -108,6 +111,14 @@ export class BranchesService {
       church_id: churchId,
       archived_at: query.archived === true ? { not: null } : null,
     };
+
+    // A non-HQ viewer only sees THEIR OWN branch in the branch list (it still
+    // powers their filter dropdowns without leaking other branches). admin-hq
+    // holders and church admins see every branch.
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.id = scope.branchId;
+    }
 
     if (query.search) {
       const searchTerm = query.search;

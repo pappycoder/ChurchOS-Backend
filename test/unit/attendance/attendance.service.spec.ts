@@ -12,6 +12,7 @@
 import { AttendanceService } from '../../../src/attendance/attendance.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('AttendanceService — categories & visitors', () => {
@@ -102,6 +103,7 @@ describe('AttendanceService — categories & visitors', () => {
     service = new AttendanceService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
+      new BranchScopeService(),
     );
   });
 

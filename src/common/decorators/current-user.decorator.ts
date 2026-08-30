@@ -20,6 +20,8 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     church_id: string;
     branch_id?: string;
+    /** Linked member id (for cell_leader own-group scoping) */
+    member_id?: string;
     /** Primary role (highest rank held) */
     role: string;
     /** All roles held, ordered by rank descending */
@@ -27,6 +29,8 @@ export interface AuthenticatedRequest extends Request {
     status?: string;
     /** Set when the profile's church is archived (ISO string) */
     church_archived_at?: string;
+    /** HQ access override: when true, the viewer sees data from ALL branches */
+    is_admin_hq?: boolean;
     permissions?: string[];
   };
 }

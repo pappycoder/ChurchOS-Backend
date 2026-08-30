@@ -82,8 +82,10 @@ export class RequestContextMiddleware implements NestMiddleware {
           id: true,
           church_id: true,
           branch_id: true,
+          member_id: true,
           role: true,
           status: true,
+          is_admin_hq: true,
           church: { select: { archived_at: true } },
         },
       });
@@ -92,9 +94,11 @@ export class RequestContextMiddleware implements NestMiddleware {
           id: profile.id,
           church_id: profile.church_id,
           branch_id: profile.branch_id ?? undefined,
+          member_id: profile.member_id ?? undefined,
           role: profile.role[0] ?? 'member',
           roles: profile.role,
           status: profile.status,
+          is_admin_hq: profile.is_admin_hq,
           church_archived_at: profile.church?.archived_at?.toISOString(),
         };
       }

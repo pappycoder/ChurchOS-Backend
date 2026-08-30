@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BranchesService } from '../../../src/branches/branches.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { MediaService } from '../../../src/media/media.service';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
@@ -40,6 +41,7 @@ describe('BranchesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },
         { provide: MediaService, useValue: { deleteByUrl: mediaDelete } },
+        BranchScopeService,
       ],
     }).compile();
 

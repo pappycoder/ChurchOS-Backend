@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from '../../../src/admin/admin.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
@@ -50,6 +51,7 @@ describe('AdminService', () => {
         AdminService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },
+        BranchScopeService,
       ],
     }).compile();
 
@@ -322,6 +324,60 @@ describe('AdminService', () => {
       expect(result[0].leaderLastName).toBe('Doe');
       expect(result[1].leaderFirstName).toBeUndefined();
       expect(result[1].leaderLastName).toBeUndefined();
+    });
+
+    it('should scope a non-HQ cell_leader to the groups they lead', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([]);
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await service.listCellGroups(mockChurchId, false, {
+        church_id: mockChurchId,
+        branch_id: 'branch-a',
+        member_id: 'leader-member',
+        role: 'cell_leader',
+        roles: ['cell_leader'],
+        is_admin_hq: false,
+      });
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ leader_id: 'leader-member' }),
+        }),
+      );
+    });
+
+    it('should scope a non-HQ non-leader viewer to their own branch', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([]);
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await service.listCellGroups(mockChurchId, false, {
+        church_id: mockChurchId,
+        branch_id: 'branch-a',
+        role: 'branch_pastor',
+        is_admin_hq: false,
+      });
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ branch_id: 'branch-a' }),
+        }),
+      );
+    });
+
+    it('should NOT scope an admin-hq viewer (sees all groups)', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([]);
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await service.listCellGroups(mockChurchId, false, {
+        church_id: mockChurchId,
+        branch_id: 'branch-a',
+        role: 'church_admin',
+        is_admin_hq: true,
+      });
+
+      const call = prisma.cellGroup.findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+      expect(call.where.leader_id).toBeUndefined();
+      expect(call.where.branch_id).toBeUndefined();
     });
   });
 

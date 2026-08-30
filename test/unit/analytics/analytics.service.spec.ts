@@ -9,6 +9,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsService } from '../../../src/analytics/analytics.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import {
   AnalyticsDateRangeDto,
   AnalyticsTrendQueryDto,
@@ -76,7 +77,11 @@ describe('AnalyticsService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AnalyticsService, { provide: PrismaService, useValue: mockPrismaService }],
+      providers: [
+        AnalyticsService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        BranchScopeService,
+      ],
     }).compile();
 
     service = module.get<AnalyticsService>(AnalyticsService);
@@ -199,6 +204,33 @@ describe('AnalyticsService', () => {
       expect(result.recurring.active).toBe(2);
       expect(result.recurring.totalMonthlyAmount).toBe(1000 + 500 * 4); // weekly * 4 + monthly
       expect(result.trend).toHaveLength(1);
+    });
+
+    it('should scope a non-HQ viewer to their own branch', async () => {
+      prisma.transaction.aggregate.mockResolvedValue({
+        _sum: { amount: 0 },
+        _count: { amount: 0 },
+      });
+      prisma.transaction.groupBy.mockResolvedValue([]);
+      prisma.recurringGiving.findMany.mockResolvedValue([]);
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      await service.getGivingAnalytics(
+        churchId,
+        {},
+        {
+          church_id: churchId,
+          branch_id: 'branch-a',
+          role: 'treasurer',
+          is_admin_hq: false,
+        },
+      );
+
+      expect(prisma.transaction.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ branch_id: 'branch-a' }),
+        }),
+      );
     });
   });
 

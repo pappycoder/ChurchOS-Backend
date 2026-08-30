@@ -13,6 +13,7 @@
 import { GivingService } from '../../../src/giving/giving.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { PaymentGatewayProvider } from '../../../src/giving/services/payment-gateway.interface';
 import { ReceiptService } from '../../../src/giving/services/receipt.service';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
@@ -138,6 +139,7 @@ describe('GivingService', () => {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
+      new BranchScopeService(),
     );
   });
 
@@ -884,6 +886,49 @@ describe('GivingService', () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
+    });
+
+    it('should scope a non-HQ viewer to their own branch', async () => {
+      model('transaction').findMany.mockResolvedValue([]);
+      model('transaction').count.mockResolvedValue(0);
+
+      await service.listTransactions(
+        mockChurchId,
+        {},
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-a',
+          role: 'treasurer',
+          is_admin_hq: false,
+        },
+      );
+
+      expect(model('transaction').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ branch_id: 'branch-a' }),
+        }),
+      );
+    });
+
+    it('should NOT branch-scope an admin-hq viewer', async () => {
+      model('transaction').findMany.mockResolvedValue([]);
+      model('transaction').count.mockResolvedValue(0);
+
+      await service.listTransactions(
+        mockChurchId,
+        {},
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-b',
+          role: 'church_admin',
+          is_admin_hq: true,
+        },
+      );
+
+      const call = model('transaction').findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(call.where.branch_id).toBeUndefined();
     });
 
     it('should map member/service/event display names from includes', async () => {

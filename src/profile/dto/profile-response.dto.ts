@@ -167,6 +167,13 @@ export class ProfileResponseDto {
   @ApiProperty({ description: 'Email-OTP two-factor authentication enabled', example: false })
   twoFactorEnabled!: boolean;
 
+  @ApiProperty({
+    description:
+      "Admin HQ flag — grants cross-branch read access within the user's permission scope. Defaults on for church_admin; managed manually otherwise.",
+    example: false,
+  })
+  isAdminHq!: boolean;
+
   @ApiProperty({ description: 'Profile status', example: 'active' })
   status!: string;
 

@@ -20,6 +20,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   PaymentGatewayProvider,
@@ -58,6 +59,7 @@ export class GivingService {
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly receipt: ReceiptService,
     private readonly notifications: NotificationsService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -813,12 +815,19 @@ export class GivingService {
   async listTransactions(
     churchId: string,
     query: ListTransactionsDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: TransactionResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TransactionWhereInput = { church_id: churchId };
+
+    // Branch-scope for non-HQ viewers (transactions carry an optional branch_id).
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    }
 
     if (query.categoryId) where.category_id = query.categoryId;
     if (query.memberId) where.member_id = query.memberId;
@@ -870,6 +879,7 @@ export class GivingService {
   async getTransactionById(
     transactionId: string,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<TransactionResponseDto> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
@@ -882,6 +892,10 @@ export class GivingService {
     });
 
     if (!transaction || transaction.church_id !== churchId) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (!this.branchScope.isVisible(viewer, transaction.branch_id)) {
       throw new NotFoundException('Transaction not found');
     }
 
@@ -1377,6 +1391,7 @@ export class GivingService {
   async generateReceipt(
     transactionId: string,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
@@ -1384,6 +1399,10 @@ export class GivingService {
     });
 
     if (!transaction || transaction.church_id !== churchId) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (!this.branchScope.isVisible(viewer, transaction.branch_id)) {
       throw new NotFoundException('Transaction not found');
     }
 
@@ -1446,6 +1465,7 @@ export class GivingService {
     transactionId: string,
     churchId: string,
     channel: 'whatsapp' | 'email',
+    viewer?: ViewerScope | null,
   ): Promise<{ success: boolean; message: string }> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
@@ -1453,6 +1473,10 @@ export class GivingService {
     });
 
     if (!transaction || transaction.church_id !== churchId) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (!this.branchScope.isVisible(viewer, transaction.branch_id)) {
       throw new NotFoundException('Transaction not found');
     }
 

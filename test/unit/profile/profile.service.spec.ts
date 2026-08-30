@@ -12,6 +12,7 @@
 import { ProfileService } from '../../../src/profile/profile.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { MediaService, MulterFile } from '../../../src/media/media.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
@@ -151,6 +152,7 @@ describe('ProfileService', () => {
       redis as unknown as RedisService,
       permissionsService as unknown as PermissionsService,
       resend as unknown as ResendService,
+      new BranchScopeService(),
     );
   });
 
@@ -858,7 +860,7 @@ describe('ProfileService', () => {
 
       expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
         where: { id: mockProfileId },
-        data: { role: ['church_admin', 'treasurer'] },
+        data: { role: ['church_admin', 'treasurer'], is_admin_hq: true },
       });
       expect(result.role).toEqual(['church_admin', 'treasurer']);
       expect(audit.log).toHaveBeenCalledWith(

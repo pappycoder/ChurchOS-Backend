@@ -15,6 +15,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 
 import { AuditLoggingService } from './services/audit-logging.service';
 import { RequestContextService } from './services/request-context.service';
+import { BranchScopeService } from './services/branch-scope.service';
 import { RequestContextMiddleware } from './middleware/request-context.middleware';
 import { CacheInterceptor } from './interceptors/cache.interceptor';
 import { CacheVersionInterceptor } from './interceptors/cache-version.interceptor';
@@ -34,6 +35,7 @@ import { CacheVersionInterceptor } from './interceptors/cache-version.intercepto
   providers: [
     AuditLoggingService,
     RequestContextService,
+    BranchScopeService,
     CacheInterceptor,
     // Globally bumps each church's cache version after every write request so
     // cached analytics/reports responses are never stale (see CacheInterceptor).
@@ -45,7 +47,7 @@ import { CacheVersionInterceptor } from './interceptors/cache-version.intercepto
     // Controllers opt in via @UseInterceptors(CacheInterceptor) + @CacheTTL().
     // This pattern avoids caching all GET responses indiscriminately.
   ],
-  exports: [AuditLoggingService, RequestContextService, CacheInterceptor],
+  exports: [AuditLoggingService, RequestContextService, BranchScopeService, CacheInterceptor],
 })
 export class CommonModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

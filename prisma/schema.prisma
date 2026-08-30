@@ -213,6 +213,7 @@ model Profile {
   avatar_url  String?
   mfa_enabled         Boolean   @default(false)
   two_factor_enabled  Boolean   @default(false) // email-OTP 2FA (per-profile, self-service)
+  is_admin_hq         Boolean   @default(false) // HQ access override: see data from ALL branches in the church within the user's permission scope; defaulted ON for church_admin
   created_at          DateTime  @default(now())
   updated_at  DateTime  @updatedAt
   archived_at DateTime? // Set when archived

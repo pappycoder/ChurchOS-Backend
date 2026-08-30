@@ -7,7 +7,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, Length } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Length } from 'class-validator';
 
 /**
  * DTO used by admins to edit another user's profile details.
@@ -54,4 +54,13 @@ export class AdminUpdateUserDto {
   @IsOptional()
   @IsIn(['active', 'inactive'])
   status?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Admin HQ flag — grants cross-branch read access within the user's permission scope. Managed manually; defaults on for church_admin.",
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAdminHq?: boolean;
 }

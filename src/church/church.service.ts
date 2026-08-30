@@ -424,6 +424,7 @@ export class ChurchService {
         church_id: churchId,
         branch_id: dto.branchId || null,
         role: [normalizedRole],
+        is_admin_hq: normalizedRole === 'church_admin',
         first_name: normalizedFirstName,
         last_name: normalizedLastName,
         phone: normalizedPhone,
@@ -550,10 +551,15 @@ export class ChurchService {
 
     const oldRole = profile.role;
 
-    // Replace the full role set with the single requested role
+    // Replace the full role set with the single requested role. is_admin_hq is
+    // left manual (never cleared); default it on only when promoting to
+    // church_admin.
     const updated = await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: [dto.role] },
+      data: {
+        role: [dto.role],
+        ...(dto.role === 'church_admin' ? { is_admin_hq: true } : {}),
+      },
       include: {
         branch: { select: { name: true } },
       },

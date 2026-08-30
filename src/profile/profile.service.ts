@@ -22,6 +22,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { MediaService, MulterFile } from '../media/media.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { PermissionsService } from '../auth/services/permissions.service';
@@ -85,6 +86,7 @@ export class ProfileService {
     private readonly redis: RedisService,
     private readonly permissionsService: PermissionsService,
     private readonly resend: ResendService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -270,6 +272,7 @@ export class ProfileService {
   async listProfiles(
     churchId: string,
     query: ListProfilesDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: ProfileResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -279,6 +282,12 @@ export class ProfileService {
       church_id: churchId,
       archived_at: query.archived === true ? { not: null } : null,
     };
+
+    // Branch-scope for non-HQ viewers (profiles carry branch_id).
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    }
 
     // Apply search filter
     if (query.search) {
@@ -294,8 +303,9 @@ export class ProfileService {
       where.role = { has: query.role };
     }
 
-    // Apply branch filter
-    if (query.branchId) {
+    // Apply branch filter (only widen from the viewer's own scope when they can
+    // see every branch — never narrow past what they're entitled to).
+    if (query.branchId && scope.churchOnly) {
       where.branch_id = query.branchId;
     }
 
@@ -633,7 +643,12 @@ export class ProfileService {
 
     await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: orderedRoles },
+      data: {
+        role: orderedRoles,
+        // is_admin_hq is left manual (never cleared); default it on only when
+        // the new role set promotes the user to church_admin.
+        ...(orderedRoles.includes('church_admin') ? { is_admin_hq: true } : {}),
+      },
     });
 
     await this.audit.log({
@@ -724,6 +739,7 @@ export class ProfileService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.branchId !== undefined) data.branch_id = dto.branchId || null;
     if (dto.status !== undefined) data.status = dto.status;
+    if (dto.isAdminHq !== undefined) data.is_admin_hq = dto.isAdminHq;
 
     await this.prisma.profile.update({
       where: { id: profileId },
@@ -1208,6 +1224,7 @@ export class ProfileService {
           church_id: churchId,
           branch_id: dto.branchId || null,
           role: [dto.role],
+          is_admin_hq: dto.role === 'church_admin',
           first_name: dto.firstName,
           last_name: dto.lastName,
           phone: dto.phone || null,
@@ -1404,6 +1421,7 @@ export class ProfileService {
       avatar_url: string | null;
       mfa_enabled: boolean;
       two_factor_enabled: boolean;
+      is_admin_hq: boolean;
       archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
@@ -1451,6 +1469,7 @@ export class ProfileService {
       avatarUrl: profile.avatar_url || undefined,
       mfaEnabled: profile.mfa_enabled,
       twoFactorEnabled: profile.two_factor_enabled,
+      isAdminHq: profile.is_admin_hq,
       status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),

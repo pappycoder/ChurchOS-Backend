@@ -50,7 +50,7 @@ export class AnalyticsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<DashboardResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getDashboard(churchId, query);
+    return this.analyticsService.getDashboard(churchId, query, req.profile);
   }
 
   /**
@@ -68,7 +68,7 @@ export class AnalyticsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<GivingAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getGivingAnalytics(churchId, query);
+    return this.analyticsService.getGivingAnalytics(churchId, query, req.profile);
   }
 
   /**
@@ -89,7 +89,7 @@ export class AnalyticsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<AttendanceAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getAttendanceAnalytics(churchId, query);
+    return this.analyticsService.getAttendanceAnalytics(churchId, query, req.profile);
   }
 
   /**
@@ -104,7 +104,7 @@ export class AnalyticsController {
   @ApiOkResponse({ description: 'Member analytics retrieved', type: MemberAnalyticsResponseDto })
   async getMemberAnalytics(@Req() req: AuthenticatedRequest): Promise<MemberAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getMemberAnalytics(churchId);
+    return this.analyticsService.getMemberAnalytics(churchId, req.profile);
   }
 
   /**
@@ -122,7 +122,7 @@ export class AnalyticsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<EventAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getEventAnalytics(churchId, query);
+    return this.analyticsService.getEventAnalytics(churchId, query, req.profile);
   }
 
   /**
@@ -143,6 +143,6 @@ export class AnalyticsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<CommunicationAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getCommunicationAnalytics(churchId, query);
+    return this.analyticsService.getCommunicationAnalytics(churchId, query, req.profile);
   }
 }

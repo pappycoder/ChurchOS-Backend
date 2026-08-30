@@ -14,6 +14,7 @@ import { Injectable, Logger, NotFoundException, ConflictException } from '@nestj
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
@@ -28,6 +29,7 @@ export class MembersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
     private readonly notifications: NotificationsService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -137,12 +139,17 @@ export class MembersService {
     id: string,
     churchId: string,
     viewerPermissions: string[] = [],
+    viewer?: ViewerScope | null,
   ): Promise<MemberResponseDto> {
     const member = await this.prisma.member.findUnique({
       where: { id },
     });
 
     if (!member || member.church_id !== churchId) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (!this.branchScope.isVisible(viewer, member.branch_id)) {
       throw new NotFoundException('Member not found');
     }
 
@@ -160,6 +167,7 @@ export class MembersService {
     churchId: string,
     query: ListMembersDto,
     viewerPermissions: string[] = [],
+    viewer?: ViewerScope | null,
   ): Promise<{ data: MemberResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -170,13 +178,22 @@ export class MembersService {
       archived_at: query.archived === true ? { not: null } : null,
     };
 
+    // Branch-scope for non-HQ viewers: without the admin-hq override, a viewer
+    // only sees members from their OWN branch. The controller passes the request
+    // profile as `viewer`; `admin-hq` holders and viewers with no branch see all.
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    }
+
     // Apply status filter
     if (query.status) {
       where.status = query.status;
     }
 
-    // Apply branch filter
-    if (query.branchId) {
+    // Apply branch filter (only widen from the viewer's own scope — never narrow
+    // past what the viewer is entitled to see).
+    if (query.branchId && scope.churchOnly) {
       where.branch_id = query.branchId;
     }
 
@@ -500,6 +517,7 @@ export class MembersService {
     searchTerm: string,
     limit = 20,
     viewerPermissions: string[] = [],
+    viewer?: ViewerScope | null,
   ): Promise<MemberResponseDto[]> {
     const term = searchTerm.trim();
 
@@ -507,9 +525,12 @@ export class MembersService {
       return [];
     }
 
+    const scope = this.branchScope.resolve(viewer);
+
     const members = await this.prisma.member.findMany({
       where: {
         church_id: churchId,
+        ...(scope.churchOnly ? {} : scope.branchId ? { branch_id: scope.branchId } : {}),
         OR: [
           { first_name: { contains: term, mode: 'insensitive' } },
           { last_name: { contains: term, mode: 'insensitive' } },
@@ -650,14 +671,20 @@ export class MembersService {
     status?: string,
     branchId?: string,
     viewerPermissions: string[] = [],
+    viewer?: ViewerScope | null,
   ): Promise<string> {
+    const scope = this.branchScope.resolve(viewer);
     const where: Prisma.MemberWhereInput = { church_id: churchId };
+
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    }
 
     if (status) {
       where.status = status as 'active' | 'inactive' | 'suspended' | 'transferred';
     }
 
-    if (branchId) {
+    if (branchId && scope.churchOnly) {
       where.branch_id = branchId;
     }
 
@@ -752,16 +779,22 @@ export class MembersService {
     status?: string,
     branchId?: string,
     viewerPermissions: string[] = [],
+    viewer?: ViewerScope | null,
   ): Promise<Buffer> {
     const ExcelJS = await import('exceljs');
 
+    const scope = this.branchScope.resolve(viewer);
     const where: Prisma.MemberWhereInput = { church_id: churchId };
+
+    if (!scope.churchOnly && scope.branchId) {
+      where.branch_id = scope.branchId;
+    }
 
     if (status) {
       where.status = status as 'active' | 'inactive' | 'suspended' | 'transferred';
     }
 
-    if (branchId) {
+    if (branchId && scope.churchOnly) {
       where.branch_id = branchId;
     }
 

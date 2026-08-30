@@ -12,6 +12,7 @@
 import { MembersService } from '../../../src/members/members.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { CreateMemberDto } from '../../../src/members/dto/create-member.dto';
 import { UpdateMemberDto } from '../../../src/members/dto/update-member.dto';
@@ -94,6 +95,7 @@ describe('MembersService', () => {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
+      new BranchScopeService(),
     );
   });
 
@@ -247,6 +249,42 @@ describe('MembersService', () => {
           where: expect.objectContaining({
             status: 'active',
           }),
+        }),
+      );
+    });
+
+    it('should scope a non-HQ viewer to their own branch', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      model('member').count.mockResolvedValue(0);
+
+      await service.listMembers(mockChurchId, {}, ['members:read'], {
+        church_id: mockChurchId,
+        branch_id: 'branch-a',
+        role: 'branch_pastor',
+        is_admin_hq: false,
+      });
+
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ branch_id: 'branch-a' }),
+        }),
+      );
+    });
+
+    it('should NOT branch-scope an admin-hq viewer', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      model('member').count.mockResolvedValue(0);
+
+      await service.listMembers(mockChurchId, { branchId: 'branch-a' }, ['members:read'], {
+        church_id: mockChurchId,
+        branch_id: 'branch-b',
+        role: 'church_admin',
+        is_admin_hq: true,
+      });
+
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ branch_id: 'branch-a' }),
         }),
       );
     });

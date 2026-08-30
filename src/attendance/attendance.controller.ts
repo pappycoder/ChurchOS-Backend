@@ -81,7 +81,7 @@ export class AttendanceController {
   @ApiListEndpoint('List services', 'Retrieves a paginated list of church services.')
   async listServices(@Query() query: ListServicesDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.attendanceService.listServices(churchId, query);
+    const result = await this.attendanceService.listServices(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {
@@ -101,7 +101,7 @@ export class AttendanceController {
     @Request() req: AuthenticatedRequest,
   ): Promise<ServiceResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.attendanceService.getServiceById(serviceId, churchId);
+    return this.attendanceService.getServiceById(serviceId, churchId, req.profile);
   }
 
   @Patch('services/:serviceId')
@@ -181,7 +181,7 @@ export class AttendanceController {
   })
   async listAttendance(@Query() query: ListAttendanceDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.attendanceService.listAttendance(churchId, query);
+    const result = await this.attendanceService.listAttendance(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {

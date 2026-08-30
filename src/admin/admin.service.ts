@@ -22,6 +22,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
@@ -41,6 +42,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     // Inject AuditLoggingService for mutation audit trails
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   // ─── Departments ──────────────────────────────────────────
@@ -547,13 +549,27 @@ export class AdminService {
   async listCellGroups(
     churchId: string,
     archived: boolean = false,
+    viewer?: ViewerScope | null,
   ): Promise<CellGroupResponseDto[]> {
-    // Query all cell groups for the church ordered by name
+    // Scope cell groups per the viewer's entitlement:
+    // admin-hq → all groups in the church; cell_leader (non-HQ) → groups they
+    // lead; everyone else (non-HQ) → groups in their own branch.
+    const scope = this.branchScope.resolveCellGroupScope(viewer);
+    const where: Prisma.CellGroupWhereInput = {
+      church_id: churchId,
+      archived_at: archived ? { not: null } : null,
+    };
+    if (!scope.churchOnly) {
+      if (scope.leaderId !== undefined) {
+        where.leader_id = scope.leaderId;
+      } else if (scope.branchId) {
+        where.branch_id = scope.branchId;
+      }
+    }
+
+    // Query the scoped cell groups for the church ordered by name
     const groups = await this.prisma.cellGroup.findMany({
-      where: {
-        church_id: churchId,
-        archived_at: archived ? { not: null } : null,
-      },
+      where,
       include: { branch: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });
@@ -572,9 +588,14 @@ export class AdminService {
    *
    * @param groupId - Cell group ID
    * @param churchId - Church ID
+   * @param viewer - Request profile (enforces cell-group scoping)
    * @returns Cell group data
    */
-  async getCellGroupById(groupId: string, churchId: string): Promise<CellGroupResponseDto> {
+  async getCellGroupById(
+    groupId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<CellGroupResponseDto> {
     // Fetch the cell group by ID scoped to the church
     const group = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
@@ -584,6 +605,20 @@ export class AdminService {
     // Throw NotFoundException if group does not exist
     if (!group) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    // Enforce the same cell-group visibility rule as listCellGroups so a
+    // cell_leader (or a branch-restricted viewer) can't fetch another group
+    // by ID.
+    const scope = this.branchScope.resolveCellGroupScope(viewer);
+    if (!scope.churchOnly) {
+      const visible =
+        scope.leaderId !== undefined
+          ? group.leader_id === scope.leaderId
+          : !!scope.branchId && group.branch_id === scope.branchId;
+      if (!visible) {
+        throw new NotFoundException(`Cell group ${groupId} not found`);
+      }
     }
 
     // Resolve the assigned leader's name for the response
