@@ -1,6 +1,6 @@
 /**
  * @file appointments.service.spec.ts
- * @description Unit tests for AppointmentsService (booking registry, secretary↔pastor).
+ * @description Unit tests for AppointmentsService (booking registry, With/Who model).
  */
 
 import { AppointmentsService, PASTOR_ROLES } from '../../../src/appointments/appointments.service';
@@ -47,6 +47,8 @@ let service: AppointmentsService;
 const CHURCH = '00000000-0000-0000-0000-000000000001';
 const SEC = '22222222-2222-2222-2222-222222222222';
 const PASTOR = '11111111-1111-1111-1111-111111111111';
+const WHO = '66666666-6666-6666-6666-666666666666';
+const VISITOR = '8c8c8c8c-8c8c-8c8c-8c8c-8c8c8c8c8c8c';
 const BRANCH_A = '33333333-3333-3333-3333-333333333333';
 const BRANCH_B = '44444444-4444-4444-4444-444444444444';
 
@@ -75,13 +77,28 @@ function pastorRow(overrides: Record<string, unknown> = {}): Record<string, unkn
   };
 }
 
+function personRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: WHO,
+    first_name: 'Bola',
+    last_name: 'Okonkwo',
+    role: ['secretary'],
+    status: 'active',
+    branch_id: BRANCH_A,
+    avatar_url: null,
+    branch: { id: BRANCH_A, name: 'Main Campus' },
+    ...overrides,
+  };
+}
+
 function apptRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: '99999999-9999-9999-9999-999999999999',
     church_id: CHURCH,
     branch_id: BRANCH_A,
-    secretary_id: SEC,
     pastor_id: PASTOR,
+    person_id: WHO,
+    visitor_id: null,
     title: 'Budget planning',
     scheduled_at: new Date('2026-09-05T10:00:00.000Z'),
     location: null,
@@ -91,6 +108,10 @@ function apptRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     archived_at: null,
     ...overrides,
   };
+}
+
+function personProfileRow(): Record<string, unknown> {
+  return { id: WHO, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] };
 }
 
 beforeEach(() => {
@@ -110,34 +131,35 @@ describe('AppointmentsService', () => {
   });
 
   describe('create', () => {
-    it('creates an appointment as a branch secretary with a same-branch pastor', async () => {
+    it('creates an appointment as a branch secretary (With pastor + Who person, same branch)', async () => {
       model('profile').findFirst.mockResolvedValueOnce(scopeRow()); // resolveScope
-      model('profile').findFirst.mockResolvedValueOnce(pastorRow()); // fetchCounterpart
-      model('appointment').create.mockResolvedValueOnce(apptRow());
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-        { id: PASTOR, first_name: 'Pastor John', last_name: 'Adebayo', role: ['branch_pastor'] },
-      ]);
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow()); // With
+      model('profile').findFirst.mockResolvedValueOnce(personRow()); // Who
+      model('appointment').create.mockResolvedValueOnce(apptRow({ person_id: WHO }));
+      model('profile').findMany.mockResolvedValueOnce([personProfileRow(), pastorRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null); // buildDetail visitor lookup
 
       const result = await service.create(
         {
           title: 'Budget planning',
           scheduledAt: '2026-09-05T10:00:00.000Z',
-          counterpartId: PASTOR,
+          withId: PASTOR,
+          whoId: WHO,
         },
         CHURCH,
         SEC,
         'user-1',
       );
 
-      expect(result.secretaryId).toBe(SEC);
+      expect(result.personId).toBe(WHO);
       expect(result.pastorId).toBe(PASTOR);
       expect(model('appointment').create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             title: 'Budget planning',
-            secretary_id: SEC,
             pastor_id: PASTOR,
+            person_id: WHO,
+            visitor_id: null,
           }),
         }),
       );
@@ -146,7 +168,54 @@ describe('AppointmentsService', () => {
       );
     });
 
-    it('rejects a cross-branch pastor for a branch secretary', async () => {
+    it('creates an appointment with an existing visitor as the Who party', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(scopeRow()); // resolveScope
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow()); // With
+      model('visitor').findFirst.mockResolvedValueOnce({
+        id: VISITOR,
+        first_name: 'Tunde',
+        last_name: 'Bello',
+      }); // Who visitor
+      model('appointment').create.mockResolvedValueOnce(
+        apptRow({ person_id: SEC, visitor_id: VISITOR }),
+      );
+      model('profile').findMany.mockResolvedValueOnce([
+        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
+        pastorRow(),
+      ]);
+      model('visitor').findFirst.mockResolvedValueOnce({
+        id: VISITOR,
+        first_name: 'Tunde',
+        last_name: 'Bello',
+      }); // buildDetail visitor lookup
+
+      const result = await service.create(
+        {
+          title: 'Outreach',
+          scheduledAt: '2026-09-05T10:00:00.000Z',
+          withId: PASTOR,
+          whoKind: 'visitor',
+          visitorId: VISITOR,
+        },
+        CHURCH,
+        SEC,
+        'user-1',
+      );
+
+      expect(result.whoKind).toBe('visitor');
+      expect(result.visitorName).toBe('Tunde Bello');
+      expect(model('appointment').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            pastor_id: PASTOR,
+            person_id: SEC,
+            visitor_id: VISITOR,
+          }),
+        }),
+      );
+    });
+
+    it('rejects a cross-branch With pastor for a branch booker', async () => {
       model('profile').findFirst.mockResolvedValueOnce(scopeRow());
       model('profile').findFirst.mockResolvedValueOnce(
         pastorRow({ branch_id: BRANCH_B, branch: { id: BRANCH_B, name: 'Branch B' } }),
@@ -157,7 +226,8 @@ describe('AppointmentsService', () => {
           {
             title: 'Budget planning',
             scheduledAt: '2026-09-05T10:00:00.000Z',
-            counterpartId: PASTOR,
+            withId: PASTOR,
+            whoId: WHO,
           },
           CHURCH,
           SEC,
@@ -166,24 +236,24 @@ describe('AppointmentsService', () => {
       ).rejects.toThrow('same branch');
     });
 
-    it('allows an HQ secretary to book a church-wide pastor', async () => {
+    it('allows an HQ booker to pick a church-wide pastor', async () => {
       model('profile').findFirst.mockResolvedValueOnce(
         scopeRow({ is_admin_hq: true, branch_id: BRANCH_B, branch: { is_headquarters: true } }),
       );
       model('profile').findFirst.mockResolvedValueOnce(
         pastorRow({ branch_id: BRANCH_A, branch: { id: BRANCH_A, name: 'Main Campus' } }),
       );
-      model('appointment').create.mockResolvedValueOnce(apptRow());
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-        { id: PASTOR, first_name: 'Pastor John', last_name: 'Adebayo', role: ['branch_pastor'] },
-      ]);
+      model('profile').findFirst.mockResolvedValueOnce(personRow());
+      model('appointment').create.mockResolvedValueOnce(apptRow({ person_id: WHO }));
+      model('profile').findMany.mockResolvedValueOnce([personProfileRow(), pastorRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
 
       const result = await service.create(
         {
           title: 'Budget planning',
           scheduledAt: '2026-09-05T10:00:00.000Z',
-          counterpartId: PASTOR,
+          withId: PASTOR,
+          whoId: WHO,
         },
         CHURCH,
         SEC,
@@ -192,11 +262,11 @@ describe('AppointmentsService', () => {
       expect(result.pastorId).toBe(PASTOR);
     });
 
-    it('rejects non-secretary/pastor roles', async () => {
+    it('rejects non-secretary/pastor/super-admin roles', async () => {
       model('profile').findFirst.mockResolvedValueOnce(scopeRow({ role: ['member'] }));
       await expect(
         service.create(
-          { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', counterpartId: PASTOR },
+          { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', withId: PASTOR, whoId: WHO },
           CHURCH,
           SEC,
           'u',
@@ -204,43 +274,77 @@ describe('AppointmentsService', () => {
       ).rejects.toThrow('Only secretary and pastor roles');
     });
 
-    it('rejects self-appointment', async () => {
+    it('allows a super_admin to book', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(
+        scopeRow({ role: ['super_admin'], is_admin_hq: true }),
+      );
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow());
+      model('profile').findFirst.mockResolvedValueOnce(personRow());
+      model('appointment').create.mockResolvedValueOnce(apptRow({ person_id: WHO }));
+      model('profile').findMany.mockResolvedValueOnce([personProfileRow(), pastorRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
+
+      const result = await service.create(
+        { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', withId: PASTOR, whoId: WHO },
+        CHURCH,
+        SEC,
+        'u',
+      );
+      expect(result.id).toBe(apptRow().id);
+    });
+
+    it('rejects the With pastor equaling the Who person', async () => {
       model('profile').findFirst.mockResolvedValueOnce(scopeRow());
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow());
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow()); // Who same as With
       await expect(
         service.create(
-          { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', counterpartId: SEC },
+          { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', withId: PASTOR, whoId: PASTOR },
           CHURCH,
           SEC,
           'u',
         ),
-      ).rejects.toThrow('with yourself');
+      ).rejects.toThrow('must be different people');
+    });
+
+    it('rejects whoKind visitor without a visitorId', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(scopeRow());
+      await expect(
+        service.create(
+          {
+            title: 'x',
+            scheduledAt: '2026-09-05T10:00:00.000Z',
+            withId: PASTOR,
+            whoKind: 'visitor',
+          },
+          CHURCH,
+          SEC,
+          'u',
+        ),
+      ).rejects.toThrow('A visitor ID is required');
     });
   });
 
   describe('list', () => {
-    it('filters to the current scope (secretary or pastor) with active rows + summary', async () => {
-      model('appointment').findMany.mockResolvedValueOnce([apptRow()]);
-      model('appointment').count.mockResolvedValueOnce(1);
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-        { id: PASTOR, first_name: 'Pastor John', last_name: 'Adebayo', role: ['branch_pastor'] },
+    it('filters to the current scope (person or pastor) with active rows + summary', async () => {
+      model('appointment').findMany.mockResolvedValueOnce([
+        apptRow({ person_id: SEC, visitor_id: null }),
       ]);
+      model('appointment').count.mockResolvedValueOnce(1);
+      model('profile').findMany.mockResolvedValueOnce([personRow({ id: SEC })]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
       model('appointment').groupBy.mockResolvedValueOnce([
         { status: 'pending', _count: { _all: 1 } },
       ]);
 
-      const result = await service.list(CHURCH, SEC, {
-        page: 1,
-        limit: 30,
-      });
+      const result = await service.list(CHURCH, SEC, { page: 1, limit: 30 });
 
       expect(result.total).toBe(1);
-      expect(result.data[0].secretaryId).toBe(SEC);
       expect(model('appointment').findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             church_id: CHURCH,
-            OR: [{ secretary_id: SEC }, { pastor_id: SEC }],
+            OR: [{ person_id: SEC }, { pastor_id: SEC }],
             archived_at: null,
           }),
         }),
@@ -277,9 +381,8 @@ describe('AppointmentsService', () => {
   describe('getOne', () => {
     it('returns the appointment for a party', async () => {
       model('appointment').findFirst.mockResolvedValueOnce(apptRow());
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-      ]);
+      model('profile').findMany.mockResolvedValueOnce([personRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
       const result = await service.getOne(apptRow().id as string, CHURCH, SEC);
       expect(result.id).toBe(apptRow().id);
     });
@@ -291,13 +394,12 @@ describe('AppointmentsService', () => {
   });
 
   describe('update', () => {
-    it('updates status/title fields', async () => {
+    it('updates status/title fields preserving parties', async () => {
       model('appointment').findFirst.mockResolvedValueOnce(apptRow());
       model('profile').findFirst.mockResolvedValueOnce(scopeRow()); // resolveScope
       model('appointment').update.mockResolvedValueOnce(apptRow({ status: 'confirmed' }));
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-      ]);
+      model('profile').findMany.mockResolvedValueOnce([personRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
 
       const result = await service.update(
         apptRow().id as string,
@@ -312,22 +414,51 @@ describe('AppointmentsService', () => {
       );
     });
 
-    it('re-changes the pastor within scope when counterpartId given', async () => {
+    it('re-changes the With pastor within scope when withId given', async () => {
       const newPastor = '55555555-5555-5555-5555-555555555555';
       model('appointment').findFirst.mockResolvedValueOnce(apptRow());
       model('profile').findFirst.mockResolvedValueOnce(scopeRow()); // resolveScope
       model('profile').findFirst.mockResolvedValueOnce(
-        pastorRow({ id: newPastor, role: ['branch_pastor'], branch_id: BRANCH_A }),
-      ); // fetchCounterpart
+        pastorRow({ id: newPastor, branch_id: BRANCH_A }),
+      ); // With
       model('appointment').update.mockResolvedValueOnce(apptRow({ pastor_id: newPastor }));
-      model('profile').findMany.mockResolvedValueOnce([
-        { id: SEC, first_name: 'Bola', last_name: 'Okonkwo', role: ['secretary'] },
-      ]);
+      model('profile').findMany.mockResolvedValueOnce([personRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
 
-      await service.update(apptRow().id as string, { counterpartId: newPastor }, CHURCH, SEC, 'u');
+      await service.update(apptRow().id as string, { withId: newPastor }, CHURCH, SEC, 'u');
       const data = model('appointment').update.mock.calls[0][0].data;
       expect(data.pastor_id).toBe(newPastor);
-      expect(data.secretary_id).toBe(SEC);
+      expect(data.person_id).toBe(WHO);
+    });
+
+    it('swaps the Who party to an existing visitor on update', async () => {
+      model('appointment').findFirst.mockResolvedValueOnce(apptRow());
+      model('profile').findFirst.mockResolvedValueOnce(scopeRow());
+      model('visitor').findFirst.mockResolvedValueOnce({
+        id: VISITOR,
+        first_name: 'Tunde',
+        last_name: 'Bello',
+      }); // Who visitor
+      model('appointment').update.mockResolvedValueOnce(
+        apptRow({ person_id: SEC, visitor_id: VISITOR }),
+      );
+      model('profile').findMany.mockResolvedValueOnce([personRow({ id: SEC })]);
+      model('visitor').findFirst.mockResolvedValueOnce({
+        id: VISITOR,
+        first_name: 'Tunde',
+        last_name: 'Bello',
+      }); // buildDetail
+
+      const result = await service.update(
+        apptRow().id as string,
+        { whoKind: 'visitor', visitorId: VISITOR },
+        CHURCH,
+        SEC,
+        'u',
+      );
+      const data = model('appointment').update.mock.calls[0][0].data;
+      expect(data.visitor_id).toBe(VISITOR);
+      expect(result.whoKind).toBe('visitor');
     });
   });
 
@@ -385,31 +516,54 @@ describe('AppointmentsService', () => {
   });
 
   describe('contacts', () => {
-    it('lists pastor counterparts in the same branch for a branch secretary', async () => {
+    it('lists With (pastor) participants in the same branch for a branch booker', async () => {
       model('profile').findFirst.mockResolvedValueOnce(scopeRow());
       model('profile').findMany.mockResolvedValueOnce([pastorRow()]);
 
-      const result = await service.listContacts(CHURCH, SEC, {});
+      const result = await service.listContacts(CHURCH, SEC, { kind: 'with' });
 
       expect(result.total).toBe(1);
+      expect(result.data[0].kind).toBe('with');
       expect(result.data[0].isPastor).toBe(true);
       const where = model('profile').findMany.mock.calls[0][0].where;
       expect(where.role.hasSome).toContain('branch_pastor');
       expect(where.branch_id).toBe(BRANCH_A);
     });
 
-    it('lists secretaries for a pastor viewer', async () => {
-      model('profile').findFirst.mockResolvedValueOnce(
-        scopeRow({ role: ['branch_pastor'], branch_id: BRANCH_A }),
-      );
-      model('profile').findMany.mockResolvedValueOnce([
-        { ...scopeRow(), role: ['secretary'], isPastor: undefined },
+    it('lists all profiles for the Who picker plus optional existing visitors', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(scopeRow());
+      model('profile').findMany.mockResolvedValueOnce([personRow()]);
+      model('visitor').findMany.mockResolvedValueOnce([
+        { id: VISITOR, first_name: 'Tunde', last_name: 'Bello' },
       ]);
 
-      const result = await service.listContacts(CHURCH, '11111111-1111-1111-1111-111111111111', {});
-      expect(result.data[0].isPastor).toBe(false);
+      const result = await service.listContacts(CHURCH, SEC, {
+        kind: 'who',
+        includeVisitors: true,
+      });
+
+      expect(result.total).toBe(2);
+      expect(result.data[0].kind).toBe('who');
+      expect(result.data[1].role).toBe('visitor');
+      expect(result.data[1].isPastor).toBe(false);
+      const profileWhere = model('profile').findMany.mock.calls[0][0].where;
+      expect(profileWhere.role).toBeUndefined();
+      expect(profileWhere.branch_id).toBe(BRANCH_A);
+      const visitorWhere = model('visitor').findMany.mock.calls[0][0].where;
+      expect(visitorWhere.deleted_at).toBeNull();
+    });
+
+    it('lists pastor participants church-wide for an HQ booker', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(
+        scopeRow({ is_admin_hq: true, branch_id: BRANCH_B, branch: { is_headquarters: true } }),
+      );
+      model('profile').findMany.mockResolvedValueOnce([pastorRow()]);
+
+      const result = await service.listContacts(CHURCH, SEC, { kind: 'with' });
+
+      expect(result.data[0].isPastor).toBe(true);
       const where = model('profile').findMany.mock.calls[0][0].where;
-      expect(where.role.hasSome).toEqual(['secretary']);
+      expect(where.branch_id).toBeUndefined();
     });
   });
 });

@@ -1,6 +1,6 @@
 /**
  * @file create-appointment.dto.ts
- * @description DTO for creating an appointment.
+ * @description DTO for creating an appointment (With/Who model).
  *
  * @module appointments/dto/create-appointment.dto
  * @since 1.0.0
@@ -15,13 +15,22 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { APPOINTMENT_STATUS } from './appointment-response.dto';
 
-export type AppointmentCreatorSide = 'secretary' | 'pastor';
+/**
+ * The Who party can be a staff/member profile or an existing visitor.
+ */
+export type AppointmentWhoKind = 'profile' | 'visitor';
 
 /**
  * DTO for creating a new appointment in the booking registry.
+ *
+ * Every appointment has a fixed With party (a pastor: branch_pastor /
+ * senior_pastor / church_admin) and a Who party (a staff/member profile or an
+ * existing visitor). The booker (secretary or pastor) is implicit — there is
+ * no stored creator column.
  */
 export class CreateAppointmentDto {
   @ApiProperty({ description: 'Appointment title', example: 'Budget planning' })
@@ -39,12 +48,41 @@ export class CreateAppointmentDto {
 
   @ApiProperty({
     description:
-      'The counterpart Profile ID. For a secretary this is the pastor; for a ' +
-      'pastor this is the secretary.',
+      'The With party — the pastor Profile ID (branch_pastor | senior_pastor | church_admin).',
     example: '11111111-1111-1111-1111-111111111111',
   })
   @IsUUID('4')
-  counterpartId!: string;
+  withId!: string;
+
+  @ApiProperty({
+    description:
+      'The Who party — a staff/member Profile ID. Mutually exclusive with the visitor form.',
+    example: '22222222-2222-2222-2222-222222222222',
+  })
+  @IsUUID('4')
+  @ValidateIf((o) => o.whoKind !== 'visitor')
+  whoId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'The Who party kind. Omit (or "profile") to book a profile via `whoId`; ' +
+      '"visitor" to book an existing visitor via `visitorId`.',
+    enum: ['profile', 'visitor'],
+    default: 'profile',
+    example: 'profile',
+  })
+  @IsIn(['profile', 'visitor'])
+  @IsOptional()
+  whoKind?: AppointmentWhoKind;
+
+  @ApiPropertyOptional({
+    description:
+      'The Who party — an existing visitor Profile-equivalent ID, required when `whoKind` is "visitor".',
+    example: '8c8c8c8c-8c8c-8c8c-8c8c-8c8c8c8c8c8c',
+  })
+  @IsUUID('4')
+  @ValidateIf((o) => o.whoKind === 'visitor')
+  visitorId?: string;
 
   @ApiPropertyOptional({ description: 'Location', example: 'Main Campus — Office 2' })
   @IsString()

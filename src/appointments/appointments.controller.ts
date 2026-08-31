@@ -3,7 +3,7 @@
  * @description HTTP endpoints for the appointment/booking registry.
  *
  * Provides create, list, detail, update, archive, restore, and permanent
- * delete for appointments, plus a counterpart (secretary/pastor) picker. All
+ * delete for appointments, plus the With/Who participant pickers. All
  * endpoints are auth-protected and permission-gated by `appointments:*`.
  *
  * @module appointments/appointments.controller
@@ -57,14 +57,14 @@ export class AppointmentsController {
   }
 
   /**
-   * List counterpart contacts for the appointment pairing picker.
+   * List participant contacts for the appointment With/Who pickers.
    * Declared before the `:appointmentId` param route to avoid shadowing.
    */
   @Get('contacts')
   @RequirePermissions('appointments:read')
   @ApiGetEndpoint(
     'List appointment contacts',
-    'Lists selectable counterpart contacts (pastors for secretaries, secretaries for pastors) in scope.',
+    'Lists selectable participants: kind "with" returns pastor-role profiles, kind "who" returns all profiles plus optional existing visitors, in scope.',
   )
   async listContacts(
     @Query() query: ListAppointmentContactsDto,

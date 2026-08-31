@@ -33,25 +33,53 @@ export class AppointmentDto {
   scheduledAt!: string;
 
   @ApiProperty({
-    description: 'Secretary Profile ID',
-    example: '22222222-2222-2222-2222-222222222222',
-  })
-  secretaryId!: string;
-
-  @ApiPropertyOptional({ description: 'Secretary full name', example: 'Sister Bola Okonkwo' })
-  secretaryName?: string;
-
-  @ApiProperty({
-    description: 'Pastor Profile ID',
+    description: 'With party — pastor Profile ID',
     example: '11111111-1111-1111-1111-111111111111',
   })
   pastorId!: string;
 
-  @ApiPropertyOptional({ description: 'Pastor full name', example: 'Pastor John Adebayo' })
+  @ApiPropertyOptional({
+    description: 'With party — pastor full name',
+    example: 'Pastor John Adebayo',
+  })
   pastorName?: string;
 
-  @ApiPropertyOptional({ description: 'Pastor primary role', example: 'branch_pastor' })
+  @ApiPropertyOptional({
+    description: 'With party — pastor primary role',
+    example: 'branch_pastor',
+  })
   pastorRole?: string;
+
+  @ApiProperty({
+    description: 'Who party — person Profile ID',
+    example: '22222222-2222-2222-2222-222222222222',
+  })
+  personId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Who party — person full name',
+    example: 'Sister Bola Okonkwo',
+  })
+  personName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Who party kind',
+    enum: ['profile', 'visitor'],
+    example: 'profile',
+  })
+  whoKind?: 'profile' | 'visitor';
+
+  @ApiPropertyOptional({
+    description: 'Who party — visitor ID (when whoKind is visitor)',
+    example: '8c8c8c8c-8c8c-8c8c-8c8c-8c8c8c8c8c8c',
+  })
+  visitorId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Who party — visitor full name (when whoKind is visitor)',
+    example: 'Visitor Tunde Bello',
+  })
+  visitorName?: string;
 
   @ApiPropertyOptional({ description: 'Location', example: 'Main Campus — Office 2' })
   location?: string;
@@ -77,7 +105,7 @@ export class AppointmentDto {
 }
 
 /**
- * A selectable appointment counterpart (secretary or pastor).
+ * A selectable appointment participant (With/pastor picker or Who/person picker).
  */
 export class AppointmentContactDto {
   @ApiProperty({
@@ -93,7 +121,15 @@ export class AppointmentContactDto {
   role!: string;
 
   @ApiProperty({
-    description: 'Whether this contact is a pastor (vs a secretary counterpart)',
+    description:
+      'Which picker this contact is for: "with" = the pastor partner, "who" = the person',
+    enum: ['with', 'who'],
+    example: 'with',
+  })
+  kind!: 'with' | 'who';
+
+  @ApiProperty({
+    description: 'Whether this contact is a pastor (fills the With/pastor side)',
     example: true,
   })
   isPastor!: boolean;

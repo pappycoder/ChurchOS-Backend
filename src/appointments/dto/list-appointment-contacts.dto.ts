@@ -1,23 +1,30 @@
 /**
  * @file list-appointment-contacts.dto.ts
- * @description DTO for listing appointment counterpart contacts (the pairing picker).
+ * @description DTO for listing appointment participant contacts (the pickers).
  *
  * @module appointments/dto/list-appointment-contacts.dto
  * @since 1.0.0
  */
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
- * DTO for listing the selectable counterpart set when creating/editing an
- * appointment. The counterpart chosen depends on who is acting:
- *  - A secretary creates an appointment WITH a pastor (the "pastor" side).
- *  - A pastor creates an appointment WITH a secretary (the role/side they pick).
- * `role` filters by exact role; `branchId` filters by branch.
+ * DTO for listing the selectable participant set when creating/editing an
+ * appointment (the With/pastor picker and the Who/person picker).
+ * `kind: 'with'` returns pastor-role profiles; `kind: 'who'` returns all
+ * profiles (any role) plus optional visitors.
  */
 export class ListAppointmentContactsDto {
+  @ApiProperty({
+    description: 'Which picker: "with" = the pastor partner picker, "who" = the person picker.',
+    enum: ['with', 'who'],
+    example: 'with',
+  })
+  @IsIn(['with', 'who'])
+  kind!: 'with' | 'who';
+
   @ApiPropertyOptional({ description: 'Page number', default: 1, example: 1 })
   @Type(() => Number)
   @IsInt()
@@ -42,12 +49,12 @@ export class ListAppointmentContactsDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Restrict to the pastor side (branch_pastor/church_admin/senior_pastor)',
+    description: 'When kind is "who", also include existing visitors in the results',
     example: true,
   })
   @Type(() => Boolean)
   @IsOptional()
-  pastorsOnly?: boolean;
+  includeVisitors?: boolean;
 
   @ApiPropertyOptional({
     description: 'Filter by exact role',

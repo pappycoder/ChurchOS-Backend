@@ -1275,9 +1275,10 @@ model EmailRecipient {
 model Appointment {
   id           String    @id @default(uuid())
   church_id    String
-  branch_id    String?   // resolved birth context (counterpart's branch)
-  secretary_id String    // secretary Profile.id
-  pastor_id    String    // pastor Profile.id (branch_pastor | church_admin | senior_pastor)
+  branch_id    String?   // resolved birth context (the With pastor's branch)
+  pastor_id    String    // With party — pastor Profile.id (branch_pastor | church_admin | senior_pastor)
+  person_id    String    // Who party — person Profile.id (any staff/member)
+  visitor_id   String?   // Who party when it's a visitor (null for profile Who)
   title        String
   scheduled_at DateTime
   location     String?
@@ -1288,8 +1289,9 @@ model Appointment {
   archived_at  DateTime? // set when archived
 
   @@index([church_id, scheduled_at])
-  @@index([secretary_id])
+  @@index([person_id])
   @@index([pastor_id])
+  @@index([visitor_id])
   @@map("appointments")
 }
 

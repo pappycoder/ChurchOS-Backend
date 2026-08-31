@@ -1,19 +1,17 @@
 /**
  * @file appointments.service.ts
- * @description Service for the appointment/booking registry.
+ * @description Service for the appointment/booking registry (With/Who model).
  *
- * An appointment pairs a secretary with a pastor (any pastor role: branch
- * pastor, church admin, senior pastor). The pairing scope follows the
- * secretary↔pastor rule:
- *  - A BRANCH secretary (not HQ) books with pastor-role profiles in the SAME
- *    branch as the secretary.
- *  - An HQ secretary (is_admin_hq OR seated at the HQ branch) books with
- *    pastor-role profiles ACROSS the church.
- *  - A pastor persona creating an appointment books with secretary-role
- *    profiles: church admins / senior pastors church-wide, branch pastors in
- *    their own branch.
- * A profile can read/manage appointments where they are the secretary_id OR
- * pastor_id (church-scoped). Status lifecycle: pending | confirmed | completed
+ * Every appointment has a fixed With party (a pastor: branch_pastor |
+ * church_admin | senior_pastor) and a Who party (a staff/member profile or an
+ * existing visitor). The booker (secretary or pastor) is implicit — there is no
+ * stored organizer column.
+ *
+ * Eligibility to book & manage: secretary, any pastor role, or super_admin.
+ *  - A BRANCH (non-HQ) booker picks With/Who participants in the SAME branch.
+ *  - An HQ booker (is_admin_hq OR seated at the HQ branch) picks church-wide.
+ * A profile can read/manage appointments where they are the `person_id` OR
+ * `pastor_id` (church-scoped). Status lifecycle: pending | confirmed | completed
  * | cancelled. Archived rows are hidden unless ?archived=true; restore returns
  * them; delete permanently purges.
  *
@@ -25,7 +23,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
-import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreateAppointmentDto, AppointmentWhoKind } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import {
   AppointmentContactDto,
@@ -34,12 +32,12 @@ import {
 } from './dto/appointment-response.dto';
 
 /**
- * Roles that count as the "pastor" side of an appointment pairing.
+ * Roles that count as the "pastor" side (the With party) of an appointment.
  */
 export const PASTOR_ROLES = ['branch_pastor', 'church_admin', 'senior_pastor'] as const;
 
 /**
- * The creator's scope context resolved from their profile.
+ * The booker's scope context resolved from their profile.
  */
 export interface AppointmentScope {
   churchId: string;
@@ -48,6 +46,7 @@ export interface AppointmentScope {
   branchId: string | null;
   isPastor: boolean;
   isSecretary: boolean;
+  isSuperAdmin: boolean;
 }
 
 interface ProfileLike {
@@ -56,9 +55,16 @@ interface ProfileLike {
   last_name: string | null;
   role: string[];
   status: string;
-  is_admin_hq: boolean;
   branch_id: string | null;
   avatar_url: string | null;
+  branch?: { id: string; name: string } | null;
+}
+
+interface VisitorLike {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  branch_id?: string | null;
   branch?: { id: string; name: string } | null;
 }
 
@@ -66,8 +72,9 @@ interface AppointmentRow {
   id: string;
   church_id: string;
   branch_id: string | null;
-  secretary_id: string;
   pastor_id: string;
+  person_id: string;
+  visitor_id: string | null;
   title: string;
   scheduled_at: Date;
   location: string | null;
@@ -87,7 +94,7 @@ export class AppointmentsService {
   ) {}
 
   /**
-   * Create a new appointment after validating the pairing is in scope.
+   * Create a new appointment after validating the With/Who parties are in scope.
    */
   async create(
     dto: CreateAppointmentDto,
@@ -96,33 +103,55 @@ export class AppointmentsService {
     userId: string,
   ): Promise<AppointmentDto> {
     const viewer = await this.resolveScope(churchId, profileId);
-    if (!viewer.isPastor && !viewer.isSecretary) {
+    if (!viewer.isSecretary && !viewer.isPastor && !viewer.isSuperAdmin) {
       throw new BadRequestException('Only secretary and pastor roles can create appointments');
     }
-    if (dto.counterpartId === profileId) {
-      throw new BadRequestException('You cannot schedule an appointment with yourself');
+
+    const isVisitorWho = dto.whoKind === 'visitor';
+    if (isVisitorWho && !dto.visitorId) {
+      throw new BadRequestException('A visitor ID is required when Who is a visitor');
+    }
+    if (!isVisitorWho && !dto.whoId) {
+      throw new BadRequestException('A person profile is required for the Who party');
     }
 
-    const creatorIsSecretary = viewer.isSecretary;
-    const counterpart = await this.fetchCounterpart(
-      churchId,
-      dto.counterpartId,
-      creatorIsSecretary,
-    );
-    if (!counterpart) {
-      throw new BadRequestException('The selected counterpart is not valid');
+    const withProfile = await this.fetchProfileInScope(churchId, dto.withId, {
+      roles: [...PASTOR_ROLES],
+    });
+    if (!withProfile) {
+      throw new BadRequestException('The selected With (pastor) is not valid');
     }
-    this.assertCounterpartInScope(viewer, counterpart, creatorIsSecretary);
+    this.assertInBranchScope(viewer, withProfile, 'Any booker');
 
-    const secretaryId = creatorIsSecretary ? viewer.profileId : counterpart.profile.id;
-    const pastorId = creatorIsSecretary ? counterpart.profile.id : viewer.profileId;
+    let whoProfile: ProfileLike | null = null;
+    let visitor: VisitorLike | null = null;
+    if (isVisitorWho) {
+      visitor = await this.fetchVisitorInScope(churchId, dto.visitorId!);
+      if (!visitor) {
+        throw new BadRequestException('The selected visitor is not valid');
+      }
+    } else {
+      whoProfile = await this.fetchProfileInScope(churchId, dto.whoId!);
+      if (!whoProfile) {
+        throw new BadRequestException('The selected Who (person) is not valid');
+      }
+      this.assertInBranchScope(viewer, whoProfile, 'Any booker');
+      if (whoProfile.id === withProfile.id) {
+        throw new BadRequestException(
+          'The With (pastor) and Who (person) must be different people',
+        );
+      }
+    }
+
+    const personId = whoProfile ? whoProfile.id : viewer.profileId;
 
     const appointment = await this.prisma.appointment.create({
       data: {
         church_id: churchId,
-        branch_id: counterpart.profile.branch_id,
-        secretary_id: secretaryId,
-        pastor_id: pastorId,
+        branch_id: withProfile.branch_id,
+        pastor_id: withProfile.id,
+        person_id: personId,
+        visitor_id: visitor ? visitor.id : null,
         title: dto.title,
         scheduled_at: new Date(dto.scheduledAt),
         location: dto.location ?? null,
@@ -140,21 +169,22 @@ export class AppointmentsService {
       newValues: {
         title: dto.title,
         scheduled_at: dto.scheduledAt,
-        secretary_id: secretaryId,
-        pastor_id: pastorId,
+        pastor_id: withProfile.id,
+        person_id: personId,
+        visitor_id: visitor ? visitor.id : null,
         status: appointment.status,
       },
     });
 
     this.logger.log(
-      `Appointment ${appointment.id} created (${secretaryId} ↔ ${pastorId}) in church ${churchId}`,
+      `Appointment ${appointment.id} created (with ${withProfile.id} / who ${personId}) in church ${churchId}`,
     );
     return this.buildDetail(appointment, churchId);
   }
 
   /**
-   * List appointments in the current viewer's scope (as secretary or pastor),
-   * with optional status/date/search/archived filters and pagination.
+   * List appointments in the current viewer's scope (as the person or the With
+   * pastor), with optional status/date/search/archived filters and pagination.
    */
   async list(
     churchId: string,
@@ -163,7 +193,7 @@ export class AppointmentsService {
   ): Promise<AppointmentListEnvelopeDto> {
     const where: Prisma.AppointmentWhereInput = {
       church_id: churchId,
-      OR: [{ secretary_id: profileId }, { pastor_id: profileId }],
+      OR: [{ person_id: profileId }, { pastor_id: profileId }],
       archived_at: q.archived === true ? { not: null } : null,
     };
 
@@ -216,8 +246,9 @@ export class AppointmentsService {
   }
 
   /**
-   * Update an appointment the viewer manages (secretary or pastor), preserving
-   * the pairing integrity by validating any new pastor.
+   * Update an appointment the viewer manages, re-validating any changed With/Who
+   * parties in scope. New visitors can only be created at creation time — on
+   * update, an existing visitor may be selected but never created inline.
    */
   async update(
     appointmentId: string,
@@ -228,24 +259,74 @@ export class AppointmentsService {
   ): Promise<AppointmentDto> {
     const row = await this.findPartyAppointment(appointmentId, churchId, profileId);
     const viewer = await this.resolveScope(churchId, profileId);
+    if (!viewer.isSecretary && !viewer.isPastor && !viewer.isSuperAdmin) {
+      throw new BadRequestException('Only secretary and pastor roles can manage appointments');
+    }
 
-    let secretaryId = row.secretary_id;
     let pastorId = row.pastor_id;
+    let personId = row.person_id;
+    let visitorId = row.visitor_id;
     let branchId = row.branch_id;
-    if (dto.counterpartId) {
-      const creatorIsSecretary = viewer.isSecretary;
-      const counterpart = await this.fetchCounterpart(
-        churchId,
-        dto.counterpartId,
-        creatorIsSecretary,
-      );
-      if (!counterpart) {
-        throw new BadRequestException('The selected counterpart is not valid');
+
+    if (dto.withId) {
+      const withProfile = await this.fetchProfileInScope(churchId, dto.withId, {
+        roles: [...PASTOR_ROLES],
+      });
+      if (!withProfile) {
+        throw new BadRequestException('The selected With (pastor) is not valid');
       }
-      this.assertCounterpartInScope(viewer, counterpart, creatorIsSecretary);
-      secretaryId = creatorIsSecretary ? viewer.profileId : counterpart.profile.id;
-      pastorId = creatorIsSecretary ? counterpart.profile.id : viewer.profileId;
-      branchId = counterpart.profile.branch_id;
+      this.assertInBranchScope(viewer, withProfile, 'Any booker');
+      pastorId = withProfile.id;
+      branchId = withProfile.branch_id;
+    }
+
+    const whoChanged =
+      dto.whoId !== undefined || dto.whoKind !== undefined || dto.visitorId !== undefined;
+
+    if (whoChanged) {
+      const targetWhoKind: AppointmentWhoKind = dto.whoKind ?? (visitorId ? 'visitor' : 'profile');
+      if (targetWhoKind === 'visitor') {
+        if (dto.whoId !== undefined && dto.whoId !== null) {
+          throw new BadRequestException(
+            'A Who profile cannot be combined with a visitor For the Who party',
+          );
+        }
+        const newVisitorId = dto.visitorId ?? visitorId;
+        if (newVisitorId) {
+          const visitor = await this.fetchVisitorInScope(churchId, newVisitorId);
+          if (!visitor) {
+            throw new BadRequestException('The selected visitor is not valid');
+          }
+          visitorId = visitor.id;
+        } else {
+          throw new BadRequestException('A visitor ID is required when Who is a visitor');
+        }
+        personId = viewer.profileId;
+        if (personId === pastorId) {
+          throw new BadRequestException(
+            'The With (pastor) and Who (person) must be different people',
+          );
+        }
+      } else {
+        if (dto.visitorId !== undefined && dto.visitorId !== null) {
+          throw new BadRequestException(
+            'A visitor cannot be combined with a Who profile For the Who party',
+          );
+        }
+        const newWhoId = dto.whoId ?? personId;
+        const whoProfile = await this.fetchProfileInScope(churchId, newWhoId);
+        if (!whoProfile) {
+          throw new BadRequestException('The selected Who (person) is not valid');
+        }
+        this.assertInBranchScope(viewer, whoProfile, 'Any booker');
+        personId = whoProfile.id;
+        visitorId = null;
+        if (personId === pastorId) {
+          throw new BadRequestException(
+            'The With (pastor) and Who (person) must be different people',
+          );
+        }
+      }
     }
 
     const updated = await this.prisma.appointment.update({
@@ -256,8 +337,8 @@ export class AppointmentsService {
         ...(dto.location !== undefined ? { location: dto.location } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
-        ...(dto.counterpartId !== undefined
-          ? { pastor_id: pastorId, secretary_id: secretaryId, branch_id: branchId }
+        ...(dto.withId !== undefined || dto.whoId !== undefined || dto.visitorId !== undefined
+          ? { pastor_id: pastorId, person_id: personId, visitor_id: visitorId, branch_id: branchId }
           : {}),
       },
     });
@@ -360,7 +441,10 @@ export class AppointmentsService {
   }
 
   /**
-   * List selectable counterpart contacts in the current viewer's pairing scope.
+   * List selectable participant contacts for a picker:
+   *  - kind "with": pastor-role profiles (the With/pastor partner).
+   *  - kind "who": all profiles (any role) plus optional existing visitors.
+   * Both scoped by branch (non-HQ) or church (HQ).
    */
   async listContacts(
     churchId: string,
@@ -368,36 +452,29 @@ export class AppointmentsService {
     q: ListAppointmentContactsLike,
   ): Promise<{ data: AppointmentContactDto[]; total: number }> {
     const viewer = await this.resolveScope(churchId, profileId);
+    const kind = q.kind ?? 'with';
 
-    let roles: string[];
-    let isPastor: boolean;
-    if (q.pastorsOnly !== undefined ? q.pastorsOnly : viewer.isSecretary) {
-      roles = [...PASTOR_ROLES];
-      isPastor = true;
-    } else {
-      roles = ['secretary'];
-      isPastor = false;
-    }
-
-    const where: Prisma.ProfileWhereInput = {
+    const profileWhere: Prisma.ProfileWhereInput = {
       church_id: churchId,
       status: { not: 'inactive' },
-      role: { hasSome: roles },
       id: { not: profileId },
     };
+    if (kind === 'with') {
+      profileWhere.role = { hasSome: [...PASTOR_ROLES] };
+    }
 
-    if (q.role && roles.includes(q.role)) {
-      where.role = { has: q.role };
+    if (q.role) {
+      profileWhere.role = { has: q.role };
     }
     if (q.branchId) {
-      where.branch_id = q.branchId;
+      profileWhere.branch_id = q.branchId;
     } else if (!viewer.isHq) {
-      where.branch_id = viewer.branchId ?? '';
+      profileWhere.branch_id = viewer.branchId ?? '';
     }
     if (q.search) {
       const s = q.search.trim();
       if (s) {
-        where.OR = [
+        profileWhere.OR = [
           { first_name: { contains: s, mode: 'insensitive' } },
           { last_name: { contains: s, mode: 'insensitive' } },
           { email: { contains: s, mode: 'insensitive' } },
@@ -406,13 +483,29 @@ export class AppointmentsService {
     }
 
     const profiles = await this.prisma.profile.findMany({
-      where,
+      where: profileWhere,
       take: Math.min(q.limit ?? 200, 200),
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
       include: { branch: { select: { id: true, name: true } } },
     });
 
-    const data = profiles.map((p) => this.mapContact(p, isPastor));
+    const data = profiles.map((p) => this.mapContact(p, kind));
+
+    if (kind === 'who' && q.includeVisitors) {
+      const visitorWhere: Prisma.VisitorWhereInput = {
+        church_id: churchId,
+        deleted_at: null,
+        archived_at: q.archived === true ? { not: null } : null,
+      };
+      const visitorRows = await this.prisma.visitor.findMany({
+        where: visitorWhere,
+        orderBy: { first_name: 'asc' },
+      });
+      const visitorContacts = (visitorRows as VisitorLike[]).map((v) => this.mapVisitorContact(v));
+      const all = [...data, ...visitorContacts];
+      return { data: all, total: all.length };
+    }
+
     return { data, total: data.length };
   }
 
@@ -432,6 +525,7 @@ export class AppointmentsService {
     const roles = (profile?.role as string[] | undefined) ?? [];
     const isPastor = roles.some((r) => (PASTOR_ROLES as readonly string[]).includes(r));
     const isSecretary = roles.includes('secretary');
+    const isSuperAdmin = roles.includes('super_admin');
     const atHqBranch = profile?.branch?.is_headquarters === true;
     const isHq = profile?.is_admin_hq === true || atHqBranch;
 
@@ -442,50 +536,54 @@ export class AppointmentsService {
       branchId: profile?.branch_id ?? null,
       isPastor,
       isSecretary,
+      isSuperAdmin,
     };
   }
 
-  private async fetchCounterpart(
+  private async fetchProfileInScope(
     churchId: string,
     id: string,
-    targetIsPastor: boolean,
-  ): Promise<{ profile: ProfileLike } | null> {
-    const roles = targetIsPastor ? ([...PASTOR_ROLES] as string[]) : ['secretary'];
+    opts: { roles?: string[] } = {},
+  ): Promise<ProfileLike | null> {
     const row = await this.prisma.profile.findFirst({
-      where: { id, church_id: churchId },
+      where: {
+        id,
+        church_id: churchId,
+        ...(opts.roles ? { role: { hasSome: opts.roles } } : {}),
+      },
       select: {
         id: true,
         first_name: true,
         last_name: true,
         role: true,
         status: true,
-        is_admin_hq: true,
         branch_id: true,
         avatar_url: true,
         branch: { select: { id: true, name: true } },
       },
     });
     if (!row || row.status === 'inactive') return null;
-    if (!(row.role as string[]).some((r) => roles.includes(r))) return null;
-    return { profile: row as ProfileLike };
+    return row as ProfileLike;
   }
 
-  private assertCounterpartInScope(
+  private async fetchVisitorInScope(churchId: string, id: string): Promise<VisitorLike | null> {
+    const row = await this.prisma.visitor.findFirst({
+      where: { id, church_id: churchId, deleted_at: null },
+      select: { id: true, first_name: true, last_name: true },
+    });
+    return row as VisitorLike | null;
+  }
+
+  private assertInBranchScope(
     viewer: AppointmentScope,
-    counterpart: { profile: ProfileLike },
-    targetIsPastor: boolean,
+    participant: { branch_id: string | null },
+    label: string,
   ): void {
     if (viewer.isHq) return;
-    if (viewer.isSecretary && targetIsPastor) {
-      if (
-        !viewer.branchId ||
-        !counterpart.profile.branch_id ||
-        counterpart.profile.branch_id !== viewer.branchId
-      ) {
-        throw new BadRequestException(
-          'A branch secretary can only book with a pastor in the same branch',
-        );
-      }
+    if (!viewer.branchId || !participant.branch_id || participant.branch_id !== viewer.branchId) {
+      throw new BadRequestException(
+        `A branch ${label} can only book with participants in the same branch (HQ can book church-wide)`,
+      );
     }
   }
 
@@ -498,7 +596,7 @@ export class AppointmentsService {
       where: {
         id: appointmentId,
         church_id: churchId,
-        OR: [{ secretary_id: profileId }, { pastor_id: profileId }],
+        OR: [{ person_id: profileId }, { pastor_id: profileId }],
       },
     });
     if (!row) throw new NotFoundException('Appointment not found');
@@ -506,29 +604,39 @@ export class AppointmentsService {
   }
 
   private async buildDetail(row: AppointmentRow, churchId: string): Promise<AppointmentDto> {
-    const ids = [...new Set([row.secretary_id, row.pastor_id])];
-    const rows = await this.prisma.profile.findMany({
-      where: { id: { in: ids }, church_id: churchId },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        role: true,
-      },
+    const profileIds = [...new Set([row.person_id, row.pastor_id])];
+    const profiles = await this.prisma.profile.findMany({
+      where: { id: { in: profileIds }, church_id: churchId },
+      select: { id: true, first_name: true, last_name: true, role: true },
     });
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    const secretary = byId.get(row.secretary_id);
+    const byId = new Map(profiles.map((r) => [r.id, r]));
+    const person = byId.get(row.person_id);
     const pastor = byId.get(row.pastor_id);
+
+    let visitorName: string | undefined;
+    if (row.visitor_id) {
+      const visitor = await this.prisma.visitor.findFirst({
+        where: { id: row.visitor_id, church_id: churchId },
+        select: { first_name: true, last_name: true },
+      });
+      if (visitor) {
+        visitorName = [visitor.first_name, visitor.last_name].filter(Boolean).join(' ').trim();
+      }
+    }
+    const whoKind: 'profile' | 'visitor' = row.visitor_id ? 'visitor' : 'profile';
 
     return {
       id: row.id,
       title: row.title,
       scheduledAt: row.scheduled_at.toISOString(),
-      secretaryId: row.secretary_id,
-      secretaryName: this.fullName(secretary),
       pastorId: row.pastor_id,
       pastorName: this.fullName(pastor),
       pastorRole: pastor ? (pastor.role as string[])[0] : undefined,
+      personId: row.person_id,
+      personName: whoKind === 'visitor' ? (visitorName ?? '') : this.fullName(person),
+      whoKind,
+      visitorId: row.visitor_id ?? undefined,
+      visitorName,
       location: row.location ?? undefined,
       notes: row.notes ?? undefined,
       status: row.status,
@@ -544,7 +652,7 @@ export class AppointmentsService {
   ): Promise<Record<string, number>> {
     const activeWhere: Prisma.AppointmentWhereInput = {
       church_id: churchId,
-      OR: [{ secretary_id: profileId }, { pastor_id: profileId }],
+      OR: [{ person_id: profileId }, { pastor_id: profileId }],
     };
     if (q.startDate || q.endDate) {
       activeWhere.scheduled_at = {
@@ -565,15 +673,26 @@ export class AppointmentsService {
     return map;
   }
 
-  private mapContact(p: ProfileLike, isPastor: boolean): AppointmentContactDto {
+  private mapContact(p: ProfileLike, kind: 'with' | 'who'): AppointmentContactDto {
     return {
       id: p.id,
       name: this.fullName(p),
       role: (p.role as string[])[0] || 'member',
-      isPastor,
+      kind,
+      isPastor: kind === 'with',
       branchId: p.branch_id ?? undefined,
       branchName: p.branch?.name,
       avatarUrl: p.avatar_url ?? undefined,
+    };
+  }
+
+  private mapVisitorContact(v: VisitorLike): AppointmentContactDto {
+    return {
+      id: v.id,
+      name: [v.first_name, v.last_name].filter(Boolean).join(' ').trim(),
+      role: 'visitor',
+      kind: 'who',
+      isPastor: false,
     };
   }
 
@@ -594,8 +713,10 @@ interface ListAppointmentsDtoLike {
 }
 
 interface ListAppointmentContactsLike {
+  kind?: 'with' | 'who';
   search?: string;
-  pastorsOnly?: boolean;
+  includeVisitors?: boolean;
+  archived?: boolean;
   role?: string;
   branchId?: string;
   limit?: number;
