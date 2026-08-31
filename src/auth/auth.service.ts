@@ -266,23 +266,34 @@ export class AuthService {
     // can complete the sign-in only after the code is verified.
     if (profile?.two_factor_enabled) {
       const recipient = profile.email?.trim() || email;
-      await this.redis.set(
-        `2fa:login:pending:${userId}`,
-        JSON.stringify({
-          session: {
-            accessToken: data.session.access_token,
-            refreshToken: data.session.refresh_token,
-            expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-          },
-          user: {
-            userId,
-            email,
-            profile: session.profile,
-          },
-        }),
-        AuthService.TWO_FACTOR_TTL_SECONDS,
-      );
-      await this.sendLoginCode(userId, recipient, profile.church.name ?? 'ChurchOS');
+      try {
+        await this.redis.set(
+          `2fa:login:pending:${userId}`,
+          JSON.stringify({
+            session: {
+              accessToken: data.session.access_token,
+              refreshToken: data.session.refresh_token,
+              expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+            },
+            user: {
+              userId,
+              email,
+              profile: session.profile,
+            },
+          }),
+          AuthService.TWO_FACTOR_TTL_SECONDS,
+        );
+        await this.sendLoginCode(userId, recipient, profile.church.name ?? 'ChurchOS');
+      } catch (err) {
+        // Fail-open: if Redis is unreachable we cannot stage/verify a 2FA code,
+        // so issue the session directly rather than locking the user out.
+        this.logger.warn(
+          `2FA staging skipped (Redis unavailable), issuing session directly: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+        return session;
+      }
       this.logger.log(`2FA required for login: ${email}`);
       return {
         requiresTwoFactor: true,
@@ -319,7 +330,14 @@ export class AuthService {
     }
 
     const key = `2fa:login:pending:${profile.user_id}`;
-    const raw = await this.redis.get<string>(key);
+    let raw: string | null = null;
+    try {
+      raw = await this.redis.get<string>(key);
+    } catch (err) {
+      this.logger.warn(
+        `2FA pending lookup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     if (!raw) {
       throw new UnauthorizedException('No pending sign-in found. Please sign in again.');
     }
@@ -352,20 +370,38 @@ export class AuthService {
     if (!digest || !verifyTwoFactorCode(dto.code.trim(), digest)) {
       attempts += 1;
       if (attempts >= AuthService.TWO_FACTOR_MAX_ATTEMPTS) {
-        await this.redis.del(key);
+        try {
+          await this.redis.del(key);
+        } catch (err) {
+          this.logger.warn(
+            `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+          );
+        }
         throw new UnauthorizedException('Too many incorrect attempts. Please sign in again.');
       }
-      await this.redis.set(
-        key,
-        JSON.stringify({ ...record, attempts }),
-        AuthService.TWO_FACTOR_TTL_SECONDS,
-      );
+      try {
+        await this.redis.set(
+          key,
+          JSON.stringify({ ...record, attempts }),
+          AuthService.TWO_FACTOR_TTL_SECONDS,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `2FA attempt counter write failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+        );
+      }
       throw new UnauthorizedException(
         `Invalid verification code. ${AuthService.TWO_FACTOR_MAX_ATTEMPTS - attempts} attempt(s) remaining.`,
       );
     }
 
-    await this.redis.del(key);
+    try {
+      await this.redis.del(key);
+    } catch (err) {
+      this.logger.warn(
+        `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     this.logger.log(`2FA sign-in completed: ${normalizedEmail}`);
 
@@ -398,7 +434,14 @@ export class AuthService {
     const digest = hashTwoFactorCode(code);
     const key = `2fa:login:pending:${userId}`;
 
-    const existing = await this.redis.get<string>(key);
+    let existing: string | null = null;
+    try {
+      existing = await this.redis.get<string>(key);
+    } catch (err) {
+      this.logger.warn(
+        `2FA pending read skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     const base = existing ? (JSON.parse(existing) as { session?: unknown; user?: unknown }) : {};
     await this.redis.set(
       key,
@@ -438,8 +481,14 @@ export class AuthService {
     // Calculate TTL from JWT expiry (default 3600s if we can't parse)
     const ttlSeconds = 3600;
 
-    // Blacklist the token in Redis
-    await this.redis.set(`auth:blacklist:${token}`, userId, ttlSeconds);
+    // Blacklist the token in Redis (non-fatal: a Redis outage must not block logout)
+    try {
+      await this.redis.set(`auth:blacklist:${token}`, userId, ttlSeconds);
+    } catch (err) {
+      this.logger.warn(
+        `Token blacklist write failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     // Revoke all sessions in Supabase (invalidates refresh tokens)
     const { error } = await this.supabase.client.auth.admin.signOut(userId);

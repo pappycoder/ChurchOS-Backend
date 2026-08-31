@@ -1025,21 +1025,38 @@ export class ProfileService {
     const digest = hashTwoFactorCode(code);
 
     if (!force) {
-      const existing = await this.redis.get<{ lastSentAt?: number }>(key);
-      const waitMs = (existing?.lastSentAt ?? 0) + this.TWO_FACTOR_COOLDOWN_MS - Date.now();
-      if (waitMs > 0) {
-        throw new HttpException(
-          `Please wait a moment before requesting another code (${Math.ceil(waitMs / 1000)}s).`,
-          HttpStatus.TOO_MANY_REQUESTS,
+      try {
+        const existing = await this.redis.get<{ lastSentAt?: number }>(key);
+        const waitMs = (existing?.lastSentAt ?? 0) + this.TWO_FACTOR_COOLDOWN_MS - Date.now();
+        if (waitMs > 0) {
+          throw new HttpException(
+            `Please wait a moment before requesting another code (${Math.ceil(waitMs / 1000)}s).`,
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+      } catch (err) {
+        if (err instanceof HttpException) {
+          throw err;
+        }
+        this.logger.warn(
+          `2FA cooldown check skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
         );
       }
     }
 
-    await this.redis.set(
-      key,
-      JSON.stringify({ digest, attempts: 0, lastSentAt: Date.now() }),
-      this.TWO_FACTOR_TTL_SECONDS,
-    );
+    try {
+      await this.redis.set(
+        key,
+        JSON.stringify({ digest, attempts: 0, lastSentAt: Date.now() }),
+        this.TWO_FACTOR_TTL_SECONDS,
+      );
+    } catch (err) {
+      throw new BadRequestException(
+        `Two-factor verification is temporarily unavailable: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+    }
 
     const churchName = profile.church?.name ?? 'ChurchOS';
     const appUrl = this.config.get<string>('WEB_URL') ?? '';
@@ -1108,7 +1125,14 @@ export class ProfileService {
     }
 
     const key = this.getTwoFactorKey(userId, purpose);
-    const raw = await this.redis.get<string>(key);
+    let raw: string | null = null;
+    try {
+      raw = await this.redis.get<string>(key);
+    } catch (err) {
+      this.logger.warn(
+        `2FA verification lookup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     if (!raw) {
       throw new BadRequestException('No verification code found. Request a new code first.');
     }
@@ -1123,20 +1147,38 @@ export class ProfileService {
     if (!verifyTwoFactorCode(code.trim(), record.digest)) {
       const attempts = (record.attempts ?? 0) + 1;
       if (attempts >= this.TWO_FACTOR_MAX_ATTEMPTS) {
-        await this.redis.del(key);
+        try {
+          await this.redis.del(key);
+        } catch (err) {
+          this.logger.warn(
+            `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+          );
+        }
         throw new BadRequestException('Too many incorrect attempts. Request a new code.');
       }
-      await this.redis.set(
-        key,
-        JSON.stringify({ ...record, attempts }),
-        this.TWO_FACTOR_TTL_SECONDS,
-      );
+      try {
+        await this.redis.set(
+          key,
+          JSON.stringify({ ...record, attempts }),
+          this.TWO_FACTOR_TTL_SECONDS,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `2FA attempt counter write failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+        );
+      }
       throw new BadRequestException(
         `Invalid verification code. ${this.TWO_FACTOR_MAX_ATTEMPTS - attempts} attempt(s) remaining.`,
       );
     }
 
-    await this.redis.del(key);
+    try {
+      await this.redis.del(key);
+    } catch (err) {
+      this.logger.warn(
+        `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     await this.prisma.profile.update({
       where: { user_id: userId },

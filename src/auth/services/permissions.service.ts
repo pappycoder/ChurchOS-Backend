@@ -105,13 +105,25 @@ export class PermissionsService {
     }
 
     const cacheKey = `${CACHE_PREFIX}${churchId}:${roleName}`;
-    const cached = await this.redis.get<string[]>(cacheKey);
-    if (cached) {
-      return cached;
+    try {
+      const cached = await this.redis.get<string[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Permission cache read skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
     }
 
     const permissions = await this.resolvePermissions(churchId, roleName);
-    await this.redis.set(cacheKey, permissions, CACHE_TTL_SECONDS);
+    try {
+      await this.redis.set(cacheKey, permissions, CACHE_TTL_SECONDS);
+    } catch (err) {
+      this.logger.warn(
+        `Permission cache write skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     return permissions;
   }
 
@@ -660,14 +672,26 @@ export class PermissionsService {
    */
   private async getAllPermissionNames(): Promise<string[]> {
     const cacheKey = `${CACHE_PREFIX}all`;
-    const cached = await this.redis.get<string[]>(cacheKey);
-    if (cached) return cached;
+    try {
+      const cached = await this.redis.get<string[]>(cacheKey);
+      if (cached) return cached;
+    } catch (err) {
+      this.logger.warn(
+        `Permission catalog read skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     const permissions = await this.prisma.permission.findMany({
       select: { name: true },
     });
     const names = permissions.map((p: { name: string }) => p.name);
-    await this.redis.set(cacheKey, names, CACHE_TTL_SECONDS);
+    try {
+      await this.redis.set(cacheKey, names, CACHE_TTL_SECONDS);
+    } catch (err) {
+      this.logger.warn(
+        `Permission catalog write skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     return names;
   }
 
@@ -675,6 +699,12 @@ export class PermissionsService {
    * Invalidates cached permissions for a role in a church.
    */
   private async invalidateCache(churchId: string, roleName: string): Promise<void> {
-    await this.redis.del(`${CACHE_PREFIX}${churchId}:${roleName}`);
+    try {
+      await this.redis.del(`${CACHE_PREFIX}${churchId}:${roleName}`);
+    } catch (err) {
+      this.logger.warn(
+        `Permission cache invalidation skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 }
