@@ -30,3 +30,5 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+.vercel
+.env*
