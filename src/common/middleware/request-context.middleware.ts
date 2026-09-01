@@ -47,7 +47,11 @@ export class RequestContextMiddleware implements NestMiddleware {
     // The JwtAuthGuard will fully verify the token later.
     let sub: string;
     try {
-      const { decodeJwt } = await import('jose');
+      // Dynamic import: load jose at runtime to avoid CommonJS/ESM conflicts
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { decodeJwt } = await (eval('import("jose")') as Promise<
+        typeof import('jose')
+      >);
       const payload = decodeJwt(token);
       sub = payload.sub ?? '';
       if (!sub) {
