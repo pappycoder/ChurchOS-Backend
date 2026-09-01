@@ -15,7 +15,6 @@
 
 import { Injectable, NestMiddleware, ForbiddenException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { decodeJwt } from 'jose';
 import { RequestContextService } from '../services/request-context.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -48,6 +47,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     // The JwtAuthGuard will fully verify the token later.
     let sub: string;
     try {
+      const { decodeJwt } = await import('jose');
       const payload = decodeJwt(token);
       sub = payload.sub ?? '';
       if (!sub) {

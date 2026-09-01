@@ -16,7 +16,6 @@
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload, JWTVerifyGetKey } from 'jose';
 
 /**
@@ -59,12 +58,13 @@ export class JwksService implements OnModuleInit {
    * Constructs the JWKS URL from the configured SUPABASE_URL:
    * `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`
    */
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     const supabaseUrl = this.config.get<string>('SUPABASE_URL');
     if (!supabaseUrl) {
       throw new Error('SUPABASE_URL must be set for JWKS verification');
     }
 
+    const { createRemoteJWKSet } = await import('jose');
     const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
     this.remoteJWKS = createRemoteJWKSet(jwksUrl);
     this.logger.log(`JWKS endpoint initialized: ${jwksUrl.href}`);
@@ -79,6 +79,7 @@ export class JwksService implements OnModuleInit {
    */
   async verifyToken(token: string): Promise<JwtVerificationResult> {
     try {
+      const { jwtVerify } = await import('jose');
       const result = await jwtVerify(token, this.remoteJWKS);
 
       return {
