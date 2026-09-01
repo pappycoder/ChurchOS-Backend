@@ -16,6 +16,7 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
   BadRequestException,
+  ServiceUnavailableException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -266,6 +267,10 @@ export class AuthService {
     // can complete the sign-in only after the code is verified.
     if (profile?.two_factor_enabled) {
       const recipient = profile.email?.trim() || email;
+
+      // Stage the withheld session in Redis. A Redis outage is the ONLY case
+      // we fail open: we cannot stage/verify a code, so issue the session
+      // directly rather than locking the user out.
       try {
         await this.redis.set(
           `2fa:login:pending:${userId}`,
@@ -283,10 +288,7 @@ export class AuthService {
           }),
           AuthService.TWO_FACTOR_TTL_SECONDS,
         );
-        await this.sendLoginCode(userId, recipient, profile.church.name ?? 'ChurchOS');
       } catch (err) {
-        // Fail-open: if Redis is unreachable we cannot stage/verify a 2FA code,
-        // so issue the session directly rather than locking the user out.
         this.logger.warn(
           `2FA staging skipped (Redis unavailable), issuing session directly: ${
             err instanceof Error ? err.message : err
@@ -294,6 +296,25 @@ export class AuthService {
         );
         return session;
       }
+
+      // Send the OTP email. This must NOT fail open: if the email cannot be
+      // sent we must not log the user in without 2FA. Surface a clean error so
+      // the caller can prompt the user to retry / request the code again.
+      try {
+        await this.sendLoginCode(userId, recipient, profile.church.name ?? 'ChurchOS');
+      } catch (err) {
+        this.logger.error(`Failed to send 2FA login code to ${recipient}: ${this.msg(err)}`);
+        // Best-effort cleanup of the pending (unverifiable) session.
+        await this.redis
+          .del(`2fa:login:pending:${userId}`)
+          .catch((delErr) =>
+            this.logger.warn(`Failed to clear pending 2FA session: ${this.msg(delErr)}`),
+          );
+        throw new ServiceUnavailableException(
+          'Could not send your verification code. Please try again.',
+        );
+      }
+
       this.logger.log(`2FA required for login: ${email}`);
       return {
         requiresTwoFactor: true,
@@ -305,6 +326,10 @@ export class AuthService {
     this.logger.log(`User logged in: ${email}`);
 
     return session;
+  }
+
+  private msg(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
   }
 
   /**

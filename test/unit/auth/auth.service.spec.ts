@@ -17,7 +17,12 @@ import { RedisService } from '../../../src/redis/redis.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ConfigService } from '@nestjs/config';
 import { ResendService } from '../../../src/communication/resend.service';
-import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnauthorizedException,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { RegisterDto } from '../../../src/auth/dto/register.dto';
 import { LoginDto } from '../../../src/auth/dto/login.dto';
 import { hashTwoFactorCode } from '../../../src/profile/two-factor.util';
@@ -367,6 +372,69 @@ describe('AuthService', () => {
         expect.stringContaining('jwt-access-token'),
         600,
       );
+    });
+
+    it('should fail open when Redis is unavailable during 2FA staging (issue session directly)', async () => {
+      signInMock.mockResolvedValue({
+        data: {
+          user: { id: mockUserId, email: loginDto.email },
+          session: {
+            access_token: 'jwt-access-token',
+            refresh_token: 'jwt-refresh-token',
+            expires_at: 1700000000,
+          },
+        },
+        error: null,
+      });
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        first_name: 'Adebayo',
+        last_name: 'Ogundimu',
+        email: loginDto.email,
+        two_factor_enabled: true,
+        church: { name: 'Grace Community Church' },
+      });
+      redis.set.mockRejectedValue(new Error('connection refused'));
+
+      const result = await service.login(loginDto);
+
+      expect(result.requiresTwoFactor).toBeUndefined();
+      expect(result.accessToken).toBe('jwt-access-token');
+      expect(resend.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('should fail closed when the 2FA OTP email cannot be sent (clear pending + throw)', async () => {
+      signInMock.mockResolvedValue({
+        data: {
+          user: { id: mockUserId, email: loginDto.email },
+          session: {
+            access_token: 'jwt-access-token',
+            refresh_token: 'jwt-refresh-token',
+            expires_at: 1700000000,
+          },
+        },
+        error: null,
+      });
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        id: mockProfileId,
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        first_name: 'Adebayo',
+        last_name: 'Ogundimu',
+        email: loginDto.email,
+        two_factor_enabled: true,
+        church: { name: 'Grace Community Church' },
+      });
+      resend.sendEmail.mockRejectedValue(new Error('SMTP unavailable'));
+
+      await expect(service.login(loginDto)).rejects.toThrow(ServiceUnavailableException);
+
+      expect(redis.del).toHaveBeenCalledWith(`2fa:login:pending:${mockUserId}`);
+      expect(redis.set).toHaveBeenCalled();
     });
   });
 

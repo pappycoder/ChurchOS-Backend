@@ -9,7 +9,12 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 import {
@@ -76,6 +81,33 @@ export class FlutterwaveService implements PaymentGatewayProvider {
   }
 
   /**
+   * Performs a Flutterwave API request, mapping network/transport failures (DNS,
+   * timeout, connection refused, bad JSON) to a clean ServiceUnavailableException
+   * so callers never surface an untyped Node `fetch` error. HTTP-level provider
+   * errors are left for the caller to interpret from the parsed body.
+   */
+  private async request<T>(url: string, init: RequestInit): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      this.logger.error(`Flutterwave network error: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(
+        'Flutterwave gateway is temporarily unavailable. Please try again.',
+      );
+    }
+
+    try {
+      return (await response.json()) as T;
+    } catch (err) {
+      this.logger.error(`Flutterwave invalid response: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(
+        'Flutterwave gateway returned an invalid response. Please try again.',
+      );
+    }
+  }
+
+  /**
    * Initializes a Flutterwave payment.
    *
    * @param email - Payer email address
@@ -104,7 +136,7 @@ export class FlutterwaveService implements PaymentGatewayProvider {
       meta: metadata,
     };
 
-    const response = await fetch(`${this.baseUrl}/payments`, {
+    const result = await this.request<FlutterwaveInitializeResponse>(`${this.baseUrl}/payments`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.secretKey}`,
@@ -112,8 +144,6 @@ export class FlutterwaveService implements PaymentGatewayProvider {
       },
       body: JSON.stringify(body),
     });
-
-    const result = (await response.json()) as FlutterwaveInitializeResponse;
 
     if (result.status !== 'success') {
       this.logger.error(`Flutterwave initialize failed: ${result.message}`);
@@ -143,7 +173,7 @@ export class FlutterwaveService implements PaymentGatewayProvider {
 
     // Flutterwave verify endpoint requires transaction ID, not tx_ref.
     // We use the /transactions/verify_by_tx_ref endpoint instead.
-    const response = await fetch(
+    const result = await this.request<FlutterwaveVerifyResponse>(
       `${this.baseUrl}/transactions/verify_by_tx_ref?tx_ref=${encodeURIComponent(reference)}`,
       {
         method: 'GET',
@@ -152,8 +182,6 @@ export class FlutterwaveService implements PaymentGatewayProvider {
         },
       },
     );
-
-    const result = (await response.json()) as FlutterwaveVerifyResponse;
 
     if (result.status !== 'success') {
       this.logger.error(`Flutterwave verify failed: ${result.message}`);

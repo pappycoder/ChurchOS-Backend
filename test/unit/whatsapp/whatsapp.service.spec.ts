@@ -11,6 +11,7 @@
 import { WhatsAppService } from '../../../src/whatsapp/whatsapp.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { TermiiService } from '../../../src/communication/termii.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
@@ -20,6 +21,7 @@ describe('WhatsAppService', () => {
   let prisma: ReturnType<typeof createPrismaMock>;
   let config: { get: jest.Mock };
   let audit: { log: jest.Mock };
+  let moduleRef: { get: jest.Mock };
   let termiiService: {
     sendWhatsAppMessage: jest.Mock;
     sendWhatsAppTemplate: jest.Mock;
@@ -64,6 +66,9 @@ describe('WhatsAppService', () => {
     prisma = createPrismaMock();
     config = { get: jest.fn() };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    moduleRef = {
+      get: jest.fn().mockReturnValue({ notify: jest.fn().mockResolvedValue(undefined) }),
+    };
     termiiService = {
       sendWhatsAppMessage: jest.fn().mockResolvedValue({ requestId: 'termii-req-001' }),
       sendWhatsAppTemplate: jest.fn().mockResolvedValue({ requestId: 'termii-req-002' }),
@@ -83,6 +88,7 @@ describe('WhatsAppService', () => {
       config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
       termiiService as unknown as TermiiService,
+      moduleRef as unknown as ModuleRef,
     );
   });
 

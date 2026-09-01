@@ -9,7 +9,12 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual, randomBytes } from 'crypto';
 import {
@@ -89,6 +94,33 @@ export class PaystackService implements PaymentGatewayProvider {
   }
 
   /**
+   * Performs a Paystack API request, mapping network/transport failures (DNS,
+   * timeout, connection refused, bad JSON) to a clean ServiceUnavailableException
+   * so callers never surface an untyped Node `fetch` error. HTTP-level provider
+   * errors are left for the caller to interpret from the parsed body.
+   */
+  private async request<T>(url: string, init: RequestInit): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      this.logger.error(`Paystack network error: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(
+        'Paystack gateway is temporarily unavailable. Please try again.',
+      );
+    }
+
+    try {
+      return (await response.json()) as T;
+    } catch (err) {
+      this.logger.error(`Paystack invalid response: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(
+        'Paystack gateway returned an invalid response. Please try again.',
+      );
+    }
+  }
+
+  /**
    * Initializes a Paystack transaction.
    *
    * @param email - Payer email address
@@ -122,16 +154,17 @@ export class PaystackService implements PaymentGatewayProvider {
       body.metadata = metadata;
     }
 
-    const response = await fetch(`${this.baseUrl}/transaction/initialize`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
-        'Content-Type': 'application/json',
+    const result = await this.request<PaystackInitializeResponse>(
+      `${this.baseUrl}/transaction/initialize`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
-
-    const result = (await response.json()) as PaystackInitializeResponse;
+    );
 
     if (!result.status) {
       this.logger.error(`Paystack initialize failed: ${result.message}`);
@@ -157,14 +190,15 @@ export class PaystackService implements PaymentGatewayProvider {
       throw new BadRequestException('Paystack is not configured. Set PAYSTACK_SECRET_KEY.');
     }
 
-    const response = await fetch(`${this.baseUrl}/transaction/verify/${reference}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
+    const result = await this.request<PaystackVerifyResponse>(
+      `${this.baseUrl}/transaction/verify/${reference}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+        },
       },
-    });
-
-    const result = (await response.json()) as PaystackVerifyResponse;
+    );
 
     if (!result.status) {
       this.logger.error(`Paystack verify failed: ${result.message}`);
@@ -313,16 +347,7 @@ export class PaystackService implements PaymentGatewayProvider {
       body.metadata = metadata;
     }
 
-    const response = await fetch(`${this.baseUrl}/transaction/charge_authorization`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    const result = (await response.json()) as {
+    const result = await this.request<{
       status: boolean;
       message: string;
       data: {
@@ -332,7 +357,14 @@ export class PaystackService implements PaymentGatewayProvider {
         paid_at?: string;
         channel?: string;
       };
-    };
+    }>(`${this.baseUrl}/transaction/charge_authorization`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
     if (!result.status) {
       this.logger.error(`Paystack charge authorization failed: ${result.message}`);

@@ -125,6 +125,9 @@ describe('GivingService - Recurring Giving', () => {
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
       new BranchScopeService(),
+      {
+        notify: jest.fn().mockResolvedValue(undefined),
+      } as never,
     );
   });
 

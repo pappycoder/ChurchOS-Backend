@@ -20,8 +20,10 @@
 
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { INTEGRATION_ALERT_SERVICE_TOKEN } from '../notifications/notification-tokens';
 
 interface TermiiSendResult {
   requestId?: string;
@@ -30,11 +32,38 @@ interface TermiiSendResult {
 @Injectable()
 export class TermiiService {
   private readonly logger = new Logger(TermiiService.name);
+  private alertService?: {
+    notify(
+      churchId: string,
+      integration: string,
+      title: string,
+      message: string,
+      data?: Record<string, unknown>,
+    ): Promise<void>;
+  };
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * Lazily resolves the integration alert service and raises a bell alert to
+   * the church's admins. Failures are swallowed so alerting can never break
+   * the underlying Termii send.
+   */
+  private async notifyFailure(churchId: string, title: string, message: string): Promise<void> {
+    try {
+      this.alertService ??= this.moduleRef.get(INTEGRATION_ALERT_SERVICE_TOKEN, {
+        strict: false,
+      });
+      if (!this.alertService) return;
+      await this.alertService.notify(churchId, 'termii', title, message);
+    } catch (err) {
+      this.logger.warn(`Termii failure alert skipped: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   /**
    * Sends an SMS via Termii and logs it to the Message table.
@@ -56,6 +85,7 @@ export class TermiiService {
     const from = this.config.get<string>('TERMII_FROM', 'ChurchOS');
 
     if (!apiKey) {
+      await this.notifyFailure(churchId, 'SMS not delivered', 'Termii API not configured.');
       throw new InternalServerErrorException('Termii API not configured');
     }
 
@@ -78,6 +108,7 @@ export class TermiiService {
       if (!response.ok) {
         const error = await response.text();
         this.logger.error(`Termii API error: ${response.status} ${error}`);
+        await this.notifyFailure(churchId, 'SMS not delivered', `HTTP ${response.status}.`);
         throw new InternalServerErrorException('Failed to send SMS');
       }
 
@@ -102,6 +133,7 @@ export class TermiiService {
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       this.logger.error(`SMS send error: ${(err as Error).message}`);
+      await this.notifyFailure(churchId, 'SMS not delivered', (err as Error).message);
       throw new InternalServerErrorException('Failed to send SMS');
     }
   }

@@ -16,12 +16,14 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ServiceUnavailableException,
   Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { IntegrationAlertService } from '../notifications/integration-alert.service';
 import {
   PaymentGatewayProvider,
   PAYMENT_GATEWAY_REGISTRY,
@@ -60,6 +62,7 @@ export class GivingService {
     private readonly receipt: ReceiptService,
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
+    private readonly integrationAlert: IntegrationAlertService,
   ) {}
 
   /**
@@ -444,14 +447,48 @@ export class GivingService {
       },
     });
 
-    // Initialize payment with the resolved gateway
+    // Initialize payment with the resolved gateway. If the gateway is
+    // unreachable/fails, mark the just-created pending transaction as failed
+    // (so no orphaned "pending" records accumulate) and notify admins, then
+    // rethrow a clean error to the payer.
     const metadata = {
       transaction_id: transaction.id,
       church_id: churchId,
       category_id: dto.categoryId,
     };
 
-    const result = await provider.initializeTransaction(dto.email, dto.amount, reference, metadata);
+    let result: Awaited<ReturnType<PaymentGatewayProvider['initializeTransaction']>>;
+    try {
+      result = await provider.initializeTransaction(dto.email, dto.amount, reference, metadata);
+    } catch (err) {
+      await this.prisma.transaction
+        .update({
+          where: { id: transaction.id },
+          data: { status: 'failed' },
+        })
+        .catch((updateErr) =>
+          this.logger.warn(
+            `Failed to mark pending transaction ${transaction.id} failed: ${this.msg(updateErr)}`,
+          ),
+        );
+
+      await this.integrationAlert
+        .notify(
+          churchId,
+          gatewayName,
+          `${this.capitalize(gatewayName)} payment init failed`,
+          `Could not initialize payment (${reference}) for NGN ${dto.amount}. ${this.msg(err)}`,
+          { reference, amount: dto.amount, gateway: gatewayName },
+        )
+        .catch(() => undefined);
+
+      if (err instanceof BadRequestException || err instanceof ConflictException) throw err;
+      if (err instanceof ServiceUnavailableException) throw err;
+      this.logger.error(`Payment init error (${gatewayName}): ${this.msg(err)}`);
+      throw new ServiceUnavailableException(
+        'Payment gateway is temporarily unavailable. Please try again.',
+      );
+    }
 
     await this.audit.log({
       userId,
@@ -475,6 +512,14 @@ export class GivingService {
       transactionId: transaction.id,
       gateway: gatewayName,
     };
+  }
+
+  private capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  private msg(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
   }
 
   /**

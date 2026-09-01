@@ -15,8 +15,10 @@
 
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { INTEGRATION_ALERT_SERVICE_TOKEN } from '../notifications/notification-tokens';
 
 interface EmailAttachment {
   filename: string;
@@ -26,11 +28,43 @@ interface EmailAttachment {
 @Injectable()
 export class ResendService {
   private readonly logger = new Logger(ResendService.name);
+  private alertService?: {
+    notify(
+      churchId: string,
+      integration: string,
+      title: string,
+      message: string,
+      data?: Record<string, unknown>,
+    ): Promise<void>;
+  };
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * Lazily resolves the integration alert service and raises a bell alert to
+   * the church's admins. Failures are swallowed so alerting can never break
+   * the underlying email send.
+   */
+  private async notifyFailure(churchId: string, subject: string, message: string): Promise<void> {
+    try {
+      this.alertService ??= this.moduleRef.get(INTEGRATION_ALERT_SERVICE_TOKEN, {
+        strict: false,
+      });
+      if (!this.alertService) return;
+      await this.alertService.notify(
+        churchId,
+        'resend',
+        'Resend email delivery failed',
+        `${subject}. ${message}`,
+      );
+    } catch (err) {
+      this.logger.warn(`Resend failure alert skipped: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   /**
    * Sends an HTML email via Resend and logs it to the Message table.
@@ -53,6 +87,7 @@ export class ResendService {
     const fromAddress = this.config.get<string>('RESEND_FROM', 'noreply@churchos.app');
 
     if (!apiKey) {
+      await this.notifyFailure(churchId, 'Email not delivered', 'Resend API not configured.');
       throw new InternalServerErrorException('Resend API not configured');
     }
 
@@ -85,6 +120,7 @@ export class ResendService {
       if (!response.ok) {
         const error = await response.text();
         this.logger.error(`Resend API error: ${response.status} ${error}`);
+        await this.notifyFailure(churchId, 'Email not delivered', `HTTP ${response.status}.`);
         throw new InternalServerErrorException('Failed to send email');
       }
 
@@ -107,6 +143,7 @@ export class ResendService {
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       this.logger.error(`Email send error: ${(err as Error).message}`);
+      await this.notifyFailure(churchId, 'Email not delivered', (err as Error).message);
       throw new InternalServerErrorException('Failed to send email');
     }
   }

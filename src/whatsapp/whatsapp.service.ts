@@ -20,12 +20,14 @@
 
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { TermiiService } from '../communication/termii.service';
 import { WebhookBodyDto } from './dto/webhook.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { Prisma, MessageDirection } from '@prisma/client';
+import { INTEGRATION_ALERT_SERVICE_TOKEN } from '../notifications/notification-tokens';
 
 /**
  * Raw Termii inbound webhook payload shape. Termii delivers a flat object
@@ -62,14 +64,43 @@ type CommandHandler = (msg: NormalizedMessage, args: string) => Promise<string>;
 export class WhatsAppService {
   private readonly logger = new Logger(WhatsAppService.name);
   private readonly commandHandlers = new Map<string, CommandHandler>();
+  private alertService?: {
+    notify(
+      churchId: string,
+      integration: string,
+      title: string,
+      message: string,
+      data?: Record<string, unknown>,
+    ): Promise<void>;
+  };
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
     private readonly termiiService: TermiiService,
+    private readonly moduleRef: ModuleRef,
   ) {
     this.registerCommands();
+  }
+
+  /**
+   * Lazily resolves the integration alert service and raises a bell alert to
+   * the church's admins. Failures are swallowed so alerting can never break
+   * the underlying WhatsApp send.
+   */
+  private async notifyFailure(churchId: string, title: string, message: string): Promise<void> {
+    try {
+      this.alertService ??= this.moduleRef.get(INTEGRATION_ALERT_SERVICE_TOKEN, {
+        strict: false,
+      });
+      if (!this.alertService) return;
+      await this.alertService.notify(churchId, 'termii', title, message);
+    } catch (err) {
+      this.logger.warn(
+        `WhatsApp failure alert skipped: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   // ─── COMMAND REGISTRY ──────────────────────────────────────────
@@ -276,6 +307,11 @@ export class WhatsAppService {
     const apiKey = this.config.get<string>('TERMII_API_KEY');
 
     if (!apiKey) {
+      await this.notifyFailure(
+        churchId,
+        'WhatsApp message not delivered',
+        'Termii WhatsApp not configured.',
+      );
       throw new InternalServerErrorException('Termii WhatsApp not configured');
     }
 
@@ -302,6 +338,7 @@ export class WhatsAppService {
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       this.logger.error(`WhatsApp send error: ${(err as Error).message}`);
+      await this.notifyFailure(churchId, 'WhatsApp message not delivered', (err as Error).message);
       throw new InternalServerErrorException('Failed to send WhatsApp message');
     }
   }
@@ -332,6 +369,11 @@ export class WhatsAppService {
     const apiKey = this.config.get<string>('TERMII_API_KEY');
 
     if (!apiKey) {
+      await this.notifyFailure(
+        churchId,
+        'WhatsApp template not delivered',
+        'Termii WhatsApp not configured.',
+      );
       throw new InternalServerErrorException('Termii WhatsApp not configured');
     }
 
@@ -361,6 +403,7 @@ export class WhatsAppService {
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       this.logger.error(`WhatsApp template send error: ${(err as Error).message}`);
+      await this.notifyFailure(churchId, 'WhatsApp template not delivered', (err as Error).message);
       throw new InternalServerErrorException('Failed to send WhatsApp template message');
     }
   }

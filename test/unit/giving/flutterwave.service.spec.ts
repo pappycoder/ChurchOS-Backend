@@ -11,7 +11,7 @@
 
 import { FlutterwaveService } from '../../../src/giving/services/flutterwave.service';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { createHmac } from 'crypto';
 
 describe('FlutterwaveService', () => {
@@ -94,6 +94,14 @@ describe('FlutterwaveService', () => {
         BadRequestException,
       );
     });
+
+    it('should throw ServiceUnavailableException when the gateway is unreachable', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('ENOTFOUND api.flutterwave.com'));
+
+      await expect(
+        service.initializeTransaction('test@example.com', 5000, 'TITHSEED123abc'),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
   });
 
   describe('verifyTransaction', () => {
@@ -133,6 +141,14 @@ describe('FlutterwaveService', () => {
       const svc = new FlutterwaveService(config as unknown as ConfigService);
 
       await expect(svc.verifyTransaction('ref')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw ServiceUnavailableException when the gateway is unreachable', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('timeout'));
+
+      await expect(service.verifyTransaction('TITHSEED123abc')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
   });
 

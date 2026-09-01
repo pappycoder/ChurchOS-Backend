@@ -16,7 +16,12 @@ import { AuditLoggingService } from '../../../src/common/services/audit-logging.
 import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { PaymentGatewayProvider } from '../../../src/giving/services/payment-gateway.interface';
 import { ReceiptService } from '../../../src/giving/services/receipt.service';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 describe('GivingService', () => {
   let service: GivingService;
@@ -26,6 +31,7 @@ describe('GivingService', () => {
   let flutterwave: Record<string, jest.Mock>;
   let gatewayRegistry: Map<string, PaymentGatewayProvider>;
   let receipt: Record<string, jest.Mock>;
+  let integrationAlert: { notify: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockChurchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -140,6 +146,7 @@ describe('GivingService', () => {
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
       new BranchScopeService(),
+      (integrationAlert = { notify: jest.fn().mockResolvedValue(undefined) }) as never,
     );
   });
 
@@ -584,6 +591,64 @@ describe('GivingService', () => {
           mockUserId,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should mark the pending transaction failed and alert when the gateway init throws', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('church').findUnique.mockResolvedValue({
+        id: mockChurchId,
+        config: { default_payment_gateway: 'paystack' },
+      });
+      model('transaction').create.mockResolvedValue({
+        ...mockTransaction,
+        id: mockTransactionId,
+        status: 'pending',
+      });
+      model('transaction').update.mockResolvedValue({ ...mockTransaction, status: 'failed' });
+      paystack.initializeTransaction.mockRejectedValue(new Error('socket hang up'));
+
+      await expect(
+        service.initializePayment(
+          { categoryId: mockCategoryId, amount: 10000, email: 'test@example.com' },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(model('transaction').update).toHaveBeenCalledWith({
+        where: { id: mockTransactionId },
+        data: { status: 'failed' },
+      });
+      expect(integrationAlert.notify).toHaveBeenCalledWith(
+        mockChurchId,
+        'paystack',
+        expect.stringContaining('Paystack payment init failed'),
+        expect.stringContaining('Could not initialize payment'),
+        expect.objectContaining({ gateway: 'paystack', reference: expect.any(String) }),
+      );
+    });
+
+    it('should rethrow a provider ServiceUnavailableException without re-wrapping', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('church').findUnique.mockResolvedValue({
+        id: mockChurchId,
+        config: { default_payment_gateway: 'paystack' },
+      });
+      model('transaction').create.mockResolvedValue({
+        ...mockTransaction,
+        id: mockTransactionId,
+        status: 'pending',
+      });
+      model('transaction').update.mockResolvedValue({ ...mockTransaction, status: 'failed' });
+      paystack.initializeTransaction.mockRejectedValue(new ServiceUnavailableException('down'));
+
+      await expect(
+        service.initializePayment(
+          { categoryId: mockCategoryId, amount: 10000, email: 'test@example.com' },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
   });
 
