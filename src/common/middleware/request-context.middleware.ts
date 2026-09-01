@@ -19,6 +19,7 @@ import { RequestContextService } from '../services/request-context.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
+import { decodeJwt } from 'jose';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
@@ -47,9 +48,6 @@ export class RequestContextMiddleware implements NestMiddleware {
     // The JwtAuthGuard will fully verify the token later.
     let sub: string;
     try {
-      // Dynamic import: load jose at runtime to avoid CommonJS/ESM conflicts
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { decodeJwt } = await (eval('import("jose")') as Promise<typeof import('jose')>);
       const payload = decodeJwt(token);
       sub = payload.sub ?? '';
       if (!sub) {
