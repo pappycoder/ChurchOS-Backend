@@ -4,7 +4,7 @@
  *
  * Configures BullModule with the shared Redis connection and registers
  * all named queues used across the application:
- * - whatsapp-outbound: Outbound WhatsApp messages (360dialog API)
+ * - whatsapp-outbound: Outbound WhatsApp messages (Termii WhatsApp API)
  * - email-outbound: Outbound emails (Resend)
  * - sms-outbound: Outbound SMS (Termii)
  * - recurring-giving: Automated recurring giving charges

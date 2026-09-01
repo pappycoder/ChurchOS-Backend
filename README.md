@@ -12,9 +12,8 @@ This repository contains the backend API for ChurchOS. It is built with:
 - **Supabase Storage** — File uploads (photos, receipts, media)
 - **Upstash Redis** — Caching and BullMQ job queues
 - **Paystack / Flutterwave** — Payment processing
-- **360dialog** — WhatsApp Business API
+- **Termii** — WhatsApp + SMS (single messaging platform)
 - **Resend** — Email delivery
-- **Termii** — SMS fallback
 
 ## Repository Structure
 
@@ -91,10 +90,11 @@ REDIS_URL=redis://localhost:6379
 PAYSTACK_SECRET_KEY=
 PAYSTACK_PUBLIC_KEY=
 FLUTTERWAVE_SECRET_KEY=
-360DIALOG_API_KEY=
-360DIALOG_WEBHOOK_SECRET=
-RESEND_API_KEY=
 TERMII_API_KEY=
+TERMII_WHATSAPP_DEVICE_ID=
+TERMII_WEBHOOK_SECRET=
+TERMII_DEFAULT_CHURCH_ID=
+RESEND_API_KEY=
 OPENAI_API_KEY=
 WEB_URL=http://localhost:3000
 ```

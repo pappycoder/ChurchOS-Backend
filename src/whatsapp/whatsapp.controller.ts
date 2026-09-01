@@ -1,9 +1,10 @@
 /**
  * @file whatsapp.controller.ts
- * @description HTTP endpoints for WhatsApp integration.
+ * @description HTTP endpoints for WhatsApp integration via Termii.
  *
  * Provides webhook verification, inbound message processing, outbound sending,
- * and message listing.
+ * and message listing. All outbound WhatsApp and SMS delivery flows through
+ * the Termii platform.
  *
  * @module whatsapp/whatsapp.controller
  * @since 1.0.0
@@ -22,21 +23,20 @@ import {
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { ApiCreateEndpoint } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 import { WhatsAppService } from './whatsapp.service';
-import { WebhookBodyDto } from './dto/webhook.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SendTemplateMessageDto } from './dto/send-template-message.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
- * Controller for WhatsApp Business API integration.
+ * Controller for WhatsApp integration via the Termii platform.
  */
 @ApiTags('WhatsApp')
 @Controller('whatsapp')
@@ -47,13 +47,13 @@ export class WhatsAppController {
 
   /**
    * Webhook verification endpoint (GET).
-   * 360dialog sends a GET request to verify the webhook URL.
+   * Termii sends a GET request to verify the webhook URL.
    */
   @Get('webhook')
   @SkipRateLimit()
   @ApiOperation({
     summary: 'Verify WhatsApp webhook',
-    description: 'Handles webhook verification from 360dialog. Returns the challenge token.',
+    description: 'Handles webhook verification from Termii. Returns the challenge token.',
   })
   @ApiQuery({ name: 'hub.mode', required: true })
   @ApiQuery({ name: 'hub.verify_token', required: true })
@@ -63,7 +63,7 @@ export class WhatsAppController {
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
   ): string {
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'churchos-verify-token';
+    const verifyToken = process.env.TERMII_WEBHOOK_VERIFY_TOKEN || 'churchos-verify-token';
 
     if (mode === 'subscribe' && token === verifyToken) {
       this.logger.log('Webhook verified successfully');
@@ -76,23 +76,31 @@ export class WhatsAppController {
 
   /**
    * Process inbound WhatsApp messages (POST).
-   * Receives webhook events from 360dialog for inbound messages and status updates.
-   * Verifies HMAC-SHA256 signature using the webhook secret.
+   * Receives webhook events from Termii for inbound messages and status updates.
+   *
+   * The body is intentionally accepted raw (not DTO-validated) because Termii
+   * delivers a flat, provider-specific payload; validation is handled in the
+   * service. When TERMII_WEBHOOK_SECRET is configured, the request is verified
+   * using the signature in the `x-termii-signature` header (falling back to
+   * the legacy `x-hub-signature-256` header for transition compatibility).
    */
   @Post('webhook')
   @SkipRateLimit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Process WhatsApp webhook',
-    description: 'Receives inbound messages and delivery status updates from 360dialog.',
+    description: 'Receives inbound messages and delivery status updates from Termii.',
   })
+  @ApiBody({ type: Object, required: true })
   async processWebhook(
-    @Body() body: WebhookBodyDto,
+    @Body() body: Record<string, unknown>,
     @Request() req: AuthenticatedRequest & { rawBody?: Buffer },
   ): Promise<{ success: boolean; processed: number }> {
-    const webhookSecret = process.env['360DIALOG_WEBHOOK_SECRET'];
+    const webhookSecret = process.env['TERMII_WEBHOOK_SECRET'];
     if (webhookSecret && req.rawBody) {
-      const signature = req.headers['x-hub-signature-256'] as string | undefined;
+      const signature =
+        (req.headers['x-termii-signature'] as string | undefined) ??
+        (req.headers['x-hub-signature-256'] as string | undefined);
       this.verifyWebhookSignature(req.rawBody, signature, webhookSecret);
     }
 

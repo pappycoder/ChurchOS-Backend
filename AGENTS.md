@@ -20,9 +20,9 @@
 | Validation | class-validator + class-transformer |
 | API Docs | Swagger / OpenAPI 3.0 |
 | Payments | Paystack, Flutterwave |
-| WhatsApp | 360dialog Business API |
+| WhatsApp | Termii WhatsApp API (single messaging platform) |
 | Email | Resend |
-| SMS | Termii |
+| SMS | Termii (same platform) |
 | Cache/Queue | Redis (ioredis + BullMQ) |
 | Image Processing | sharp (WebP optimization) |
 | File Upload | Supabase Storage + multer |
@@ -76,8 +76,8 @@ src/
 ├── giving/                 # Giving categories, multi-gateway payments, cash/bank, PDF receipts, webhooks
 ├── events/                 # Event CRUD, free/paid registration, multi-tier ticketing, payment webhook, ticket validation
 ├── sermons/                # Sermon archive CRUD, search, speaker/series/tag/date-range filtering
-├── whatsapp/               # WhatsApp 360dialog webhooks, command router, outbound messaging
-├── communication/          # Resend email service + Termii SMS service, Message table logging
+├── whatsapp/               # WhatsApp Termii webhooks, command router, outbound messaging
+├── communication/          # Termii WhatsApp+SMS service + Resend email, Message table logging
 ├── media/                  # File uploads, image optimization, media library browsing
 ├── profile/                # Profile CRUD, photo upload, role management, MFA, soft-delete
 ├── church/                 # Church CRUD, config, staff invitation/management
@@ -188,9 +188,13 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 | `REDIS_URL` | Yes | Upstash Redis connection |
 | `PAYSTACK_SECRET_KEY` | No | Paystack payment processing |
 | `FLUTTERWAVE_SECRET_KEY` | No | Flutterwave payment processing |
-| `360DIALOG_API_KEY` | No | WhatsApp Business API |
+| `36xDIALOG_API_KEY` | No | <b>Removed in consolidation</b> — all messaging now via Termii |
 | `RESEND_API_KEY` | No | Email delivery |
-| `TERMII_API_KEY` | No | SMS fallback |
+| `TERMII_API_KEY` | No | Unified WhatsApp + SMS delivery |
+| `TERMII_FROM` | No (default: `ChurchOS`) | SMS sender ID / WhatsApp device name |
+| `TERMII_WHATSAPP_DEVICE_ID` | No | Termii WhatsApp device ID (outbound + template) |
+| `TERMII_WEBHOOK_SECRET` | No | Termii webhook signature secret |
+| `TERMII_DEFAULT_CHURCH_ID` | No | Church attributed to unknown WhatsApp senders |
 | `ENABLE_SMS_FALLBACK` | No (default: `false`) | Enable SMS fallback when WhatsApp delivery fails |
 | `OPENAI_API_KEY` | No | AI chatbot features |
 | `SUPABASE_STORAGE_BUCKET` | No (default: media) | Supabase Storage bucket name for file uploads |
@@ -209,6 +213,15 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **Messaging consolidated onto a single platform: Termii for both WhatsApp and SMS** (360dialog removed). WhatsApp + SMS now route through one provider/account/billing window. The Prisma `Message.channel` enum ('whatsapp'/'sms'), `MessageResponseDto`, and the `/whatsapp/*` + `/broadcasts` API shapes are unchanged, so the web console and mobile SDKs need no changes.
+  - **`TermiiService`** (`src/communication/termii.service.ts`) is now the unified Termii delivery layer, owning every outbound Termii API call: `sendSms()` (unchanged, channel 'generic'), new `sendWhatsAppMessage()` (conversational — `POST /api/sms/send` with `channel: 'whatsapp'`, `from: TERMII_WHATSAPP_DEVICE_ID`, `type: 'plain'`), and new `sendWhatsAppTemplate()` (`POST /api/send/template` with `device_id`, `template_id`, `data`). WhatsApp delivery no longer performs Message persistence here — ownership stays with `WhatsAppService` (which maps to `MessageResponseDto`).
+  - **`WhatsAppService`** (`src/whatsapp/whatsapp.service.ts`) now injects `TermiiService`; `sendMessage`/`sendTemplateMessage` delegate outbound delivery to it (metadata now `{ termii_request_id }` instead of `{ wa_message_id }`, and templates log `template_name` as the Termii template ID). Removed the 360dialog Facebook Cloud API fetch logic and the now-unused `buildTemplateComponents`/`interpolateTemplate` helpers. `processWebhook` now accepts the **raw** body and supports **both** the Termii flat inbound shape (`{ type:'inbound', sender, message, message_id, channel }`, normalized via `normalizeTermiiMessage`, plus Termii delivery-status events via `handleTermiiStatusUpdate`) and the legacy Meta/360dialog envelope for transition. Unknown senders are attributed to `TERMII_DEFAULT_CHURCH_ID` (no visitor auto-creation).
+  - **`WhatsAppController`** (`src/whatsapp/whatsapp.controller.ts`): the webhook POST now takes a raw body (Termii fields are provider-specific, so the global `forbidNonWhitelisted` DTO validation must not strip them); webhook verification accepts `x-termii-signature` (falling back to `x-hub-signature-256`) using `TERMII_WEBHOOK_SECRET`; the GET verification token reads `TERMII_WEBHOOK_VERIFY_TOKEN`.
+  - **`WhatsAppModule`** now imports `CommunicationModule` to resolve `TermiiService`.
+  - **Env**: removed `360DIALOG_API_KEY`/`360DIALOG_WEBHOOK_SECRET`/`WHATSAPP_API_KEY`/`WHATSAPP_API_URL`/`WHATSAPP_PHONE_NUMBER_ID`; added `TERMII_WHATSAPP_DEVICE_ID`, `TERMII_WEBHOOK_SECRET`, `TERMII_DEFAULT_CHURCH_ID` to `env.validation.ts`, `.env.example`, and `README.md`. (`TERMII_API_KEY`/`TERMII_FROM`/`ENABLE_SMS_FALLBACK` unchanged; the live WhatsApp/SMS fallback path and `whatsapp-outbound`/`sms-outbound` processors are unaffected since they already call `WhatsAppService`/`TermiiService`.)
+  - **Tests**: `whatsapp.service.spec.ts` reworked to mock `TermiiService` and assert the Termii delegation (plain + template send, not-configured throw), a new Termii flat inbound webhook test, and the legacy command-router/send paths retained; removed the obsolete `fetch`-assertion and `interpolateTemplate` tests. Processor spec untouched. `npx tsc --noEmit` clean.
+  - **Note (placeholder)**: like Sentry, all new Termii WhatsApp env vars are wired as placeholders — live sending needs the real `TERMII_WHATSAPP_DEVICE_ID` and approved template IDs from the Termii dashboard.
 
 - **Appointment contacts picker returned 0 for a null-branch church_admin (fix).** The logged-in church_admin dev profile (`is_admin_hq = false`, `branch_id = null`) was treated as a non-HQ booker by `AppointmentsService.listContacts`, so the branch-scope filter collapsed to `profile.branch_id = ''` and matched nothing → the With/Who pickers rendered empty (0 contacts). This is a **data + seed** fix, not a service-logic change:
   - **Data (dev DB)**: set `is_admin_hq = true` + the HQ `branch_id` on the seed admin profile (`087d8598…`) so it resolves as HQ and picks church-wide. Verified: `kind=with` now returns the branch_pastor, `kind=who` returns the branch_pastor + secretary (Grace Okafor, the seeded pairing counterpart) in scope.

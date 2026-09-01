@@ -42,18 +42,17 @@ const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
 
-  // ─── WhatsApp (360dialog) ─────────────────────────────────
-  '360DIALOG_API_KEY': z.string().optional(),
-  '360DIALOG_WEBHOOK_SECRET': z.string().optional(),
+  // ─── Messaging (Termii — single platform for WhatsApp + SMS) ───
+  TERMII_API_KEY: z.string().optional(),
+  TERMII_FROM: z.string().default('ChurchOS'),
+  TERMII_WHATSAPP_DEVICE_ID: z.string().optional(),
+  TERMII_WEBHOOK_SECRET: z.string().optional(),
+  TERMII_DEFAULT_CHURCH_ID: z.string().optional(),
+  ENABLE_SMS_FALLBACK: z.coerce.boolean().default(false),
 
   // ─── Email (Resend) ───────────────────────────────────────
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().default('noreply@churchos.app'),
-
-  // ─── SMS (Termii) ─────────────────────────────────────────
-  TERMII_API_KEY: z.string().optional(),
-  TERMII_FROM: z.string().default('ChurchOS'),
-  ENABLE_SMS_FALLBACK: z.coerce.boolean().default(false),
 
   // ─── AI (Optional) ────────────────────────────────────────
   OPENAI_API_KEY: z.string().optional(),

@@ -3,7 +3,8 @@
  * @description WhatsApp Business API integration service.
  *
  * Handles inbound webhook processing, command routing, outbound message sending,
- * and message logging for the 360dialog WhatsApp Business API.
+ * and message logging for the Termii WhatsApp API (single platform for
+ * WhatsApp + SMS).
  *
  * Command Router:
  *   CHECKIN — Mark attendance for today's service
@@ -21,9 +22,27 @@ import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { TermiiService } from '../communication/termii.service';
 import { WebhookBodyDto } from './dto/webhook.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { Prisma, MessageDirection } from '@prisma/client';
+
+/**
+ * Raw Termii inbound webhook payload shape. Termii delivers a flat object
+ * (not the Meta/360dialog envelope). Type is either 'inbound' (a message)
+ * or a delivery/status event.
+ */
+interface TermiiWebhookPayload {
+  type?: string;
+  id?: string;
+  message_id?: string;
+  receiver?: string;
+  sender?: string;
+  message?: string;
+  received_at?: string;
+  status?: string;
+  channel?: string;
+}
 
 /**
  * Normalized inbound message used by the command router.
@@ -48,6 +67,7 @@ export class WhatsAppService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
+    private readonly termiiService: TermiiService,
   ) {
     this.registerCommands();
   }
@@ -67,23 +87,35 @@ export class WhatsAppService {
   }
 
   /**
-   * Process an inbound WhatsApp webhook from 360dialog.
+   * Process an inbound WhatsApp webhook from Termii.
+   *
+   * Handles both the Termii flat payload shape and the legacy Meta/360dialog
+   * envelope for backward compatibility during transition.
    */
-  async processWebhook(body: WebhookBodyDto): Promise<{ processed: number }> {
-    if (!body.messages || body.messages.length === 0) {
+  async processWebhook(
+    body: WebhookBodyDto | Record<string, unknown>,
+  ): Promise<{ processed: number }> {
+    // Termii flat payloads carry a `type`/`sender`/`message` top-level shape.
+    if (body && !('messages' in body) && this.isTermiiPayload(body as Record<string, unknown>)) {
+      return this.processTermiiWebhook(body as unknown as TermiiWebhookPayload);
+    }
+
+    const metaBody = body as WebhookBodyDto;
+
+    if (!metaBody.messages || metaBody.messages.length === 0) {
       // Status update — handle delivery/read receipts
-      if (body.statuses && body.statuses.length > 0) {
-        await this.handleStatusUpdates(body.statuses);
-        return { processed: body.statuses.length };
+      if (metaBody.statuses && metaBody.statuses.length > 0) {
+        await this.handleStatusUpdates(metaBody.statuses);
+        return { processed: metaBody.statuses.length };
       }
       return { processed: 0 };
     }
 
     let processed = 0;
 
-    const phoneNumberId = body.metadata?.phone_number_id;
+    const phoneNumberId = metaBody.metadata?.phone_number_id;
 
-    for (const msg of body.messages) {
+    for (const msg of metaBody.messages) {
       try {
         const normalized = await this.normalizeMessage(
           msg.from,
@@ -105,7 +137,134 @@ export class WhatsAppService {
   }
 
   /**
-   * Send an outbound WhatsApp message via 360dialog API.
+   * Determines whether a raw webhook body is a Termii flat payload rather
+   * than the Meta/360dialog envelope.
+   */
+  private isTermiiPayload(body: Record<string, unknown>): boolean {
+    if (body.type === 'inbound') return true;
+    if (typeof body.sender === 'string' && typeof body.message === 'string') return true;
+    if (body.channel === 'whatsapp' && (body.message_id || body.id)) return true;
+    return false;
+  }
+
+  /**
+   * Processes a Termii flat inbound webhook: an inbound text message or a
+   * delivery/status event.
+   */
+  private async processTermiiWebhook(body: TermiiWebhookPayload): Promise<{ processed: number }> {
+    // Status / delivery reports carry a status but no inbound text.
+    if (body.type && body.type !== 'inbound' && body.status) {
+      if (body.id || body.message_id) {
+        await this.handleTermiiStatusUpdate(body.message_id ?? body.id!, body.status);
+      }
+      return { processed: 1 };
+    }
+
+    const phone = body.sender ? `+${body.sender.replace(/^\+/, '')}` : '';
+    const content = body.message ?? '';
+    const messageId = body.message_id ?? body.id ?? '';
+
+    if (!phone || !content.trim()) {
+      this.logger.debug('Skipping Termii non-text inbound message');
+      return { processed: 0 };
+    }
+
+    // Termii inbound payloads don't carry a phone_number_id; resolve church
+    // from the member profile or fall back to a configured default.
+    const normalized = await this.normalizeTermiiMessage(
+      phone,
+      messageId,
+      body.received_at,
+      content.trim(),
+    );
+
+    if (normalized) {
+      await this.routeMessage(normalized);
+      return { processed: 1 };
+    }
+
+    return { processed: 0 };
+  }
+
+  /**
+   * Normalizes a Termii inbound message into the internal message shape used
+   * by the command router. Resolves the member by phone, then falls back to
+   * the configured TERMII_DEFAULT_CHURCH_ID for unknown visitors.
+   */
+  private async normalizeTermiiMessage(
+    phone: string,
+    messageId: string,
+    timestamp?: string,
+    body?: string,
+  ): Promise<NormalizedMessage | null> {
+    if (!body || body.trim().length === 0) {
+      this.logger.debug(`Skipping non-text message from ${phone}`);
+      return null;
+    }
+
+    const profile = await this.prisma.profile.findFirst({
+      where: { phone },
+      select: { church_id: true, member_id: true },
+    });
+
+    let churchId = profile?.church_id || '';
+    const memberId = profile?.member_id || null;
+
+    // No profile match — attribute to a default church so visitors can still
+    // interact, but do not fabricate a member record.
+    if (!churchId) {
+      churchId = this.config.get<string>('TERMII_DEFAULT_CHURCH_ID', '');
+      this.logger.warn(
+        `Unknown Termii sender ${phone}; using default church ${churchId || '(none)'}`,
+      );
+    }
+
+    if (!churchId) {
+      return null;
+    }
+
+    // Log inbound message
+    await this.prisma.message.create({
+      data: {
+        church_id: churchId,
+        member_id: memberId,
+        phone,
+        direction: MessageDirection.inbound,
+        channel: 'whatsapp',
+        content: body,
+        status: 'delivered',
+        metadata: { termii_message_id: messageId } as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      phone,
+      body: body.trim(),
+      messageId,
+      timestamp: timestamp ?? new Date().toISOString(),
+      memberId,
+      churchId,
+    };
+  }
+
+  /**
+   * Updates the delivery status of a message previously sent via Termii.
+   */
+  private async handleTermiiStatusUpdate(messageId: string, status: string): Promise<void> {
+    try {
+      await this.prisma.message.updateMany({
+        where: {
+          metadata: { path: ['termii_request_id'], equals: messageId },
+        },
+        data: { status },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to update status for ${messageId}: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Send an outbound WhatsApp message via Termii.
    * Logs the message to the database.
    */
   async sendMessage(
@@ -114,41 +273,14 @@ export class WhatsAppService {
     churchId: string,
     memberId?: string,
   ): Promise<MessageResponseDto> {
-    const apiKey = this.config.get<string>('WHATSAPP_API_KEY');
-    const apiUrl = this.config.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com/v18.0');
+    const apiKey = this.config.get<string>('TERMII_API_KEY');
 
     if (!apiKey) {
-      throw new InternalServerErrorException('WhatsApp API not configured');
+      throw new InternalServerErrorException('Termii WhatsApp not configured');
     }
 
-    // 360dialog uses the Cloud API endpoint
-    const phoneNumberId = this.config.get<string>('WHATSAPP_PHONE_NUMBER_ID');
-
     try {
-      const response = await fetch(`${apiUrl}/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: to.replace('+', ''),
-          type: 'text',
-          text: { body: content },
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`360dialog send failed: ${response.status} ${error}`);
-        throw new InternalServerErrorException('Failed to send WhatsApp message');
-      }
-
-      const result = (await response.json()) as {
-        messages?: { id: string }[];
-      };
-      const waMessageId = result.messages?.[0]?.id;
+      const result = await this.termiiService.sendWhatsAppMessage(to, content);
 
       // Log outbound message
       const message = await this.prisma.message.create({
@@ -160,7 +292,7 @@ export class WhatsAppService {
           channel: 'whatsapp',
           content,
           status: 'sent',
-          metadata: { wa_message_id: waMessageId } as Prisma.InputJsonValue,
+          metadata: { termii_request_id: result.requestId } as Prisma.InputJsonValue,
         },
       });
 
@@ -175,16 +307,16 @@ export class WhatsAppService {
   }
 
   /**
-   * Sends a WhatsApp template message via 360dialog Cloud API.
+   * Sends a WhatsApp template message via the Termii WhatsApp Template API.
    *
    * Template messages are required for any outbound message outside the
    * 24-hour customer service window. The template must be pre-approved
-   * by Meta and registered with 360dialog.
+   * and registered on the Termii device (subscription page).
    *
    * @param to - Recipient phone number
-   * @param templateName - WhatsApp template name
+   * @param templateName - Termii template ID (from the device subscription page)
    * @param language - Template language code (default: en)
-   * @param variables - Variable values to interpolate into the template
+   * @param variables - Variable values to populate the template placeholders
    * @param churchId - Church ID for tenant scoping
    * @param memberId - Optional member ID for message logging
    * @returns Created message response
@@ -192,51 +324,19 @@ export class WhatsAppService {
   async sendTemplateMessage(
     to: string,
     templateName: string,
-    language: string,
+    _language: string,
     variables: Record<string, string> | undefined,
     churchId: string,
     memberId?: string,
   ): Promise<MessageResponseDto> {
-    const apiKey = this.config.get<string>('WHATSAPP_API_KEY');
-    const apiUrl = this.config.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com/v18.0');
+    const apiKey = this.config.get<string>('TERMII_API_KEY');
 
     if (!apiKey) {
-      throw new InternalServerErrorException('WhatsApp API not configured');
+      throw new InternalServerErrorException('Termii WhatsApp not configured');
     }
 
-    const phoneNumberId = this.config.get<string>('WHATSAPP_PHONE_NUMBER_ID');
-
-    const bodyComponents = this.buildTemplateComponents(variables);
-
     try {
-      const response = await fetch(`${apiUrl}/${phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: to.replace('+', ''),
-          type: 'template',
-          template: {
-            name: templateName,
-            language: { code: language || 'en' },
-            components: bodyComponents,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`360dialog template send failed: ${response.status} ${error}`);
-        throw new InternalServerErrorException('Failed to send WhatsApp template message');
-      }
-
-      const result = (await response.json()) as {
-        messages?: { id: string }[];
-      };
-      const waMessageId = result.messages?.[0]?.id;
+      const result = await this.termiiService.sendWhatsAppTemplate(to, templateName, variables);
 
       const message = await this.prisma.message.create({
         data: {
@@ -248,7 +348,7 @@ export class WhatsAppService {
           content: `Template: ${templateName}`,
           status: 'sent',
           metadata: {
-            wa_message_id: waMessageId,
+            termii_request_id: result.requestId,
             template_name: templateName,
             variables,
           } as Prisma.InputJsonValue,
@@ -263,49 +363,6 @@ export class WhatsAppService {
       this.logger.error(`WhatsApp template send error: ${(err as Error).message}`);
       throw new InternalServerErrorException('Failed to send WhatsApp template message');
     }
-  }
-
-  /**
-   * Builds WhatsApp Cloud API template body components from variable values.
-   *
-   * Maps simple key-value variables into the body component format expected
-   * by the WhatsApp Cloud API.
-   */
-  private buildTemplateComponents(variables?: Record<string, string>): Record<string, unknown>[] {
-    if (!variables || Object.keys(variables).length === 0) {
-      return [];
-    }
-
-    const parameters = Object.entries(variables).map(([key, value]) => ({
-      type: 'text',
-      text: value,
-      parameter_name: key,
-    }));
-
-    return [
-      {
-        type: 'body',
-        parameters,
-      },
-    ];
-  }
-
-  /**
-   * Interpolates variables into a template content string.
-   *
-   * Supports {{variable}} and {variable} placeholder syntax.
-   *
-   * @param content - Template content with placeholders
-   * @param variables - Variable values to substitute
-   * @returns Interpolated content string
-   */
-  interpolateTemplate(content: string, variables?: Record<string, string>): string {
-    if (!variables) return content;
-
-    return content.replace(/\{\{(\w+)\}\}|\{(\w+)\}/g, (_match, double, single) => {
-      const key = double || single;
-      return variables[key] ?? '';
-    });
   }
 
   /**

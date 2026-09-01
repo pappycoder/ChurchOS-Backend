@@ -12,6 +12,7 @@ import { WhatsAppService } from '../../../src/whatsapp/whatsapp.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
+import { TermiiService } from '../../../src/communication/termii.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('WhatsAppService', () => {
@@ -19,7 +20,11 @@ describe('WhatsAppService', () => {
   let prisma: ReturnType<typeof createPrismaMock>;
   let config: { get: jest.Mock };
   let audit: { log: jest.Mock };
-  let fetchSpy: jest.SpyInstance;
+  let termiiService: {
+    sendWhatsAppMessage: jest.Mock;
+    sendWhatsAppTemplate: jest.Mock;
+    sendSms: jest.Mock;
+  };
 
   const mockChurchId = '11111111-1111-1111-1111-111111111111';
   const mockMemberId = '44444444-4444-4444-4444-444444444444';
@@ -59,17 +64,16 @@ describe('WhatsAppService', () => {
     prisma = createPrismaMock();
     config = { get: jest.fn() };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
-
-    // Mock fetch for WhatsApp API calls
-    fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({ messages: [{ id: 'wa-sent-001' }] }),
-    } as Response);
+    termiiService = {
+      sendWhatsAppMessage: jest.fn().mockResolvedValue({ requestId: 'termii-req-001' }),
+      sendWhatsAppTemplate: jest.fn().mockResolvedValue({ requestId: 'termii-req-002' }),
+      sendSms: jest.fn().mockResolvedValue('sms-msg-id'),
+    };
 
     config.get.mockImplementation((key: string, defaultVal?: string) => {
-      if (key === 'WHATSAPP_API_KEY') return 'test-api-key';
-      if (key === 'WHATSAPP_API_URL') return 'https://mock.api.url';
-      if (key === 'WHATSAPP_PHONE_NUMBER_ID') return '123456789';
+      if (key === 'TERMII_API_KEY') return 'test-api-key';
+      if (key === 'TERMII_WHATSAPP_DEVICE_ID') return 'device-123456';
+      if (key === 'TERMII_FROM') return 'ChurchOS';
       if (key === 'WEB_URL') return 'https://churchos.example.com';
       return defaultVal;
     });
@@ -78,11 +82,12 @@ describe('WhatsAppService', () => {
       prisma as unknown as PrismaService,
       config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
+      termiiService as unknown as TermiiService,
     );
   });
 
   afterEach(() => {
-    fetchSpy.mockRestore();
+    jest.restoreAllMocks();
   });
 
   describe('processWebhook', () => {
@@ -404,7 +409,7 @@ describe('WhatsAppService', () => {
   });
 
   describe('sendTemplateMessage', () => {
-    it('should send a WhatsApp template message', async () => {
+    it('should send a WhatsApp template message via Termii', async () => {
       prisma.message.create.mockResolvedValue(mockMessage);
 
       const result = await service.sendTemplateMessage(
@@ -416,38 +421,68 @@ describe('WhatsAppService', () => {
         mockMemberId,
       );
 
-      expect(result.messageId).toBe(mockMessage.id);
-      expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/messages'),
-        expect.objectContaining({
-          body: expect.stringContaining('"type":"template"'),
-        }),
+      expect(termiiService.sendWhatsAppTemplate).toHaveBeenCalledWith(
+        mockPhone,
+        'welcome_message',
+        { name: 'Ade', church: 'Grace Community Church' },
       );
+      expect(result.messageId).toBe(mockMessage.id);
     });
 
-    it('should throw if WhatsApp API is not configured', async () => {
-      config.get.mockImplementation((key: string, defaultVal?: string) => {
-        if (key === 'WHATSAPP_API_KEY') return undefined;
-        if (key === 'WHATSAPP_API_URL') return 'https://mock.api.url';
-        if (key === 'WHATSAPP_PHONE_NUMBER_ID') return '123456789';
-        return defaultVal;
+    it('should throw if Termii WhatsApp is not configured', async () => {
+      config.get.mockImplementation((key: string) => {
+        if (key === 'TERMII_API_KEY') return undefined;
+        if (key === 'TERMII_WHATSAPP_DEVICE_ID') return 'device-123456';
+        return undefined;
       });
 
       await expect(
         service.sendTemplateMessage(mockPhone, 'welcome_message', 'en', {}, mockChurchId),
-      ).rejects.toThrow('WhatsApp API not configured');
+      ).rejects.toThrow('Termii WhatsApp not configured');
     });
   });
 
-  describe('interpolateTemplate', () => {
-    it('should replace {{variable}} placeholders', () => {
-      const result = service.interpolateTemplate('Hello {{name}}!', { name: 'Ade' });
-      expect(result).toBe('Hello Ade!');
-    });
+  describe('sendMessage (Termii delegation)', () => {
+    it('should delegate plain text sending to Termii and log the message', async () => {
+      prisma.message.create.mockResolvedValue(mockMessage);
 
-    it('should replace {variable} placeholders', () => {
-      const result = service.interpolateTemplate('Hello {name}!', { name: 'Ade' });
-      expect(result).toBe('Hello Ade!');
+      const result = await service.sendMessage(mockPhone, 'Hello!', mockChurchId, mockMemberId);
+
+      expect(termiiService.sendWhatsAppMessage).toHaveBeenCalledWith(mockPhone, 'Hello!');
+      expect(result.messageId).toBe(mockMessage.id);
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            channel: 'whatsapp',
+            direction: 'outbound',
+            status: 'sent',
+            metadata: { termii_request_id: 'termii-req-001' },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('Termii inbound webhook', () => {
+    it('should process a Termii flat inbound payload', async () => {
+      prisma.profile.findFirst.mockResolvedValue(mockProfile);
+      prisma.message.create.mockResolvedValue(mockMessage);
+
+      const result = await service.processWebhook({
+        type: 'inbound',
+        id: '8248611476370959318',
+        message_id: '3905204342778053556',
+        receiver: '2348066666666',
+        sender: '2348012345678',
+        message: 'HELP',
+        received_at: '2026-07-20T10:00:00.000Z',
+        status: 'Received',
+        channel: 'whatsapp',
+      });
+
+      expect(result.processed).toBe(1);
+      // inbound log + outbound HELP reply
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
     });
   });
 });

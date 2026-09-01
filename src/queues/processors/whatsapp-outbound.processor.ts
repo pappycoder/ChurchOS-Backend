@@ -4,7 +4,7 @@
  *
  * Handles jobs from the 'whatsapp-outbound' queue. Each job contains
  * a recipient phone number, message content, and church ID for tenant scoping.
- * Delegates to WhatsAppService to send via the 360dialog Cloud API.
+ * Delegates to WhatsAppService to send via the Termii WhatsApp API.
  * If WhatsApp delivery fails after all retries and ENABLE_SMS_FALLBACK is true,
  * the processor falls back to SMS delivery via TermiiService.
  *
@@ -71,12 +71,13 @@ export class WhatsAppOutboundProcessor extends WorkerHost {
   /**
    * Processes a single outbound WhatsApp message job.
    *
-   * Delegates to WhatsAppService.sendMessage() which handles 360dialog API
-   * communication and persists the outbound message to the Message table.
+   * Delegates to WhatsAppService.sendMessage() which handles the Termii
+   * WhatsApp API communication and persists the outbound message to the
+   * Message table.
    * On success, stores the created message ID in the job data for fallback linking.
    *
    * @param job - BullMQ job containing recipient phone, message content, and church ID
-   * @returns Void — message sent via WhatsAppService (360dialog API)
+   * @returns Void — message sent via WhatsAppService (Termii WhatsApp API)
    * @throws Error if WhatsApp API is not configured or send fails (triggers retry)
    */
   private async handleSend(job: WhatsAppSendJob): Promise<void> {

@@ -17,7 +17,7 @@ export class SendTemplateMessageDto {
 
   @ApiProperty({
     example: 'welcome_message',
-    description: 'Template name registered with WhatsApp / 360dialog',
+    description: 'Template name / ID registered with WhatsApp (Termii template ID)',
   })
   @IsString()
   @IsNotEmpty()
