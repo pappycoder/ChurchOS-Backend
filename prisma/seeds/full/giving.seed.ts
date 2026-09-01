@@ -77,7 +77,7 @@ export async function seedGiving(
    let txCount = 0;
    for (const t of TX_DEFS) {
     const memberIndex = t[0];
-    const branch = t[1];
+    const branch = t[1] as 'hq' | 'lekki';
     const catName = t[2];
     const amount = t[3];
     const type = t[4];
@@ -107,7 +107,7 @@ export async function seedGiving(
         payment_reference: 'GIV' + Date.now() + '_' + txCount,
         payment_gateway: gateway,
         payment_method: method,
-        receipt_number: 'GCC/' + branch.toUpperCase() + '/2026/' + String(txCount +  ​1).padStart(4,, '0'),
+        receipt_number: 'GCC/' + branch.toUpperCase() + '/2026/' + String(txCount +  ​1).padStart(4, '0'),
         notes: 'Seeded transaction (full test env)',
       },
     });
