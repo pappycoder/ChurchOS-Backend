@@ -49,9 +49,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     try {
       // Dynamic import: load jose at runtime to avoid CommonJS/ESM conflicts
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { decodeJwt } = await (eval('import("jose")') as Promise<
-        typeof import('jose')
-      >);
+      const { decodeJwt } = await (eval('import("jose")') as Promise<typeof import('jose')>);
       const payload = decodeJwt(token);
       sub = payload.sub ?? '';
       if (!sub) {

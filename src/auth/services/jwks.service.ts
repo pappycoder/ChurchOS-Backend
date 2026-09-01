@@ -66,9 +66,7 @@ export class JwksService implements OnModuleInit {
 
     // Dynamic import: load jose at runtime to avoid CommonJS/ESM conflicts
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createRemoteJWKSet } = await (eval('import("jose")') as Promise<
-      typeof import('jose')
-    >);
+    const { createRemoteJWKSet } = await (eval('import("jose")') as Promise<typeof import('jose')>);
     const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
     this.remoteJWKS = createRemoteJWKSet(jwksUrl);
     this.logger.log(`JWKS endpoint initialized: ${jwksUrl.href}`);
@@ -85,9 +83,7 @@ export class JwksService implements OnModuleInit {
     try {
       // Dynamic import: load jose at runtime to avoid CommonJS/ESM conflicts
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { jwtVerify } = await (eval('import("jose")') as Promise<
-        typeof import('jose')
-      >);
+      const { jwtVerify } = await (eval('import("jose")') as Promise<typeof import('jose')>);
       const result = await jwtVerify(token, this.remoteJWKS);
 
       return {
