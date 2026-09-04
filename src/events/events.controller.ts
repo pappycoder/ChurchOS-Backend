@@ -529,11 +529,11 @@ export class EventsController {
         throw new ForbiddenException('You do not have permission to create tickets');
       }
     } else {
-      // Member path: can only self-assign (enforced in service)
-      if (!dto.memberId && !dto.visitorId) {
-        throw new BadRequestException(
-          'Members must provide a memberId to claim a ticket for themselves',
-        );
+      // Member path: can only self-assign (enforced in service). memberId is
+      // optional — when omitted the service resolves the caller's own member
+      // profile (auto-create and link if the profile has none).
+      if (dto.visitorId) {
+        throw new BadRequestException('Members cannot claim a ticket for a visitor');
       }
     }
 

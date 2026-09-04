@@ -1250,13 +1250,17 @@ export class EventsService {
 
     // Members may only claim a ticket for themselves. Staff can assign to anyone.
     if (viewer?.enforceSelf) {
-      if (!viewer.memberId) {
+      // Resolve the caller's own member profile, auto-creating and linking a
+      // Member record on the fly when the profile has none (same convention as
+      // sermons/pastoral ensureMemberId) so members can always self-claim.
+      let selfMemberId = viewer.memberId;
+      if (!selfMemberId) {
+        selfMemberId = await this.ensureMemberId(userId);
+      }
+      if (!selfMemberId) {
         throw new ForbiddenException(
           'No member profile is linked. Contact your church admin to assign a ticket.',
         );
-      }
-      if (!memberId || memberId !== viewer.memberId) {
-        throw new ForbiddenException('Members can only claim a ticket for themselves');
       }
       if (visitorId) {
         throw new ForbiddenException('Members cannot create a ticket for a visitor');
@@ -1265,6 +1269,11 @@ export class EventsService {
       // unless the event is church-wide (no branch) or the viewer is HQ.
       if (!viewer.isAdminHq && event.branch_id && event.branch_id !== viewer.branchId) {
         throw new ForbiddenException('This event belongs to another branch');
+      }
+      // When the caller omits memberId, fill it with their resolved self id.
+      memberId = memberId ?? selfMemberId;
+      if (memberId !== selfMemberId) {
+        throw new ForbiddenException('Members can only claim a ticket for themselves');
       }
     }
 
@@ -1410,6 +1419,57 @@ export class EventsService {
       pricePaid,
       status: 'paid' as const,
     };
+  }
+
+  /**
+   * Returns the member ID linked to a user's profile, creating a Member record
+   * on the fly and linking it to the profile when none exists.
+   *
+   * Follows the same convention as SermonsService/PastoralService so that
+   * self-service member actions (e.g. claiming a ticket) always have a member
+   * identity to work with.
+   *
+   * @param userId - Supabase Auth user ID (from JWT sub claim)
+   * @returns The member ID linked to the user's profile
+   * @throws NotFoundException if the user has no profile
+   */
+  private async ensureMemberId(userId: string): Promise<string> {
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        member_id: true,
+        first_name: true,
+        last_name: true,
+        church_id: true,
+        branch_id: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('User does not have a profile');
+    }
+
+    if (profile.member_id) {
+      return profile.member_id;
+    }
+
+    const member = await this.prisma.member.create({
+      data: {
+        church_id: profile.church_id,
+        branch_id: profile.branch_id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        status: 'active',
+      },
+    });
+
+    await this.prisma.profile.update({
+      where: { id: profile.id },
+      data: { member_id: member.id },
+    });
+
+    return member.id;
   }
 
   /**
