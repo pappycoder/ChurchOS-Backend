@@ -172,7 +172,11 @@ export class EmailService {
         churchId,
         messages.map((m) => m.id),
       );
-      const data = messages.map((m) => this.mapSentItem(m, recipientRows.get(m.id) || []));
+
+      const senderAvatar = await this.resolveSenderAvatars(churchId, [profileId]);
+      const myAvatar = senderAvatar.get(profileId);
+
+      const data = messages.map((m) => this.mapSentItem(m, recipientRows.get(m.id) || [], myAvatar));
 
       return { data, total, unreadCount: 0 };
     }
@@ -195,16 +199,19 @@ export class EmailService {
       }),
     ]);
 
-    const messageIds = recipientCopies.map((r) => r.message_id);
-    const messageRows = await this.fetchMessages(churchId, messageIds);
+      const messageIds = recipientCopies.map((r) => r.message_id);
+      const messageRows = await this.fetchMessages(churchId, messageIds);
 
-    const data = recipientCopies
-      .map((copy) => {
-        const msg = messageRows.get(copy.message_id);
-        if (!msg) return null;
-        return this.mapInboxItem(copy, msg);
-      })
-      .filter((item): item is EmailItemDto => item !== null);
+      const senderIds = [...new Set([...messageRows.values()].map((m) => m.sender_id))];
+      const avatarMap = await this.resolveSenderAvatars(churchId, senderIds);
+
+      const data = recipientCopies
+        .map((copy) => {
+          const msg = messageRows.get(copy.message_id);
+          if (!msg) return null;
+          return this.mapInboxItem(copy, msg, avatarMap.get(msg.sender_id));
+        })
+        .filter((item): item is EmailItemDto => item !== null);
 
     return { data, total, unreadCount };
   }
@@ -552,16 +559,23 @@ export class EmailService {
     deletedAt?: Date,
   ): Promise<EmailDetailDto> {
     let senderName: string | undefined;
+    let senderAvatarUrl: string | undefined;
     if (message.sender_name) {
       senderName = message.sender_name;
+      const senderProfile = await this.prisma.profile.findFirst({
+        where: { id: message.sender_id, church_id: churchId },
+        select: { avatar_url: true },
+      });
+      senderAvatarUrl = senderProfile?.avatar_url ?? undefined;
     } else {
       const sender = await this.prisma.profile.findFirst({
         where: { id: message.sender_id, church_id: churchId },
-        select: { first_name: true, last_name: true },
+        select: { first_name: true, last_name: true, avatar_url: true },
       });
       senderName = sender
         ? [sender.first_name, sender.last_name].filter(Boolean).join(' ').trim()
         : undefined;
+      senderAvatarUrl = sender?.avatar_url ?? undefined;
     }
 
     return {
@@ -570,12 +584,27 @@ export class EmailService {
       body: message.body,
       senderId: message.sender_id,
       senderName,
+      senderAvatarUrl,
       recipientIds: recipients.map((r) => r.id),
       readAt: readAt ? readAt.toISOString() : undefined,
       deletedAt: deletedAt ? deletedAt.toISOString() : undefined,
       replyToId: message.reply_to_id ?? undefined,
       createdAt: message.created_at.toISOString(),
     };
+  }
+
+  private async resolveSenderAvatars(
+    churchId: string,
+    senderIds: string[],
+  ): Promise<Map<string, string | undefined>> {
+    const map = new Map<string, string | undefined>();
+    if (senderIds.length === 0) return map;
+    const profiles = await this.prisma.profile.findMany({
+      where: { id: { in: senderIds }, church_id: churchId },
+      select: { id: true, avatar_url: true },
+    });
+    for (const p of profiles) map.set(p.id, p.avatar_url ?? undefined);
+    return map;
   }
 
   private mapInboxItem(
@@ -588,6 +617,7 @@ export class EmailService {
       sender_name: string | null;
       created_at: Date;
     },
+    senderAvatarUrl?: string,
   ): EmailItemDto {
     return {
       id: msg.id,
@@ -595,6 +625,7 @@ export class EmailService {
       preview: this.preview(msg.body),
       senderId: msg.sender_id,
       senderName: msg.sender_name ?? undefined,
+      senderAvatarUrl,
       recipientId: '',
       recipientName: '',
       readAt: copy.read_at ? copy.read_at.toISOString() : undefined,
@@ -614,6 +645,7 @@ export class EmailService {
       deleted_at: Date | null;
     },
     recipients: ContactRow[],
+    senderAvatarUrl?: string,
   ): EmailItemDto {
     return {
       id: msg.id,
@@ -621,6 +653,7 @@ export class EmailService {
       preview: this.preview(msg.body),
       senderId: msg.sender_id,
       senderName: msg.sender_name ?? undefined,
+      senderAvatarUrl,
       recipientId: recipients[0]?.id ?? '',
       recipientName: recipients.map((r) => this.fullName(r)).join(', '),
       readAt: undefined,

@@ -50,6 +50,12 @@ export class AppointmentDto {
   })
   pastorRole?: string;
 
+  @ApiPropertyOptional({
+    description: 'With party — pastor avatar URL',
+    example: 'https://storage.example.com/avatars/pastor.jpg',
+  })
+  pastorAvatarUrl?: string;
+
   @ApiProperty({
     description: 'Who party — person Profile ID',
     example: '22222222-2222-2222-2222-222222222222',
@@ -61,6 +67,12 @@ export class AppointmentDto {
     example: 'Sister Bola Okonkwo',
   })
   personName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Who party — person avatar URL',
+    example: 'https://storage.example.com/avatars/person.jpg',
+  })
+  personAvatarUrl?: string;
 
   @ApiPropertyOptional({
     description: 'Who party kind',
