@@ -11,20 +11,20 @@ export interface AttendanceSeedResult {
 
 // [serviceIdx, memberIdx, branch, category?, source?]
 const ATT_DEFS: Array<[number, number, 'hq' | 'lekki', string?, string?]> = [
-  [0,0,'hq','adult','manual'],
-  [0,1,'hq','adult','manual'],
-  [0,2,'hq','adult','qr'],
-  [0,3,'hq','adult','whatsapp'],
-  [0,4,'hq','adult','manual'],
-  [0,10,'hq','adult','manual'],
-  [0,11,'hq','adult','manual'],
-  [1,0,'hq','adult','whatsapp'],
-  [1,2,'hq','adult','manual'],
-  [2,14,'lekki','adult','manual'],
-  [2,15,'lekki','adult','manual'],
-  [2,16,'lekki','adult','qr'],
-  [2,17,'lekki','adult','manual'],
-  [3,14,'lekki','adult','manual'],
+  [0, 0, 'hq', 'adult', 'manual'],
+  [0, 1, 'hq', 'adult', 'manual'],
+  [0, 2, 'hq', 'adult', 'qr'],
+  [0, 3, 'hq', 'adult', 'whatsapp'],
+  [0, 4, 'hq', 'adult', 'manual'],
+  [0, 10, 'hq', 'adult', 'manual'],
+  [0, 11, 'hq', 'adult', 'manual'],
+  [1, 0, 'hq', 'adult', 'whatsapp'],
+  [1, 2, 'hq', 'adult', 'manual'],
+  [2, 14, 'lekki', 'adult', 'manual'],
+  [2, 15, 'lekki', 'adult', 'manual'],
+  [2, 16, 'lekki', 'adult', 'qr'],
+  [2, 17, 'lekki', 'adult', 'manual'],
+  [3, 14, 'lekki', 'adult', 'manual'],
 ];
 
 export async function seedAttendance(
@@ -37,16 +37,16 @@ export async function seedAttendance(
 ): Promise<AttendanceSeedResult> {
   console.log('📦 Seeding attendance...');
 
-   const existingCount = await prisma.attendance.count({
+  const existingCount = await prisma.attendance.count({
     where: { church_id: churchId },
   });
-   if (existingCount > 0) {
+  if (existingCount > 0) {
     console.log(`  ⏭️  ${existingCount} attendance records exist, skipping`);
     return { attendanceCount: existingCount };
   }
 
-   let count = 0;
-   for (const a of ATT_DEFS) {
+  let count = 0;
+  for (const a of ATT_DEFS) {
     const serviceIndex = a[0];
     const memberIndex = a[1];
     const branchCategory = a[3] ?? 'adult';
@@ -65,9 +65,9 @@ export async function seedAttendance(
     count++;
   }
 
-   // Event-linked attendance
-   if (events[0]) {
-    for (const mi of [0,1,4,10]) {
+  // Event-linked attendance
+  if (events[0]) {
+    for (const mi of [0, 1, 4, 10]) {
       if (!members[mi]) continue;
       await prisma.attendance.create({
         data: {
@@ -83,8 +83,8 @@ export async function seedAttendance(
     }
   }
 
-   // Visitor walk-ins
-   if (services[0] && visitors[0]) {
+  // Visitor walk-ins
+  if (services[0] && visitors[0]) {
     await prisma.attendance.create({
       data: {
         church_id: churchId,
@@ -98,7 +98,7 @@ export async function seedAttendance(
     });
     count++;
   }
-   if (services[2] && visitors[2]) {
+  if (services[2] && visitors[2]) {
     await prisma.attendance.create({
       data: {
         church_id: churchId,
@@ -113,6 +113,6 @@ export async function seedAttendance(
     count++;
   }
 
-   console.log(`  🎉 Attendance records: ${count}`);
-   return { attendanceCount: count };
+  console.log(`  🎉 Attendance records: ${count}`);
+  return { attendanceCount: count };
 }

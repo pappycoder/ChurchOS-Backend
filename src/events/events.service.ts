@@ -22,6 +22,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -422,14 +423,25 @@ export class EventsService {
    */
   async listAllTickets(
     churchId: string,
-    filters: { eventId?: string; status?: string; search?: string; page: number; limit: number },
+    filters: {
+      eventId?: string;
+      status?: string;
+      search?: string;
+      page: number;
+      limit: number;
+      memberId?: string;
+    },
   ) {
-    const { eventId, status, search, page, limit } = filters;
+    const { eventId, status, search, page, limit, memberId } = filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TicketWhereInput = {
       event: { church_id: churchId },
     };
+
+    if (memberId) {
+      where.member_id = memberId;
+    }
 
     if (eventId) {
       where.event_id = eventId;
@@ -1220,6 +1232,12 @@ export class EventsService {
     tierId: string | undefined,
     churchId: string,
     userId: string,
+    viewer?: {
+      memberId?: string;
+      branchId?: string;
+      isAdminHq?: boolean;
+      enforceSelf?: boolean;
+    },
   ) {
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, church_id: churchId },
@@ -1228,6 +1246,26 @@ export class EventsService {
 
     if (!event) {
       throw new NotFoundException('Event not found');
+    }
+
+    // Members may only claim a ticket for themselves. Staff can assign to anyone.
+    if (viewer?.enforceSelf) {
+      if (!viewer.memberId) {
+        throw new ForbiddenException(
+          'No member profile is linked. Contact your church admin to assign a ticket.',
+        );
+      }
+      if (!memberId || memberId !== viewer.memberId) {
+        throw new ForbiddenException('Members can only claim a ticket for themselves');
+      }
+      if (visitorId) {
+        throw new ForbiddenException('Members cannot create a ticket for a visitor');
+      }
+      // Branch scope: members may only claim tickets for events in their own branch,
+      // unless the event is church-wide (no branch) or the viewer is HQ.
+      if (!viewer.isAdminHq && event.branch_id && event.branch_id !== viewer.branchId) {
+        throw new ForbiddenException('This event belongs to another branch');
+      }
     }
 
     // Validate at least one of memberId or visitorId

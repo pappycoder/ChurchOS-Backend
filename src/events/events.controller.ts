@@ -23,6 +23,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -120,7 +121,7 @@ export class EventsController {
   @Get('management/tickets')
   @ApiOperation({
     summary: 'List all tickets',
-    description: 'Lists all tickets across events for management purposes.',
+    description: 'Admins see all tickets. Members see only their own assigned tickets.',
   })
   async listAllTickets(
     @Query('eventId') eventId?: string,
@@ -131,12 +132,15 @@ export class EventsController {
     @Request() req?: AuthenticatedRequest,
   ) {
     const churchId = req?.profile?.church_id || '';
+    const roles = req?.profile?.roles || ([req?.profile?.role].filter(Boolean) as string[]);
+    const isStaff = roles.some((r) => r !== 'member');
     return this.eventsService.listAllTickets(churchId, {
       eventId,
       status,
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
+      ...(isStaff ? {} : { memberId: req?.profile?.member_id }),
     });
   }
 
@@ -502,13 +506,11 @@ export class EventsController {
    */
   @Post(':eventId/tickets')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
-  @RequirePermissions('events:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a ticket',
     description:
-      'Manually creates a ticket for a member or visitor. Used for walk-in purchases, comp tickets, or admin ticket creation.',
+      'Staff (admin, branch pastor) can create a ticket for any member or visitor. Members can claim a ticket for themselves — one per event, limited to their branch.',
   })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
   async createTicket(
@@ -517,9 +519,24 @@ export class EventsController {
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ) {
-    if (!dto.memberId && !dto.visitorId) {
-      throw new BadRequestException('At least one of memberId or visitorId must be provided');
+    const roles = req.profile?.roles || ([req.profile?.role].filter(Boolean) as string[]);
+    const isStaff = roles.some((r) => r !== 'member');
+
+    // Staff path: require events:create permission (existing admin guard)
+    if (isStaff) {
+      const hasPerm = req.profile?.permissions?.includes('events:create') || false;
+      if (!hasPerm) {
+        throw new ForbiddenException('You do not have permission to create tickets');
+      }
+    } else {
+      // Member path: can only self-assign (enforced in service)
+      if (!dto.memberId && !dto.visitorId) {
+        throw new BadRequestException(
+          'Members must provide a memberId to claim a ticket for themselves',
+        );
+      }
     }
+
     const churchId = req.profile?.church_id || '';
     return this.eventsService.createTicket(
       eventId,
@@ -528,6 +545,14 @@ export class EventsController {
       dto.tierId,
       churchId,
       user.sub,
+      isStaff
+        ? undefined
+        : {
+            memberId: req.profile?.member_id,
+            branchId: req.profile?.branch_id,
+            isAdminHq: req.profile?.is_admin_hq,
+            enforceSelf: true,
+          },
     );
   }
 

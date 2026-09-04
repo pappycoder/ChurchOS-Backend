@@ -35,20 +35,8 @@ const SERMON_DEFS: SermonDefinition[] = [
     'Psalms 103:1-5',
     'Gratitude Series',
   ],
-  [
-    'Walking in Faith',
-    'Pastor David Adeyemi',
-    '2026-08-23',
-    'Hebrews 11:1',
-    'Faith Series',
-  ],
-  [
-    'Purpose and Calling',
-    'Pastor Samuel Bamidele',
-    '2026-08-30',
-    'Ephesians 2:10',
-    null,
-  ],
+  ['Walking in Faith', 'Pastor David Adeyemi', '2026-08-23', 'Hebrews 11:1', 'Faith Series'],
+  ['Purpose and Calling', 'Pastor Samuel Bamidele', '2026-08-30', 'Ephesians 2:10', null],
 ];
 
 // ── Media definitions ───────────────────────────────────────────────
@@ -113,8 +101,7 @@ export async function seedMedia(
         series_name: seriesName || undefined,
         tags: ['seed'],
         description: `Seeded sermon: ${title}`,
-        audio_url:
-          'https://storage.churchos.dev/sermons/audio-sample.mp3',
+        audio_url: 'https://storage.churchos.dev/sermons/audio-sample.mp3',
         duration_seconds: 2700,
       },
     });
@@ -152,13 +139,9 @@ export async function seedMedia(
           },
         });
 
-        console.log(
-          `  ✅ Bookmark: member ${members[0].id} → ${firstSermon.title}`,
-        );
+        console.log(`  ✅ Bookmark: member ${members[0].id} → ${firstSermon.title}`);
       } else {
-        console.log(
-          `  ℹ️ Bookmark already exists for: ${firstSermon.title}`,
-        );
+        console.log(`  ℹ️ Bookmark already exists for: ${firstSermon.title}`);
       }
     }
   }
@@ -197,9 +180,7 @@ export async function seedMedia(
     console.log(`  ✅ Media: ${filename}`);
   }
 
-  console.log(
-    `  🎉 Sermons: ${sermonCount}, media assets: ${mediaCount}`,
-  );
+  console.log(`  🎉 Sermons: ${sermonCount}, media assets: ${mediaCount}`);
 
   return {
     sermonCount,

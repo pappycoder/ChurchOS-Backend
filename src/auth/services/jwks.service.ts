@@ -11,12 +11,7 @@
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  createRemoteJWKSet,
-  jwtVerify,
-  type JWTPayload,
-  type JWTVerifyGetKey,
-} from 'jose';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
 
 /**
  * Result of a successful JWT verification.
@@ -50,10 +45,7 @@ export class JwksService implements OnModuleInit {
       throw new Error('SUPABASE_URL must be set for JWKS verification');
     }
 
-    const jwksUrl = new URL(
-      '/auth/v1/.well-known/jwks.json',
-      supabaseUrl,
-    );
+    const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
 
     this.remoteJWKS = createRemoteJWKSet(jwksUrl);
 
@@ -75,8 +67,7 @@ export class JwksService implements OnModuleInit {
         protectedHeader: result.protectedHeader as Record<string, unknown>,
       };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
 
       this.logger.warn(`JWT verification failed: ${message}`);
 

@@ -145,8 +145,7 @@ export async function seedComm(
   }> = [
     {
       name: 'Welcome Message',
-      content:
-        'Welcome to Grace Community Church! We are glad to have you.',
+      content: 'Welcome to Grace Community Church! We are glad to have you.',
       channel: 'whatsapp',
       status: 'published',
       category: 'UTILITY',
@@ -160,8 +159,7 @@ export async function seedComm(
     },
     {
       name: 'Prayer Request Acknowledgment',
-      content:
-        'We have received your prayer request and will pray with you.',
+      content: 'We have received your prayer request and will pray with you.',
       channel: 'email',
       status: 'draft',
       category: null,
@@ -307,8 +305,7 @@ export async function seedComm(
           sender_id: admin,
           sender_name: 'Grace Okafor',
           subject: 'Welcome to the admin dashboard',
-          body:
-            'Hi! This is an internal email to help you test the email module. Explore the inbox and sent boxes.',
+          body: 'Hi! This is an internal email to help you test the email module. Explore the inbox and sent boxes.',
         },
       });
 

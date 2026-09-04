@@ -19,17 +19,7 @@ export interface EventSeedResult {
 
 // [title, branch, type, startDate, endDate, location, capacity, price, isFree]
 const EVENT_DEFS: Array<
-  [
-    string,
-    'hq' | 'lekki',
-    EventType,
-    string,
-    string,
-    string,
-    number?,
-    number?,
-    boolean?,
-  ]
+  [string, 'hq' | 'lekki', EventType, string, string, string, number?, number?, boolean?]
 > = [
   [
     'Annual Leadership Conference',
@@ -75,14 +65,7 @@ const TIER_DEFS: Array<[number, string, number, number?]> = [
 
 // [eventIdx, memberIdx, tierIdx?, paymentStatus, quantity, checkedIn?]
 const REG_DEFS: Array<
-  [
-    number,
-    number,
-    number | undefined,
-    RegistrationPaymentStatus,
-    number,
-    boolean?,
-  ]
+  [number, number, number | undefined, RegistrationPaymentStatus, number, boolean?]
 > = [
   [0, 0, 0, RegistrationPaymentStatus.paid, 1, true],
   [0, 1, 0, RegistrationPaymentStatus.paid, 1, false],
@@ -118,17 +101,7 @@ export async function seedEvents(
 
   // ── Events ─────────────────────────────────────────────────────────
   for (const eventDef of EVENT_DEFS) {
-    const [
-      title,
-      branch,
-      type,
-      start,
-      end,
-      location,
-      capacity,
-      price,
-      isFree,
-    ] = eventDef;
+    const [title, branch, type, start, end, location, capacity, price, isFree] = eventDef;
 
     const existing = await prisma.event.findFirst({
       where: {
@@ -155,20 +128,14 @@ export async function seedEvents(
         location,
         capacity: capacity ?? undefined,
         is_free: isFree ?? false,
-        price: isFree ? undefined : price ?? undefined,
-        registration_fields: [
-          'full_name',
-          'email',
-          'phone',
-        ] as Prisma.InputJsonValue,
+        price: isFree ? undefined : (price ?? undefined),
+        registration_fields: ['full_name', 'email', 'phone'] as Prisma.InputJsonValue,
       },
     });
 
     events.push({ id: created.id });
 
-    console.log(
-      `  ✅ Event: ${created.title} (${branch.toUpperCase()})`,
-    );
+    console.log(`  ✅ Event: ${created.title} (${branch.toUpperCase()})`);
   }
 
   // ── Ticket tiers ───────────────────────────────────────────────────
@@ -207,8 +174,7 @@ export async function seedEvents(
         name,
         price,
         capacity: capacity ?? undefined,
-        display_order:
-          tiers.filter((tier) => tier.eventIdx === eventIndex).length + 1,
+        display_order: tiers.filter((tier) => tier.eventIdx === eventIndex).length + 1,
       },
     });
 
@@ -226,22 +192,14 @@ export async function seedEvents(
   let ticketCount = 0;
 
   for (const registrationDef of REG_DEFS) {
-    const [
-      eventIndex,
-      memberIndex,
-      tierIndex,
-      paymentStatus,
-      quantity,
-      checkedIn,
-    ] = registrationDef;
+    const [eventIndex, memberIndex, tierIndex, paymentStatus, quantity, checkedIn] =
+      registrationDef;
 
     const event = events[eventIndex];
     const member = members[memberIndex];
 
     if (!event) {
-      console.warn(
-        `  ⚠️ Skipping registration because event index ${eventIndex} does not exist.`,
-      );
+      console.warn(`  ⚠️ Skipping registration because event index ${eventIndex} does not exist.`);
       continue;
     }
 
@@ -255,28 +213,22 @@ export async function seedEvents(
     const isCheckedIn = checkedIn ?? false;
 
     // Tier indexes are relative to the tiers belonging to this event.
-    const eventTiers = tiers.filter(
-      (tier) => tier.eventIdx === eventIndex,
-    );
+    const eventTiers = tiers.filter((tier) => tier.eventIdx === eventIndex);
 
-    const tier =
-      tierIndex !== undefined ? eventTiers[tierIndex] : undefined;
+    const tier = tierIndex !== undefined ? eventTiers[tierIndex] : undefined;
 
     if (tierIndex !== undefined && !tier) {
-      console.warn(
-        `  ⚠️ Tier index ${tierIndex} not found for event index ${eventIndex}.`,
-      );
+      console.warn(`  ⚠️ Tier index ${tierIndex} not found for event index ${eventIndex}.`);
       continue;
     }
 
     // Prevent duplicate registrations.
-    const existingRegistration =
-      await prisma.eventRegistration.findFirst({
-        where: {
-          event_id: event.id,
-          member_id: member.id,
-        },
-      });
+    const existingRegistration = await prisma.eventRegistration.findFirst({
+      where: {
+        event_id: event.id,
+        member_id: member.id,
+      },
+    });
 
     if (existingRegistration) {
       const existingTickets = await prisma.ticket.count({
@@ -287,9 +239,7 @@ export async function seedEvents(
 
       ticketCount += existingTickets;
 
-      console.log(
-        `  ℹ️ Registration already exists: ${member.first_name} → ${event.id}`,
-      );
+      console.log(`  ℹ️ Registration already exists: ${member.first_name} → ${event.id}`);
 
       continue;
     }
@@ -357,14 +307,10 @@ export async function seedEvents(
 
     ticketCount++;
 
-    console.log(
-      `  ✅ Registration: ${member.first_name} → ${event.id} (${paymentStatus})`,
-    );
+    console.log(`  ✅ Registration: ${member.first_name} → ${event.id} (${paymentStatus})`);
   }
 
-  console.log(
-    `  🎉 Events: ${events.length}, tiers: ${tiers.length}, tickets: ${ticketCount}`,
-  );
+  console.log(`  🎉 Events: ${events.length}, tiers: ${tiers.length}, tickets: ${ticketCount}`);
 
   return {
     eventCount: events.length,
