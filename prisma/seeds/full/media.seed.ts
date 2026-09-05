@@ -3,7 +3,7 @@
  * @description Seeds sermons + bookmarks, and media assets.
  */
 
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 export interface MediaSeedResult {
   sermonCount: number;
