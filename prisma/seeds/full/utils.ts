@@ -5,10 +5,15 @@
 
 import { PrismaClient } from '@prisma/client';
 
+interface ModelWithId<T extends { id: string }> {
+  findFirst: (args: { where: Record<string, unknown> }) => Promise<T | null>;
+  create: (args: { data: Record<string, unknown> }) => Promise<T>;
+}
+
 /** Idempotent create-or-skip for church-scoped rows with a stable natural key. */
 export async function findOrCreate<T extends { id: string }>(
   prisma: PrismaClient,
-  model: { findFirst: (args: any) => Promise<T | null>; create: (args: any) => Promise<T> },
+  model: ModelWithId<T>,
   where: Record<string, unknown>,
   data: Record<string, unknown>,
 ): Promise<{ row: T; created: boolean }> {
