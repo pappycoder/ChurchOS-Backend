@@ -607,7 +607,7 @@ export class AppointmentsService {
     const profileIds = [...new Set([row.person_id, row.pastor_id])];
     const profiles = await this.prisma.profile.findMany({
       where: { id: { in: profileIds }, church_id: churchId },
-      select: { id: true, first_name: true, last_name: true, role: true },
+      select: { id: true, first_name: true, last_name: true, role: true, avatar_url: true },
     });
     const byId = new Map(profiles.map((r) => [r.id, r]));
     const person = byId.get(row.person_id);
@@ -632,8 +632,10 @@ export class AppointmentsService {
       pastorId: row.pastor_id,
       pastorName: this.fullName(pastor),
       pastorRole: pastor ? (pastor.role as string[])[0] : undefined,
+      pastorAvatarUrl: pastor?.avatar_url ?? undefined,
       personId: row.person_id,
       personName: whoKind === 'visitor' ? (visitorName ?? '') : this.fullName(person),
+      personAvatarUrl: whoKind === 'visitor' ? undefined : (person?.avatar_url ?? undefined),
       whoKind,
       visitorId: row.visitor_id ?? undefined,
       visitorName,

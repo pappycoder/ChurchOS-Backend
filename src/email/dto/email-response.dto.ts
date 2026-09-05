@@ -35,6 +35,12 @@ export class EmailItemDto {
   @ApiPropertyOptional({ description: 'Sender full name', example: 'Pastor John Adebayo' })
   senderName?: string;
 
+  @ApiPropertyOptional({
+    description: 'Sender avatar URL',
+    example: 'https://storage.example.com/avatars/pastor.jpg',
+  })
+  senderAvatarUrl?: string;
+
   @ApiProperty({
     description: 'Recipient Profile ID (inbox copy)',
     example: '22222222-2222-2222-2222-222222222222',
@@ -84,6 +90,12 @@ export class EmailDetailDto {
 
   @ApiPropertyOptional({ description: 'Sender full name', example: 'Pastor John Adebayo' })
   senderName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Sender avatar URL',
+    example: 'https://storage.example.com/avatars/pastor.jpg',
+  })
+  senderAvatarUrl?: string;
 
   @ApiProperty({
     description: 'Recipient Profile IDs',

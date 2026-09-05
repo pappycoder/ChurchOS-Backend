@@ -184,6 +184,7 @@ describe('EmailService', () => {
       model('emailRecipient').count.mockResolvedValueOnce(1); // total
       model('emailRecipient').count.mockResolvedValueOnce(1); // unread
       model('emailMessage').findMany.mockResolvedValueOnce([messageRow()]);
+      model('profile').findMany.mockResolvedValueOnce([{ id: mockRecipientId, avatar_url: null }]);
 
       const result = await service.list(mockChurchId, mockRecipientId, 1, 30);
 
@@ -205,6 +206,7 @@ describe('EmailService', () => {
         { message_id: mockMessageId, profile_id: mockRecipientId },
       ]);
       model('profile').findMany.mockResolvedValueOnce([recipientRow({ role: ['secretary'] })]);
+      model('profile').findMany.mockResolvedValueOnce([{ id: mockSenderId, avatar_url: null }]);
 
       const result = await service.list(mockChurchId, mockSenderId, 1, 30, EmailBox.Sent);
 

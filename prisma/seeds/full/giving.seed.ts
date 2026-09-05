@@ -12,32 +12,67 @@ export interface GivingSeedResult {
 }
 
 // [memberIdx, branch, categoryName, amount, type, status, gateway, method, linkService?, linkEvent?]
-const TX_DEFS: Array<[number, string, string, number, TransactionType, TransactionStatus, PaymentGateway, string, boolean?, boolean?]> = [
-  [0,'hq','Tithe',25000,'digital','success','paystack','card',true,false],
-  [1,'hq','Offering',12000,'cash','success','manual','cash',true,false],
-  [2,'hq','Seed',45000,'digital','success','paystack','card',false,false],
-  [3,'hq','First Fruit',100000,'bank_transfer','success','flutterwave','bank_transfer',false,false],
-  [4,'hq','Thanksgiving',35000,'digital','success','paystack','card',false,false],
-  [5,'hq','Building Project',75000,'digital','success','paystack','card',false,false],
-  [6,'hq','Welfare/Mission',15000,'cash','success','manual','cash',false,false],
-  [7,'hq','Gift',5000,'digital','failed','paystack','card',false,false],
-  [8,'hq','Venison',20000,'bank_transfer','pending','flutterwave','bank_transfer',false,false],
-  [9,'hq','Overall Total',60000,'cash','success','manual','cash',false,true],
-  [10,'hq','Tithe',18000,'digital','success','paystack','card',false,false],
-  [14,'lekki','Tithe',22000,'digital','success','paystack','card',true,false],
-  [15,'lekki','Offering',9000,'cash','success','manual','cash',true,false],
-  [16,'lekki','Seed',30000,'digital','success','paystack','card',false,false],
-  [17,'lekki','Thanksgiving',14000,'digital','reversed','flutterwave','card',false,false],
-  [18,'lekki','Gift',8000,'cash','success','manual','cash',false,false],
-  [20,'lekki','Building Project',40000,'digital','success','paystack','card',false,false],
+const TX_DEFS: Array<
+  [
+    number,
+    string,
+    string,
+    number,
+    TransactionType,
+    TransactionStatus,
+    PaymentGateway,
+    string,
+    boolean?,
+    boolean?,
+  ]
+> = [
+  [0, 'hq', 'Tithe', 25000, 'digital', 'success', 'paystack', 'card', true, false],
+  [1, 'hq', 'Offering', 12000, 'cash', 'success', 'manual', 'cash', true, false],
+  [2, 'hq', 'Seed', 45000, 'digital', 'success', 'paystack', 'card', false, false],
+  [
+    3,
+    'hq',
+    'First Fruit',
+    100000,
+    'bank_transfer',
+    'success',
+    'flutterwave',
+    'bank_transfer',
+    false,
+    false,
+  ],
+  [4, 'hq', 'Thanksgiving', 35000, 'digital', 'success', 'paystack', 'card', false, false],
+  [5, 'hq', 'Building Project', 75000, 'digital', 'success', 'paystack', 'card', false, false],
+  [6, 'hq', 'Welfare/Mission', 15000, 'cash', 'success', 'manual', 'cash', false, false],
+  [7, 'hq', 'Gift', 5000, 'digital', 'failed', 'paystack', 'card', false, false],
+  [
+    8,
+    'hq',
+    'Venison',
+    20000,
+    'bank_transfer',
+    'pending',
+    'flutterwave',
+    'bank_transfer',
+    false,
+    false,
+  ],
+  [9, 'hq', 'Overall Total', 60000, 'cash', 'success', 'manual', 'cash', false, true],
+  [10, 'hq', 'Tithe', 18000, 'digital', 'success', 'paystack', 'card', false, false],
+  [14, 'lekki', 'Tithe', 22000, 'digital', 'success', 'paystack', 'card', true, false],
+  [15, 'lekki', 'Offering', 9000, 'cash', 'success', 'manual', 'cash', true, false],
+  [16, 'lekki', 'Seed', 30000, 'digital', 'success', 'paystack', 'card', false, false],
+  [17, 'lekki', 'Thanksgiving', 14000, 'digital', 'reversed', 'flutterwave', 'card', false, false],
+  [18, 'lekki', 'Gift', 8000, 'cash', 'success', 'manual', 'cash', false, false],
+  [20, 'lekki', 'Building Project', 40000, 'digital', 'success', 'paystack', 'card', false, false],
 ];
 
 // [memberIdx, categoryName, amount, frequency]
 const RECURRING_DEFS: Array<[number, string, number, string]> = [
-  [0,'Tithe',25000,'monthly'],
-  [2,'Tithe',45000,'weekly'],
-  [5,'Offering',15000,'monthly'],
-  [15,'Tithe',22000,'monthly'],
+  [0, 'Tithe', 25000, 'monthly'],
+  [2, 'Tithe', 45000, 'weekly'],
+  [5, 'Offering', 15000, 'monthly'],
+  [15, 'Tithe', 22000, 'monthly'],
 ];
 
 export async function seedGiving(
@@ -49,33 +84,33 @@ export async function seedGiving(
 ): Promise<GivingSeedResult> {
   console.log('📦 Seeding giving transactions + recurring giving...');
 
-   const branchIdFor = (b: 'hq' | 'lekki'): string => (b === 'hq' ? hqBranchId : lekkiBranchId);
+  const branchIdFor = (b: 'hq' | 'lekki'): string => (b === 'hq' ? hqBranchId : lekkiBranchId);
   const categories = await prisma.givingCategory.findMany({
     where: { church_id: churchId },
   });
-   const catByName = new Map(categories.map((c) => [c.name, c.id]));
-   const services = await prisma.service.findMany({
+  const catByName = new Map(categories.map((c) => [c.name, c.id]));
+  const services = await prisma.service.findMany({
     where: { church_id: churchId },
   });
-   const events = await prisma.event.findMany({
+  const events = await prisma.event.findMany({
     where: { church_id: churchId },
   });
 
-   const existingCount = await prisma.transaction.count({
+  const existingCount = await prisma.transaction.count({
     where: { church_id: churchId },
   });
-   if (existingCount > 0) {
+  if (existingCount > 0) {
     console.log(`  ⏭️  ${existingCount} transactions already exist, skipping`);
     return {
       transactionCount: existingCount,
-      recurringCount: (await prisma.recurringGiving.count({
+      recurringCount: await prisma.recurringGiving.count({
         where: { church_id: churchId },
-      })),
+      }),
     };
   }
 
-   let txCount = 0;
-   for (const t of TX_DEFS) {
+  let txCount = 0;
+  for (const t of TX_DEFS) {
     const memberIndex = t[0];
     const branch = t[1] as 'hq' | 'lekki';
     const catName = t[2];
@@ -107,16 +142,19 @@ export async function seedGiving(
         payment_reference: 'GIV' + Date.now() + '_' + txCount,
         payment_gateway: gateway,
         payment_method: method,
-        receipt_number: 'GCC/' + branch.toUpperCase() + '/2026/' + String(txCount +  ​1).padStart(4, '0'),
+        receipt_number:
+          'GCC/' + branch.toUpperCase() + '/2026/' + String(txCount + 1).padStart(4, '0'),
         notes: 'Seeded transaction (full test env)',
       },
     });
     txCount++;
-    console.log(`  ✅ Transaction: ${member.first_name} gave ₦${amount.toLocaleString()} (${catName}, ${branch.toUpperCase()}, ${status})`);
+    console.log(
+      `  ✅ Transaction: ${member.first_name} gave ₦${amount.toLocaleString()} (${catName}, ${branch.toUpperCase()}, ${status})`,
+    );
   }
 
-   let recCount =  ​0;
-   for (const r of RECURRING_DEFS) {
+  let recCount = 0;
+  for (const r of RECURRING_DEFS) {
     const memberIndex = r[0];
     const catName = r[1];
     const amount = r[2];
@@ -144,14 +182,16 @@ export async function seedGiving(
         currency: 'NGN',
         frequency,
         is_active: true,
-        next_charge_date: new Date(Date.now() +  ​30 *  ​24 *  ​60 *  ​60 *  ​1000),
-        last_charge_date: new Date(Date.now() -  ​7 *  ​24 *  ​60 *  ​60 *  ​1000),
+        next_charge_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        last_charge_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       },
     });
     recCount++;
-    console.log(`  ✅ Recurring: ${member.first_name} ${frequency} ₦${amount.toLocaleString()} (${catName})`);
+    console.log(
+      `  ✅ Recurring: ${member.first_name} ${frequency} ₦${amount.toLocaleString()} (${catName})`,
+    );
   }
 
-   console.log(`  🎉 Transactions: ${txCount}, recurring giving: ${recCount}`);
-   return { transactionCount: txCount, recurringCount: recCount };
+  console.log(`  🎉 Transactions: ${txCount}, recurring giving: ${recCount}`);
+  return { transactionCount: txCount, recurringCount: recCount };
 }

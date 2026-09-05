@@ -421,8 +421,6 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   member: [
-    // Members — read (own profile only, enforced at service level)
-    'members:read',
     // Events — read
     'events:read',
     // Sermons — read
@@ -431,12 +429,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:read',
     // Profiles — read
     'profiles:read',
-    // Giving — read (own transactions, enforced at service level)
-    'giving:read',
     // Church — read
     'church:read',
-    // Families — read
-    'families:read',
   ],
 };
 

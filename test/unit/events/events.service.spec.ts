@@ -13,7 +13,12 @@ import { EventsService } from '../../../src/events/events.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('EventsService', () => {
@@ -669,6 +674,135 @@ describe('EventsService', () => {
       await expect(
         service.updateTicketTier(mockEventId, 'tier-1', { name: 'X' }, mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('createTicket (member self-claim)', () => {
+    const viewer = {
+      memberId: undefined,
+      branchId: undefined,
+      isAdminHq: false,
+      enforceSelf: true,
+    };
+
+    it('should resolve the caller memberId via ensureMemberId when the profile has none', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
+      prisma.eventRegistration.findUnique.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        member_id: null,
+        first_name: 'John',
+        last_name: 'Doe',
+        church_id: mockChurchId,
+        branch_id: null,
+      });
+      prisma.member.create.mockResolvedValue({ id: mockMemberId });
+      prisma.profile.update.mockResolvedValue({});
+      prisma.member.findFirst.mockResolvedValue({
+        id: mockMemberId,
+        first_name: 'John',
+        last_name: 'Doe',
+        church_id: mockChurchId,
+        branch_id: null,
+      });
+      (prisma.$transaction as unknown as jest.Mock).mockImplementation(
+        (cb: (tx: unknown) => unknown) => cb(prisma),
+      );
+      prisma.ticket.create.mockResolvedValue({
+        id: '77777777-7777-7777-7777-777777777777',
+        code: 'EVT-20260801-ABCDE',
+        status: 'paid',
+        tier_name: 'General',
+        price_paid: 0,
+      });
+      prisma.eventRegistration.create.mockResolvedValue(mockRegistration);
+      prisma.eventRegistration.update.mockResolvedValue(mockRegistration);
+
+      const result = await service.createTicket(
+        mockEventId,
+        undefined,
+        undefined,
+        undefined,
+        mockChurchId,
+        mockUserId,
+        viewer,
+      );
+
+      expect(prisma.member.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            first_name: 'John',
+            last_name: 'Doe',
+            status: 'active',
+          }),
+        }),
+      );
+      expect(prisma.profile.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ member_id: mockMemberId }) }),
+      );
+      expect(result.memberId).toBe(mockMemberId);
+    });
+
+    it('should reject when the caller tries to claim for a different memberId', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
+      prisma.profile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        member_id: mockMemberId,
+        first_name: 'John',
+        last_name: 'Doe',
+        church_id: mockChurchId,
+        branch_id: null,
+      });
+
+      await expect(
+        service.createTicket(
+          mockEventId,
+          '99999999-9999-9999-9999-999999999999',
+          undefined,
+          undefined,
+          mockChurchId,
+          mockUserId,
+          viewer,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.ticket.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject visitors in the member self-claim path', async () => {
+      prisma.event.findFirst.mockResolvedValue({
+        ...mockEvent,
+        _count: { registrations: 0 },
+        ticket_tiers: [],
+      });
+      prisma.profile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        member_id: mockMemberId,
+        first_name: 'John',
+        last_name: 'Doe',
+        church_id: mockChurchId,
+        branch_id: null,
+      });
+
+      await expect(
+        service.createTicket(
+          mockEventId,
+          mockMemberId,
+          'visitor-1',
+          undefined,
+          mockChurchId,
+          mockUserId,
+          viewer,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.ticket.create).not.toHaveBeenCalled();
     });
   });
 });

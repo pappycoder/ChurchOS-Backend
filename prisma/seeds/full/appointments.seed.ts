@@ -15,10 +15,10 @@ export async function seedAppointments(
 ): Promise<void> {
   console.log('📦 Seeding appointments...');
 
-   // HQ: secretary books with senior pastor
-   const secretary = profiles['secretary'];
-   const seniorPastor = profiles['senior_pastor'];
-   if (secretary && seniorPastor) {
+  // HQ: secretary books with senior pastor
+  const secretary = profiles['secretary'];
+  const seniorPastor = profiles['senior_pastor'];
+  if (secretary && seniorPastor) {
     const existing = await prisma.appointment.findFirst({
       where: { church_id: churchId, title: 'Pastoral counselling — HQ' },
     });
@@ -39,10 +39,10 @@ export async function seedAppointments(
     }
   }
 
-   // Lekki: branch secretary books with branch pastor
-   const branchSecretary = profiles['branch_secretary'];
-   const branchPastor = profiles['branch_pastor'];
-   if (branchSecretary && branchPastor) {
+  // Lekki: branch secretary books with branch pastor
+  const branchSecretary = profiles['branch_secretary'];
+  const branchPastor = profiles['branch_pastor'];
+  if (branchSecretary && branchPastor) {
     const existing = await prisma.appointment.findFirst({
       where: { church_id: churchId, title: 'Lekki staff meeting' },
     });
@@ -62,8 +62,8 @@ export async function seedAppointments(
     }
   }
 
-   // Visitor-Who appointment
-   if (secretary && seniorPastor && visitors[0]) {
+  // Visitor-Who appointment
+  if (secretary && seniorPastor && visitors[0]) {
     const existing = await prisma.appointment.findFirst({
       where: { church_id: churchId, title: 'First-time visitor follow-up' },
     });
@@ -84,5 +84,5 @@ export async function seedAppointments(
     }
   }
 
-   console.log('  🎉 Appointments written');
+  console.log('  🎉 Appointments written');
 }
