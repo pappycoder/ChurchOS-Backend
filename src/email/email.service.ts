@@ -176,7 +176,9 @@ export class EmailService {
       const senderAvatar = await this.resolveSenderAvatars(churchId, [profileId]);
       const myAvatar = senderAvatar.get(profileId);
 
-      const data = messages.map((m) => this.mapSentItem(m, recipientRows.get(m.id) || [], myAvatar));
+      const data = messages.map((m) =>
+        this.mapSentItem(m, recipientRows.get(m.id) || [], myAvatar),
+      );
 
       return { data, total, unreadCount: 0 };
     }
@@ -199,19 +201,19 @@ export class EmailService {
       }),
     ]);
 
-      const messageIds = recipientCopies.map((r) => r.message_id);
-      const messageRows = await this.fetchMessages(churchId, messageIds);
+    const messageIds = recipientCopies.map((r) => r.message_id);
+    const messageRows = await this.fetchMessages(churchId, messageIds);
 
-      const senderIds = [...new Set([...messageRows.values()].map((m) => m.sender_id))];
-      const avatarMap = await this.resolveSenderAvatars(churchId, senderIds);
+    const senderIds = [...new Set([...messageRows.values()].map((m) => m.sender_id))];
+    const avatarMap = await this.resolveSenderAvatars(churchId, senderIds);
 
-      const data = recipientCopies
-        .map((copy) => {
-          const msg = messageRows.get(copy.message_id);
-          if (!msg) return null;
-          return this.mapInboxItem(copy, msg, avatarMap.get(msg.sender_id));
-        })
-        .filter((item): item is EmailItemDto => item !== null);
+    const data = recipientCopies
+      .map((copy) => {
+        const msg = messageRows.get(copy.message_id);
+        if (!msg) return null;
+        return this.mapInboxItem(copy, msg, avatarMap.get(msg.sender_id));
+      })
+      .filter((item): item is EmailItemDto => item !== null);
 
     return { data, total, unreadCount };
   }
