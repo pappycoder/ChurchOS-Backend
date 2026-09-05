@@ -16,10 +16,13 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NOTIFICATIONS_SERVICE_TOKEN } from '../../notifications/notification-tokens';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'EXPORT';
+export type AuditAction =
+  'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'EXPORT' | 'ARCHIVE' | 'RESTORE';
 
 export interface AuditLogParams {
   userId: string;
@@ -31,6 +34,72 @@ export interface AuditLogParams {
   newValues?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
+}
+
+/**
+ * Audit actions that produce an in-app notification for the acting user.
+ * Only mutating CRUD actions notify — reads/login/logout/exports do not.
+ */
+const NOTIFICATION_ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE', 'ARCHIVE', 'RESTORE'];
+
+const ACTION_VERB: Record<string, string> = {
+  CREATE: 'created',
+  UPDATE: 'updated',
+  DELETE: 'deleted',
+  ARCHIVE: 'archived',
+  RESTORE: 'restored',
+};
+
+const CRUD_TITLE: Record<string, string> = {
+  CREATE: 'Created',
+  UPDATE: 'Updated',
+  DELETE: 'Deleted',
+  ARCHIVE: 'Archived',
+  RESTORE: 'Restored',
+};
+
+/**
+ * Pulls a human-friendly record name out of the audit `newValues` payload so a
+ * notification can read "Member <name> updated" instead of just "Member".
+ */
+function resolveEntityLabel(entity: string, newValues?: Record<string, unknown>): string | null {
+  if (!newValues) return null;
+
+  const nameCandidates =
+    entity === 'member'
+      ? ['firstName', 'first_name', 'fullName', 'name']
+      : ['name', 'fullName', 'title', 'firstName', 'first_name', 'label'];
+
+  for (const key of nameCandidates) {
+    const value = newValues[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/**
+ * Converts a snake_case entity name into a readable title-cased label
+ * (e.g. "giving_category" → "Giving Category", "cell_group" → "Cell Group").
+ */
+function humanizeEntity(entity: string): string {
+  return entity
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * Builds the notification title/body for a CRUD action on an entity.
+ */
+function crudNotificationText(
+  action: AuditAction,
+  entity: string,
+  label: string,
+): { title: string; body: string } {
+  const title = `${CRUD_TITLE[action]} ${humanizeEntity(entity)}`;
+  const verb = ACTION_VERB[action];
+  return { title, body: `You ${verb} ${label}.` };
 }
 
 /**
@@ -54,8 +123,21 @@ export interface AuditLogParams {
 @Injectable()
 export class AuditLoggingService {
   private readonly logger = new Logger(AuditLoggingService.name);
+  private notifications?: {
+    createNotification(
+      churchId: string,
+      profileId: string,
+      type: string,
+      title: string,
+      body: string,
+      data?: Record<string, unknown>,
+    ): Promise<unknown>;
+  };
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly moduleRef: ModuleRef,
+  ) {}
 
   /**
    * Records an audit log entry.
@@ -81,6 +163,56 @@ export class AuditLoggingService {
       this.logger.error(
         `Failed to write audit log: ${params.action} on ${params.entity}`,
         error instanceof Error ? error.stack : String(error),
+      );
+    }
+
+    // Mirror every user CRUD mutation with an in-app notification for the
+    // acting user. LOAD/EXPORT reads are excluded — only create, update,
+    // delete (and archive/restore) notify.
+    if (NOTIFICATION_ACTIONS.includes(params.action)) {
+      await this.createCrudNotification(params);
+    }
+  }
+
+  /**
+   * Creates an in-app notification describing a user's CRUD action. Failures
+   * are swallowed so a notification issue can never break the CRUD operation.
+   *
+   * `NotificationsService` is resolved lazily through the container rather
+   * than injected directly: `NotificationsService` depends on `WhatsAppService`,
+   * which depends on `AuditLoggingService`, so a direct constructor dependency
+   * would be circular. Lazy resolution breaks that cycle while still working.
+   */
+  private async createCrudNotification(params: AuditLogParams): Promise<void> {
+    try {
+      if (!params.userId) return;
+
+      const notifications = (this.notifications ??= this.moduleRef.get(
+        NOTIFICATIONS_SERVICE_TOKEN,
+        { strict: false },
+      ));
+      if (!notifications) return;
+
+      const profile = await this.prisma.profile.findUnique({
+        where: { user_id: params.userId },
+        select: { id: true },
+      });
+      if (!profile) return;
+
+      const resolvedName = resolveEntityLabel(params.entity, params.newValues);
+      const label = resolvedName || humanizeEntity(params.entity);
+      const { title, body } = crudNotificationText(params.action, params.entity, label);
+
+      await notifications.createNotification(params.churchId, profile.id, 'system', title, body, {
+        entity: params.entity,
+        entityId: params.entityId,
+        action: params.action,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to create CRUD notification for ${params.action} on ${params.entity}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
   }

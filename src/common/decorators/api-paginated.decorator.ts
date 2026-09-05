@@ -1,5 +1,5 @@
 import { applyDecorators, Type } from '@nestjs/common';
-import { ApiOkResponse, ApiQuery, getSchemaPath } from '@nestjs/swagger';
+import { ApiExtraModels, ApiOkResponse, ApiQuery, getSchemaPath } from '@nestjs/swagger';
 
 /**
  * Decorator for paginated response documentation.
@@ -17,6 +17,7 @@ import { ApiOkResponse, ApiQuery, getSchemaPath } from '@nestjs/swagger';
  */
 export function ApiPaginatedResponse<T extends Type<unknown>>(itemClass: T) {
   return applyDecorators(
+    ApiExtraModels(itemClass),
     ApiOkResponse({
       description: 'Paginated list of items',
       schema: {

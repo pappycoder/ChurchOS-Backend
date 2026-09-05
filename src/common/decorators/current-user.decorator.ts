@@ -1,36 +1,36 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { Request } from 'express';
+import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
 
 /**
  * Interface representing the authenticated Supabase user.
- * Extracted from the JWT token after verification by SupabaseAuthGuard.
+ * Extracted from the JWT token after verification by JwtAuthGuard.
  */
-export interface SupabaseUser {
-  /** Supabase Auth user ID (UUID) */
-  id: string;
-  /** User's email address */
-  email?: string;
-  /** User's phone number */
-  phone?: string;
-  /** User's full name (if set) */
-  full_name?: string;
-  /** User's avatar URL (if set) */
-  avatar_url?: string;
-}
+export type SupabaseUser = SupabaseJwtPayload;
 
 /**
  * Interface representing the full request with authenticated user context.
- * The SupabaseAuthGuard attaches `user` and `profile` to the request.
+ * The JwtAuthGuard attaches `user` and `profile` to the request.
  */
 export interface AuthenticatedRequest extends Request {
   /** The authenticated Supabase user */
-  user: SupabaseUser;
+  user: SupabaseJwtPayload;
   /** The user's ChurchOS profile (role, church_id, branch_id) */
   profile?: {
     id: string;
     church_id: string;
     branch_id?: string;
+    /** Linked member id (for cell_leader own-group scoping) */
+    member_id?: string;
+    /** Primary role (highest rank held) */
     role: string;
+    /** All roles held, ordered by rank descending */
+    roles?: string[];
+    status?: string;
+    /** Set when the profile's church is archived (ISO string) */
+    church_archived_at?: string;
+    /** HQ access override: when true, the viewer sees data from ALL branches */
+    is_admin_hq?: boolean;
     permissions?: string[];
   };
 }

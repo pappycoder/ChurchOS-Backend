@@ -1,20 +1,31 @@
 /**
  * @file auth.module.ts
- * @description Authentication module providing JWT guard and Supabase Auth integration.
- *
- * Imports the Passport module and registers the JwtStrategy so that
- * JwtAuthGuard can be used on any protected route.
+ * @description Authentication module providing JWT guard, Supabase Auth integration,
+ * registration, and profile management.
  *
  * @module auth/auth.module
  * @since 1.0.0
  */
 
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwksService } from './services/jwks.service';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { PermissionsController } from './permissions.controller';
+import { SupabaseModule } from '../supabase/supabase.module';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { PermissionsModule } from './permissions.module';
+import { CommunicationModule } from '../communication/communication.module';
 
 /**
  * Auth module providing authentication infrastructure.
+ *
+ * Uses JWKS-based JWT verification via the `jose` library to support
+ * Supabase's ES256 (ECDSA) signed tokens. No Passport dependency needed.
+ *
+ * Also registers PermissionsController since it depends on JwtAuthGuard
+ * which is provided here. PermissionsModule only provides PermissionsService.
  *
  * @example
  * ```typescript
@@ -27,8 +38,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
  * ```
  */
 @Module({
-  imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
-  providers: [JwtStrategy],
-  exports: [PassportModule],
+  imports: [SupabaseModule, PermissionsModule, CommunicationModule],
+  controllers: [AuthController, PermissionsController],
+  providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService],
+  exports: [AuthService, JwtAuthGuard, JwksService, PermissionsModule],
 })
 export class AuthModule {}

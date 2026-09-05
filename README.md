@@ -8,13 +8,12 @@ This repository contains the backend API for ChurchOS. It is built with:
 
 - **NestJS** — Modular TypeScript backend framework
 - **Prisma** — Type-safe ORM for PostgreSQL
-- **Supabase Auth** — Authentication, MFA, session management
+- **Supabase Auth** — Authentication, MFA, session management (ES256 via JWKS)
 - **Supabase Storage** — File uploads (photos, receipts, media)
 - **Upstash Redis** — Caching and BullMQ job queues
 - **Paystack / Flutterwave** — Payment processing
-- **360dialog** — WhatsApp Business API
+- **Termii** — WhatsApp + SMS (single messaging platform)
 - **Resend** — Email delivery
-- **Termii** — SMS fallback
 
 ## Repository Structure
 
@@ -85,14 +84,17 @@ DATABASE_URL=postgresql://user:password@localhost:5432/churchos
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_ANON_KEY=your-anon-key
+# Optional: Only needed for legacy HS256 tokens. ES256 tokens (default) use JWKS.
+# SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase-dashboard
 REDIS_URL=redis://localhost:6379
 PAYSTACK_SECRET_KEY=
 PAYSTACK_PUBLIC_KEY=
 FLUTTERWAVE_SECRET_KEY=
-360DIALOG_API_KEY=
-360DIALOG_WEBHOOK_SECRET=
-RESEND_API_KEY=
 TERMII_API_KEY=
+TERMII_WHATSAPP_DEVICE_ID=
+TERMII_WEBHOOK_SECRET=
+TERMII_DEFAULT_CHURCH_ID=
+RESEND_API_KEY=
 OPENAI_API_KEY=
 WEB_URL=http://localhost:3000
 ```
@@ -172,6 +174,21 @@ The database schema is defined in `prisma/schema.prisma`. Key models include:
 ### Data Isolation
 
 All queries are scoped by `church_id` to ensure multi-tenant data isolation. This is enforced via Prisma middleware and NestJS guards.
+
+### Archive Lifecycle (soft-delete)
+
+Archivable entities carry `archived_at` and move through **Archive → Restore → Purge**:
+
+- **Archive** sets `archived_at`; the row exits active lists (list endpoints filter `archived_at: null` by default) but its data is kept. Each module exposes `POST /<entity>/:id/archive`.
+- **Restore** clears `archived_at` via `POST /<entity>/:id/restore`. Members and profiles use `POST /members/:memberId/restore-archive` / `POST /profiles/:profileId/restore-archive` because their plain `restore` routes are the legacy soft-delete undelete.
+- **Purge** is the existing hard `DELETE /<entity>/:id` — it still works on archived rows (this is intentional; it is how archived rows are permanently removed). Deletes are deliberately un-guarded against the archived state in every module.
+- `GET /<entity>/:id` (detail) stays unfiltered so archived rows remain reachable by ID; update-style mutations 404 an archived row.
+- List endpoints accept `?archived=true` to show archived-only rows.
+- Every archive/restore is audit-logged with `AuditAction` `ARCHIVE`/`RESTORE` and a snake_case `entity`.
+- `churches` is archivable; the request-context middleware rejects requests from a profile whose church is archived, except `POST /church/restore` so an admin can always restore their own church.
+- Offline sync (`SyncService`): bootstrap pulls filter `archived_at: null`, and `hydrateChange` returns a tombstone (`data: null`) for rows whose `archived_at` is set — archived rows reach mobile clients as deletions.
+
+The 21 archivable models are members, profiles, visitors, families, events, event ticket tiers, services, sermons, giving categories, departments, cell groups, branches, assets, asset categories, pastoral notes, life events, templates, custom field definitions, forms, webhook subscriptions, and churches. Transactional/join rows (transactions, recurring giving, asset loans/maintenance/depreciation/scans, media, sync queue, form submissions, attendance) are not archived.
 
 ## GitHub Project Automation
 
