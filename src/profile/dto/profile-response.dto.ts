@@ -143,6 +143,13 @@ export class ProfileResponseDto {
   })
   member?: MemberSummaryDto;
 
+  @ApiPropertyOptional({
+    description:
+      'Linked member id — present when the profile is linked to a member record (used by self-service ownership checks)',
+    example: '44444444-4444-4444-4444-444444444444',
+  })
+  memberId?: string;
+
   @ApiProperty({ description: 'First name', example: 'Adebayo' })
   firstName!: string;
 

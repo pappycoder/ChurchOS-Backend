@@ -285,6 +285,30 @@ describe('ProfileService', () => {
 
       expect(result.avatarUrl).toBe('https://example.com/avatar.webp');
     });
+
+    it('should emit the linked memberId when the profile is linked to a member', async () => {
+      const profileWithMember = {
+        ...mockProfileWithRelations,
+        member_id: 'member-uuid',
+      };
+
+      model(prisma, 'profile').findUnique.mockResolvedValue(profileWithMember);
+
+      const result = await service.getMyProfile(mockUserId);
+
+      expect(result.memberId).toBe('member-uuid');
+    });
+
+    it('should leave memberId undefined when no member is linked', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...mockProfileWithRelations,
+        member_id: null,
+      });
+
+      const result = await service.getMyProfile(mockUserId);
+
+      expect(result.memberId).toBeUndefined();
+    });
   });
 
   // ─── UPDATE MY PROFILE ─────────────────────────────────────────────

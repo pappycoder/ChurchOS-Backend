@@ -904,6 +904,13 @@ describe('EventsService', () => {
       expect(arg.where.member_id).toBe(mockMemberId);
     });
 
+    it('should scope to no rows (never all tickets) when a non-staff caller has no linked member', async () => {
+      await service.listAllTickets(mockChurchId, { page: 1, limit: 50, memberId: '' });
+      const arg = (prisma.ticket.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.member_id).toBe('');
+      expect(arg.where.event).toEqual({ church_id: mockChurchId });
+    });
+
     it('should honor eventId, status, and search filters alongside self-scoping', async () => {
       await service.listAllTickets(mockChurchId, {
         page: 1,

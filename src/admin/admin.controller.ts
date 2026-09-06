@@ -281,7 +281,7 @@ export class AdminController {
    * Finds nearest cell groups based on geolocation.
    */
   @Get('cell-groups/nearest')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'member')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'member', 'cell_leader')
   @ApiOperation({ summary: 'Find nearest cell groups by location' })
   async findNearestGroups(
     @Query('latitude') latitude: number,
@@ -317,7 +317,7 @@ export class AdminController {
    * Updates a cell group.
    */
   @Patch('cell-groups/:groupId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Update a cell group' })
@@ -329,8 +329,9 @@ export class AdminController {
   ): Promise<CellGroupResponseDto> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to update the cell group
-    return this.adminService.updateCellGroup(groupId, dto, churchId, user.sub);
+    // Delegate to AdminService to update the cell group (enforces
+    // own-group ownership for non-HQ cell leaders)
+    return this.adminService.updateCellGroup(groupId, dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -396,7 +397,7 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/members')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Add a member to a cell group' })
@@ -413,6 +414,7 @@ export class AdminController {
       dto.role || 'member',
       churchId,
       user.sub,
+      req.profile,
     );
   }
 
@@ -421,7 +423,7 @@ export class AdminController {
    */
   @Delete('cell-groups/:groupId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiParam({ name: 'memberId', type: String })
@@ -433,7 +435,7 @@ export class AdminController {
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    await this.adminService.removeCellGroupMember(groupId, memberId, churchId, user.sub);
+    await this.adminService.removeCellGroupMember(groupId, memberId, churchId, user.sub, req.profile);
   }
 
   /**

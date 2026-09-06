@@ -94,6 +94,8 @@ export class EventsController {
    * @returns Paginated list of events
    */
   @Get()
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @ApiPaginatedResponse(EventResponseDto)
   @ApiOperation({
     summary: 'List events',
@@ -144,7 +146,7 @@ export class EventsController {
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
-      ...(isStaff ? {} : { memberId: req?.profile?.member_id }),
+      ...(isStaff ? {} : { memberId: req?.profile?.member_id ?? '' }),
     });
   }
 
@@ -459,6 +461,8 @@ export class EventsController {
    * @returns Array of registration responses
    */
   @Get(':eventId/registrations')
+  @UseGuards(RolesGuard)
+  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @ApiListEndpoint('List event registrations', 'Lists all registrations for an event.')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
   async listRegistrations(

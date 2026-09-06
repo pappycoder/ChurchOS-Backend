@@ -556,13 +556,21 @@ export class AdminService {
     // admin-hq → all groups in the church; cell_leader (non-HQ) → groups they
     // lead; everyone else (non-HQ) → groups in their own branch.
     const scope = this.branchScope.resolveCellGroupScope(viewer);
+    // A cell-leader scope is detected by the PRESENCE of the `leaderId` key —
+    // not by a non-undefined value. A leader whose profile has no linked member
+    // resolves `{ churchOnly: false, leaderId: undefined }`, and must still be
+    // treated as a leader scope so they see ZERO groups rather than falling
+    // through to the branch fallback (which would leak groups they don't lead).
+    const isCellLeaderScope = !scope.churchOnly && 'leaderId' in scope;
     const where: Prisma.CellGroupWhereInput = {
       church_id: churchId,
-      archived_at: archived ? { not: null } : null,
+      archived_at: isCellLeaderScope ? null : archived ? { not: null } : null,
     };
     if (!scope.churchOnly) {
-      if (scope.leaderId !== undefined) {
-        where.leader_id = scope.leaderId;
+      if (isCellLeaderScope) {
+        // Undefined leaderId (no linked member) → force a no-match filter so
+        // the leader sees nothing instead of every group in the church.
+        where.leader_id = scope.leaderId || '';
       } else if (scope.branchId) {
         where.branch_id = scope.branchId;
       }
@@ -612,11 +620,21 @@ export class AdminService {
     // cell_leader (or a branch-restricted viewer) can't fetch another group
     // by ID.
     const scope = this.branchScope.resolveCellGroupScope(viewer);
+    // Same leader-scope discriminator as listCellGroups (see above): a leader
+    // whose profile has no linked member resolves `leaderId: undefined` and
+    // must NOT fall through to the branch check.
+    const isCellLeaderScope = !scope.churchOnly && 'leaderId' in scope;
+    // Archived groups are invisible to cell leaders: treat them like the group
+    // doesn't exist (silent 404, matching the active-only list filter above).
+    if (isCellLeaderScope && group.archived_at) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
     if (!scope.churchOnly) {
-      const visible =
-        scope.leaderId !== undefined
-          ? group.leader_id === scope.leaderId
-          : !!scope.branchId && group.branch_id === scope.branchId;
+      // A cell leader sees a group ONLY when it is the one they lead; without a
+      // linked member (leaderId undefined) nothing is visible.
+      const visible = isCellLeaderScope
+        ? !!scope.leaderId && group.leader_id === scope.leaderId
+        : !!scope.branchId && group.branch_id === scope.branchId;
       if (!visible) {
         throw new NotFoundException(`Cell group ${groupId} not found`);
       }
@@ -630,12 +648,35 @@ export class AdminService {
   }
 
   /**
+   * A branch-restricted `cell_leader` may only manage the cell groups they
+   * lead — mirrors `resolveCellGroupScope` and the ownership check in
+   * `recordCellGroupAttendance` (admin-hq cell leaders are unconstrained).
+   *
+   * @param viewer - The request profile-derived viewer context, if any
+   * @param group - The cell group being acted on (must be pre-fetched and
+   *   church-scoped)
+   * @throws ForbiddenException if the group is not the caller's own
+   */
+  private assertCellLeaderOwnership(
+    viewer: ViewerScope | null | undefined,
+    group: { leader_id: string | null },
+  ): void {
+    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
+    if (isCellLeader && !viewer?.is_admin_hq) {
+      if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
+        throw new ForbiddenException('You can only manage your own cell group');
+      }
+    }
+  }
+
+  /**
    * Updates a cell group.
    *
    * @param groupId - Cell group ID
    * @param dto - Update data
    * @param churchId - Church ID
    * @param userId - User performing update
+   * @param viewer - The request profile-derived viewer context, if any
    * @returns Updated cell group
    */
   async updateCellGroup(
@@ -643,6 +684,7 @@ export class AdminService {
     dto: Partial<CreateCellGroupDto>,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<CellGroupResponseDto> {
     // Verify the cell group exists within this church
     const existing = await this.prisma.cellGroup.findFirst({
@@ -658,14 +700,25 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    // A branch-restricted cell leader may only update the groups they lead.
+    this.assertCellLeaderOwnership(viewer, existing);
+
+    // A branch-restricted cell leader may change every field EXCEPT the
+    // group's leader and branch — reassigning those is pastor-only. The
+    // payload is silently stripped (never an error) so clients can keep
+    // sending the full form.
+    const restrictedLeader =
+      (viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader')) &&
+      !viewer?.is_admin_hq;
+
     // Apply partial updates to the cell group record
     const updated = await this.prisma.cellGroup.update({
       where: { id: groupId },
       data: {
         ...(dto.name && { name: dto.name }),
-        ...(dto.branchId !== undefined && { branch_id: dto.branchId }),
+        ...(dto.branchId !== undefined && !restrictedLeader && { branch_id: dto.branchId }),
         ...(dto.address !== undefined && { address: dto.address }),
-        ...(dto.leaderId !== undefined && { leader_id: dto.leaderId }),
+        ...(dto.leaderId !== undefined && !restrictedLeader && { leader_id: dto.leaderId }),
         ...(dto.latitude !== undefined && { latitude: dto.latitude }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
         ...(dto.meetingDay !== undefined && { meeting_day: dto.meetingDay }),
@@ -845,6 +898,8 @@ export class AdminService {
 
   /**
    * Adds a member to a cell group.
+   *
+   * @param viewer - The request profile-derived viewer context, if any
    */
   async addCellGroupMember(
     groupId: string,
@@ -852,6 +907,7 @@ export class AdminService {
     role: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<void> {
     const group = await this.prisma.cellGroup.findFirst({
       where: { id: groupId, church_id: churchId },
@@ -864,6 +920,10 @@ export class AdminService {
     if (group.archived_at) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
+
+    // A branch-restricted cell leader may only manage members of the groups
+    // they lead.
+    this.assertCellLeaderOwnership(viewer, group);
 
     // Verify the member belongs to this church
     const member = await this.prisma.member.findFirst({
@@ -907,13 +967,32 @@ export class AdminService {
 
   /**
    * Removes a member from a cell group.
+   *
+   * @param viewer - The request profile-derived viewer context, if any
    */
   async removeCellGroupMember(
     groupId: string,
     memberId: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<void> {
+    const group = await this.prisma.cellGroup.findFirst({
+      where: { id: groupId, church_id: churchId },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    if (group.archived_at) {
+      throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    // A branch-restricted cell leader may only manage members of the groups
+    // they lead.
+    this.assertCellLeaderOwnership(viewer, group);
+
     const existing = await this.prisma.cellGroupMember.findUnique({
       where: {
         cell_group_id_member_id: { cell_group_id: groupId, member_id: memberId },

@@ -22,6 +22,7 @@
     "prisma:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
     "prisma:seed-perms": "ts-node --project tsconfig.seed.json prisma/seed-permissions.ts",
     "prisma:seed-demo": "ts-node --project tsconfig.seed.json prisma/seed-full.ts",
+    "prisma:seed-demo-logins": "ts-node --project tsconfig.seed.json prisma/seed-demo-logins.ts",
     "delete-data": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts",
     "delete-data:dry": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts --dry-run",
     "seed-super-admin": "ts-node -P tsconfig.scripts.json scripts/seed-super-admin.ts",

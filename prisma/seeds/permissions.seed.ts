@@ -35,7 +35,7 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   {
     name: 'cell_leader',
     description:
-      'Cell group leader who records attendance for their own group and follows up on visitors',
+      'Cell group leader with member-level access plus management of their own group (edit details, members, attendance)',
   },
   { name: 'member', description: 'Regular church member with read-only access' },
 ];
@@ -410,24 +410,22 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   cell_leader: [
-    // Assets — create + read + update
-    'assets:create',
-    'assets:read',
-    'assets:update',
-    // Cell Groups — read + create (attendance recording for their own group)
+    // Events — read (member parity)
+    'events:read',
+    // Sermons — read (member parity)
+    'sermons:read',
+    // Media — read (member parity)
+    'media:read',
+    // Profiles — read (member parity)
+    'profiles:read',
+    // Church — read (member parity)
+    'church:read',
+    // Cell Groups — read + create + update (the ONLY additions over member:
+    // editing their own group, adding/removing members, and recording
+    // attendance — all enforced to their OWN group server-side)
     'cell_groups:read',
     'cell_groups:create',
-    // Events — read (tickets + branch-wide event list)
-    'events:read',
-    // Visitors — create + read (branch-scoped follow-up)
-    'visitors:read',
-    'visitors:create',
-    // Members — read
-    'members:read',
-    // Giving — read
-    'giving:read',
-    // Emails — read
-    'emails:read',
+    'cell_groups:update',
   ],
 
   member: [
@@ -551,6 +549,38 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
 
   // One batched insert; (role_id, permission_id) is unique, so duplicates are skipped.
   await prisma.rolePermission.createMany({ data: desiredMappings, skipDuplicates: true });
+
+  // ─── 4. Reconcile (remove stale mappings) ────────────────
+  // The seed is template-driven: every template role's grants must EXACTLY
+  // match its DEFAULT_PERMISSION_MATRIX entry. Because the insert above is
+  // additive-only, permissions removed from a template would linger forever —
+  // so delete mappings for these null-church template roles that are not in
+  // the desired set. super_admin stays locked to ALL (never reconciled);
+  // per-church custom roles are untouched (they live on RolePermission with
+  // a non-null church_id and are not addressed by roleIdByName).
+  for (const [roleName, permissions] of Object.entries(DEFAULT_PERMISSION_MATRIX)) {
+    if (roleName === 'super_admin') continue; // Locked — always everything
+
+    const roleId = roleIdByName.get(roleName);
+    if (!roleId) {
+      console.warn(`    ⚠️  Role "${roleName}" not found, skipping reconciliation`);
+      continue;
+    }
+
+    const desiredIds = permissions
+      .map((permName) => permissionIdByName.get(permName))
+      .filter((id): id is string => Boolean(id));
+
+    const deleted = await prisma.rolePermission.deleteMany({
+      where: {
+        role_id: roleId,
+        permission_id: { notIn: desiredIds },
+      },
+    });
+    if (deleted.count > 0) {
+      console.log(`    🧹 Removed ${deleted.count} stale permissions from ${roleName}`);
+    }
+  }
 
   // ─── Summary ─────────────────────────────────────────────
   const totalRolePermissions = await prisma.rolePermission.count();

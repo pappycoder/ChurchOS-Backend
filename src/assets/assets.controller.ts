@@ -5,7 +5,7 @@
  * Provides REST endpoints for asset categories, asset register, maintenance,
  * depreciation, loans, QR codes, and scan workflows.
  * Write operations are restricted to church_admin, branch_pastor, secretary,
- * treasurer, and cell_leader roles.
+ * and treasurer roles.
  *
  * @module assets/assets.controller
  * @since 1.0.0
@@ -69,7 +69,6 @@ const WRITE_ROLES = [
   'branch_pastor',
   'secretary',
   'treasurer',
-  'cell_leader',
 ] as const;
 
 @ApiTags('Assets')

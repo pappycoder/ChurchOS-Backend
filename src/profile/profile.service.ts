@@ -1454,6 +1454,7 @@ export class ProfileService {
       user_id: string;
       church_id: string;
       branch_id: string | null;
+      member_id?: string | null;
       role: string[];
       status: string;
       first_name: string;
@@ -1503,6 +1504,7 @@ export class ProfileService {
       userId: profile.user_id,
       churchId: profile.church_id,
       branchId: profile.branch_id || undefined,
+      memberId: profile.member_id || undefined,
       role: profile.role ?? [],
       firstName: profile.first_name,
       lastName: profile.last_name,

@@ -47,6 +47,13 @@ describe('AdminService', () => {
     updated_at: new Date('2024-06-01'),
   };
 
+  const mockCellGroupMember = {
+    cell_group_id: mockGroupId,
+    member_id: mockMemberId,
+    role: 'member',
+    joined_at: new Date('2024-02-01'),
+  };
+
   beforeEach(async () => {
     prisma = createPrismaMock();
     auditLog = jest.fn();
@@ -290,6 +297,142 @@ describe('AdminService', () => {
       expect(result.branchName).toBe('Lekki Campus');
       expect(result.address).toBe('12 Adeola Odeku St, Lekki');
     });
+
+    it('should forbid a cell_leader updating a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-other',
+      });
+
+      await expect(
+        service.updateCellGroup(mockGroupId, { name: 'X' }, mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow an own-group cell_leader update while stripping leader/branch changes', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+        branch_id: 'branch-1',
+      });
+      prisma.cellGroup.update.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+        branch_id: 'branch-1',
+        address: '10 Admiralty Way, Lekki',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      const result = await service.updateCellGroup(
+        mockGroupId,
+        { branchId: 'branch-2', leaderId: 'member-other', address: '10 Admiralty Way, Lekki' },
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+        },
+      );
+
+      const call = prisma.cellGroup.update.mock.calls[0][0] as { data: Record<string, unknown> };
+      expect(call.data.address).toBe('10 Admiralty Way, Lekki');
+      expect(call.data.branch_id).toBeUndefined();
+      expect(call.data.leader_id).toBeUndefined();
+      expect(result.branchId).toBe('branch-1');
+    });
+  });
+
+  describe('cell group member management ownership', () => {
+    it('should allow an own-group cell_leader to add members', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+      prisma.cellGroupMember.findUnique.mockResolvedValue(null);
+      prisma.cellGroupMember.create.mockResolvedValue({} as never);
+
+      await service.addCellGroupMember(
+        mockGroupId,
+        mockMemberId,
+        'member',
+        mockChurchId,
+        mockUserId,
+        { church_id: mockChurchId, branch_id: 'branch-1', member_id: 'member-leader-1', role: 'cell_leader' },
+      );
+
+      expect(prisma.cellGroupMember.create).toHaveBeenCalled();
+    });
+
+    it('should forbid a cell_leader adding members to a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-other',
+      });
+
+      await expect(
+        service.addCellGroupMember(mockGroupId, mockMemberId, 'member', mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow an own-group cell_leader to remove members', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.cellGroupMember.findUnique.mockResolvedValue(mockCellGroupMember);
+      prisma.cellGroupMember.delete.mockResolvedValue({} as never);
+
+      await service.removeCellGroupMember(mockGroupId, mockMemberId, mockChurchId, mockUserId, {
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        member_id: 'member-leader-1',
+        role: 'cell_leader',
+      });
+
+      expect(prisma.cellGroupMember.delete).toHaveBeenCalled();
+    });
+
+    it('should forbid a cell_leader removing members from a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-other',
+      });
+
+      await expect(
+        service.removeCellGroupMember(mockGroupId, mockMemberId, mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forbid a cell_leader without a linked member from managing members', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+
+      await expect(
+        service.removeCellGroupMember(mockGroupId, mockMemberId, mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          role: 'cell_leader',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   describe('listCellGroups', () => {
@@ -347,6 +490,28 @@ describe('AdminService', () => {
       expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ leader_id: 'leader-member' }),
+        }),
+      );
+    });
+
+    it('should scope a non-HQ cell_leader WITHOUT a linked member to zero groups (never the branch fallback)', async () => {
+      prisma.cellGroup.findMany.mockResolvedValue([]);
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await service.listCellGroups(mockChurchId, false, {
+        church_id: mockChurchId,
+        branch_id: 'branch-a',
+        role: 'cell_leader',
+        roles: ['cell_leader'],
+        is_admin_hq: false,
+      });
+
+      expect(prisma.cellGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            leader_id: '',
+            archived_at: null,
+          }),
         }),
       );
     });
@@ -412,6 +577,68 @@ describe('AdminService', () => {
       await expect(service.getCellGroupById(mockGroupId, mockChurchId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('should allow the owning cell_leader to fetch their group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+        branch_id: 'branch-1',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      const result = await service.getCellGroupById(mockGroupId, mockChurchId, {
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        member_id: 'member-leader-1',
+        role: 'cell_leader',
+        roles: ['cell_leader'],
+        is_admin_hq: false,
+      });
+
+      expect(result.id).toBe(mockGroupId);
+    });
+
+    it('should 404 a non-owning cell_leader fetching a group in their branch', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-other',
+        branch_id: 'branch-1',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.getCellGroupById(mockGroupId, mockChurchId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+          roles: ['cell_leader'],
+          is_admin_hq: false,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should 404 a cell_leader WITHOUT a linked member fetching any group (never the branch fallback)', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+        branch_id: 'branch-1',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.getCellGroupById(mockGroupId, mockChurchId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          role: 'cell_leader',
+          roles: ['cell_leader'],
+          is_admin_hq: false,
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

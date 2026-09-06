@@ -441,8 +441,8 @@ export class EventsService {
       },
     };
 
-    if (memberId) {
-      where.member_id = memberId;
+    if (memberId !== undefined) {
+      where.member_id = memberId || '';
     }
 
     if (eventId) {

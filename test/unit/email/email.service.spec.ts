@@ -89,10 +89,10 @@ beforeEach(() => {
 });
 
 describe('EmailService', () => {
-  it('MAIN_ROLES excludes member', () => {
+  it('MAIN_ROLES excludes member and cell_leader', () => {
     expect(MAIN_ROLES).not.toContain('member');
     expect(MAIN_ROLES).toContain('church_admin');
-    expect(MAIN_ROLES).toContain('cell_leader');
+    expect(MAIN_ROLES).not.toContain('cell_leader');
   });
 
   describe('send', () => {

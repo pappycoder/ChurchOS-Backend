@@ -143,9 +143,12 @@ describe('AdminController permission decorators', () => {
     );
   });
 
-  it('leaves GET /admin/cell-groups/nearest intentionally permission-free (member-facing)', () => {
+  it('leaves GET /admin/cell-groups/nearest intentionally permission-free (member-facing, cell_leader now allowed)', () => {
     const block = blockBetween("@Get('cell-groups/nearest')", 'async findNearestGroups(');
-    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'member'");
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'member', 'cell_leader'",
+    );
     expect(block).not.toContain("@RequirePermissions('cell_groups:read')");
   });
 
@@ -158,10 +161,10 @@ describe('AdminController permission decorators', () => {
     );
   });
 
-  it('requires cell_groups:update on PATCH /admin/cell-groups/:groupId', () => {
+  it('requires cell_groups:update on PATCH /admin/cell-groups/:groupId (with cell_leader own-group updater role)', () => {
     const block = blockBetween("@Patch('cell-groups/:groupId')", 'async updateCellGroup(');
     expect(block).toContain("@RequirePermissions('cell_groups:update')");
-    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader'");
   });
 
   it('requires cell_groups:delete on DELETE /admin/cell-groups/:groupId', () => {
@@ -170,20 +173,22 @@ describe('AdminController permission decorators', () => {
     hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
-  it('requires cell_groups:create on POST /admin/cell-groups/:groupId/members', () => {
+  it('requires cell_groups:create on POST /admin/cell-groups/:groupId/members (with cell_leader own-group role)', () => {
     const block = blockBetween(
       "@Post('cell-groups/:groupId/members')",
       'async addCellGroupMember(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:create')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader'");
   });
 
-  it('requires cell_groups:update on DELETE /admin/cell-groups/:groupId/members/:memberId', () => {
+  it('requires cell_groups:update on DELETE /admin/cell-groups/:groupId/members/:memberId (with cell_leader own-group role)', () => {
     const block = blockBetween(
       "@Delete('cell-groups/:groupId/members/:memberId')",
       'async removeCellGroupMember(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:update')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader'");
   });
 
   it('requires cell_groups:update on POST /admin/cell-groups/:groupId/archive', () => {
