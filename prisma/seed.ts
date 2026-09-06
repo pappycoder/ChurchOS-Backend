@@ -40,6 +40,10 @@ import { seedFormTemplates } from './seeds/form-templates.seed';
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
+  // A slow/pooled database (e.g. remote Supabase pgbouncer) shouldn't be able
+  // to hang a query forever or leave idle connections stuck mid-seed.
+  connectionTimeoutMillis: 15_000,
+  idleTimeoutMillis: 30_000,
 });
 const prisma = new PrismaClient({ adapter });
 

@@ -102,38 +102,49 @@ export async function seedMembers(
 ): Promise<MemberSeedResult> {
   console.log('📦 Seeding members...');
 
-  const members: { id: string; first_name: string; last_name: string }[] = [];
+  const emails = MEMBERS.map((m) => m.email);
+  const existing = await prisma.member.findMany({
+    where: { church_id: churchId, email: { in: emails } },
+    select: { email: true },
+  });
+  const existingEmails = new Set(existing.map((m) => m.email));
 
-  for (let i = 0; i < MEMBERS.length; i++) {
-    const data = MEMBERS[i];
-
-    let member = await prisma.member.findFirst({
-      where: { church_id: churchId, email: data.email },
+  const missing = MEMBERS.filter((m) => !existingEmails.has(m.email));
+  if (missing.length > 0) {
+    // Pre-filtered to only missing members (no unique constraint on email), so
+    // no skipDuplicates needed — but it is still a single batched insert.
+    await prisma.member.createMany({
+      data: missing.map((m) => ({
+        church_id: churchId,
+        branch_id: branchId,
+        first_name: m.first_name,
+        last_name: m.last_name,
+        email: m.email,
+        phone: m.phone,
+        whatsapp_number: m.phone,
+        gender: m.gender,
+        date_of_birth: m.date_of_birth,
+        status: MemberStatus.active,
+        member_since: new Date(2024, MEMBERS.indexOf(m) % 12, 1),
+      })),
     });
+  }
 
-    if (!member) {
-      member = await prisma.member.create({
-        data: {
-          church_id: churchId,
-          branch_id: branchId,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          email: data.email,
-          phone: data.phone,
-          whatsapp_number: data.phone,
-          gender: data.gender,
-          date_of_birth: data.date_of_birth,
-          status: MemberStatus.active,
-          member_since: new Date(2024, i % 12, 1),
-        },
-      });
+  const rows = await prisma.member.findMany({
+    where: { church_id: churchId, email: { in: emails } },
+    select: { id: true, first_name: true, last_name: true, email: true },
+  });
+  const rowsByEmail = new Map(rows.map((r) => [r.email, r]));
+
+  const members: { id: string; first_name: string; last_name: string }[] = MEMBERS.map((m) => {
+    const row = rowsByEmail.get(m.email);
+    if (!row) {
+      throw new Error(`Member "${m.email}" missing after seed`);
     }
+    return { id: row.id, first_name: row.first_name, last_name: row.last_name };
+  });
 
-    members.push({
-      id: member.id,
-      first_name: member.first_name,
-      last_name: member.last_name,
-    });
+  for (const member of members) {
     console.log(`  ✅ Member: ${member.first_name} ${member.last_name}`);
   }
 

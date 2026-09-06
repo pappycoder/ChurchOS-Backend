@@ -32,25 +32,27 @@ export async function seedServices(
 ): Promise<ServiceSeedResult> {
   console.log('📦 Seeding services...');
 
+  const names = SERVICES.map((s) => s.name);
+  const existing = await prisma.service.findMany({
+    where: { church_id: churchId, name: { in: names } },
+    select: { name: true },
+  });
+  const existingNames = new Set(existing.map((s) => s.name));
+
+  const missing = SERVICES.filter((s) => !existingNames.has(s.name));
+  if (missing.length > 0) {
+    await prisma.service.createMany({
+      data: missing.map((s) => ({
+        ...s,
+        church_id: churchId,
+        branch_id: branchId,
+        is_active: true,
+      })),
+    });
+  }
+
   let count = 0;
   for (const svc of SERVICES) {
-    const existing = await prisma.service.findFirst({
-      where: { church_id: churchId, name: svc.name },
-    });
-
-    if (!existing) {
-      await prisma.service.create({
-        data: {
-          church_id: churchId,
-          branch_id: branchId,
-          name: svc.name,
-          day_of_week: svc.day_of_week,
-          start_time: svc.start_time,
-          end_time: svc.end_time,
-          is_active: true,
-        },
-      });
-    }
     count++;
     console.log(`  ✅ Service: ${svc.name}`);
   }

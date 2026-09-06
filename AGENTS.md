@@ -41,6 +41,7 @@ npx prisma migrate dev # Create a new migration
 npx prisma studio      # Visual database browser
 npx prisma db seed     # Seed database with dev data
 npm run prisma:seed    # Alternative seed command
+npm run prisma:seed-perms  # Seed roles/permissions only (~8 queries, fast reseed)
 ```
 
 ## Architecture
@@ -213,6 +214,13 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **Seed performance: ~600 sequential queries → ~30, plus a fast permissions-only reseed command.** The full seed used per-row loops over the remote database (pooled Supabase), where ~600 sequential round trips took minutes and frequently aborted partway. The hot paths are now batched, and re-granting template permissions (like the cell_leader grants below) no longer requires touching any demo data.
+  - **`prisma/seeds/permissions.seed.ts` — ~515 queries → ~8**: roles via one `findMany({ church_id: null, name: { in } })` + `createMany` for missing (descriptions only updated when they actually differ); all 100 permissions via one `createMany({ skipDuplicates: true })` (uses `Permission.name` unique) + one `findMany` for the name→id map; the full super_admin + `DEFAULT_PERMISSION_MATRIX` mapping set is built in memory and written with **one** `createMany({ skipDuplicates: true })` (uses `RolePermission @@unique([role_id, permission_id])`). Same idempotency, same console output shape, same grants (`seedPermissions` is shared with `prisma/seed-full.ts` and benefits automatically).
+  - **Small modules batched** (`categories`, `services`, `members`, `families`, `form-templates`): `findMany` existing → `createMany` only the missing rows (pre-filtered, so no unique constraint is needed and skips are safe). `members` re-`findMany`s ids in `MEMBERS` order (return shape unchanged); `families` `createMany`s the families, re-reads ids, then writes all `family_members` in one `createMany`; `form-templates` keeps its overwrite-existing semantics (per-existing `update`).
+  - **Connection resilience**: `PrismaPg` now gets `connectionTimeoutMillis: 15_000` + `idleTimeoutMillis: 30_000` in `prisma/seed.ts`, `prisma/seed-full.ts`, and the new `prisma/seed-permissions.ts`, so a slow/pooled database can't hang a query forever mid-seed.
+  - **New `npm run prisma:seed-perms`** (`prisma/seed-permissions.ts`): seeds ONLY roles/permissions/mappings (~8 queries, seconds). On existing databases that need the new cell_leader grants (or any future template permission change), this is the intended reseed — it never touches members/transactions/forms demo data. `tsconfig.seed.json` already includes `prisma/**/*.ts`.
+  - **Verification**: `npx tsc -p tsconfig.seed.json --noEmit` clean (the batched `createMany`/`skipDuplicates` calls typecheck against the generated client); main `npx tsc --noEmit`, `npm run build`, `npm run lint` clean; full suite **54 suites / 1042 tests green** (seed-only change, no test deltas). Note: Docker Hub and the local Postgres were unreachable from this environment, so no live smoke test of the seed was run — the first `npm run prisma:seed-perms` on a connected machine will exercise it.
 
 - **Cell group leader fixes: branch-scoped visitors + cell-group attendance ownership + branch-wide tickets.**
   - **Schema/migration** (`prisma/schema.prisma` + hand-written `prisma/migrations/20260906000000_add_visitor_branch/migration.sql`): `Visitor.branch_id` (nullable) via `visitors_branch_id_fkey` → `branches(id)` (ON DELETE SET NULL ON UPDATE CASCADE) + index `visitors_branch_id_idx`; `Branch.visitors` back-relation. **NOT yet applied** (remote Supabase DB unreachable from this environment) — apply via `npx prisma migrate dev` on a DB-connected machine.

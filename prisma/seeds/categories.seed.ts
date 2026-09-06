@@ -69,23 +69,24 @@ export async function seedCategories(
 ): Promise<CategorySeedResult> {
   console.log('📦 Seeding giving categories...');
 
+  const names = CATEGORIES.map((c) => c.name);
+  const existing = await prisma.givingCategory.findMany({
+    where: { church_id: churchId, name: { in: names } },
+    select: { name: true },
+  });
+  const existingNames = new Set(existing.map((c) => c.name));
+
+  const missing = CATEGORIES.filter((c) => !existingNames.has(c.name));
+  if (missing.length > 0) {
+    // Pre-filtered to only missing rows (no unique constraint on name), so no
+    // skipDuplicates needed — but it is still a single batched insert.
+    await prisma.givingCategory.createMany({
+      data: missing.map((c) => ({ ...c, church_id: churchId })),
+    });
+  }
+
   let count = 0;
   for (const cat of CATEGORIES) {
-    const existing = await prisma.givingCategory.findFirst({
-      where: { church_id: churchId, name: cat.name },
-    });
-
-    if (!existing) {
-      await prisma.givingCategory.create({
-        data: {
-          church_id: churchId,
-          name: cat.name,
-          description: cat.description,
-          display_order: cat.display_order,
-          is_recurring: cat.is_recurring,
-        },
-      });
-    }
     count++;
     console.log(`  ✅ Category: ${cat.name}`);
   }

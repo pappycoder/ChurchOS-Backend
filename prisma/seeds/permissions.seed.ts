@@ -447,8 +447,12 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 /**
  * Seeds all roles, permissions, and default role-permission mappings.
  *
- * This function is idempotent — running it multiple times will not create
- * duplicate records. Existing roles/permissions are upserted.
+ * Idempotent — running it multiple times will not create duplicate records.
+ * Batched with `createMany({ skipDuplicates: true })` (and filtered
+ * findMany/createMany for the per-church NULL-templated roles), so the whole
+ * module runs in ~8 queries instead of ~500 sequential round trips — the old
+ * per-row upsert loop took minutes and would abort against remote/pooled
+ * databases.
  *
  * @param prisma - PrismaClient instance
  */
@@ -457,58 +461,65 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
 
   // ─── 1. Create Roles ──────────────────────────────────────
   console.log('  📦 Creating roles...');
-  const createdRoles: { id: string; name: string }[] = [];
+  const roleNames = DEFAULT_ROLES.map((role) => role.name);
+  // Roles are unique per (church_id, name); templates have church_id = null.
+  // The compound-unique filter cannot express NULL in this Prisma version,
+  // so match on church_id = null and name in one batched findMany.
+  const existingRoles = await prisma.role.findMany({
+    where: { church_id: null, name: { in: roleNames } },
+    select: { id: true, name: true, description: true },
+  });
+  const existingByRoleName = new Map(existingRoles.map((r) => [r.name, r]));
+
+  const missingRoles = DEFAULT_ROLES.filter((role) => !existingByRoleName.has(role.name));
+  if (missingRoles.length > 0) {
+    await prisma.role.createMany({ data: missingRoles });
+  }
+
+  // Only touch descriptions that actually changed (no wasted writes on re-runs).
   for (const role of DEFAULT_ROLES) {
-    // Roles are unique per (church_id, name); templates have church_id = null.
-    // The compound-unique filter cannot express NULL in this Prisma version,
-    // so look up explicitly instead of upsert.
-    const existing = await prisma.role.findFirst({
-      where: { name: role.name, church_id: null },
-      select: { id: true, name: true },
-    });
-    const created = existing
-      ? await prisma.role.update({
-          where: { id: existing.id },
-          data: { description: role.description },
-        })
-      : await prisma.role.create({ data: { name: role.name, description: role.description } });
-    createdRoles.push(created);
-    console.log(`    ✅ Role: ${created.name}`);
+    const existing = existingByRoleName.get(role.name);
+    if (existing && existing.description !== role.description) {
+      await prisma.role.update({
+        where: { id: existing.id },
+        data: { description: role.description },
+      });
+    }
+  }
+
+  const allRoles = await prisma.role.findMany({
+    where: { church_id: null, name: { in: roleNames } },
+    select: { id: true, name: true },
+  });
+  for (const role of allRoles) {
+    console.log(`    ✅ Role: ${role.name}`);
   }
 
   // ─── 2. Create Permissions ────────────────────────────────
   console.log('  📦 Creating permissions...');
   const allPermissions = generateAllPermissions();
-  const createdPermissions: { id: string; name: string }[] = [];
-
-  for (const perm of allPermissions) {
-    const created = await prisma.permission.upsert({
-      where: { name: perm.name },
-      update: {},
-      create: {
-        name: perm.name,
-        resource: perm.resource,
-        action: perm.action,
-      },
-    });
-    createdPermissions.push(created);
-  }
+  // One batched insert; `name` is unique so skipDuplicates ignores existing rows.
+  await prisma.permission.createMany({ data: allPermissions, skipDuplicates: true });
+  const createdPermissions = await prisma.permission.findMany({
+    where: { name: { in: allPermissions.map((p) => p.name) } },
+    select: { id: true, name: true },
+  });
+  const permissionIdByName = new Map(createdPermissions.map((p) => [p.name, p.id]));
   console.log(
     `    ✅ Permissions: ${createdPermissions.length} (${RESOURCES.length} resources × ${ACTIONS.length} actions)`,
   );
 
   // ─── 3. Assign Default Permissions to Roles ──────────────
   console.log('  📦 Assigning default permissions to roles...');
+  const roleIdByName = new Map(allRoles.map((r) => [r.name, r.id]));
+
+  const desiredMappings: { role_id: string; permission_id: string }[] = [];
 
   // super_admin gets ALL permissions (locked — always everything)
-  const superAdminRole = createdRoles.find((r) => r.name === 'super_admin');
+  const superAdminRole = roleIdByName.get('super_admin');
   if (superAdminRole) {
     for (const perm of createdPermissions) {
-      await prisma.rolePermission.upsert({
-        where: { role_id_permission_id: { role_id: superAdminRole.id, permission_id: perm.id } },
-        update: {},
-        create: { role_id: superAdminRole.id, permission_id: perm.id },
-      });
+      desiredMappings.push({ role_id: superAdminRole, permission_id: perm.id });
     }
     console.log(
       `    ✅ Assigned ${createdPermissions.length} permissions to super_admin (ALL — locked)`,
@@ -519,33 +530,31 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   for (const [roleName, permissions] of Object.entries(DEFAULT_PERMISSION_MATRIX)) {
     if (roleName === 'super_admin') continue; // Already handled above
 
-    const role = createdRoles.find((r) => r.name === roleName);
-    if (!role) {
+    const roleId = roleIdByName.get(roleName);
+    if (!roleId) {
       console.warn(`    ⚠️  Role "${roleName}" not found in created roles, skipping`);
       continue;
     }
 
     let assignedCount = 0;
     for (const permName of permissions) {
-      const perm = createdPermissions.find((p) => p.name === permName);
-      if (!perm) {
+      const permissionId = permissionIdByName.get(permName);
+      if (!permissionId) {
         console.warn(`    ⚠️  Permission "${permName}" not found, skipping`);
         continue;
       }
-
-      await prisma.rolePermission.upsert({
-        where: { role_id_permission_id: { role_id: role.id, permission_id: perm.id } },
-        update: {},
-        create: { role_id: role.id, permission_id: perm.id },
-      });
+      desiredMappings.push({ role_id: roleId, permission_id: permissionId });
       assignedCount++;
     }
     console.log(`    ✅ Assigned ${assignedCount} permissions to ${roleName}`);
   }
 
+  // One batched insert; (role_id, permission_id) is unique, so duplicates are skipped.
+  await prisma.rolePermission.createMany({ data: desiredMappings, skipDuplicates: true });
+
   // ─── Summary ─────────────────────────────────────────────
   const totalRolePermissions = await prisma.rolePermission.count();
   console.log(
-    `\n  🎉 Permissions seed complete: ${createdRoles.length} roles, ${createdPermissions.length} permissions, ${totalRolePermissions} role-permission mappings`,
+    `\n  🎉 Permissions seed complete: ${allRoles.length} roles, ${createdPermissions.length} permissions, ${totalRolePermissions} role-permission mappings`,
   );
 }

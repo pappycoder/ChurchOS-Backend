@@ -152,31 +152,38 @@ const templates: FormTemplateSeed[] = [
 export async function seedFormTemplates(prisma: PrismaClient, churchId: string): Promise<void> {
   console.log('📦 Creating default form templates...');
 
-  for (const template of templates) {
-    const existing = await prisma.form.findFirst({
-      where: { church_id: churchId, title: template.title },
-    });
+  const titles = templates.map((t) => t.title);
+  const existing = await prisma.form.findMany({
+    where: { church_id: churchId, title: { in: titles } },
+    select: { id: true, title: true },
+  });
+  const existingByTitle = new Map(existing.map((f) => [f.title, f]));
 
-    if (existing) {
+  const missing = templates.filter((t) => !existingByTitle.has(t.title));
+  if (missing.length > 0) {
+    await prisma.form.createMany({
+      data: missing.map((t) => ({
+        church_id: churchId,
+        title: t.title,
+        description: t.description,
+        fields: t.fields as unknown as Prisma.InputJsonValue,
+        status: 'published',
+        is_template: true,
+        is_public: t.is_public,
+        public_token: t.is_public ? crypto.randomUUID() : null,
+      })),
+    });
+  }
+
+  for (const template of templates) {
+    const existingTemplate = existingByTitle.get(template.title);
+    if (existingTemplate) {
       await prisma.form.update({
-        where: { id: existing.id },
+        where: { id: existingTemplate.id },
         data: {
           description: template.description,
           fields: template.fields as unknown as Prisma.InputJsonValue,
           is_public: template.is_public,
-        },
-      });
-    } else {
-      await prisma.form.create({
-        data: {
-          church_id: churchId,
-          title: template.title,
-          description: template.description,
-          fields: template.fields as unknown as Prisma.InputJsonValue,
-          status: 'published',
-          is_template: true,
-          is_public: template.is_public,
-          public_token: template.is_public ? crypto.randomUUID() : null,
         },
       });
     }
