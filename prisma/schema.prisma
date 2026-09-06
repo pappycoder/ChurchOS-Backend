@@ -188,6 +188,7 @@ model Branch {
   church       Church        @relation(fields: [church_id], references: [id])
   profiles     Profile[]
   members      Member[]
+  visitors     Visitor[]
   services     Service[]
   transactions Transaction[]
   events       Event[]
@@ -1082,6 +1083,7 @@ model ChurchConfig {
 model Visitor {
   id                  String    @id @default(uuid())
   church_id           String
+  branch_id           String? // Branch the visitor was first received in (derived from the recording user at create time)
   first_name          String
   last_name           String?
   gender              String?
@@ -1101,6 +1103,7 @@ model Visitor {
   archived_at         DateTime? // Set when archived
 
   church              Church                @relation(fields: [church_id], references: [id])
+  branch              Branch?               @relation(fields: [branch_id], references: [id])
   assigned_to         Profile?              @relation("AssignedTo", fields: [assigned_to_id], references: [id])
   converted_member    Member?               @relation(fields: [converted_member_id], references: [id])
   attendance          Attendance[]
@@ -1108,6 +1111,7 @@ model Visitor {
 
   @@index([church_id, follow_up_status])
   @@index([church_id, assigned_to_id])
+  @@index([branch_id])
   @@map("visitors")
 }
 

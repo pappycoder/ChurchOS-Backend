@@ -75,6 +75,15 @@ export class CreateVisitorDto {
   firstVisitDate?: string;
 
   @ApiPropertyOptional({
+    description:
+      "Branch this visitor was received in. Derives from the acting user's branch when omitted; ignored for branch-restricted users (they are pinned to their own branch).",
+    example: '3b4a93f1-6d10-4b3c-8e9f-2f0b5a7d1c9e',
+  })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional({
     description: 'Initial follow-up status (defaults to new)',
     enum: FOLLOW_UP_STATUSES,
   })

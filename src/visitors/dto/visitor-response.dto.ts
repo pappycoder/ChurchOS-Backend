@@ -7,6 +7,12 @@ export class VisitorResponseDto {
   @ApiProperty({ description: 'Church ID' })
   churchId!: string;
 
+  @ApiPropertyOptional({ description: 'Branch the visitor was received in' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Branch name (resolved server-side)' })
+  branchName?: string;
+
   @ApiProperty({ description: 'First name' })
   firstName!: string;
 

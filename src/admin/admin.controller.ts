@@ -456,7 +456,7 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/attendance')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'cell_leader')
   @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Record cell group attendance' })
@@ -477,6 +477,7 @@ export class AdminController {
       dto.notes,
       churchId,
       user.sub,
+      req.profile,
     );
   }
 

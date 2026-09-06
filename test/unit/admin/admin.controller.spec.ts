@@ -210,13 +210,16 @@ describe('AdminController permission decorators', () => {
     );
   });
 
-  it('requires cell_groups:create on POST /admin/cell-groups/:groupId/attendance (keeps secretary recorder role)', () => {
+  it('requires cell_groups:create on POST /admin/cell-groups/:groupId/attendance (with cell_leader recorder role)', () => {
     const block = blockBetween(
       "@Post('cell-groups/:groupId/attendance')",
       'async recordCellGroupAttendance(',
     );
     expect(block).toContain("@RequirePermissions('cell_groups:create')");
-    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary'");
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'cell_leader'",
+    );
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/:groupId/attendance with widened read roles', () => {

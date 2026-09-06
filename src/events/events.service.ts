@@ -430,13 +430,17 @@ export class EventsService {
       page: number;
       limit: number;
       memberId?: string;
+      branchId?: string;
     },
   ) {
-    const { eventId, status, search, page, limit, memberId } = filters;
+    const { eventId, status, search, page, limit, memberId, branchId } = filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TicketWhereInput = {
-      event: { church_id: churchId },
+      event: {
+        church_id: churchId,
+        ...(branchId ? { branch_id: branchId } : {}),
+      },
     };
 
     if (memberId) {
@@ -1237,6 +1241,8 @@ export class EventsService {
       branchId?: string;
       isAdminHq?: boolean;
       enforceSelf?: boolean;
+      /** Branch-scoped self-claimers (cell_leader) may only take events explicitly assigned to their branch — unlike members, church-wide (null-branch) events are excluded. */
+      strictBranch?: boolean;
     },
   ) {
     const event = await this.prisma.event.findFirst({
@@ -1267,8 +1273,15 @@ export class EventsService {
       }
       // Branch scope: members may only claim tickets for events in their own branch,
       // unless the event is church-wide (no branch) or the viewer is HQ.
-      if (!viewer.isAdminHq && event.branch_id && event.branch_id !== viewer.branchId) {
-        throw new ForbiddenException('This event belongs to another branch');
+      // Branch-scoped cell leaders (strictBranch) are pinned to their branch's
+      // events only — church-wide events are not claimable by them.
+      if (!viewer.isAdminHq) {
+        const outside = viewer.strictBranch
+          ? event.branch_id !== viewer.branchId
+          : event.branch_id && event.branch_id !== viewer.branchId;
+        if (outside) {
+          throw new ForbiddenException('This event belongs to another branch');
+        }
       }
       // When the caller omits memberId, fill it with their resolved self id.
       memberId = memberId ?? selfMemberId;

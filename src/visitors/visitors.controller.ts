@@ -50,7 +50,7 @@ export class VisitorsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<VisitorResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.visitorsService.create(dto, churchId, user.id);
+    return this.visitorsService.create(dto, churchId, user.id, req.profile);
   }
 
   @Get()
@@ -62,7 +62,7 @@ export class VisitorsController {
   })
   async findAll(@Query() query: ListVisitorsDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.visitorsService.findAll(churchId, query);
+    const result = await this.visitorsService.findAll(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {

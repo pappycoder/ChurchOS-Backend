@@ -32,7 +32,11 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'department_head', description: 'Department leader with read-heavy access' },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
-  { name: 'cell_leader', description: 'Cell group leader with shared asset management access' },
+  {
+    name: 'cell_leader',
+    description:
+      'Cell group leader who records attendance for their own group and follows up on visitors',
+  },
   { name: 'member', description: 'Regular church member with read-only access' },
 ];
 
@@ -410,8 +414,14 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'assets:create',
     'assets:read',
     'assets:update',
-    // Cell Groups — read
+    // Cell Groups — read + create (attendance recording for their own group)
     'cell_groups:read',
+    'cell_groups:create',
+    // Events — read (tickets + branch-wide event list)
+    'events:read',
+    // Visitors — create + read (branch-scoped follow-up)
+    'visitors:read',
+    'visitors:create',
     // Members — read
     'members:read',
     // Giving — read

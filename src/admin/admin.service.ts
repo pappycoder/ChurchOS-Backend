@@ -19,6 +19,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
@@ -998,6 +999,7 @@ export class AdminService {
     notes: string | undefined,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<void> {
     // Attendance must reference a member, a visitor, or a free-text walk-in name
     if (!memberId && !visitorId && !visitorName) {
@@ -1016,6 +1018,16 @@ export class AdminService {
 
     if (group.archived_at) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
+    }
+
+    // A branch-restricted cell_leader may only record attendance for the
+    // groups they lead (mirrors resolveCellGroupScope: admin-hq cell_leaders
+    // are unconstrained).
+    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
+    if (isCellLeader && !viewer?.is_admin_hq) {
+      if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
+        throw new ForbiddenException('You can only record attendance for your own cell group');
+      }
     }
 
     let resolvedVisitorName = visitorName;

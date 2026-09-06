@@ -121,7 +121,8 @@ export class EventsController {
   @Get('management/tickets')
   @ApiOperation({
     summary: 'List all tickets',
-    description: 'Admins see all tickets. Members see only their own assigned tickets.',
+    description:
+      'Staff see all tickets. Branch-scoped cell group leaders see tickets for their branch only. Members see only their own assigned tickets.',
   })
   async listAllTickets(
     @Query('eventId') eventId?: string,
@@ -134,13 +135,21 @@ export class EventsController {
     const churchId = req?.profile?.church_id || '';
     const roles = req?.profile?.roles || ([req?.profile?.role].filter(Boolean) as string[]);
     const isStaff = roles.some((r) => r !== 'member');
+    const isCellLeader = roles.includes('cell_leader');
+    const isAdminHq = req?.profile?.is_admin_hq === true;
+
+    // Branch-scoped cell group leaders (not HQ) see every ticket for events
+    // explicitly assigned to their branch — church-wide events excluded.
+    const branchScope = isCellLeader && !isAdminHq ? req?.profile?.branch_id : undefined;
+
     return this.eventsService.listAllTickets(churchId, {
       eventId,
       status,
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
-      ...(isStaff ? {} : { memberId: req?.profile?.member_id }),
+      ...(branchScope ? { branchId: branchScope } : {}),
+      ...(isStaff || branchScope ? {} : { memberId: req?.profile?.member_id }),
     });
   }
 
@@ -521,17 +530,23 @@ export class EventsController {
   ) {
     const roles = req.profile?.roles || ([req.profile?.role].filter(Boolean) as string[]);
     const isStaff = roles.some((r) => r !== 'member');
+    const isCellLeader = roles.includes('cell_leader');
+    const isAdminHq = req.profile?.is_admin_hq === true;
+    // Branch-scoped cell group leaders self-claim like members but are pinned
+    // to their own branch's events (church-wide events excluded).
+    const cellLeaderSelfClaim = isCellLeader && !isAdminHq;
 
-    // Staff path: require events:create permission (existing admin guard)
-    if (isStaff) {
+    // Full staff path: require events:create permission (existing admin guard).
+    // Branch-scoped cell leaders fall through to the member self-claim path.
+    if (isStaff && !cellLeaderSelfClaim) {
       const hasPerm = req.profile?.permissions?.includes('events:create') || false;
       if (!hasPerm) {
         throw new ForbiddenException('You do not have permission to create tickets');
       }
     } else {
-      // Member path: can only self-assign (enforced in service). memberId is
-      // optional — when omitted the service resolves the caller's own member
-      // profile (auto-create and link if the profile has none).
+      // Member / cell_leader self-claim path: can only self-assign (enforced
+      // in service). memberId is optional — when omitted the service resolves
+      // the caller's own member profile (auto-create and link if none).
       if (dto.visitorId) {
         throw new BadRequestException('Members cannot claim a ticket for a visitor');
       }
@@ -545,13 +560,14 @@ export class EventsController {
       dto.tierId,
       churchId,
       user.sub,
-      isStaff
+      isStaff && !cellLeaderSelfClaim
         ? undefined
         : {
             memberId: req.profile?.member_id,
             branchId: req.profile?.branch_id,
             isAdminHq: req.profile?.is_admin_hq,
             enforceSelf: true,
+            ...(cellLeaderSelfClaim ? { strictBranch: true } : {}),
           },
     );
   }

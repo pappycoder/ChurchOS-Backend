@@ -182,6 +182,58 @@ describe('VisitorsService', () => {
       );
       expect(result.assignedToId).toBe('profile-from-member');
     });
+
+    it("should pin branch to the acting user's branch for branch-restricted creators", async () => {
+      (prismaMock.visitor.create as jest.Mock).mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockVisitor, branch_id: data.branch_id }),
+      );
+      await service.create({ firstName: 'Amina' }, churchId, userId, {
+        church_id: churchId,
+        branch_id: 'branch-9',
+        role: 'cell_leader',
+      });
+      const call = (prismaMock.visitor.create as jest.Mock).mock.calls[0][0];
+      expect(call.data.branch_id).toBe('branch-9');
+    });
+
+    it('should ignore an explicit branchId for branch-restricted creators', async () => {
+      (prismaMock.visitor.create as jest.Mock).mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockVisitor, branch_id: data.branch_id }),
+      );
+      await service.create({ firstName: 'Amina', branchId: 'branch-other' }, churchId, userId, {
+        church_id: churchId,
+        branch_id: 'branch-9',
+        role: 'cell_leader',
+      });
+      const call = (prismaMock.visitor.create as jest.Mock).mock.calls[0][0];
+      expect(call.data.branch_id).toBe('branch-9');
+    });
+
+    it('should honor an explicit branchId for HQ creators', async () => {
+      prismaMock.branch = { findFirst: jest.fn().mockResolvedValue({ id: 'branch-2' }) };
+      (prismaMock.visitor.create as jest.Mock).mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockVisitor, branch_id: data.branch_id }),
+      );
+      await service.create({ firstName: 'Amina', branchId: 'branch-2' }, churchId, userId, {
+        church_id: churchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        is_admin_hq: true,
+      });
+      const call = (prismaMock.visitor.create as jest.Mock).mock.calls[0][0];
+      expect(call.data.branch_id).toBe('branch-2');
+    });
+
+    it('should reject an explicit branch outside the church for HQ creators', async () => {
+      prismaMock.branch = { findFirst: jest.fn().mockResolvedValue(null) };
+      await expect(
+        service.create({ firstName: 'Amina', branchId: 'branch-foreign' }, churchId, userId, {
+          church_id: churchId,
+          role: 'church_admin',
+          is_admin_hq: true,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('findAll', () => {
@@ -197,14 +249,52 @@ describe('VisitorsService', () => {
     it('should filter by followUpStatus and assignedToId', async () => {
       await service.findAll(churchId, { followUpStatus: 'new', assignedToId: assigneeId });
       const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
-      expect(arg.where.follow_up_status).toBe('new');
-      expect(arg.where.assigned_to_id).toBe(assigneeId);
+      expect(arg.where.AND[0].follow_up_status).toBe('new');
+      expect(arg.where.AND[1].assigned_to_id).toBe(assigneeId);
     });
 
     it('should search across name, email, and phone', async () => {
       await service.findAll(churchId, { search: 'Amina' });
       const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
-      expect(arg.where.OR).toHaveLength(4);
+      expect(arg.where.AND[0].OR).toHaveLength(4);
+    });
+
+    it('should scope branch-restricted viewers to their branch plus untagged visitors', async () => {
+      await service.findAll(
+        churchId,
+        {},
+        {
+          church_id: churchId,
+          branch_id: 'branch-1',
+          role: 'cell_leader',
+        },
+      );
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.AND[0].OR).toEqual([{ branch_id: 'branch-1' }, { branch_id: null }]);
+    });
+
+    it('should not scope HQ viewers by branch', async () => {
+      await service.findAll(
+        churchId,
+        {},
+        {
+          church_id: churchId,
+          branch_id: 'branch-1',
+          role: 'church_admin',
+          is_admin_hq: true,
+        },
+      );
+      const arg = (prismaMock.visitor.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.AND).toBeUndefined();
+    });
+
+    it('should map branchId and branchName in responses', async () => {
+      (prismaMock.visitor.findMany as jest.Mock).mockResolvedValueOnce([
+        { ...mockVisitor, branch_id: 'branch-1', branch: { id: 'branch-1', name: 'Lekki' } },
+      ]);
+      const result = await service.findAll(churchId, {});
+      expect(result.data[0].branchId).toBe('branch-1');
+      expect(result.data[0].branchName).toBe('Lekki');
     });
 
     it('should map camelCase sortBy to snake_case columns', async () => {

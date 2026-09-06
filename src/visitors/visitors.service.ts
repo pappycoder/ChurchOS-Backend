@@ -12,6 +12,7 @@ import { UpdateVisitorDto } from './dto/update-visitor.dto';
 import { ConvertVisitorDto } from './dto/convert-visitor.dto';
 import { ListVisitorsDto } from './dto/list-visitors.dto';
 import { VisitorResponseDto } from './dto/visitor-response.dto';
+import { ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
@@ -27,15 +28,23 @@ export class VisitorsService {
     dto: CreateVisitorDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<VisitorResponseDto> {
     let assignedToId = dto.assignedToId;
     if (assignedToId) {
       assignedToId = await this.resolveAssigneeProfileId(assignedToId, churchId);
     }
 
+    // Tag the visitor with a branch so branch-restricted viewers can scope
+    // follow-up lists. HQ/unspecified creators may set an explicit branch or
+    // leave it unset (null = church-wide); branch-restricted creators are
+    // pinned to their own branch.
+    const branchId = await this.resolveVisitorBranch(dto.branchId, churchId, viewer);
+
     const visitor = await this.prisma.visitor.create({
       data: {
         church_id: churchId,
+        branch_id: branchId,
         first_name: dto.firstName,
         last_name: dto.lastName,
         gender: dto.gender,
@@ -48,7 +57,10 @@ export class VisitorsService {
         notes: dto.notes,
         custom_fields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
       },
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     await this.audit.log({
@@ -68,34 +80,49 @@ export class VisitorsService {
   async findAll(
     churchId: string,
     query: ListVisitorsDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: VisitorResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.VisitorWhereInput = {
-      church_id: churchId,
-      deleted_at: null,
-      archived_at: query.archived === true ? { not: null } : null,
-    };
+    const conditions: Prisma.VisitorWhereInput[] = [];
 
     if (query.followUpStatus) {
-      where.follow_up_status = query.followUpStatus;
+      conditions.push({ follow_up_status: query.followUpStatus });
     }
 
     if (query.assignedToId) {
-      where.assigned_to_id = query.assignedToId;
+      conditions.push({ assigned_to_id: query.assignedToId });
     }
 
     if (query.search?.trim()) {
       const term = query.search.trim();
-      where.OR = [
-        { first_name: { contains: term, mode: 'insensitive' } },
-        { last_name: { contains: term, mode: 'insensitive' } },
-        { email: { contains: term, mode: 'insensitive' } },
-        { phone: { contains: term } },
-      ];
+      conditions.push({
+        OR: [
+          { first_name: { contains: term, mode: 'insensitive' } },
+          { last_name: { contains: term, mode: 'insensitive' } },
+          { email: { contains: term, mode: 'insensitive' } },
+          { phone: { contains: term } },
+        ],
+      });
     }
+
+    // Branch-scoped viewers (non-HQ) see visitors from their own branch only,
+    // PLUS untagged legacy visitors (branch_id IS NULL) so previously recorded
+    // rows don't vanish from branch lists.
+    if (viewer && !viewer.is_admin_hq && viewer.branch_id) {
+      conditions.push({
+        OR: [{ branch_id: viewer.branch_id }, { branch_id: null }],
+      });
+    }
+
+    const where: Prisma.VisitorWhereInput = {
+      church_id: churchId,
+      deleted_at: null,
+      archived_at: query.archived === true ? { not: null } : null,
+      ...(conditions.length ? { AND: conditions } : {}),
+    };
 
     const orderBy: Prisma.VisitorOrderByWithRelationInput[] = [];
     if (query.sortBy) {
@@ -114,7 +141,10 @@ export class VisitorsService {
     const [visitors, total] = await Promise.all([
       this.prisma.visitor.findMany({
         where,
-        include: { assigned_to: { select: { first_name: true, last_name: true } } },
+        include: {
+          assigned_to: { select: { first_name: true, last_name: true } },
+          branch: { select: { id: true, name: true } },
+        },
         orderBy,
         skip,
         take: limit,
@@ -131,7 +161,10 @@ export class VisitorsService {
   async findOne(id: string, churchId: string): Promise<VisitorResponseDto> {
     const visitor = await this.prisma.visitor.findUnique({
       where: { id },
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     if (!visitor || visitor.church_id !== churchId) {
@@ -181,7 +214,10 @@ export class VisitorsService {
     const visitor = await this.prisma.visitor.update({
       where: { id },
       data: updateData,
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     await this.audit.log({
@@ -249,7 +285,10 @@ export class VisitorsService {
     const visitor = await this.prisma.visitor.update({
       where: { id },
       data: { archived_at: new Date() },
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     await this.audit.log({
@@ -291,7 +330,10 @@ export class VisitorsService {
     const visitor = await this.prisma.visitor.update({
       where: { id },
       data: { archived_at: null },
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     await this.audit.log({
@@ -360,7 +402,10 @@ export class VisitorsService {
         // surfaces again in visitor pulls (list/search/follow-up board).
         deleted_at: new Date(),
       },
-      include: { assigned_to: { select: { first_name: true, last_name: true } } },
+      include: {
+        assigned_to: { select: { first_name: true, last_name: true } },
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     await this.audit.log({
@@ -379,6 +424,37 @@ export class VisitorsService {
       visitor: this.toResponseDto(updatedVisitor),
       memberId: member.id,
     };
+  }
+
+  private async resolveVisitorBranch(
+    dtoBranchId: string | undefined,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<string | null> {
+    let branchId: string | null;
+    let explicit = false;
+    if (viewer && !viewer.is_admin_hq) {
+      // Branch-restricted creators are pinned to their own branch.
+      branchId = viewer.branch_id ?? null;
+    } else {
+      // HQ / unspecified creators may set an explicit branch or leave it null.
+      branchId = dtoBranchId ?? null;
+      explicit = !!branchId;
+    }
+
+    // Validate only explicit branches (the viewer's own branch comes from the
+    // trusted profile context).
+    if (explicit) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId as string, church_id: churchId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new BadRequestException('Branch not found');
+      }
+    }
+
+    return branchId;
   }
 
   private async resolveAssigneeProfileId(assigneeId: string, churchId: string): Promise<string> {
@@ -406,6 +482,8 @@ export class VisitorsService {
   private toResponseDto(visitor: {
     id: string;
     church_id: string;
+    branch_id: string | null;
+    branch?: { id: string; name: string } | null;
     first_name: string;
     last_name: string | null;
     gender: string | null;
@@ -427,6 +505,8 @@ export class VisitorsService {
     return {
       id: visitor.id,
       churchId: visitor.church_id,
+      branchId: visitor.branch_id || undefined,
+      branchName: visitor.branch?.name || undefined,
       firstName: visitor.first_name,
       lastName: visitor.last_name || undefined,
       gender: visitor.gender || undefined,
