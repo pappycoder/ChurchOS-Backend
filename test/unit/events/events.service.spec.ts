@@ -806,13 +806,12 @@ describe('EventsService', () => {
     });
   });
 
-  describe('createTicket (branch-scoped cell leader self-claim)', () => {
+  describe('createTicket (cell leader self-claim — identical to member)', () => {
     const baseViewer = {
       memberId: mockMemberId,
       branchId: 'branch-1',
       isAdminHq: false,
       enforceSelf: true,
-      strictBranch: true,
     };
 
     it("should allow claiming for an event in the leader's own branch", async () => {
@@ -838,13 +837,14 @@ describe('EventsService', () => {
       // Proceeded past the branch check (member lookup ran) — not Forbidden.
     });
 
-    it('should reject a church-wide (null-branch) event for a cell leader', async () => {
+    it('should allow claiming a church-wide (null-branch) event, like a member', async () => {
       prisma.event.findFirst.mockResolvedValue({
         ...mockEvent,
         branch_id: null,
         _count: { registrations: 0 },
         ticket_tiers: [],
       });
+      prisma.member.findFirst.mockResolvedValue(null);
 
       await expect(
         service.createTicket(
@@ -856,11 +856,11 @@ describe('EventsService', () => {
           mockUserId,
           baseViewer,
         ),
-      ).rejects.toThrow(ForbiddenException);
-      expect(prisma.member.findFirst).not.toHaveBeenCalled();
+      ).rejects.toThrow(NotFoundException);
+      // Proceeded past the branch check — not Forbidden.
     });
 
-    it('should reject an event from another branch for a cell leader', async () => {
+    it('should reject an event from another branch, like a member', async () => {
       prisma.event.findFirst.mockResolvedValue({
         ...mockEvent,
         branch_id: 'branch-2',
@@ -881,29 +881,6 @@ describe('EventsService', () => {
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.member.findFirst).not.toHaveBeenCalled();
     });
-
-    it('should allow a plain member to claim a church-wide event (no strictBranch)', async () => {
-      prisma.event.findFirst.mockResolvedValue({
-        ...mockEvent,
-        branch_id: null,
-        _count: { registrations: 0 },
-        ticket_tiers: [],
-      });
-      prisma.member.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.createTicket(
-          mockEventId,
-          mockMemberId,
-          undefined,
-          undefined,
-          mockChurchId,
-          mockUserId,
-          { ...baseViewer, strictBranch: false },
-        ),
-      ).rejects.toThrow(NotFoundException);
-      // Proceeded past the branch check — not Forbidden.
-    });
   });
 
   describe('listAllTickets', () => {
@@ -914,36 +891,30 @@ describe('EventsService', () => {
       prisma.visitor.findMany.mockResolvedValue([]);
     });
 
-    it('should scope church-wide by default (no branch/member filter)', async () => {
+    it('should scope church-wide by default (no member filter)', async () => {
       await service.listAllTickets(mockChurchId, { page: 1, limit: 50 });
       const arg = (prisma.ticket.findMany as jest.Mock).mock.calls[0][0];
       expect(arg.where.event).toEqual({ church_id: mockChurchId });
       expect(arg.where.member_id).toBeUndefined();
     });
 
-    it('should scope by branch when branchId is supplied (branch-scoped cell leader)', async () => {
-      await service.listAllTickets(mockChurchId, { page: 1, limit: 50, branchId: 'branch-1' });
-      const arg = (prisma.ticket.findMany as jest.Mock).mock.calls[0][0];
-      expect(arg.where.event).toEqual({ church_id: mockChurchId, branch_id: 'branch-1' });
-    });
-
-    it('should self-scope by memberId for plain members', async () => {
+    it('should self-scope by memberId for members and cell group leaders', async () => {
       await service.listAllTickets(mockChurchId, { page: 1, limit: 50, memberId: mockMemberId });
       const arg = (prisma.ticket.findMany as jest.Mock).mock.calls[0][0];
       expect(arg.where.member_id).toBe(mockMemberId);
     });
 
-    it('should honor eventId, status, and search filters alongside branch scope', async () => {
+    it('should honor eventId, status, and search filters alongside self-scoping', async () => {
       await service.listAllTickets(mockChurchId, {
         page: 1,
         limit: 50,
-        branchId: 'branch-1',
+        memberId: mockMemberId,
         eventId: mockEventId,
         status: 'paid',
         search: 'EVT',
       });
       const arg = (prisma.ticket.findMany as jest.Mock).mock.calls[0][0];
-      expect(arg.where.event).toEqual({ church_id: mockChurchId, branch_id: 'branch-1' });
+      expect(arg.where.member_id).toBe(mockMemberId);
       expect(arg.where.event_id).toBe(mockEventId);
       expect(arg.where.status).toBe('paid');
       expect(arg.where.OR).toEqual([
