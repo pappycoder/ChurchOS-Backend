@@ -1,93 +1,61 @@
 /**
- * @file seed-full.ts
- * @description FULL ChurchOS development seed — factory-reset test environment.
+ * @file index.seed.ts
+ * @description DEVELOPMENT seed orchestration — factory-reset test environment.
  *
- * Creates real Supabase Auth users (shared dev password: ChurchOS@1234),
- * profiles for every role in both HQ and a non-HQ branch, plus reference data
- * (members, families, visitors, giving, events, attendance, org, pastoral,
- * communication, media, appointments, system rows) across all 60 models.
+ * Populates the database entirely with linked demo data across all 60 models:
+ * real Supabase Auth users (shared dev password: ChurchOS@1234), profiles for
+ * every role in both HQ and a non-HQ branch, plus reference data (members,
+ * families, visitors, giving, events, attendance, org, pastoral, communication,
+ * media, appointments, system rows). This is the "Development" path of the main
+ * `prisma/seed.ts` entry and replaces the former `seed-full.ts`.
  *
  * Idempotent — safe to rerun (no duplicate rows or auth users).
  *
- * Usage:
- *   npm run db:seed
- *   npx prisma db seed   (wired via package.json "prisma.seed")
+ * @module seeds/development/index.seed
  */
 
-import 'dotenv/config';
-
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 
-import { seedChurch } from './seeds/church.seed';
-import { seedCategories } from './seeds/categories.seed';
-import { seedPermissions } from './seeds/permissions.seed';
-import { seedServices } from './seeds/services.seed';
-import { seedFormTemplates } from './seeds/form-templates.seed';
-import { seedMembers } from './seeds/members.seed';
+import { seedChurch } from './church.seed';
+import { seedCategories } from './categories.seed';
+import { seedServices } from './services.seed';
+import { seedFormTemplates } from './form-templates.seed';
+import { seedMembers } from './members.seed';
+import { seedPermissions } from '../shared/permissions.seed';
 
-import { seedBranches } from './seeds/full/branches.seed';
+import { seedBranches } from './branches.seed';
 
-import { seedUsers, UserSeedResult } from './seeds/full/users.seed';
+import { seedUsers, UserSeedResult } from './users.seed';
 
-import { seedPeople, assignVisitorFollowUp, PersonSeedResult } from './seeds/full/people.seed';
+import { seedPeople, assignVisitorFollowUp, PersonSeedResult } from './people.seed';
 
-import { seedGiving } from './seeds/full/giving.seed';
-import { seedEvents } from './seeds/full/events.seed';
-import { seedAttendance } from './seeds/full/attendance.seed';
-import { seedOrg } from './seeds/full/org.seed';
-import { seedPastoral } from './seeds/full/pastoral.seed';
-import { seedMedia } from './seeds/full/media.seed';
-import { seedComm } from './seeds/full/comm.seed';
-import { seedAppointments } from './seeds/full/appointments.seed';
-import { seedSystem } from './seeds/full/system.seed';
+import { seedGiving } from './giving.seed';
+import { seedEvents } from './events.seed';
+import { seedAttendance } from './attendance.seed';
+import { seedOrg } from './org.seed';
+import { seedPastoral } from './pastoral.seed';
+import { seedMedia } from './media.seed';
+import { seedComm } from './comm.seed';
+import { seedAppointments } from './appointments.seed';
+import { seedSystem } from './system.seed';
 
-// -----------------------------------------------------------------------------
-// Prisma
-// -----------------------------------------------------------------------------
-
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is not defined in the environment.');
+export interface DevelopmentSeedResult {
+  churchId: string;
+  churchName: string;
+  members: number;
+  visitors: number;
+  authUsersCreated: number;
+  authUsersExisting: number;
+  profiles: number;
+  events: number;
+  services: number;
 }
 
-const adapter = new PrismaPg({
-  connectionString: databaseUrl,
-  // A slow/pooled database (e.g. remote Supabase pgbouncer) shouldn't be able
-  // to hang a query forever or leave idle connections stuck mid-seed.
-  connectionTimeoutMillis: 15_000,
-  idleTimeoutMillis: 30_000,
-});
-
-const prisma = new PrismaClient({
-  adapter,
-});
-
-// -----------------------------------------------------------------------------
-// Supabase
-// -----------------------------------------------------------------------------
-
-let supabase: SupabaseClient | null = null;
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-// -----------------------------------------------------------------------------
-// Main seed
-// -----------------------------------------------------------------------------
-
-async function main(): Promise<void> {
+export async function runDevelopmentSeed(
+  prisma: PrismaClient,
+  supabase: SupabaseClient | null,
+): Promise<DevelopmentSeedResult> {
   console.log('🌱 Starting FULL database seed...\n');
 
   // ---------------------------------------------------------------------------
@@ -266,17 +234,16 @@ async function main(): Promise<void> {
   );
 
   console.log('    member.lekki@churchos.dev (plus 5 bulk member accounts)');
+
+  return {
+    churchId,
+    churchName,
+    members: members.length,
+    visitors: visitors.length,
+    authUsersCreated: users.authUsersCreated,
+    authUsersExisting: users.authUsersExisting,
+    profiles: Object.keys(profilesByKey).length,
+    events: eventsSeed.eventCount,
+    services: serviceCount,
+  };
 }
-
-// -----------------------------------------------------------------------------
-// Execute
-// -----------------------------------------------------------------------------
-
-main()
-  .catch((error) => {
-    console.error('❌ Seed failed:', error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });

@@ -39,8 +39,10 @@ npm run test           # Jest unit tests
 npx prisma generate    # Regenerate Prisma Client after schema changes
 npx prisma migrate dev # Create a new migration
 npx prisma studio      # Visual database browser
-npx prisma db seed     # Seed database with dev data
-npm run prisma:seed    # Alternative seed command
+npx prisma db seed     # Seed database (interactive: Development full demo / Production reference data)
+npm run prisma:seed    # Alternative seed command (interactive)
+npm run prisma:seed-development  # Development path directly (full linked demo data)
+npm run prisma:seed-production   # Production path directly (role/permission catalog only)
 npm run prisma:seed-perms  # Seed roles/permissions only (~8 queries, fast reseed)
 ```
 
@@ -214,6 +216,15 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **Seeding restructured around two explicit paths — Development (full demo) vs Production (reference data) — with a single interactive entry.** The three-way script clutter (`prisma/seed.ts` simple dev, `prisma/seed-full.ts` full demo, `prisma/seeds/full/*`) is collapsed into one `prisma/seed.ts` that asks "1) Development  2) Production" and runs the matching path (or accepts `--development`/`--production` to skip the prompt). The seed folder now separates reusable vs environment-specific modules, so production bootstraps only what a fresh install actually needs before its first admin registers.
+  - **`prisma/seeds/shared/permissions.seed.ts`** — the only seed used by BOTH paths (moved from `prisma/seeds/permissions.seed.ts`; `prisma/seed-permissions.ts` import updated to `./seeds/shared/permissions.seed`).
+  - **`prisma/seeds/development/`** — all demo data, moved from `prisma/seeds/` (church, categories, services, members, profiles, transactions, families, form-templates) + `prisma/seeds/full/` (utils, branches, users, people, giving, events, attendance, org, pastoral, media, comm, appointments, system). New **`index.seed.ts` `runDevelopmentSeed(prisma, supabase)`** is the former `seed-full.ts` `main()` body — full linked demo across all 60 models (real Supabase auth users, `ChurchOS@1234`, `.churchos.dev` accounts unchanged, idempotent); `prisma/seed-full.ts` deleted.
+  - **`prisma/seeds/production/index.seed.ts`** — new **`runProductionSeed(prisma)`**: seeds the platform-wide role/permission catalog only (`seedPermissions`). Deliberately NOT seeded: church, branches, giving categories, services, form templates, or any people — all church-scoped and created by the admin via the app's registration page after login. Form templates are church-scoped (`seedFormTemplates(prisma, churchId)`) and therefore can't run before a church exists, so they're dev-only by design.
+  - **`prisma/seed.ts`** — rewritten: shared `PrismaPg` adapter + `readline` chooser; argv `--development`/`--production` bypasses the prompt.
+  - **`package.json`** — `prisma:seed` stays the interactive entry (and the wired `prisma.seed` config); `prisma:seed-development` replaces `prisma:seed-demo` (`seed.ts --development`); new `prisma:seed-production` (`seed.ts --production`); `prisma:seed-perms`, `prisma:seed-demo-logins`, and `seed-super-admin` kept (the super-admin script remains available for production when an out-of-band admin is needed; normal admins self-register).
+  - **Docs**: README "Running Locally" + "Prisma Commands" seed blocks and AGENTS.md Key Commands updated. Historical changelog entries referencing `seed-full`/`seeds/full`/`prisma:seed-demo` are left as-is (records of past state).
+  - Verification: `npx tsc -p tsconfig.seed.json --noEmit` clean; seed-only change (no source/test deltas). Run `npm run prisma:seed-development` / `npm run prisma:seed-production` on a connected DB to exercise each path.
 
 - **Cell groups now support export-to-CSV, filtering, and search — available to every read role including the admin-HQ cell leader.** The existing `GET /admin/cell-groups` list gains `archived`, `search`, `branchId`, and `meetingDay` query filters, and a new `GET /admin/cell-groups/export` route streams the same scoped+filtered rows as a CSV (`cell-groups.csv`). This completes the admin-HQ cell leader's read/edit-only contract: they can view everything, edit details, filter, search, and export — but still cannot record attendance or add/remove members.
   - **`src/admin/dto/list-cell-groups.dto.ts`** — new `ListCellGroupsDto`: `archived?` (`@Type(() => Boolean)` + `@IsBoolean`), `search?` (`@IsString` + `@MaxLength(100)`), `branchId?` (`@IsUUID`), `meetingDay?` (`@MaxLength(30)`), mirroring the `ListAssetCategoriesDto` boolean-query convention.

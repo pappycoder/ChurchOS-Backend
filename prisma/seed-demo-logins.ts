@@ -4,8 +4,8 @@
  * accounts, so local demo logins resolve in `GET /profiles/me` (and the whole
  * app) instead of 404ing "User profile not found".
  *
- * Background: the plain `prisma:seed`/`prisma:seed-full` scripts write profiles
- * with `user_id: crypto.randomUUID()` — ids that never match a real Supabase
+ * Background: the Development `prisma:seed` path writes profiles with
+ * `user_id: crypto.randomUUID()` — ids that never match a real Supabase
  * user sub. Those rows are useful for pickers/UI, but no demo login can ever
  * authenticate to them. This script resolves each demo account's auth sub by
  * email (via the Supabase admin API) and upserts the matching profile row.
@@ -25,7 +25,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Dev database ids for the RCCG demo church/branch that host the seeded
-// "Sunday Worship Service" event (see prisma/seed-full.ts).
+// "Sunday Worship Service" event (see prisma/seeds/development).
 const CHURCH_RCCG = 'd922c528-f4cd-4347-a7ef-bd8d4d10c7a6';
 const BRANCH_RCCG = 'c7171ba1-6d4f-4d16-b1a4-d72e12e975f2';
 

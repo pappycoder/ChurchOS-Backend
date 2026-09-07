@@ -108,7 +108,8 @@ docker-compose up -d
 # Run Prisma migrations
 npx prisma migrate dev
 
-# Seed the database
+# Seed the database (asks for mode: Development full demo / Production reference data)
+# Use `npm run prisma:seed-development` or `npm run prisma:seed-production` to skip the prompt
 npx prisma db seed
 
 # Development
@@ -152,7 +153,7 @@ npx prisma generate
 # Open Prisma Studio (visual database browser)
 npx prisma studio
 
-# Seed the database
+# Seed the database (interactive: Development full demo / Production reference data)
 npx prisma db seed
 ```
 

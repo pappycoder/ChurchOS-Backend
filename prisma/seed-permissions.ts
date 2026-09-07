@@ -16,7 +16,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { seedPermissions } from './seeds/permissions.seed';
+import { seedPermissions } from './seeds/shared/permissions.seed';
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
