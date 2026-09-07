@@ -27,6 +27,7 @@ import { BranchScopeService, ViewerScope } from '../common/services/branch-scope
 import { Prisma } from '@prisma/client';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
+import { ListCellGroupsDto } from './dto/list-cell-groups.dto';
 import {
   DepartmentResponseDto,
   CellGroupResponseDto,
@@ -544,12 +545,17 @@ export class AdminService {
    * Lists cell groups for a church.
    *
    * @param churchId - Church ID
-   * @param archived - Whether to list archived groups only (default: active only)
+   * @param query - Optional filter/search query (archived, search, branchId,
+   *   meetingDay). The `branchId` filter is only honored for church-only
+   *   (admin-HQ / viewer-less) callers — a branch-restricted viewer is always
+   *   forced to their own scoped branch (same convention as the rest of the
+   *   branch-scoped reads).
+   * @param viewer - Request profile-derived viewer context
    * @returns List of cell groups
    */
   async listCellGroups(
     churchId: string,
-    archived: boolean = false,
+    query: ListCellGroupsDto = {},
     viewer?: ViewerScope | null,
   ): Promise<CellGroupResponseDto[]> {
     // Scope cell groups per the viewer's entitlement:
@@ -564,7 +570,7 @@ export class AdminService {
     const isCellLeaderScope = !scope.churchOnly && 'leaderId' in scope;
     const where: Prisma.CellGroupWhereInput = {
       church_id: churchId,
-      archived_at: isCellLeaderScope ? null : archived ? { not: null } : null,
+      archived_at: isCellLeaderScope ? null : query.archived ? { not: null } : null,
     };
     if (!scope.churchOnly) {
       if (isCellLeaderScope) {
@@ -574,6 +580,36 @@ export class AdminService {
       } else if (scope.branchId) {
         where.branch_id = scope.branchId;
       }
+    } else if (query.branchId) {
+      where.branch_id = query.branchId;
+    }
+
+    if (query.meetingDay) {
+      where.meeting_day = query.meetingDay;
+    }
+
+    const term = query.search?.trim();
+    if (term) {
+      // Search across the group name, its meet-up address, and the names of its
+      // leader (leader_id is a free-form member reference, so leader ids are
+      // resolved first by name and matched via `in`).
+      const leaders = await this.prisma.member.findMany({
+        where: {
+          church_id: churchId,
+          OR: [
+            { first_name: { contains: term, mode: 'insensitive' } },
+            { last_name: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+      });
+      where.AND = {
+        OR: [
+          { name: { contains: term, mode: 'insensitive' } },
+          { address: { contains: term, mode: 'insensitive' } },
+          { leader_id: { in: leaders.map((l) => l.id) } },
+        ],
+      };
     }
 
     // Query the scoped cell groups for the church ordered by name
@@ -590,6 +626,68 @@ export class AdminService {
     return groups.map((g) =>
       this.mapCellGroupToResponseDto({ ...g, leader: leaders.get(g.leader_id || '') }),
     );
+  }
+
+  /**
+   * Exports the scoped cell groups as a CSV file download.
+   *
+   * Scope and filters work exactly like {@link listCellGroups}, so everyone
+   * who can list cell groups (including admin-hq and branch cell leaders) can
+   * export the same set of rows they currently see.
+   *
+   * @param churchId - Church ID
+   * @param query - Optional filter/search query applied before exporting
+   * @param viewer - Request profile-derived viewer context
+   * @returns CSV text (with header row)
+   */
+  async exportCellGroupsCsv(
+    churchId: string,
+    query: ListCellGroupsDto = {},
+    viewer?: ViewerScope | null,
+  ): Promise<string> {
+    const groups = await this.listCellGroups(churchId, query, viewer);
+
+    const headers = [
+      'ID',
+      'Name',
+      'Leader',
+      'Branch',
+      'Address',
+      'Meeting Day',
+      'Meeting Time',
+      'Latitude',
+      'Longitude',
+      'Archived At',
+      'Created At',
+    ];
+
+    const rows = groups.map((g) => [
+      g.id,
+      g.name,
+      [g.leaderFirstName, g.leaderLastName].filter(Boolean).join(' '),
+      g.branchName || '',
+      g.address || '',
+      g.meetingDay || '',
+      g.meetingTime || '',
+      g.latitude?.toString() || '',
+      g.longitude?.toString() || '',
+      g.archivedAt || '',
+      g.createdAt,
+    ]);
+
+    // Escape CSV values (handle commas, quotes, newlines)
+    const escapeCsv = (value: string): string => {
+      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+
+    const csvLines = [headers.join(','), ...rows.map((row) => row.map(escapeCsv).join(','))];
+
+    this.logger.log(`Exported ${groups.length} cell groups as CSV`);
+
+    return csvLines.join('\n');
   }
 
   /**
@@ -666,6 +764,23 @@ export class AdminService {
       if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
         throw new ForbiddenException('You can only manage your own cell group');
       }
+    }
+  }
+
+  /**
+   * An admin-HQ cell_leader is granted church-wide cell group READING and
+   * DETAIL EDITING (see updateCellGroup) but is locked out of the membership
+   * and attendance write paths — recording attendance, adding a member, or
+   * removing a member is Forbidden for them on every group. Non-HQ cell
+   * leaders are unaffected (own-group writes, enforced by
+   * assertCellLeaderOwnership).
+   */
+  private assertCellLeaderHqReadOnly(viewer: ViewerScope | null | undefined): void {
+    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
+    if (isCellLeader && viewer?.is_admin_hq) {
+      throw new ForbiddenException(
+        'HQ cell group leaders can view and edit cell groups but cannot record attendance or manage members',
+      );
     }
   }
 
@@ -921,6 +1036,9 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    // An admin-HQ cell leader may manage no group's membership.
+    this.assertCellLeaderHqReadOnly(viewer);
+
     // A branch-restricted cell leader may only manage members of the groups
     // they lead.
     this.assertCellLeaderOwnership(viewer, group);
@@ -928,11 +1046,19 @@ export class AdminService {
     // Verify the member belongs to this church
     const member = await this.prisma.member.findFirst({
       where: { id: memberId, church_id: churchId },
-      select: { id: true },
+      select: { id: true, branch_id: true },
     });
 
     if (!member) {
       throw new NotFoundException('Member not found in this church');
+    }
+
+    // A branch-restricted viewer may only add members from their own branch
+    // (mirrors the member list scoping, which hides other-branch members).
+    if (this.branchScope.isBranchRestricted(viewer)) {
+      if (!this.branchScope.isVisible(viewer, member.branch_id)) {
+        throw new ForbiddenException(`Member ${memberId} does not belong to your branch`);
+      }
     }
 
     const existing = await this.prisma.cellGroupMember.findUnique({
@@ -988,6 +1114,9 @@ export class AdminService {
     if (group.archived_at) {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
+
+    // An admin-HQ cell leader may manage no group's membership.
+    this.assertCellLeaderHqReadOnly(viewer);
 
     // A branch-restricted cell leader may only manage members of the groups
     // they lead.
@@ -1099,6 +1228,9 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
+    // An admin-HQ cell leader may not record attendance for any group.
+    this.assertCellLeaderHqReadOnly(viewer);
+
     // A branch-restricted cell_leader may only record attendance for the
     // groups they lead (mirrors resolveCellGroupScope: admin-hq cell_leaders
     // are unconstrained).
@@ -1115,11 +1247,19 @@ export class AdminService {
     if (memberId) {
       const member = await this.prisma.member.findFirst({
         where: { id: memberId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
 
       if (!member) {
         throw new NotFoundException('Member not found in this church');
+      }
+
+      // A branch-restricted viewer may only record attendance for members of
+      // their own branch (mirrors the member list scoping).
+      if (this.branchScope.isBranchRestricted(viewer)) {
+        if (!this.branchScope.isVisible(viewer, member.branch_id)) {
+          throw new ForbiddenException(`Member ${memberId} does not belong to your branch`);
+        }
       }
     }
 
@@ -1127,15 +1267,49 @@ export class AdminService {
     if (visitorId) {
       const visitor = await this.prisma.visitor.findFirst({
         where: { id: visitorId, church_id: churchId },
-        select: { first_name: true, last_name: true },
+        select: { first_name: true, last_name: true, branch_id: true },
       });
 
       if (!visitor) {
         throw new NotFoundException('Visitor not found in this church');
       }
 
+      // A branch-restricted viewer may only record attendance for visitors of
+      // their own branch. Legacy untagged visitors (branch_id null) stay
+      // allowed, mirroring the visitors list scoping.
+      if (this.branchScope.isBranchRestricted(viewer)) {
+        const viewerBranchId = viewer?.branch_id;
+        const sameBranch = visitor.branch_id === null || visitor.branch_id === viewerBranchId;
+        if (!sameBranch) {
+          throw new ForbiddenException(`Visitor ${visitorId} does not belong to your branch`);
+        }
+      }
+
       resolvedVisitorName =
         resolvedVisitorName || `${visitor.first_name} ${visitor.last_name || ''}`.trim();
+    }
+
+    // A branch-restricted viewer who records a walk-in registers the visitor
+    // as a real Visitor record pinned to their own branch. HQ viewers keep the
+    // free-text snapshot behavior.
+    const isWalkIn = !memberId && !visitorId && !!visitorName;
+    const restrictedViewer = this.branchScope.isBranchRestricted(viewer);
+    const viewerBranchId = viewer?.branch_id;
+    if (isWalkIn && restrictedViewer && viewerBranchId) {
+      const [firstName, ...rest] = visitorName.trim().split(/\s+/);
+      const createdVisitor = await this.prisma.visitor.create({
+        data: {
+          church_id: churchId,
+          first_name: firstName,
+          last_name: rest.length ? rest.join(' ') : null,
+          branch_id: viewerBranchId,
+        },
+        select: { id: true, first_name: true, last_name: true },
+      });
+      visitorId = createdVisitor.id;
+      resolvedVisitorName =
+        resolvedVisitorName ||
+        `${createdVisitor.first_name} ${createdVisitor.last_name || ''}`.trim();
     }
 
     const meetingDateObj = new Date(meetingDate);
@@ -1164,9 +1338,11 @@ export class AdminService {
 
     const subject = memberId
       ? `member ${memberId}`
-      : visitorId
-        ? `visitor ${visitorId}`
-        : `walk-in ${visitorName || ''}`.trim();
+      : isWalkIn
+        ? `walk-in ${visitorName || ''}`.trim()
+        : visitorId
+          ? `visitor ${visitorId}`
+          : `walk-in ${visitorName || ''}`.trim();
 
     if (existing) {
       // Update existing attendance record

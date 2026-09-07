@@ -129,6 +129,16 @@ export async function seedUsers(
       isAdminHq: false,
       memberIndex: 0,
     },
+    {
+      key: 'cell_leader_hq',
+      email: `cell.leader.hq@${EMAIL_DOMAIN}`,
+      firstName: 'Chinedu',
+      lastName: 'Okafor',
+      role: ['cell_leader', 'member'],
+      branch: 'hq',
+      isAdminHq: true,
+      memberIndex: 10,
+    },
 
     // ── Lekki branch staff(is_admin_hq = false — branch-scoped context) ──────
     {
@@ -170,12 +180,12 @@ export async function seedUsers(
     {
       key: 'cell_leader',
       email: `cell.leader@${EMAIL_DOMAIN}`,
-      firstName: 'Emeka',
-      lastName: 'Okonkwo',
+      firstName: 'Yemi',
+      lastName: 'Afolabi',
       role: ['cell_leader', 'member'],
       branch: 'lekki',
       isAdminHq: false,
-      memberIndex: 2,
+      memberIndex: 15,
     },
     {
       key: 'member_lekki',
@@ -255,8 +265,38 @@ export async function seedUsers(
         : {}),
     };
     let profile = await prisma.profile.findUnique({ where: { user_id: userId } });
-    if (!profile) profile = await prisma.profile.create({ data: profileData });
-    else profile = await prisma.profile.update({ where: { id: profile.id }, data: profileData });
+    if (!profile) {
+      try {
+        profile = await prisma.profile.create({ data: profileData });
+      } catch (createError) {
+        // Historical placeholder profiles (older demo seeds) can already claim
+        // this member via a random user_id that never matches a real auth sub,
+        // so the create hits the unique `member_id` constraint. Adopt that row
+        // in place (re-pointing it to the real auth user) rather than failing.
+        // NOTE: with the PrismaPg driver adapter the unique target is not
+        // surfaced in `meta.target`, so fall back on the error message.
+        const prismaErr = createError as {
+          code?: string;
+          meta?: { target?: string[] };
+          message?: string;
+        };
+        const isMemberIdConflict =
+          prismaErr.code === 'P2002' &&
+          (prismaErr.meta?.target?.includes('member_id') ??
+            String(prismaErr.message ?? '').includes('member_id'));
+        const conflicting = linkedMember
+          ? await prisma.profile.findUnique({ where: { member_id: linkedMember.id } })
+          : null;
+        if (isMemberIdConflict && conflicting) {
+          profile = await prisma.profile.update({
+            where: { id: conflicting.id },
+            data: profileData,
+          });
+        } else {
+          throw createError;
+        }
+      }
+    } else profile = await prisma.profile.update({ where: { id: profile.id }, data: profileData });
     return profile.id;
   };
 

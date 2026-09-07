@@ -58,6 +58,15 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     branchId: BRANCH_RCCG,
     isAdminHq: false,
   },
+  {
+    email: 'cell.leader.hq@churchos.dev',
+    firstName: 'Cell',
+    lastName: 'Leader HQ',
+    roles: ['cell_leader'],
+    churchId: CHURCH_RCCG,
+    branchId: BRANCH_RCCG,
+    isAdminHq: true,
+  },
 ];
 
 const adapter = new PrismaPg({
@@ -67,9 +76,7 @@ const adapter = new PrismaPg({
 });
 const prisma = new PrismaClient({ adapter });
 
-async function resolveSubsByEmail(
-  supabase: SupabaseClient,
-): Promise<Map<string, string>> {
+async function resolveSubsByEmail(supabase: SupabaseClient): Promise<Map<string, string>> {
   const subs = new Map<string, string>();
   // Demo projects have a handful of users; page through to be safe.
   for (let page = 1; ; page++) {
@@ -111,9 +118,7 @@ async function main(): Promise<void> {
   for (const account of DEMO_ACCOUNTS) {
     const sub = subs.get(account.email.toLowerCase());
     if (!sub) {
-      console.warn(
-        `  ⚠️  No Supabase auth user found for ${account.email} — skipped`,
-      );
+      console.warn(`  ⚠️  No Supabase auth user found for ${account.email} — skipped`);
       skipped++;
       continue;
     }
@@ -135,15 +140,11 @@ async function main(): Promise<void> {
         where: { user_id: sub },
         data,
       });
-      console.log(
-        `  ✅ Updated ${account.email} → ${account.roles.join(', ')} (${sub})`,
-      );
+      console.log(`  ✅ Updated ${account.email} → ${account.roles.join(', ')} (${sub})`);
       updated++;
     } else {
       await prisma.profile.create({ data });
-      console.log(
-        `  ✅ Created ${account.email} → ${account.roles.join(', ')} (${sub})`,
-      );
+      console.log(`  ✅ Created ${account.email} → ${account.roles.join(', ')} (${sub})`);
       created++;
     }
   }

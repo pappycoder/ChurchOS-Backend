@@ -50,7 +50,7 @@ describe('AdminController permission decorators', () => {
     expect(depUpdate).toBe(5);
     expect(depDelete).toBe(1);
     expect(cgCreate).toBe(3);
-    expect(cgRead).toBe(5);
+    expect(cgRead).toBe(6);
     expect(cgUpdate).toBe(4);
     expect(cgDelete).toBe(1);
   });
@@ -150,6 +150,16 @@ describe('AdminController permission decorators', () => {
       "'church_admin', 'senior_pastor', 'branch_pastor', 'member', 'cell_leader'",
     );
     expect(block).not.toContain("@RequirePermissions('cell_groups:read')");
+  });
+
+  it('requires cell_groups:read on GET /admin/cell-groups/export with the widened read roles', () => {
+    const block = blockBetween("@Get('cell-groups/export')", 'async exportCellGroupsCsv(');
+    expect(block).toContain("@RequirePermissions('cell_groups:read')");
+    hasRequireRoles(
+      block,
+      "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader'",
+    );
+    expect(block).toContain("@Header('Content-Type', 'text/csv')");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/:groupId with widened read roles', () => {

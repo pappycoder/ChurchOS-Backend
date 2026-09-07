@@ -257,7 +257,7 @@ async function main(): Promise<void> {
     '    senior.pastor@churchos.dev, treasurer.hq@churchos.dev, secretary.hq@churchos.dev,',
   );
 
-  console.log('    dept.head.hq@churchos.dev, member.hq@churchos.dev');
+  console.log('    dept.head.hq@churchos.dev, member.hq@churchos.dev, cell.leader.hq@churchos.dev');
 
   console.log('  Lekki: branch.pastor@churchos.dev, branch.secretary@churchos.dev,');
 

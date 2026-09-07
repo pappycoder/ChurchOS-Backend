@@ -313,6 +313,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:read',
     // Media — read
     'media:read',
+    // Member floor — read (everything a normal member can see/do)
+    'sermons:read',
+    'profiles:read',
+    'church:read',
     // Cell Groups — read
     'cell_groups:read',
     // Families — read
@@ -340,6 +344,9 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:create',
     'events:read',
     'events:update',
+    // Member floor — read (everything a normal member can see/do)
+    'sermons:read',
+    'media:read',
     // Church — read
     'church:read',
     // Branches — read
@@ -401,6 +408,12 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'church_settings:read',
     // Members — read
     'members:read',
+    // Member floor — read (everything a normal member can see/do)
+    'events:read',
+    'sermons:read',
+    'media:read',
+    'profiles:read',
+    'church:read',
     // Analytics — read
     'analytics:read',
     // Users — read

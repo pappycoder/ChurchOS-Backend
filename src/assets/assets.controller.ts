@@ -64,12 +64,7 @@ import {
   UpdateLoanDto,
 } from './dto';
 
-const WRITE_ROLES = [
-  'church_admin',
-  'branch_pastor',
-  'secretary',
-  'treasurer',
-] as const;
+const WRITE_ROLES = ['church_admin', 'branch_pastor', 'secretary', 'treasurer'] as const;
 
 @ApiTags('Assets')
 @ApiBearerAuth('supabase-auth')

@@ -22,11 +22,14 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
@@ -45,6 +48,7 @@ import {
   RecordCellGroupAttendanceDto,
 } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
+import { ListCellGroupsDto } from './dto/list-cell-groups.dto';
 import {
   DepartmentResponseDto,
   CellGroupResponseDto,
@@ -266,15 +270,34 @@ export class AdminController {
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'List cell groups' })
+  @ApiQuery({
+    name: 'archived',
+    required: false,
+    type: Boolean,
+    description: 'List archived groups only',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by name, address, or leader name',
+  })
+  @ApiQuery({ name: 'branchId', required: false, type: String, description: 'Filter by branch ID' })
+  @ApiQuery({
+    name: 'meetingDay',
+    required: false,
+    type: String,
+    description: 'Filter by meeting day',
+  })
   async listCellGroups(
-    @Query('archived') archived: string,
+    @Query() query: ListCellGroupsDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<CellGroupResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to list the scoped cell groups (admin-hq sees all;
     // cell_leader sees only their own; others see their own branch's groups)
-    return this.adminService.listCellGroups(churchId, archived === 'true', req.profile);
+    return this.adminService.listCellGroups(churchId, query, req.profile);
   }
 
   /**
@@ -293,6 +316,44 @@ export class AdminController {
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to find nearest groups, default limit 5
     return this.adminService.findNearestGroups(latitude, longitude, churchId, limit || 5);
+  }
+
+  /**
+   * Exports cell groups (scoped + filtered like the list) as a CSV file.
+   */
+  @Get('cell-groups/export')
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="cell-groups.csv"')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
+  @RequirePermissions('cell_groups:read')
+  @ApiOperation({ summary: 'Export cell groups as CSV' })
+  @ApiQuery({
+    name: 'archived',
+    required: false,
+    type: Boolean,
+    description: 'Export archived groups only',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Export only matching name/address/leader',
+  })
+  @ApiQuery({ name: 'branchId', required: false, type: String, description: 'Filter by branch ID' })
+  @ApiQuery({
+    name: 'meetingDay',
+    required: false,
+    type: String,
+    description: 'Filter by meeting day',
+  })
+  async exportCellGroupsCsv(
+    @Query() query: ListCellGroupsDto,
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+  ): Promise<void> {
+    const churchId = req.profile?.church_id || '';
+    const csv = await this.adminService.exportCellGroupsCsv(churchId, query, req.profile);
+    res.send(csv);
   }
 
   /**
@@ -435,7 +496,13 @@ export class AdminController {
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    await this.adminService.removeCellGroupMember(groupId, memberId, churchId, user.sub, req.profile);
+    await this.adminService.removeCellGroupMember(
+      groupId,
+      memberId,
+      churchId,
+      user.sub,
+      req.profile,
+    );
   }
 
   /**
