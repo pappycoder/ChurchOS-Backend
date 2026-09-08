@@ -113,11 +113,12 @@ export async function seedUsers(
     {
       key: 'dept_head',
       email: `dept.head.hq@${EMAIL_DOMAIN}`,
-      firstName: 'Kelechi',
-      lastName: 'Obi',
+      firstName: 'Chioma',
+      lastName: 'Nwosu',
       role: ['department_head'],
       branch: 'hq',
       isAdminHq: true,
+      memberIndex: 1,
     },
     {
       key: 'member_hq',
@@ -171,11 +172,12 @@ export async function seedUsers(
     {
       key: 'branch_dept_head',
       email: `branch.depthead@${EMAIL_DOMAIN}`,
-      firstName: 'Chinwe',
-      lastName: 'Odoemelam',
+      firstName: 'Obinna',
+      lastName: 'Eze',
       role: ['department_head'],
       branch: 'lekki',
       isAdminHq: false,
+      memberIndex: 14,
     },
     {
       key: 'cell_leader',

@@ -21,12 +21,16 @@ export interface OrgSeedResult {
 }
 
 // ── Department definitions ─────────────────────────────────────────
-// [name, description?]
-const DEPT_DEFS: Array<[string, string?]> = [
-  ['Choir', 'Worship and music ministry'],
-  ['Ushering', 'Welcome and seating ministry'],
-  ['Media', 'Audio-visual and livestream ministry'],
-  ['Youth', 'Youth and young adults fellowship'],
+// [name, branch, description?, headMemberIdx?]
+// Heads are the demo department_head accounts' linked members:
+//   Choir  head idx 1 (Chioma Nwosu)  -> dept.head.hq@churchos.dev (HQ, read-only)
+//   Youth  head idx 14 (Obinna Eze)   -> branch.depthead@churchos.dev (Lekki, own-department)
+// Ushering + Media intentionally have no head (exercises "No head assigned").
+const DEPT_DEFS: Array<[string, 'hq' | 'lekki', string?, number?]> = [
+  ['Choir', 'hq', 'Worship and music ministry', 1],
+  ['Ushering', 'hq', 'Welcome and seating ministry'],
+  ['Media', 'hq', 'Audio-visual and livestream ministry'],
+  ['Youth', 'lekki', 'Youth and young adults fellowship', 14],
 ];
 
 // [deptIdx, memberIdx, role]
@@ -185,7 +189,9 @@ export async function seedOrg(
   let depCount = 0;
 
   for (const departmentDef of DEPT_DEFS) {
-    const [name, description] = departmentDef;
+    const [name, branch, description, headMemberIndex] = departmentDef;
+
+    const headMemberId = headMemberIndex !== undefined ? members[headMemberIndex]?.id : undefined;
 
     const existing = await prisma.department.findFirst({
       where: {
@@ -195,6 +201,16 @@ export async function seedOrg(
     });
 
     if (existing) {
+      // Heal rows created before the branch/head migration so re-seeding an
+      // existing DB gives departments a branch + head like a fresh seed would.
+      await prisma.department.update({
+        where: { id: existing.id },
+        data: {
+          branch_id: branchIdFor(branch),
+          head_member_id: headMemberId ?? null,
+        },
+      });
+
       departments.push({ id: existing.id });
       depCount++;
       continue;
@@ -205,6 +221,8 @@ export async function seedOrg(
         church_id: churchId,
         name,
         description: description ?? undefined,
+        branch_id: branchIdFor(branch),
+        head_member_id: headMemberId ?? null,
       },
     });
 
