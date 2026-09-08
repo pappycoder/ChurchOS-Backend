@@ -29,6 +29,18 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsString()
   parentId?: string;
+
+  // Optional branch this department belongs to
+  @ApiPropertyOptional({ description: 'Branch this department belongs to' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  // Optional head member ID (free-form, mirrors cell group leader_id)
+  @ApiPropertyOptional({ description: 'Head member ID (free-form)' })
+  @IsOptional()
+  @IsString()
+  headMemberId?: string;
 }
 
 // Define DTO for adding a member to a department

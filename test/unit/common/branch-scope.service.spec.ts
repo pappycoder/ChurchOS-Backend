@@ -157,4 +157,58 @@ describe('BranchScopeService', () => {
       });
     });
   });
+
+  describe('resolveDepartmentScope', () => {
+    it('returns church-wide for HQ holders and no viewer', () => {
+      expect(service.resolveDepartmentScope(null)).toEqual({ churchOnly: true });
+      expect(
+        service.resolveDepartmentScope({
+          church_id: 'c',
+          branch_id: branchId,
+          role: 'department_head',
+          is_admin_hq: true,
+        }),
+      ).toEqual({ churchOnly: true });
+    });
+
+    it('scopes a department_head (non-HQ) to the departments they head', () => {
+      const viewer = {
+        church_id: 'c',
+        branch_id: branchId,
+        member_id: memberId,
+        role: 'department_head',
+        roles: ['department_head'],
+        is_admin_hq: false,
+      };
+      expect(service.resolveDepartmentScope(viewer)).toEqual({
+        churchOnly: false,
+        headId: memberId,
+      });
+    });
+
+    it('detects department_head from the roles array even when not primary', () => {
+      const viewer = {
+        church_id: 'c',
+        branch_id: branchId,
+        member_id: memberId,
+        role: 'secretary',
+        roles: ['secretary', 'department_head'],
+        is_admin_hq: false,
+      };
+      expect(service.resolveDepartmentScope(viewer)).toEqual({
+        churchOnly: false,
+        headId: memberId,
+      });
+    });
+
+    it('stays church-wide for other non-HQ viewers (departments are not branch-scoped)', () => {
+      const viewer = {
+        church_id: 'c',
+        branch_id: branchId,
+        role: 'branch_pastor',
+        is_admin_hq: false,
+      };
+      expect(service.resolveDepartmentScope(viewer)).toEqual({ churchOnly: true });
+    });
+  });
 });

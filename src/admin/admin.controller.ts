@@ -92,7 +92,7 @@ export class AdminController {
    * Lists all departments for the church.
    */
   @Get('departments')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head')
   @RequirePermissions('departments:read')
   @ApiOperation({ summary: 'List departments' })
   async listDepartments(
@@ -101,15 +101,16 @@ export class AdminController {
   ): Promise<DepartmentResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to list all departments
-    return this.adminService.listDepartments(churchId, archived === 'true');
+    // Delegate to AdminService to list the scoped departments (admin-hq sees all;
+    // department_head sees only the department(s) they head)
+    return this.adminService.listDepartments(churchId, archived === 'true', req.profile);
   }
 
   /**
    * Gets a single department by ID.
    */
   @Get('departments/:departmentId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head')
   @RequirePermissions('departments:read')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Get a department by ID' })
@@ -119,15 +120,15 @@ export class AdminController {
   ): Promise<DepartmentResponseDto> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to fetch the department by ID
-    return this.adminService.getDepartmentById(departmentId, churchId);
+    // Delegate to AdminService to fetch the department by ID (enforces scoping)
+    return this.adminService.getDepartmentById(departmentId, churchId, req.profile);
   }
 
   /**
    * Updates a department.
    */
   @Patch('departments/:departmentId')
-  @RequireRoles('church_admin', 'senior_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Update a department' })
@@ -139,8 +140,9 @@ export class AdminController {
   ): Promise<DepartmentResponseDto> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Delegate to AdminService to update the department
-    return this.adminService.updateDepartment(departmentId, dto, churchId, user.sub);
+    // Delegate to AdminService to update the department (enforces
+    // own-department ownership for non-HQ department heads)
+    return this.adminService.updateDepartment(departmentId, dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -204,7 +206,7 @@ export class AdminController {
    */
   @Post('departments/:departmentId/members')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Add a member to a department' })
@@ -217,7 +219,7 @@ export class AdminController {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to add the member to the department
-    return this.adminService.addDepartmentMember(departmentId, dto, churchId, user.sub);
+    return this.adminService.addDepartmentMember(departmentId, dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -225,7 +227,7 @@ export class AdminController {
    */
   @Delete('departments/:departmentId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin', 'senior_pastor')
+  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiParam({ name: 'memberId', type: String })
@@ -239,7 +241,13 @@ export class AdminController {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to remove the member from the department
-    return this.adminService.removeDepartmentMember(departmentId, memberId, churchId, user.sub);
+    return this.adminService.removeDepartmentMember(
+      departmentId,
+      memberId,
+      churchId,
+      user.sub,
+      req.profile,
+    );
   }
 
   // ─── Cell Groups ──────────────────────────────────────────

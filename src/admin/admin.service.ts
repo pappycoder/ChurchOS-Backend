@@ -72,6 +72,9 @@ export class AdminService {
       }
     }
 
+    // Validate the branch + head assignments (church-scoped)
+    await this.validateDepartmentAssignments(churchId, dto.branchId, dto.headMemberId);
+
     // Create the department record in the database
     const department = await this.prisma.department.create({
       data: {
@@ -79,7 +82,10 @@ export class AdminService {
         name: dto.name,
         description: dto.description,
         parent_id: dto.parentId,
+        branch_id: dto.branchId,
+        head_member_id: dto.headMemberId,
       },
+      include: { branch: { select: { id: true, name: true } } },
     });
 
     // Log the creation for operational monitoring
@@ -95,25 +101,42 @@ export class AdminService {
       newValues: { name: department.name },
     });
 
+    // Resolve the assigned head's name for the response
+    const heads = await this.resolveDepartmentHeads(churchId, [department]);
+
     // Map the Prisma record to a response DTO and return
-    return this.mapDepartmentToResponseDto(department, []);
+    return this.mapDepartmentToResponseDto(
+      department,
+      [],
+      heads.get(department.head_member_id || ''),
+    );
   }
 
   /**
    * Lists departments for a church.
    *
    * @param churchId - Church ID
+   * @param archived - Whether to list archived departments only
+   * @param viewer - The request profile-derived viewer context, if any
    * @returns List of departments with member counts
    */
   async listDepartments(
     churchId: string,
     archived: boolean = false,
+    viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto[]> {
+    // A branch-restricted department_head sees only the department(s) they
+    // head. The head scope is detected by key presence ('headId') so a viewer
+    // with no linked member can never fall through to the unfiltered list.
+    const scope = this.branchScope.resolveDepartmentScope(viewer);
+    const isHeadScope = !scope.churchOnly && 'headId' in scope;
+
     // Query all departments for the church with their members
     const departments = await this.prisma.department.findMany({
       where: {
         church_id: churchId,
         archived_at: archived ? { not: null } : null,
+        ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
       },
       include: {
         department_members: {
@@ -121,12 +144,18 @@ export class AdminService {
             member: { select: { id: true, first_name: true, last_name: true } },
           },
         },
+        branch: { select: { id: true, name: true } },
       },
       orderBy: { name: 'asc' },
     });
 
+    // Resolve the assigned heads' names for the responses
+    const heads = await this.resolveDepartmentHeads(churchId, departments.flatMap((d) => d));
+
     // Map each department to a response DTO with member info
-    return departments.map((d) => this.mapDepartmentToResponseDto(d, d.department_members));
+    return departments.map((d) =>
+      this.mapDepartmentToResponseDto(d, d.department_members, heads.get(d.head_member_id || '')),
+    );
   }
 
   /**
@@ -134,18 +163,33 @@ export class AdminService {
    *
    * @param departmentId - Department ID
    * @param churchId - Church ID
+   * @param viewer - The request profile-derived viewer context, if any
    * @returns Department with members
    */
-  async getDepartmentById(departmentId: string, churchId: string): Promise<DepartmentResponseDto> {
+  async getDepartmentById(
+    departmentId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<DepartmentResponseDto> {
+    // A branch-restricted department_head may only fetch the department(s)
+    // they head; other departments resolve to a silent 404 for them.
+    const scope = this.branchScope.resolveDepartmentScope(viewer);
+    const isHeadScope = !scope.churchOnly && 'headId' in scope;
+
     // Fetch the department by ID scoped to the church
     const department = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
+      },
       include: {
         department_members: {
           include: {
             member: { select: { id: true, first_name: true, last_name: true } },
           },
         },
+        branch: { select: { id: true, name: true } },
       },
     });
 
@@ -154,8 +198,15 @@ export class AdminService {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
+    // Resolve the assigned head's name for the response
+    const heads = await this.resolveDepartmentHeads(churchId, [department]);
+
     // Map and return the department with its members
-    return this.mapDepartmentToResponseDto(department, department.department_members);
+    return this.mapDepartmentToResponseDto(
+      department,
+      department.department_members,
+      heads.get(department.head_member_id || ''),
+    );
   }
 
   /**
@@ -165,6 +216,7 @@ export class AdminService {
    * @param dto - Update data
    * @param churchId - Church ID
    * @param userId - User performing update
+   * @param viewer - The request profile-derived viewer context, if any
    * @returns Updated department
    */
   async updateDepartment(
@@ -172,6 +224,7 @@ export class AdminService {
     dto: Partial<CreateDepartmentDto>,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
     // Verify the department exists within this church
     const existing = await this.prisma.department.findFirst({
@@ -187,6 +240,24 @@ export class AdminService {
       throw new NotFoundException('Department is archived');
     }
 
+    // An admin-HQ department head is read-only (view + export only).
+    this.assertDepartmentHeadHqReadOnly(viewer);
+
+    // A branch-restricted department head may only update their own department.
+    this.assertDepartmentHeadOwnership(viewer, existing);
+
+    // A branch-restricted department head may change every field EXCEPT the
+    // branch and head — reassigning those is church-admin-only. The payload is
+    // silently stripped (never an error) so clients can keep sending the full form.
+    const restrictedHead =
+      (viewer?.role === 'department_head' || viewer?.roles?.includes('department_head')) &&
+      !viewer?.is_admin_hq;
+
+    // Validate the branch + head assignments when the caller is allowed to set them
+    if (!restrictedHead) {
+      await this.validateDepartmentAssignments(churchId, dto.branchId, dto.headMemberId);
+    }
+
     // Apply partial updates to the department record
     const updated = await this.prisma.department.update({
       where: { id: departmentId },
@@ -194,6 +265,9 @@ export class AdminService {
         ...(dto.name && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.parentId !== undefined && { parent_id: dto.parentId }),
+        ...(dto.branchId !== undefined && !restrictedHead && { branch_id: dto.branchId }),
+        ...(dto.headMemberId !== undefined &&
+          !restrictedHead && { head_member_id: dto.headMemberId }),
       },
       include: {
         department_members: {
@@ -201,6 +275,7 @@ export class AdminService {
             member: { select: { id: true, first_name: true, last_name: true } },
           },
         },
+        branch: { select: { id: true, name: true } },
       },
     });
 
@@ -221,8 +296,15 @@ export class AdminService {
       },
     });
 
+    // Resolve the assigned head's name for the response
+    const heads = await this.resolveDepartmentHeads(churchId, [updated]);
+
     // Map and return the updated department
-    return this.mapDepartmentToResponseDto(updated, updated.department_members);
+    return this.mapDepartmentToResponseDto(
+      updated,
+      updated.department_members,
+      heads.get(updated.head_member_id || ''),
+    );
   }
 
   /**
@@ -263,6 +345,7 @@ export class AdminService {
             member: { select: { id: true, first_name: true, last_name: true } },
           },
         },
+        branch: { select: { id: true, name: true } },
       },
     });
 
@@ -277,7 +360,13 @@ export class AdminService {
     });
 
     this.logger.log(`Department archived: ${departmentId}`);
-    return this.mapDepartmentToResponseDto(updated, updated.department_members);
+
+    const heads = await this.resolveDepartmentHeads(churchId, [updated]);
+    return this.mapDepartmentToResponseDto(
+      updated,
+      updated.department_members,
+      heads.get(updated.head_member_id || ''),
+    );
   }
 
   /**
@@ -316,6 +405,7 @@ export class AdminService {
             member: { select: { id: true, first_name: true, last_name: true } },
           },
         },
+        branch: { select: { id: true, name: true } },
       },
     });
 
@@ -330,7 +420,13 @@ export class AdminService {
     });
 
     this.logger.log(`Department restored: ${departmentId}`);
-    return this.mapDepartmentToResponseDto(updated, updated.department_members);
+
+    const heads = await this.resolveDepartmentHeads(churchId, [updated]);
+    return this.mapDepartmentToResponseDto(
+      updated,
+      updated.department_members,
+      heads.get(updated.head_member_id || ''),
+    );
   }
 
   /**
@@ -383,16 +479,19 @@ export class AdminService {
    * @param dto - Member addition data
    * @param churchId - Church ID
    * @param userId - User performing the action
+   * @param viewer - The request profile-derived viewer context, if any
    */
   async addDepartmentMember(
     departmentId: string,
     dto: AddDepartmentMemberDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<void> {
     // Verify the department exists within this church
     const department = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
+      select: { id: true, archived_at: true, head_member_id: true },
     });
 
     // Throw NotFoundException if department does not exist
@@ -404,6 +503,11 @@ export class AdminService {
     if (department.archived_at) {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
+
+    // An admin-HQ department head is read-only; a branch-restricted head may
+    // only manage their own department.
+    this.assertDepartmentHeadHqReadOnly(viewer);
+    this.assertDepartmentHeadOwnership(viewer, department);
 
     // Verify the member belongs to this church
     const member = await this.prisma.member.findFirst({
@@ -455,13 +559,36 @@ export class AdminService {
    * @param memberId - Member ID
    * @param churchId - Church ID
    * @param userId - User performing the action
+   * @param viewer - The request profile-derived viewer context, if any
    */
   async removeDepartmentMember(
     departmentId: string,
     memberId: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<void> {
+    // Verify the department exists within this church (previously the delete
+    // ran without ever loading the department, so any caller holding the route
+    // permission could remove anyone from a cross-church department).
+    const department = await this.prisma.department.findFirst({
+      where: { id: departmentId, church_id: churchId },
+      select: { id: true, archived_at: true, head_member_id: true },
+    });
+
+    if (!department) {
+      throw new NotFoundException(`Department ${departmentId} not found`);
+    }
+
+    if (department.archived_at) {
+      throw new NotFoundException(`Department ${departmentId} not found`);
+    }
+
+    // An admin-HQ department head is read-only; a branch-restricted head may
+    // only manage their own department.
+    this.assertDepartmentHeadHqReadOnly(viewer);
+    this.assertDepartmentHeadOwnership(viewer, department);
+
     // Verify the member is assigned to this department
     const existing = await this.prisma.departmentMember.findUnique({
       where: { department_id_member_id: { department_id: departmentId, member_id: memberId } },
@@ -781,6 +908,85 @@ export class AdminService {
       throw new ForbiddenException(
         'HQ cell group leaders can view and edit cell groups but cannot record attendance or manage members',
       );
+    }
+  }
+
+  /**
+   * A branch-restricted `department_head` may only manage the department(s)
+   * they head — mirrors `resolveDepartmentScope`. Admin-HQ department heads
+   * are read-only (see `assertDepartmentHeadHqReadOnly`), so they never reach
+   * this ownership check.
+   *
+   * @param viewer - The request profile-derived viewer context, if any
+   * @param department - The department being acted on (must be pre-fetched
+   *   and church-scoped)
+   * @throws ForbiddenException if the department is not the caller's own
+   */
+  private assertDepartmentHeadOwnership(
+    viewer: ViewerScope | null | undefined,
+    department: { head_member_id: string | null },
+  ): void {
+    const isDepartmentHead =
+      viewer?.role === 'department_head' || viewer?.roles?.includes('department_head');
+    if (isDepartmentHead && !viewer?.is_admin_hq) {
+      if (!viewer?.member_id || department.head_member_id !== viewer.member_id) {
+        throw new ForbiddenException('You can only manage your own department');
+      }
+    }
+  }
+
+  /**
+   * An admin-HQ department_head is read-only: they can view and export every
+   * department church-wide, but editing, adding members, or removing members
+   * is Forbidden for them. Non-HQ department heads are unaffected (own-department
+   * writes, enforced by `assertDepartmentHeadOwnership`).
+   */
+  private assertDepartmentHeadHqReadOnly(viewer: ViewerScope | null | undefined): void {
+    const isDepartmentHead =
+      viewer?.role === 'department_head' || viewer?.roles?.includes('department_head');
+    if (isDepartmentHead && viewer?.is_admin_hq) {
+      throw new ForbiddenException(
+        'HQ department heads can view and export departments but cannot edit them',
+      );
+    }
+  }
+
+  /**
+   * Validates department branch + head assignments are church-scoped and
+   * consistent: the branch must belong to the church, the head member must
+   * belong to the church, and (when both are set) the head member must belong
+   * to the selected branch.
+   *
+   * @param churchId - Church ID
+   * @param branchId - Proposed branch ID (optional)
+   * @param headMemberId - Proposed head member ID (optional)
+   */
+  private async validateDepartmentAssignments(
+    churchId: string,
+    branchId?: string,
+    headMemberId?: string,
+  ): Promise<void> {
+    if (branchId !== undefined) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new NotFoundException(`Branch ${branchId} not found`);
+      }
+    }
+
+    if (headMemberId !== undefined) {
+      const member = await this.prisma.member.findFirst({
+        where: { id: headMemberId, church_id: churchId },
+        select: { id: true, branch_id: true },
+      });
+      if (!member) {
+        throw new NotFoundException('Head member not found in this church');
+      }
+      if (branchId !== undefined && member.branch_id !== branchId) {
+        throw new BadRequestException('Head member must belong to the selected branch');
+      }
     }
   }
 
@@ -1607,12 +1813,15 @@ export class AdminService {
     dept: {
       id: string;
       church_id: string;
+      branch_id: string | null;
       name: string;
       description: string | null;
       parent_id: string | null;
+      head_member_id: string | null;
       archived_at: Date | null;
       created_at: Date;
       updated_at: Date;
+      branch?: { id: string; name: string } | null;
     },
     members: Array<{
       id: string;
@@ -1621,6 +1830,7 @@ export class AdminService {
       joined_at: Date;
       member?: { first_name: string; last_name: string } | null;
     }>,
+    head?: { first_name: string; last_name: string } | null,
   ): DepartmentResponseDto {
     // Map the department fields to camelCase DTO properties
     return {
@@ -1629,6 +1839,11 @@ export class AdminService {
       name: dept.name,
       description: dept.description || undefined,
       parentId: dept.parent_id || undefined,
+      branchId: dept.branch_id || undefined,
+      branchName: dept.branch?.name,
+      headMemberId: dept.head_member_id || undefined,
+      headFirstName: head?.first_name || undefined,
+      headLastName: head?.last_name || undefined,
       // Map each member record to a DepartmentMemberDto
       members: members.map((m) => ({
         id: m.id,
@@ -1807,6 +2022,40 @@ export class AdminService {
     // Build a lookup map keyed by member ID
     return new Map(
       leaders.map((m) => [m.id, { first_name: m.first_name, last_name: m.last_name }]),
+    );
+  }
+
+  /**
+   * Resolves the names of department heads via a batched member lookup.
+   *
+   * @param churchId - Church ID (scope)
+   * @param departments - Department rows to gather head IDs from
+   * @returns Map of head member ID to { first_name, last_name }
+   */
+  private async resolveDepartmentHeads(
+    churchId: string,
+    departments: Array<{ head_member_id: string | null }>,
+  ): Promise<Map<string, { first_name: string; last_name: string }>> {
+    // Collect unique non-null head IDs
+    const headIds = [
+      ...new Set(departments.map((d) => d.head_member_id).filter((id): id is string => !!id)),
+    ];
+
+    // Short-circuit when no heads are assigned
+    if (headIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch-fetch head member names scoped to the church
+    const heads =
+      (await this.prisma.member.findMany({
+        where: { church_id: churchId, id: { in: headIds } },
+        select: { id: true, first_name: true, last_name: true },
+      })) ?? [];
+
+    // Build a lookup map keyed by member ID
+    return new Map(
+      heads.map((m) => [m.id, { first_name: m.first_name, last_name: m.last_name }]),
     );
   }
 

@@ -194,6 +194,7 @@ model Branch {
   events       Event[]
   assets       Asset[]
   cellGroups   CellGroup[]
+  departments  Department[]
 
   @@index([church_id])
   @@map("branches")
@@ -759,20 +760,25 @@ model EngagementScore {
 // ─── Operations ──────────────────────────────────────────
 
 model Department {
-  id          String    @id @default(uuid())
-  church_id   String
-  name        String
-  description String?
-  parent_id   String?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  archived_at DateTime? // Set when archived
+  id             String    @id @default(uuid())
+  church_id      String
+  branch_id      String?
+  name           String
+  description    String?
+  parent_id      String?
+  head_member_id String? // Free-form head member id (mirrors CellGroup.leader_id)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  archived_at    DateTime? // Set when archived
 
   church             Church             @relation(fields: [church_id], references: [id])
+  branch             Branch?            @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   department_members DepartmentMember[]
   assets             Asset[]
 
   @@index([church_id])
+  @@index([church_id, branch_id])
+  @@index([head_member_id])
   @@map("departments")
 }
 

@@ -69,21 +69,22 @@ describe('AdminController permission decorators', () => {
     hasRequireRoles(block, "'church_admin', 'senior_pastor'");
   });
 
-  it('requires departments:read on GET /admin/departments', () => {
+  it('requires departments:read on GET /admin/departments with widened read roles', () => {
     const block = blockBetween("@Get('departments')", 'async listDepartments(');
     expect(block).toContain("@RequirePermissions('departments:read')");
-    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head'");
   });
 
-  it('requires departments:read on GET /admin/departments/:departmentId', () => {
+  it('requires departments:read on GET /admin/departments/:departmentId with widened read roles', () => {
     const block = blockBetween("@Get('departments/:departmentId')", 'async getDepartmentById(');
     expect(block).toContain("@RequirePermissions('departments:read')");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head'");
   });
 
-  it('requires departments:update on PATCH /admin/departments/:departmentId', () => {
+  it('requires departments:update on PATCH /admin/departments/:departmentId (with department_head own-department updater role)', () => {
     const block = blockBetween("@Patch('departments/:departmentId')", 'async updateDepartment(');
     expect(block).toContain("@RequirePermissions('departments:update')");
-    hasRequireRoles(block, "'church_admin', 'senior_pastor'");
+    hasRequireRoles(block, "'church_admin', 'senior_pastor', 'department_head'");
   });
 
   it('requires departments:delete on DELETE /admin/departments/:departmentId (keeps church_admin ceiling)', () => {

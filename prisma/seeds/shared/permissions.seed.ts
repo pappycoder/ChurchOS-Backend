@@ -37,7 +37,7 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'senior_pastor', description: 'Senior/lead pastor with near-full access' },
   { name: 'church_admin', description: 'Church administrator with full access' },
   { name: 'branch_pastor', description: 'Branch/campus pastor with limited admin access' },
-  { name: 'department_head', description: 'Department leader with read-heavy access' },
+  { name: 'department_head', description: 'Department leader with member-level access plus management of their own department' },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
   {
@@ -384,33 +384,15 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   department_head: [
-    // Members — read
-    'members:read',
-    // Users — read
-    'users:read',
-    // Attendance — create + read
-    'attendance:create',
-    'attendance:read',
-    // Giving — read
-    'giving:read',
-    // Events — read
-    'events:read',
-    // Media — read
-    'media:read',
     // Member floor — read (everything a normal member can see/do)
+    'events:read',
     'sermons:read',
+    'media:read',
     'profiles:read',
     'church:read',
-    // Cell Groups — read
-    'cell_groups:read',
-    // Families — read
-    'families:read',
-    // Visitors — read
-    'visitors:read',
-    // Assets — read
-    'assets:read',
-    // Emails — read
-    'emails:read',
+    // Departments — read + update (manage their own headed department)
+    'departments:read',
+    'departments:update',
   ],
 
   secretary: [

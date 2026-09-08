@@ -46,6 +46,21 @@ export class DepartmentResponseDto {
   @ApiPropertyOptional({ description: 'Optional parent department ID for hierarchy' })
   parentId?: string;
 
+  @ApiPropertyOptional({ description: 'Optional branch this department belongs to' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: "Optional branch's name" })
+  branchName?: string;
+
+  @ApiPropertyOptional({ description: 'Optional head member ID' })
+  headMemberId?: string;
+
+  @ApiPropertyOptional({ description: "Optional head's first name" })
+  headFirstName?: string;
+
+  @ApiPropertyOptional({ description: "Optional head's last name" })
+  headLastName?: string;
+
   @ApiProperty({
     type: [DepartmentMemberDto],
     description: 'List of members assigned to this department',
