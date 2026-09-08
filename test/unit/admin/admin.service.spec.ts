@@ -183,6 +183,77 @@ describe('AdminService', () => {
         ),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should reject a member from a different branch than the department', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        branch_id: 'branch-lekki',
+        head_member_id: null,
+        archived_at: null,
+      });
+      prisma.member.findFirst.mockResolvedValue({
+        id: mockMemberId,
+        branch_id: 'branch-hq',
+      });
+
+      await expect(
+        service.addDepartmentMember(
+          mockDepartmentId,
+          { memberId: mockMemberId },
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.departmentMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow a member from the department branch', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        branch_id: 'branch-lekki',
+        head_member_id: null,
+        archived_at: null,
+      });
+      prisma.member.findFirst.mockResolvedValue({
+        id: mockMemberId,
+        branch_id: 'branch-lekki',
+      });
+      prisma.departmentMember.findUnique.mockResolvedValue(null);
+      prisma.departmentMember.create.mockResolvedValue({} as never);
+
+      await service.addDepartmentMember(
+        mockDepartmentId,
+        { memberId: mockMemberId },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.departmentMember.create).toHaveBeenCalled();
+    });
+
+    it('should allow any church member when the department has no branch', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        branch_id: null,
+        head_member_id: null,
+        archived_at: null,
+      });
+      prisma.member.findFirst.mockResolvedValue({
+        id: mockMemberId,
+        branch_id: 'branch-hq',
+      });
+      prisma.departmentMember.findUnique.mockResolvedValue(null);
+      prisma.departmentMember.create.mockResolvedValue({} as never);
+
+      await service.addDepartmentMember(
+        mockDepartmentId,
+        { memberId: mockMemberId },
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.departmentMember.create).toHaveBeenCalled();
+    });
   });
 
   describe('createCellGroup', () => {

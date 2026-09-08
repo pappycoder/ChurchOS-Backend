@@ -491,7 +491,7 @@ export class AdminService {
     // Verify the department exists within this church
     const department = await this.prisma.department.findFirst({
       where: { id: departmentId, church_id: churchId },
-      select: { id: true, archived_at: true, head_member_id: true },
+      select: { id: true, archived_at: true, head_member_id: true, branch_id: true },
     });
 
     // Throw NotFoundException if department does not exist
@@ -512,11 +512,17 @@ export class AdminService {
     // Verify the member belongs to this church
     const member = await this.prisma.member.findFirst({
       where: { id: dto.memberId, church_id: churchId },
-      select: { id: true },
+      select: { id: true, branch_id: true },
     });
 
     if (!member) {
       throw new NotFoundException('Member not found in this church');
+    }
+
+    // A department can only contain members from its own branch. Branchless
+    // departments (legacy) impose no constraint.
+    if (department.branch_id && member.branch_id !== department.branch_id) {
+      throw new BadRequestException("Member does not belong to this department's branch");
     }
 
     // Check if the member is already assigned to this department
