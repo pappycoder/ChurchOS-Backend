@@ -58,7 +58,7 @@ export class SermonsController {
   @Post()
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'branch_pastor')
-  @RequirePermissions('sermons:create')
+  @RequirePermissions('sermons:new:create')
   @ApiCreateEndpoint('Create a sermon', 'Creates a new sermon record for the church.')
   async createSermon(
     @Body() dto: CreateSermonDto,
@@ -89,7 +89,7 @@ export class SermonsController {
    * List sermons with pagination and filters.
    */
   @Get()
-  @RequirePermissions('sermons:read')
+  @RequirePermissions('sermons:list:read')
   @ApiPaginatedResponse(SermonResponseDto)
   @ApiOperation({
     summary: 'List sermons',
@@ -107,7 +107,7 @@ export class SermonsController {
    * List distinct series with counts (must be before :sermonId).
    */
   @Get('series')
-  @RequirePermissions('sermons:read')
+  @RequirePermissions('sermons:series:read')
   @ApiOperation({
     summary: 'List sermon series',
     description: 'Returns distinct series names with sermon counts for the church.',
@@ -123,7 +123,7 @@ export class SermonsController {
    * List distinct speakers with counts (must be before :sermonId).
    */
   @Get('speakers')
-  @RequirePermissions('sermons:read')
+  @RequirePermissions('sermons:speakers:read')
   @ApiOperation({
     summary: 'List sermon speakers',
     description: 'Returns distinct speakers with sermon counts for the church.',
@@ -139,7 +139,7 @@ export class SermonsController {
    * Get a single sermon by ID.
    */
   @Get(':sermonId')
-  @RequirePermissions('sermons:read')
+  @RequirePermissions('sermons:list:read')
   @ApiGetEndpoint('Get sermon details')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
   async getSermon(

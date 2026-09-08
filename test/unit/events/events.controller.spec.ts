@@ -46,22 +46,42 @@ describe('EventsController archive/restore permission decorators', () => {
     hasRequireRoles(block, "'church_admin', 'branch_pastor'");
   });
 
-  it('requires events:update on POST /events/:eventId/tiers/:tierId/archive', () => {
+  it('requires events:tickets:update on POST /events/:eventId/tiers/:tierId/archive', () => {
     const block = blockBetween(
       "@Post(':eventId/tiers/:tierId/archive')",
       'async archiveTicketTier(',
     );
-    expect(block).toContain("@RequirePermissions('events:update')");
+    expect(block).toContain("@RequirePermissions('events:tickets:update')");
     hasRequireRoles(block, "'church_admin', 'branch_pastor'");
   });
 
-  it('requires events:update on POST /events/:eventId/tiers/:tierId/restore', () => {
+  it('requires events:tickets:update on POST /events/:eventId/tiers/:tierId/restore', () => {
     const block = blockBetween(
       "@Post(':eventId/tiers/:tierId/restore')",
       'async restoreTicketTier(',
     );
-    expect(block).toContain("@RequirePermissions('events:update')");
+    expect(block).toContain("@RequirePermissions('events:tickets:update')");
     hasRequireRoles(block, "'church_admin', 'branch_pastor'");
+  });
+
+  it('requires events:list:read on GET /events (staff list)', () => {
+    const block = blockBetween('@Get()', 'async listEvents(');
+    expect(block).toContain("@RequirePermissions('events:list:read')");
+  });
+
+  it('requires events:registrations:read on GET /events/:eventId/registrations', () => {
+    const block = blockBetween("@Get(':eventId/registrations')", 'async listRegistrations(');
+    expect(block).toContain("@RequirePermissions('events:registrations:read')");
+  });
+
+  it('requires events:registrations:update on DELETE /events/:eventId/register/:memberId', () => {
+    const block = blockBetween("@Delete(':eventId/register/:memberId')", 'async cancelRegistration(');
+    expect(block).toContain("@RequirePermissions('events:registrations:update')");
+  });
+
+  it('requires events:checkin:read on GET /events/:eventId/attendance', () => {
+    const block = blockBetween("@Get(':eventId/attendance')", 'async getEventAttendance(');
+    expect(block).toContain("@RequirePermissions('events:checkin:read')");
   });
 
   it('routes the archive/restore methods to the service with church scoping', () => {

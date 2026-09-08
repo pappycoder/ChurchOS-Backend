@@ -2,9 +2,17 @@
  * @file permissions.seed.ts
  * @description Default roles, permissions, and role-permission mappings seed data.
  *
- * Seeds 8 roles and ~100 permissions (25 resources x 4 actions) with
- * default role-permission assignments. Churches start with these defaults
- * and can customize via the church_admin permissions API.
+ * Seeds 9 roles and the hierarchical surface-permission catalog:
+ *   - `resource:view`                 — top-level menu visibility
+ *   - `resource:action`               — coarse CRUD (create/read/update/delete)
+ *   - `resource:surface:action`       — per-surface CRUD (e.g. `events:calendar:read`,
+ *                                        `members:new:create`, `giving:reports:read`)
+ *
+ * Roles' surface grants are <em>derived</em> from their coarse grants, so a
+ * role's visible menus never change: wherever a role holds `resource:create`,
+ * they also hold every `resource:<surface>:create`, and wherever they hold any
+ * `resource:<action>` they also hold `resource:view`. Churches start with
+ * these defaults and can customize via the church_admin permissions API.
  *
  * The `super_admin` role is always locked to ALL permissions.
  *
@@ -54,6 +62,7 @@ export const RESOURCES = [
   'profiles',
   'whatsapp',
   'reports',
+  'roles',
   'forms',
   'pastoral',
   'departments',
@@ -72,31 +81,99 @@ export const RESOURCES = [
 
 export type Resource = (typeof RESOURCES)[number];
 
-export const ACTIONS = ['create', 'read', 'update', 'delete'] as const;
+export const CRUD_ACTIONS = ['create', 'read', 'update', 'delete'] as const;
+export type CrudAction = (typeof CRUD_ACTIONS)[number];
+
+// ─── Action Definitions ────────────────────────────────────
+
+export const ACTIONS = ['view', ...CRUD_ACTIONS] as const;
 export type Action = (typeof ACTIONS)[number];
 
+// ─── Surface Definitions ───────────────────────────────────
+// Hierarchical sub-surfaces inside a resource (mirrors sidebar submenus /
+// header child items). Each surface carries the full CRUD action set as
+// `resource:surface:action`. Single-page menus (templates, broadcasts,
+// whatsapp/messages, emails/inbox, appointments, church/settings, analytics)
+// intentionally have NO surface map — they stay coarse `resource:action`.
+
+export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
+  members: ['all', 'new', 'import'],
+  attendance: ['dashboard', 'services', 'checkin', 'records', 'reports'],
+  giving: ['dashboard', 'categories', 'records', 'reports', 'recurring'],
+  events: ['calendar', 'list', 'checkin', 'registrations', 'tickets'],
+  sermons: ['list', 'new', 'series', 'speakers'],
+  media: ['library', 'upload', 'folders'],
+  pastoral: ['notes', 'life-events', 'risk-scores', 'engagement'],
+  visitors: ['list', 'new', 'followup'],
+  assets: ['list', 'categories', 'maintenance', 'loans'],
+  forms: ['list', 'submissions'],
+};
+
 /**
- * Generates all permission names in the format `resource:action`.
+ * Generates the full permission catalog:
+ *  - `resource:view` for every resource
+ *  - coarse `resource:action` for every CRUD action
+ *  - `resource:surface:action` for every surface × CRUD action
+ * `resource` stores the nested path (`events:calendar`) and `action` the
+ * final segment, so exact-string set membership still works end-to-end.
  */
 export function generateAllPermissions(): { name: string; resource: string; action: string }[] {
   const permissions: { name: string; resource: string; action: string }[] = [];
   for (const resource of RESOURCES) {
-    for (const action of ACTIONS) {
-      permissions.push({
-        name: `${resource}:${action}`,
-        resource,
-        action,
-      });
+    permissions.push({ name: `${resource}:view`, resource, action: 'view' });
+    for (const action of CRUD_ACTIONS) {
+      permissions.push({ name: `${resource}:${action}`, resource, action });
+    }
+    for (const surface of SURFACES[resource] ?? []) {
+      for (const action of CRUD_ACTIONS) {
+        permissions.push({
+          name: `${resource}:${surface}:${action}`,
+          resource: `${resource}:${surface}`,
+          action,
+        });
+      }
     }
   }
   return permissions;
 }
 
+/**
+ * Derives hierarchical grants from a role's coarse grant set so its visible
+ * menus never change:
+ *  - holding any `resource:<action>` grants `resource:view`
+ *  - holding `resource:<action>` grants the same `<action>` on every surface
+ *    (`resource:<surface>:<action>`)
+ */
+export function expandPermissions(base: string[]): string[] {
+  const expanded = new Set(base);
+  for (const resource of RESOURCES) {
+    const actions = new Set<string>();
+    for (const code of base) {
+      const parts = code.split(':');
+      if (parts.length === 2 && parts[0] === resource) actions.add(parts[1]);
+    }
+    if (actions.size === 0) continue;
+    expanded.add(`${resource}:view`);
+    const surfaces = SURFACES[resource] ?? [];
+    for (const surface of surfaces) {
+      for (const action of CRUD_ACTIONS) {
+        if (actions.has(action)) {
+          expanded.add(`${resource}:${surface}:${action}`);
+        }
+      }
+    }
+  }
+  return [...expanded];
+}
+
 // ─── Default Permission Matrix ─────────────────────────────
-// Each role maps to an array of `resource:action` permission strings.
+// Each role maps to an array of coarse `resource:action` permission strings.
+// The exported DEFAULT_PERMISSION_MATRIX is the raw set passed through
+// `expandPermissions`, which adds `resource:view` + surface grants derived
+// from the coarse grants — so per-role visible menus never change.
 // `super_admin` is handled separately (always ALL permissions, locked).
 
-export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
+const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   senior_pastor: [
     // Members — full access
     'members:create',
@@ -191,7 +268,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'broadcasts:read',
     'broadcasts:update',
     'broadcasts:delete',
-    // Analytics — read
+    // Analytics — view + read
+    'analytics:view',
     'analytics:read',
     // Church Settings — read + update
     'church_settings:read',
@@ -220,7 +298,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 
   church_admin: [
     // ALL permissions (same as super_admin, but not locked)
-    ...RESOURCES.flatMap((r) => ACTIONS.map((a) => `${r}:${a}`)),
+    ...generateAllPermissions().map((p) => p.name),
+    // Roles & permissions management (menus + API):
+    'roles:read',
+    'roles:update',
   ],
 
   branch_pastor: [
@@ -254,8 +335,10 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'whatsapp:read',
     // Reports — read
     'reports:read',
-    // Forms — read
+    // Forms — create + read + update
+    'forms:create',
     'forms:read',
+    'forms:update',
     // Pastoral — create + read + update
     'pastoral:create',
     'pastoral:read',
@@ -280,7 +363,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Broadcasts — create + read
     'broadcasts:create',
     'broadcasts:read',
-    // Analytics — read
+    // Analytics — view + read
+    'analytics:view',
     'analytics:read',
     // Visitors — create + read + update
     'visitors:create',
@@ -414,7 +498,8 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:read',
     'profiles:read',
     'church:read',
-    // Analytics — read
+    // Analytics — view + read
+    'analytics:view',
     'analytics:read',
     // Users — read
     'users:read',
@@ -454,6 +539,14 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'church:read',
   ],
 };
+
+// Every role's effective grants = coarse matrix + derived hierarchical grants.
+export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEntries(
+  Object.entries(RAW_DEFAULT_PERMISSION_MATRIX).map(([role, perms]) => [
+    role,
+    expandPermissions(perms),
+  ]),
+);
 
 /**
  * Seeds all roles, permissions, and default role-permission mappings.
@@ -516,8 +609,9 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
     select: { id: true, name: true },
   });
   const permissionIdByName = new Map(createdPermissions.map((p) => [p.name, p.id]));
+  const surfaceCount = Object.values(SURFACES).reduce((sum, s) => sum + s.length, 0);
   console.log(
-    `    ✅ Permissions: ${createdPermissions.length} (${RESOURCES.length} resources × ${ACTIONS.length} actions)`,
+    `    ✅ Permissions: ${createdPermissions.length} (${RESOURCES.length} resources × ${CRUD_ACTIONS.length} coarse actions + ${surfaceCount} surfaces)`,
   );
 
   // ─── 3. Assign Default Permissions to Roles ──────────────

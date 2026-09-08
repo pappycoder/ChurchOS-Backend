@@ -41,7 +41,7 @@ export class VisitorsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions('visitors:create')
+  @RequirePermissions('visitors:new:create')
   @UseGuards(RolesGuard)
   @ApiCreateEndpoint('Register a new visitor', 'Registers a new visitor for follow-up.')
   async create(
@@ -54,7 +54,7 @@ export class VisitorsController {
   }
 
   @Get()
-  @RequirePermissions('visitors:read')
+  @RequirePermissions('visitors:list:read')
   @ApiPaginatedResponse(VisitorResponseDto)
   @ApiOperation({
     summary: 'List visitors',
@@ -75,7 +75,7 @@ export class VisitorsController {
   }
 
   @Get(':visitorId')
-  @RequirePermissions('visitors:read')
+  @RequirePermissions('visitors:list:read')
   @ApiGetEndpoint('Get a visitor by ID', 'Retrieves a single visitor by its UUID.')
   async findOne(
     @Param('visitorId') visitorId: string,
@@ -86,7 +86,7 @@ export class VisitorsController {
   }
 
   @Patch(':visitorId')
-  @RequirePermissions('visitors:update')
+  @RequirePermissions('visitors:list:update')
   @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Update a visitor', 'Updates a visitor with partial data.')
   async update(
@@ -101,7 +101,7 @@ export class VisitorsController {
 
   @Post(':visitorId/convert')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions('visitors:update')
+  @RequirePermissions('visitors:followup:update')
   @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Convert visitor to member',
@@ -120,7 +120,7 @@ export class VisitorsController {
 
   @Post(':visitorId/archive')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('visitors:update')
+  @RequirePermissions('visitors:list:update')
   @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Archive a visitor',
@@ -137,7 +137,7 @@ export class VisitorsController {
 
   @Post(':visitorId/restore')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('visitors:update')
+  @RequirePermissions('visitors:list:update')
   @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Restore an archived visitor',
@@ -154,7 +154,7 @@ export class VisitorsController {
 
   @Delete(':visitorId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequirePermissions('visitors:delete')
+  @RequirePermissions('visitors:list:delete')
   @UseGuards(RolesGuard)
   @ApiDeleteEndpoint('Delete a visitor', 'Permanently deletes a visitor record.')
   async remove(

@@ -27,6 +27,7 @@ import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   ApiCreateEndpoint,
   ApiDeleteEndpoint,
@@ -71,6 +72,7 @@ export class FormsController {
   @Post()
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a form')
   async createForm(
@@ -126,6 +128,7 @@ export class FormsController {
   @Patch(':formId')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @ApiUpdateEndpoint('Update a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
   async updateForm(
@@ -143,6 +146,7 @@ export class FormsController {
   @Delete(':formId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'secretary')
+  @RequirePermissions('forms:list:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Close a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -161,6 +165,7 @@ export class FormsController {
   @Post(':formId/archive')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -178,6 +183,7 @@ export class FormsController {
   @Post(':formId/restore')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -195,6 +201,7 @@ export class FormsController {
   @Post(':formId/regenerate-link')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Regenerate the public submission link')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -212,6 +219,7 @@ export class FormsController {
   @Post(':formId/close')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Close a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -229,6 +237,7 @@ export class FormsController {
   @Post(':formId/reopen')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Reopen a closed form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -246,6 +255,7 @@ export class FormsController {
   @Post(':formId/clone')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Clone a form')
   @ApiParam({ name: 'formId', description: 'Form UUID to clone' })
@@ -277,6 +287,7 @@ export class FormsController {
    * Lists submissions for a form.
    */
   @Get(':formId/submissions')
+  @RequirePermissions('forms:submissions:read')
   @ApiPaginatedResponse(FormSubmissionResponseDto)
   @ApiListEndpoint('List form submissions')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -305,6 +316,7 @@ export class FormsController {
    * Gets a single submission by ID.
    */
   @Get(':formId/submissions/:submissionId')
+  @RequirePermissions('forms:submissions:read')
   @ApiGetEndpoint('Get form submission by ID')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
   @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
@@ -322,6 +334,7 @@ export class FormsController {
   @Patch(':formId/submissions/:submissionId/status')
   @UseGuards(RolesGuard)
   @RequireRoles(...WRITE_ROLES)
+  @RequirePermissions('forms:submissions:update')
   @ApiUpdateEndpoint('Update submission status')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
   @ApiParam({ name: 'submissionId', description: 'Submission UUID' })

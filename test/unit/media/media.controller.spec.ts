@@ -3,10 +3,11 @@
  *
  * The global PermissionsGuard only enforces routes that carry
  * @RequirePermissions. The media library (browse/folders/single) requires
- * media:read; permission changes and deletion require media:update / media:delete
- * on top of the existing church_admin role ceiling. The raw upload endpoints
- * stay auth-only on purpose (profile photos, church logos, and sermon media are
- * uploaded by consumers who do not necessarily hold media:create).
+ * media:library:read, folders -> media:folders:read; permission changes and
+ * deletion require media:library:update / media:library:delete on top of the
+ * existing church_admin role ceiling. The raw upload endpoints stay auth-only
+ * on purpose (profile photos, church logos, and sermon media are uploaded by
+ * consumers who do not necessarily hold media:create).
  *
  * Asserted against the source text to avoid pulling the controller's
  * transitive ESM-only dependencies into the Jest runtime.
@@ -28,42 +29,42 @@ describe('MediaController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('requires media:read on GET /media/library', () => {
+  it('requires media:library:read on GET /media/library', () => {
     expect(blockBetween("@Get('library')", 'async listLibrary(')).toContain(
-      "@RequirePermissions('media:read')",
+      "@RequirePermissions('media:library:read')",
     );
   });
 
-  it('requires media:read on GET /media/library/folders', () => {
+  it('requires media:folders:read on GET /media/library/folders', () => {
     expect(blockBetween("@Get('library/folders')", 'async getFolders(')).toContain(
-      "@RequirePermissions('media:read')",
+      "@RequirePermissions('media:folders:read')",
     );
   });
 
-  it('requires media:read on GET /media/library/:assetId', () => {
+  it('requires media:library:read on GET /media/library/:assetId', () => {
     expect(blockBetween("@Get('library/:assetId')", 'async getAsset(')).toContain(
-      "@RequirePermissions('media:read')",
+      "@RequirePermissions('media:library:read')",
     );
   });
 
-  it('requires media:update on PATCH /media/library/:assetId/permissions', () => {
+  it('requires media:library:update on PATCH /media/library/:assetId/permissions', () => {
     const block = blockBetween(
       "@Patch('library/:assetId/permissions')",
       'async updatePermissions(',
     );
-    expect(block).toContain("@RequirePermissions('media:update')");
+    expect(block).toContain("@RequirePermissions('media:library:update')");
     expect(block).toContain("@RequireRoles('church_admin')");
   });
 
-  it('requires media:delete on DELETE /media/library/:assetId', () => {
+  it('requires media:library:delete on DELETE /media/library/:assetId', () => {
     const block = blockBetween("@Delete('library/:assetId')", 'async deleteAsset(');
-    expect(block).toContain("@RequirePermissions('media:delete')");
+    expect(block).toContain("@RequirePermissions('media:library:delete')");
     expect(block).toContain("@RequireRoles('church_admin')");
   });
 
-  it('requires media:delete on the legacy DELETE /media/:path(*) storage delete', () => {
+  it('requires media:library:delete on the legacy DELETE /media/:path(*) storage delete', () => {
     const block = blockBetween("@Delete(':path(*)')", 'async deleteFile(');
-    expect(block).toContain("@RequirePermissions('media:delete')");
+    expect(block).toContain("@RequirePermissions('media:library:delete')");
     expect(block).toContain("@RequireRoles('church_admin')");
   });
 

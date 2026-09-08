@@ -3,8 +3,10 @@
  *
  * The global PermissionsGuard only enforces routes that carry
  * @RequirePermissions. All pastoral routes (notes, life events, and the
- * risk/engagement scoring endpoints) must carry granular permissions so the
- * frontend permission gates match the server's enforcement layer.
+ * risk/engagement scoring endpoints) must carry granular surface permissions
+ * (pastoral:notes:*, pastoral:life-events:*, pastoral:risk-scores:read,
+ * pastoral:engagement:read) so the frontend permission gates match the
+ * server's enforcement layer.
  *
  * Asserted against the source text to avoid pulling the controllers'
  * transitive ESM-only dependencies into the Jest runtime.
@@ -30,112 +32,112 @@ describe('PastoralController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('requires pastoral:create on POST /pastoral/notes', () => {
+  it('requires pastoral:notes:create on POST /pastoral/notes', () => {
     expect(blockBetween("@Post('notes')", 'async createNote(')).toContain(
-      "@RequirePermissions('pastoral:create')",
+      "@RequirePermissions('pastoral:notes:create')",
     );
   });
 
-  it('requires pastoral:read on GET /pastoral/notes and GET /pastoral/notes/:noteId', () => {
+  it('requires pastoral:notes:read on GET /pastoral/notes and GET /pastoral/notes/:noteId', () => {
     expect(blockBetween("@Get('notes')", 'async listNotes(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:notes:read')",
     );
     expect(blockBetween("@Get('notes/:noteId')", 'async getNoteById(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:notes:read')",
     );
   });
 
-  it('requires pastoral:update on PATCH /pastoral/notes/:noteId', () => {
+  it('requires pastoral:notes:update on PATCH /pastoral/notes/:noteId', () => {
     expect(blockBetween("@Patch('notes/:noteId')", 'async updateNote(')).toContain(
-      "@RequirePermissions('pastoral:update')",
+      "@RequirePermissions('pastoral:notes:update')",
     );
   });
 
-  it('requires pastoral:delete on DELETE /pastoral/notes/:noteId', () => {
+  it('requires pastoral:notes:delete on DELETE /pastoral/notes/:noteId', () => {
     expect(blockBetween("@Delete('notes/:noteId')", 'async deleteNote(')).toContain(
-      "@RequirePermissions('pastoral:delete')",
+      "@RequirePermissions('pastoral:notes:delete')",
     );
   });
 
-  it('requires pastoral:create on POST /pastoral/life-events', () => {
+  it('requires pastoral:life-events:create on POST /pastoral/life-events', () => {
     expect(blockBetween("@Post('life-events')", 'async createLifeEvent(')).toContain(
-      "@RequirePermissions('pastoral:create')",
+      "@RequirePermissions('pastoral:life-events:create')",
     );
   });
 
-  it('requires pastoral:read on the life-event reads', () => {
+  it('requires pastoral:life-events:read on the life-event reads', () => {
     expect(blockBetween("@Get('life-events')", 'async listLifeEvents(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:life-events:read')",
     );
     expect(blockBetween("@Get('life-events/upcoming')", 'async getUpcomingLifeEvents(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:life-events:read')",
     );
     expect(blockBetween("@Get('life-events/:eventId')", 'async getLifeEventById(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:life-events:read')",
     );
   });
 
-  it('requires pastoral:delete on DELETE /pastoral/life-events/:eventId', () => {
+  it('requires pastoral:life-events:delete on DELETE /pastoral/life-events/:eventId', () => {
     expect(blockBetween("@Delete('life-events/:eventId')", 'async deleteLifeEvent(')).toContain(
-      "@RequirePermissions('pastoral:delete')",
+      "@RequirePermissions('pastoral:life-events:delete')",
     );
   });
 
-  it('requires pastoral:read on GET /pastoral/risk-scores', () => {
+  it('requires pastoral:risk-scores:read on GET /pastoral/risk-scores', () => {
     expect(blockBetween("@Get('risk-scores')", 'async listRiskScores(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:risk-scores:read')",
     );
   });
 
-  it('requires pastoral:read on GET /pastoral/engagement-scores', () => {
+  it('requires pastoral:engagement:read on GET /pastoral/engagement-scores', () => {
     expect(blockBetween("@Get('engagement-scores')", 'async listEngagementScores(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:engagement:read')",
     );
   });
 
-  it('requires pastoral:read on GET /pastoral/engagement/summary', () => {
+  it('requires pastoral:engagement:read on GET /pastoral/engagement/summary', () => {
     expect(
       blockBetween("@Get('engagement/summary')", 'async getEngagementDistribution('),
-    ).toContain("@RequirePermissions('pastoral:read')");
+    ).toContain("@RequirePermissions('pastoral:engagement:read')");
   });
 
-  it('requires pastoral:read on GET /pastoral/members/:memberId/scoring', () => {
+  it('requires pastoral:risk-scores:read on GET /pastoral/members/:memberId/scoring', () => {
     expect(blockBetween("@Get('members/:memberId/scoring')", 'async getMemberScoring(')).toContain(
-      "@RequirePermissions('pastoral:read')",
+      "@RequirePermissions('pastoral:risk-scores:read')",
     );
   });
 
-  it('requires pastoral:update on POST /pastoral/notes/:noteId/archive', () => {
+  it('requires pastoral:notes:update on POST /pastoral/notes/:noteId/archive', () => {
     expect(blockBetween("@Post('notes/:noteId/archive')", 'async archiveNote(')).toContain(
-      "@RequirePermissions('pastoral:update')",
+      "@RequirePermissions('pastoral:notes:update')",
     );
     expect(blockBetween("@Post('notes/:noteId/archive')", 'async archiveNote(')).toContain(
       '@HttpCode(HttpStatus.OK)',
     );
   });
 
-  it('requires pastoral:update on POST /pastoral/notes/:noteId/restore', () => {
+  it('requires pastoral:notes:update on POST /pastoral/notes/:noteId/restore', () => {
     expect(blockBetween("@Post('notes/:noteId/restore')", 'async restoreNote(')).toContain(
-      "@RequirePermissions('pastoral:update')",
+      "@RequirePermissions('pastoral:notes:update')",
     );
     expect(blockBetween("@Post('notes/:noteId/restore')", 'async restoreNote(')).toContain(
       '@HttpCode(HttpStatus.OK)',
     );
   });
 
-  it('requires pastoral:update on POST /pastoral/life-events/:lifeEventId/archive', () => {
+  it('requires pastoral:life-events:update on POST /pastoral/life-events/:lifeEventId/archive', () => {
     expect(
       blockBetween("@Post('life-events/:lifeEventId/archive')", 'async archiveLifeEvent('),
-    ).toContain("@RequirePermissions('pastoral:update')");
+    ).toContain("@RequirePermissions('pastoral:life-events:update')");
     expect(
       blockBetween("@Post('life-events/:lifeEventId/archive')", 'async archiveLifeEvent('),
     ).toContain('@HttpCode(HttpStatus.OK)');
   });
 
-  it('requires pastoral:update on POST /pastoral/life-events/:lifeEventId/restore', () => {
+  it('requires pastoral:life-events:update on POST /pastoral/life-events/:lifeEventId/restore', () => {
     expect(
       blockBetween("@Post('life-events/:lifeEventId/restore')", 'async restoreLifeEvent('),
-    ).toContain("@RequirePermissions('pastoral:update')");
+    ).toContain("@RequirePermissions('pastoral:life-events:update')");
     expect(
       blockBetween("@Post('life-events/:lifeEventId/restore')", 'async restoreLifeEvent('),
     ).toContain('@HttpCode(HttpStatus.OK)');

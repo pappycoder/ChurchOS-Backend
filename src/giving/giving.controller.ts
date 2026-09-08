@@ -78,7 +78,7 @@ export class GivingController {
   @Post('categories')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'treasurer', 'secretary')
-  @RequirePermissions('giving:create')
+  @RequirePermissions('giving:categories:create')
   @ApiCreateEndpoint('Create a giving category', 'Creates a new giving category for the church.')
   async createCategory(
     @Body() dto: CreateCategoryDto,
@@ -139,6 +139,7 @@ export class GivingController {
   @Patch('categories/:categoryId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Update a giving category', 'Updates a giving category with partial data.')
   async updateCategory(
     @Param('categoryId') categoryId: string,
@@ -156,6 +157,7 @@ export class GivingController {
   @Delete('categories/:categoryId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
+  @RequirePermissions('giving:categories:delete')
   @ApiDeleteEndpoint('Delete a giving category', 'Deactivates a giving category.')
   async deleteCategory(
     @Param('categoryId') categoryId: string,
@@ -174,7 +176,7 @@ export class GivingController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'treasurer', 'secretary')
-  @RequirePermissions('giving:update')
+  @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Archive a giving category', 'Archives a giving category.')
   async archiveCategory(
     @Param('categoryId') categoryId: string,
@@ -192,7 +194,7 @@ export class GivingController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'treasurer', 'secretary')
-  @RequirePermissions('giving:update')
+  @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Restore a giving category', 'Restores an archived giving category.')
   async restoreCategory(
     @Param('categoryId') categoryId: string,
@@ -300,7 +302,7 @@ export class GivingController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin', 'secretary', 'treasurer')
-  @RequirePermissions('giving:create')
+  @RequirePermissions('giving:records:create')
   @ApiCreateEndpoint(
     'Record cash/bank giving',
     'Records an offline cash or bank transfer giving transaction with auto-generated receipt number.',
@@ -338,6 +340,7 @@ export class GivingController {
    * List recurring giving schedules.
    */
   @Get('recurring')
+  @RequirePermissions('giving:recurring:read')
   @ApiPaginatedResponse(RecurringGivingResponseDto)
   @ApiOperation({
     summary: 'List recurring givings',
@@ -364,6 +367,7 @@ export class GivingController {
    * Get a single recurring giving by ID.
    */
   @Get('recurring/:id')
+  @RequirePermissions('giving:recurring:read')
   @ApiGetEndpoint('Get recurring giving', 'Retrieves a single recurring giving schedule by ID.')
   async getRecurringGiving(
     @Param('id') id: string,
@@ -428,6 +432,7 @@ export class GivingController {
    * List transactions with pagination and filters.
    */
   @Get('transactions')
+  @RequirePermissions('giving:records:read')
   @ApiPaginatedResponse(TransactionResponseDto)
   @ApiOperation({
     summary: 'List transactions',
@@ -454,6 +459,7 @@ export class GivingController {
    * Get a single transaction by ID.
    */
   @Get('transactions/:transactionId')
+  @RequirePermissions('giving:records:read')
   @ApiGetEndpoint('Get transaction details', 'Retrieves a single giving transaction by ID.')
   async getTransaction(
     @Param('transactionId') transactionId: string,
@@ -467,6 +473,7 @@ export class GivingController {
    * Download a PDF receipt for a transaction.
    */
   @Get('transactions/:transactionId/receipt')
+  @RequirePermissions('giving:records:read')
   @ApiOperation({
     summary: 'Download receipt',
     description: 'Generates and downloads a PDF receipt for a successful transaction.',
@@ -492,6 +499,7 @@ export class GivingController {
   }
 
   @Post('transactions/:transactionId/send-receipt')
+  @RequirePermissions('giving:records:read')
   @ApiOperation({
     summary: 'Send receipt',
     description: 'Sends a receipt for a transaction via WhatsApp or email.',

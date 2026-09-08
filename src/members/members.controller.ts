@@ -60,7 +60,7 @@ export class MembersController {
    */
   @Post()
   @RequireRoles('church_admin', 'senior_pastor', 'secretary')
-  @RequirePermissions('members:create')
+  @RequirePermissions('members:new:create')
   @ApiCreateEndpoint(
     'Create a new member',
     'Creates a new church member with the provided details.',
@@ -214,6 +214,7 @@ export class MembersController {
    */
   @Patch(':memberId')
   @RequireRoles('church_admin', 'senior_pastor', 'secretary')
+  @RequirePermissions('members:all:update')
   @ApiUpdateEndpoint(
     'Update member details',
     'Updates a member with partial data. Only provided fields are updated.',
@@ -233,7 +234,7 @@ export class MembersController {
    */
   @Delete(':memberId')
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:delete')
+  @RequirePermissions('members:all:delete')
   @ApiDeleteEndpoint(
     'Delete a member',
     'Soft-deletes a member by setting their status to inactive.',
@@ -253,7 +254,7 @@ export class MembersController {
    */
   @Post(':memberId/restore')
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:update')
+  @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restore a member',
@@ -273,7 +274,7 @@ export class MembersController {
    */
   @Post(':memberId/archive')
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:update')
+  @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Archive a member',
@@ -293,7 +294,7 @@ export class MembersController {
    */
   @Post(':memberId/restore-archive')
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:update')
+  @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restore an archived member',
@@ -313,7 +314,7 @@ export class MembersController {
    */
   @Post('bulk-import')
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('members:create')
+  @RequirePermissions('members:import:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Bulk import members',

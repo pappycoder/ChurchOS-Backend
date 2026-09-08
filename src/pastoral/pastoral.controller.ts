@@ -74,7 +74,7 @@ export class PastoralController {
   @Post('notes')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:create')
+  @RequirePermissions('pastoral:notes:create')
   @ApiOperation({ summary: 'Create a new pastoral note' })
   async createNote(
     @Body() dto: CreatePastoralNoteDto,
@@ -99,7 +99,7 @@ export class PastoralController {
    */
   @Get('notes')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:notes:read')
   @ApiPaginatedResponse(PastoralNoteResponseDto)
   @ApiOperation({ summary: 'List pastoral notes with filters' })
   async listNotes(
@@ -124,7 +124,7 @@ export class PastoralController {
    */
   @Get('notes/:noteId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:notes:read')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Get a pastoral note by ID' })
   async getNoteById(
@@ -150,7 +150,7 @@ export class PastoralController {
    */
   @Patch('notes/:noteId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:update')
+  @RequirePermissions('pastoral:notes:update')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Update a pastoral note' })
   async updateNote(
@@ -176,7 +176,7 @@ export class PastoralController {
   @Delete('notes/:noteId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
-  @RequirePermissions('pastoral:delete')
+  @RequirePermissions('pastoral:notes:delete')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Delete a pastoral note' })
   async deleteNote(
@@ -202,7 +202,7 @@ export class PastoralController {
   @Post('notes/:noteId/archive')
   @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:update')
+  @RequirePermissions('pastoral:notes:update')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Archive a pastoral note' })
   async archiveNote(
@@ -227,7 +227,7 @@ export class PastoralController {
   @Post('notes/:noteId/restore')
   @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:update')
+  @RequirePermissions('pastoral:notes:update')
   @ApiParam({ name: 'noteId', type: String })
   @ApiOperation({ summary: 'Restore an archived pastoral note' })
   async restoreNote(
@@ -254,7 +254,7 @@ export class PastoralController {
   @Post('life-events')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:create')
+  @RequirePermissions('pastoral:life-events:create')
   @ApiOperation({ summary: 'Create a new life event' })
   async createLifeEvent(
     @Body() dto: CreateLifeEventDto,
@@ -276,7 +276,7 @@ export class PastoralController {
    */
   @Get('life-events')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:life-events:read')
   @ApiPaginatedResponse(LifeEventResponseDto)
   @ApiOperation({ summary: 'List life events with filters' })
   async listLifeEvents(@Query() query: ListLifeEventsDto, @Req() req: AuthenticatedRequest) {
@@ -295,7 +295,7 @@ export class PastoralController {
    */
   @Get('life-events/upcoming')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:life-events:read')
   @ApiOperation({ summary: 'Get upcoming life events' })
   async getUpcomingLifeEvents(
     @Query('daysAhead') daysAhead: number,
@@ -316,7 +316,7 @@ export class PastoralController {
    */
   @Get('life-events/:eventId')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:life-events:read')
   @ApiParam({ name: 'eventId', type: String })
   @ApiOperation({ summary: 'Get a life event by ID' })
   async getLifeEventById(
@@ -339,7 +339,7 @@ export class PastoralController {
   @Delete('life-events/:eventId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireRoles('church_admin', 'senior_pastor')
-  @RequirePermissions('pastoral:delete')
+  @RequirePermissions('pastoral:life-events:delete')
   @ApiParam({ name: 'eventId', type: String })
   @ApiOperation({ summary: 'Delete a life event' })
   async deleteLifeEvent(
@@ -363,7 +363,7 @@ export class PastoralController {
   @Post('life-events/:lifeEventId/archive')
   @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:update')
+  @RequirePermissions('pastoral:life-events:update')
   @ApiParam({ name: 'lifeEventId', type: String })
   @ApiOperation({ summary: 'Archive a life event' })
   async archiveLifeEvent(
@@ -387,7 +387,7 @@ export class PastoralController {
   @Post('life-events/:lifeEventId/restore')
   @HttpCode(HttpStatus.OK)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:update')
+  @RequirePermissions('pastoral:life-events:update')
   @ApiParam({ name: 'lifeEventId', type: String })
   @ApiOperation({ summary: 'Restore an archived life event' })
   async restoreLifeEvent(
@@ -412,7 +412,7 @@ export class PastoralController {
    */
   @Get('risk-scores')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:risk-scores:read')
   @ApiPaginatedResponse(RiskScoreResponseDto)
   @ApiOperation({ summary: 'List member risk scores' })
   async listRiskScores(@Query() query: ListRiskScoresDto, @Req() req: AuthenticatedRequest) {
@@ -431,7 +431,7 @@ export class PastoralController {
    */
   @Get('engagement-scores')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:engagement:read')
   @ApiPaginatedResponse(EngagementScoreResponseDto)
   @ApiOperation({ summary: 'List member engagement scores' })
   async listEngagementScores(
@@ -452,7 +452,7 @@ export class PastoralController {
    */
   @Get('engagement/summary')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:engagement:read')
   @ApiOperation({ summary: 'Get engagement score distribution' })
   async getEngagementDistribution(@Req() req: AuthenticatedRequest) {
     // Extract the church ID from the authenticated user's profile
@@ -470,7 +470,7 @@ export class PastoralController {
    */
   @Get('members/:memberId/scoring')
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('pastoral:read')
+  @RequirePermissions('pastoral:risk-scores:read')
   @ApiParam({ name: 'memberId', type: String })
   @ApiOperation({ summary: 'Get member risk + engagement scores' })
   async getMemberScoring(@Param('memberId') memberId: string, @Req() req: AuthenticatedRequest) {

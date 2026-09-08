@@ -62,7 +62,7 @@ export class AttendanceController {
   // ─── Service Endpoints ──────────────────────────────────
 
   @Post('services')
-  @RequirePermissions('attendance:create')
+  @RequirePermissions('attendance:services:create')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a service', 'Creates a new church service schedule.')
@@ -76,7 +76,7 @@ export class AttendanceController {
   }
 
   @Get('services')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:services:read')
   @ApiPaginatedResponse(ServiceResponseDto)
   @ApiListEndpoint('List services', 'Retrieves a paginated list of church services.')
   async listServices(@Query() query: ListServicesDto, @Request() req: AuthenticatedRequest) {
@@ -94,7 +94,7 @@ export class AttendanceController {
   }
 
   @Get('services/:serviceId')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:services:read')
   @ApiGetEndpoint('Get service by ID', 'Retrieves a single service by its UUID.')
   async getServiceById(
     @Param('serviceId') serviceId: string,
@@ -105,7 +105,7 @@ export class AttendanceController {
   }
 
   @Patch('services/:serviceId')
-  @RequirePermissions('attendance:update')
+  @RequirePermissions('attendance:services:update')
   @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Update a service', 'Updates a service with partial data.')
   async updateService(
@@ -119,7 +119,7 @@ export class AttendanceController {
   }
 
   @Delete('services/:serviceId')
-  @RequirePermissions('attendance:delete')
+  @RequirePermissions('attendance:services:delete')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
@@ -140,7 +140,7 @@ export class AttendanceController {
    */
   @Post('services/:serviceId/archive')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('attendance:update')
+  @RequirePermissions('attendance:services:update')
   @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Archive a service', 'Archives a service.')
   async archiveService(
@@ -157,7 +157,7 @@ export class AttendanceController {
    */
   @Post('services/:serviceId/restore')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('attendance:update')
+  @RequirePermissions('attendance:services:update')
   @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Restore a service', 'Restores an archived service.')
   async restoreService(
@@ -172,7 +172,7 @@ export class AttendanceController {
   // ─── Attendance Endpoints ───────────────────────────────
 
   @Get('attendance')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:records:read')
   @ApiPaginatedResponse(AttendanceResponseDto)
   @ApiOperation({
     summary: 'List attendance records',
@@ -194,7 +194,7 @@ export class AttendanceController {
   }
 
   @Post('attendance')
-  @RequirePermissions('attendance:create')
+  @RequirePermissions('attendance:checkin:create')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Record attendance', 'Records a single check-in for a service.')
@@ -208,7 +208,7 @@ export class AttendanceController {
   }
 
   @Post('attendance/bulk')
-  @RequirePermissions('attendance:create')
+  @RequirePermissions('attendance:checkin:create')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -229,7 +229,7 @@ export class AttendanceController {
   }
 
   @Post('attendance/visitor')
-  @RequirePermissions('attendance:create')
+  @RequirePermissions('attendance:checkin:create')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -246,7 +246,7 @@ export class AttendanceController {
   }
 
   @Delete('attendance/:attendanceId')
-  @RequirePermissions('attendance:delete')
+  @RequirePermissions('attendance:records:delete')
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
@@ -263,7 +263,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/summary')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:dashboard:read')
   @ApiOperation({
     summary: 'Get attendance summary',
     description: 'Returns total check-ins, member/visitor breakdown, and source breakdown.',
@@ -287,7 +287,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/trends')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:reports:read')
   @ApiOperation({
     summary: 'Get attendance trends',
     description: 'Returns daily attendance counts for the last N days.',
@@ -329,7 +329,7 @@ export class AttendanceController {
   }
 
   @Get('attendance/by-service/:serviceId')
-  @RequirePermissions('attendance:read')
+  @RequirePermissions('attendance:services:read')
   @ApiGetEndpoint(
     'Get attendance by service',
     'Retrieves all attendance records for a specific service.',

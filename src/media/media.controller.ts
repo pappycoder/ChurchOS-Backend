@@ -157,7 +157,7 @@ export class MediaController {
    * Lists media assets with pagination and filters.
    */
   @Get('library')
-  @RequirePermissions('media:read')
+  @RequirePermissions('media:library:read')
   @ApiPaginatedResponse(MediaAssetResponseDto)
   @ApiOperation({
     summary: 'Browse media library',
@@ -175,7 +175,7 @@ export class MediaController {
    * Gets unique folder list for the church's media library.
    */
   @Get('library/folders')
-  @RequirePermissions('media:read')
+  @RequirePermissions('media:folders:read')
   @ApiOperation({
     summary: 'List media folders',
     description: 'Returns unique folder names used in the church media library.',
@@ -190,7 +190,7 @@ export class MediaController {
    * Gets a single media asset by ID.
    */
   @Get('library/:assetId')
-  @RequirePermissions('media:read')
+  @RequirePermissions('media:library:read')
   @ApiGetEndpoint('Get media asset details')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
   async getAsset(
@@ -207,7 +207,7 @@ export class MediaController {
   @Patch('library/:assetId/permissions')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
-  @RequirePermissions('media:update')
+  @RequirePermissions('media:library:update')
   @ApiUpdateEndpoint('Update media permissions')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
   async updatePermissions(
@@ -226,7 +226,7 @@ export class MediaController {
   @Delete('library/:assetId')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
-  @RequirePermissions('media:delete')
+  @RequirePermissions('media:library:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a media asset')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
@@ -243,7 +243,7 @@ export class MediaController {
   @Delete(':path(*)')
   @UseGuards(RolesGuard)
   @RequireRoles('church_admin')
-  @RequirePermissions('media:delete')
+  @RequirePermissions('media:library:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Delete a file from storage',

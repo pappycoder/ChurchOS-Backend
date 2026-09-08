@@ -208,7 +208,7 @@ export class ChurchController {
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles('church_admin')
-  @RequirePermissions('church:manage_staff')
+  @RequirePermissions('church:update')
   @ApiCreateEndpoint(
     'Invite staff member',
     'Sends a Supabase Auth invitation email and creates a Profile record for the new staff member.',
@@ -287,7 +287,7 @@ export class ChurchController {
 
   @Delete('staff/:profileId')
   @RequireRoles('church_admin')
-  @RequirePermissions('church:manage_staff')
+  @RequirePermissions('church:update')
   @ApiDeleteEndpoint(
     'Remove staff member',
     'Soft-deletes a staff member by setting their role to "removed".',
