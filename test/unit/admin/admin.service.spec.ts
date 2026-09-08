@@ -256,6 +256,65 @@ describe('AdminService', () => {
     });
   });
 
+  describe('removeDepartmentMember', () => {
+    it('should remove a member and audit the removal', async () => {
+      prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.departmentMember.findUnique.mockResolvedValue({
+        id: 'dm-1',
+        department_id: mockDepartmentId,
+        member_id: mockMemberId,
+      });
+      prisma.departmentMember.delete.mockResolvedValue({} as never);
+
+      await service.removeDepartmentMember(
+        mockDepartmentId,
+        mockMemberId,
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.departmentMember.delete).toHaveBeenCalledTimes(1);
+      expect(auditLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('should treat an already-removed membership as a successful no-op', async () => {
+      prisma.department.findFirst.mockResolvedValue(mockDepartment);
+      prisma.departmentMember.findUnique.mockResolvedValue(null);
+
+      await service.removeDepartmentMember(
+        mockDepartmentId,
+        mockMemberId,
+        mockChurchId,
+        mockUserId,
+      );
+
+      expect(prisma.departmentMember.findUnique).toHaveBeenCalledWith({
+        where: {
+          department_id_member_id: {
+            department_id: mockDepartmentId,
+            member_id: mockMemberId,
+          },
+        },
+      });
+      expect(prisma.departmentMember.delete).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('should reject an unknown department', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.removeDepartmentMember(
+          mockDepartmentId,
+          mockMemberId,
+          mockChurchId,
+          mockUserId,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.departmentMember.delete).not.toHaveBeenCalled();
+    });
+  });
+
   describe('createCellGroup', () => {
     it('should create a cell group', async () => {
       prisma.cellGroup.create.mockResolvedValue(mockCellGroup);

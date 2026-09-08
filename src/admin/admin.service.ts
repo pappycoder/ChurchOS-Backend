@@ -600,9 +600,17 @@ export class AdminService {
       where: { department_id_member_id: { department_id: departmentId, member_id: memberId } },
     });
 
-    // Throw NotFoundException if the membership record does not exist
+    // Idempotent removal: the web drawer's Remove button re-enables the
+    // moment the first DELETE settles (204), while the removed row stays
+    // visible until the invalidation refetch lands — so a second, identical
+    // DELETE can arrive for an already-removed membership. Treat the missing
+    // record as a successful no-op instead of a 404 the UI surfaces as a
+    // "Failed to remove member" error.
     if (!existing) {
-      throw new NotFoundException(`Member ${memberId} not found in department ${departmentId}`);
+      this.logger.log(
+        `Member ${memberId} not in department ${departmentId}: no-op removal`,
+      );
+      return;
     }
 
     // Delete the department-member assignment record
