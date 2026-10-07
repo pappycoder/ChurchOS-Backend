@@ -888,9 +888,10 @@ export class AdminService {
   }
 
   /**
-   * A branch-restricted `cell_leader` may only manage the cell groups they
-   * lead — mirrors `resolveCellGroupScope` and the ownership check in
-   * `recordCellGroupAttendance` (admin-hq cell leaders are unconstrained).
+   * A `cell_leader` — HQ or branch-restricted alike — may only manage the
+   * cell groups they lead, on every write path (detail edits, membership,
+   * attendance). Mirrors `resolveCellGroupScope`; the admin-HQ flag only
+   * widens READING to church-wide, never the write scope.
    *
    * @param viewer - The request profile-derived viewer context, if any
    * @param group - The cell group being acted on (must be pre-fetched and
@@ -902,27 +903,10 @@ export class AdminService {
     group: { leader_id: string | null },
   ): void {
     const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
-    if (isCellLeader && !viewer?.is_admin_hq) {
+    if (isCellLeader) {
       if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
         throw new ForbiddenException('You can only manage your own cell group');
       }
-    }
-  }
-
-  /**
-   * An admin-HQ cell_leader is granted church-wide cell group READING and
-   * DETAIL EDITING (see updateCellGroup) but is locked out of the membership
-   * and attendance write paths — recording attendance, adding a member, or
-   * removing a member is Forbidden for them on every group. Non-HQ cell
-   * leaders are unaffected (own-group writes, enforced by
-   * assertCellLeaderOwnership).
-   */
-  private assertCellLeaderHqReadOnly(viewer: ViewerScope | null | undefined): void {
-    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
-    if (isCellLeader && viewer?.is_admin_hq) {
-      throw new ForbiddenException(
-        'HQ cell group leaders can view and edit cell groups but cannot record attendance or manage members',
-      );
     }
   }
 
@@ -1036,13 +1020,15 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // A branch-restricted cell leader may only update the groups they lead.
+    // A cell leader — HQ or branch-restricted — may only update the groups
+    // they lead.
     this.assertCellLeaderOwnership(viewer, existing);
 
-    // A branch-restricted cell leader may change every field EXCEPT the
-    // group's leader and branch — reassigning those is pastor-only. The
+    // A branch-restricted cell leader (non-HQ) may change every field EXCEPT
+    // the group's leader and branch — reassigning those is pastor-only. The
     // payload is silently stripped (never an error) so clients can keep
-    // sending the full form.
+    // sending the full form. An admin-HQ cell leader editing their own group
+    // keeps the branch/leader controls (they are not branch-restricted).
     const restrictedLeader =
       (viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader')) &&
       !viewer?.is_admin_hq;
@@ -1257,11 +1243,7 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // An admin-HQ cell leader may manage no group's membership.
-    this.assertCellLeaderHqReadOnly(viewer);
-
-    // A branch-restricted cell leader may only manage members of the groups
-    // they lead.
+    // A cell leader may only manage members of the groups they lead.
     this.assertCellLeaderOwnership(viewer, group);
 
     // Verify the member belongs to this church
@@ -1336,11 +1318,7 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // An admin-HQ cell leader may manage no group's membership.
-    this.assertCellLeaderHqReadOnly(viewer);
-
-    // A branch-restricted cell leader may only manage members of the groups
-    // they lead.
+    // A cell leader may only manage members of the groups they lead.
     this.assertCellLeaderOwnership(viewer, group);
 
     const existing = await this.prisma.cellGroupMember.findUnique({
@@ -1449,18 +1427,10 @@ export class AdminService {
       throw new NotFoundException(`Cell group ${groupId} not found`);
     }
 
-    // An admin-HQ cell leader may not record attendance for any group.
-    this.assertCellLeaderHqReadOnly(viewer);
-
-    // A branch-restricted cell_leader may only record attendance for the
-    // groups they lead (mirrors resolveCellGroupScope: admin-hq cell_leaders
-    // are unconstrained).
-    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
-    if (isCellLeader && !viewer?.is_admin_hq) {
-      if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
-        throw new ForbiddenException('You can only record attendance for your own cell group');
-      }
-    }
+    // A cell leader may only record attendance for the groups they lead
+    // (mirrors resolveCellGroupScope — the admin-HQ flag widens reading to
+    // church-wide, but every write is still own-group).
+    this.assertCellLeaderOwnership(viewer, group);
 
     let resolvedVisitorName = visitorName;
 

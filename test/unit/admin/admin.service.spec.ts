@@ -474,15 +474,40 @@ describe('AdminService', () => {
       expect(result.branchId).toBe('branch-1');
     });
 
-    it('should allow an admin-hq cell_leader editing any group\u2019s details without stripping leader/branch', async () => {
+    it('should forbid an admin-hq cell_leader editing a group they do not lead', async () => {
       prisma.cellGroup.findFirst.mockResolvedValue({
         ...mockCellGroup,
         leader_id: 'member-other',
         branch_id: 'branch-1',
       });
+
+      await expect(
+        service.updateCellGroup(
+          mockGroupId,
+          { branchId: 'branch-2', leaderId: 'member-other', address: '10 Admiralty Way, Lekki' },
+          mockChurchId,
+          mockUserId,
+          {
+            church_id: mockChurchId,
+            branch_id: 'branch-1',
+            member_id: 'member-leader-1',
+            role: 'cell_leader',
+            is_admin_hq: true,
+          },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.cellGroup.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq cell_leader editing their own group without stripping leader/branch', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+        branch_id: 'branch-1',
+      });
       prisma.cellGroup.update.mockResolvedValue({
         ...mockCellGroup,
-        leader_id: 'member-other',
+        leader_id: 'member-leader-1',
         branch_id: 'branch-2',
         address: '10 Admiralty Way, Lekki',
         branch: { id: 'branch-2', name: 'Ikeja Campus' },
@@ -490,7 +515,7 @@ describe('AdminService', () => {
 
       const result = await service.updateCellGroup(
         mockGroupId,
-        { branchId: 'branch-2', leaderId: 'member-other', address: '10 Admiralty Way, Lekki' },
+        { branchId: 'branch-2', leaderId: 'member-leader-1', address: '10 Admiralty Way, Lekki' },
         mockChurchId,
         mockUserId,
         {
@@ -505,7 +530,7 @@ describe('AdminService', () => {
       const call = prisma.cellGroup.update.mock.calls[0][0] as { data: Record<string, unknown> };
       expect(call.data.address).toBe('10 Admiralty Way, Lekki');
       expect(call.data.branch_id).toBe('branch-2');
-      expect(call.data.leader_id).toBe('member-other');
+      expect(call.data.leader_id).toBe('member-leader-1');
       expect(result.branchId).toBe('branch-2');
     });
   });
@@ -597,10 +622,10 @@ describe('AdminService', () => {
       expect(prisma.cellGroupMember.create).toHaveBeenCalled();
     });
 
-    it('should forbid an admin-hq cell_leader adding a member', async () => {
+    it('should forbid an admin-hq cell_leader adding a member to a group they do not lead', async () => {
       prisma.cellGroup.findFirst.mockResolvedValue({
         ...mockCellGroup,
-        leader_id: null,
+        leader_id: 'member-other',
       });
       prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'branch-2' });
       prisma.cellGroupMember.findUnique.mockResolvedValue(null);
@@ -616,6 +641,33 @@ describe('AdminService', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.cellGroupMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq cell_leader adding a member to their own group (any branch)', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'branch-2' });
+      prisma.cellGroupMember.findUnique.mockResolvedValue(null);
+      prisma.cellGroupMember.create.mockResolvedValue({} as never);
+
+      await service.addCellGroupMember(
+        mockGroupId,
+        mockMemberId,
+        'member',
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+          is_admin_hq: true,
+        },
+      );
+
+      expect(prisma.cellGroupMember.create).toHaveBeenCalled();
     });
 
     it('should allow an own-group cell_leader to remove members', async () => {
@@ -664,8 +716,8 @@ describe('AdminService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should forbid an admin-hq cell_leader removing a member', async () => {
-      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: null });
+    it('should forbid an admin-hq cell_leader removing a member from a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: 'member-other' });
       prisma.cellGroupMember.findUnique.mockResolvedValue(mockCellGroupMember);
       prisma.cellGroupMember.delete.mockResolvedValue({} as never);
 
@@ -679,6 +731,25 @@ describe('AdminService', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.cellGroupMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq cell_leader removing a member from their own group', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.cellGroupMember.findUnique.mockResolvedValue(mockCellGroupMember);
+      prisma.cellGroupMember.delete.mockResolvedValue({} as never);
+
+      await service.removeCellGroupMember(mockGroupId, mockMemberId, mockChurchId, mockUserId, {
+        church_id: mockChurchId,
+        branch_id: 'branch-1',
+        member_id: 'member-leader-1',
+        role: 'cell_leader',
+        is_admin_hq: true,
+      });
+
+      expect(prisma.cellGroupMember.delete).toHaveBeenCalled();
     });
   });
 
@@ -1301,8 +1372,8 @@ describe('AdminService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should forbid an admin-hq cell_leader recording attendance', async () => {
-      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: null });
+    it('should forbid an admin-hq cell_leader recording attendance for a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: 'member-other' });
       prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
       prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
       prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
@@ -1327,6 +1398,37 @@ describe('AdminService', () => {
         ),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.cellGroupAttendance.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq cell_leader recording attendance for their own group (any branch member)', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'branch-2' });
+      prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
+      prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        mockMemberId,
+        undefined,
+        undefined,
+        meetingDate,
+        'present',
+        undefined,
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+          is_admin_hq: true,
+        },
+      );
+
+      expect(prisma.cellGroupAttendance.create).toHaveBeenCalled();
     });
 
     it('should forbid a branch-restricted viewer recording a member from another branch', async () => {
@@ -1556,8 +1658,8 @@ describe('AdminService', () => {
       });
     });
 
-    it('should forbid an admin-hq cell_leader recording a walk-in', async () => {
-      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: null });
+    it('should forbid an admin-hq cell_leader recording a walk-in for a group they do not lead', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({ ...mockCellGroup, leader_id: 'member-other' });
       prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
       prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
 
@@ -1582,6 +1684,45 @@ describe('AdminService', () => {
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.visitor.create).not.toHaveBeenCalled();
       expect(prisma.cellGroupAttendance.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq cell_leader recording a walk-in for their own group (snapshot only, no visitor row)', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue({
+        ...mockCellGroup,
+        leader_id: 'member-leader-1',
+      });
+      prisma.cellGroupAttendance.findUnique.mockResolvedValue(null);
+      prisma.cellGroupAttendance.create.mockResolvedValue({} as never);
+
+      await service.recordCellGroupAttendance(
+        mockGroupId,
+        undefined,
+        undefined,
+        'Walk In Guest',
+        meetingDate,
+        'present',
+        undefined,
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-leader-1',
+          role: 'cell_leader',
+          is_admin_hq: true,
+        },
+      );
+
+      expect(prisma.visitor.create).not.toHaveBeenCalled();
+      expect(prisma.cellGroupAttendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            member_id: null,
+            visitor_id: null,
+            visitor_name: 'Walk In Guest',
+          }),
+        }),
+      );
     });
   });
 

@@ -217,6 +217,16 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Cell-group writes are now ownership-scoped for HQ cell leaders too** (aligns the backend with the web's `canManageMembers` gate so the UI promise — "a cell leader manages only the group they lead" — can no longer be bypassed against the API, and walks the same matrix as the non-HQ leader rules already enforced).
+  - **`src/admin/admin.service.ts` — `assertCellLeaderOwnership`** no longer exempts `is_admin_hq` viewers (the `&& !viewer?.is_admin_hq` was dropped): every cell-group write path now requires `group.leader_id === viewer.member_id` for **all** cell leaders, HQ or not. Doc comment updated accordingly.
+  - **`assertCellLeaderHqReadOnly` deleted** along with its three call sites; each "HQ-leader-on-others'-groups" case now fails with the same 403 as any non-owner leader:
+  - `addCellGroupMember` → `assertCellLeaderOwnership(viewer, group)` (was `assertCellLeaderHqReadOnly`).
+  - `removeCellGroupMember` → `assertCellLeaderOwnership(viewer, group)` (was `assertCellLeaderHqReadOnly`).
+  - `recordCellGroupAttendance` → the inline ownership block is consolidated to a single `this.assertCellLeaderOwnership(viewer, group)` (was `assertCellLeaderHqReadOnly`).
+  - `updateCellGroup` needs no logic change — the helper now constrains HQ. `restrictedLeader` is unchanged (`isCellLeader && !viewer?.is_admin_hq`), so an HQ leader editing **their own** group still keeps branch/leader reassignment rights (not stripped). HQ read scope stays church-wide and `isBranchRestricted` is still false for HQ, so HQ own-group walk-ins remain free-text snapshot-only (`visitor_id: null, visitor_name: 'Walk In Guest'`, no `visitor.create`).
+  - **Tests** (`test/unit/admin/admin.service.spec.ts`, 93 → 97): the four HQ "forbid" tests retitled to "a group they do not lead" semantics (`leader_id: 'member-other'`) — add member, remove member, attendance, walk-in; five new positive HQ own-group tests — edit (allowed, branch_id/leader_id **not** stripped), add member (cross-branch OK), remove member, attendance (cross-branch member OK), walk-in (snapshot-only, no `visitor.create`).
+  - Verification: `npx tsc --noEmit`, `npm run build`, `npm run lint` clean; full suite **54 suites / 1108 tests green** (was 1103); admin.service suite 97/97.
+
 - **`GET /media/library/folders` now returns per-folder counts + newest timestamps (and is Redis-cached)** (performance audit on ChurchOS-Web: the media folders page previously fetched the full asset list — every folder's items — client-side to derive each folder's count and latest upload, then overlaid that data on the folder list).
   - **`src/media/dto/media-folder-summary.dto.ts`** — new `MediaFolderSummaryDto { folder, count, newestAt }`.
   - **`src/media/media.service.ts` — `getFolders(churchId)`** now returns `MediaFolderSummaryDto[]` instead of a bare `string[]`: the existing `mediaAsset.groupBy({ by: ['folder'] })` gains `_count: { _all: true }` + `_max: { created_at: true }` so one query yields each folder's asset count and latest upload (`newestAt` ISO string; null when a folder has no dated rows).
