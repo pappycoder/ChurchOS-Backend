@@ -487,8 +487,6 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Analytics — view + read
     'analytics:view',
     'analytics:read',
-    // Users — read
-    'users:read',
     // Emails — read
     'emails:read',
   ],
