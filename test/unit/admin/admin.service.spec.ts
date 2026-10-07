@@ -254,6 +254,58 @@ describe('AdminService', () => {
 
       expect(prisma.departmentMember.create).toHaveBeenCalled();
     });
+
+    it('should forbid an admin-hq department_head adding a member to a department they do not head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-other',
+        archived_at: null,
+      });
+
+      await expect(
+        service.addDepartmentMember(
+          mockDepartmentId,
+          { memberId: mockMemberId },
+          mockChurchId,
+          mockUserId,
+          {
+            church_id: mockChurchId,
+            branch_id: 'branch-hq',
+            member_id: 'member-hq-head',
+            role: 'department_head',
+            is_admin_hq: true,
+          },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.departmentMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq department_head adding a member to the department they head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-hq-head',
+        archived_at: null,
+      });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+      prisma.departmentMember.findUnique.mockResolvedValue(null);
+      prisma.departmentMember.create.mockResolvedValue({} as never);
+
+      await service.addDepartmentMember(
+        mockDepartmentId,
+        { memberId: mockMemberId },
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-hq',
+          member_id: 'member-hq-head',
+          role: 'department_head',
+          is_admin_hq: true,
+        },
+      );
+
+      expect(prisma.departmentMember.create).toHaveBeenCalled();
+    });
   });
 
   describe('removeDepartmentMember', () => {
@@ -307,6 +359,191 @@ describe('AdminService', () => {
         service.removeDepartmentMember(mockDepartmentId, mockMemberId, mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.departmentMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should forbid an admin-hq department_head removing a member from a department they do not head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-other',
+        archived_at: null,
+      });
+
+      await expect(
+        service.removeDepartmentMember(mockDepartmentId, mockMemberId, mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          branch_id: 'branch-hq',
+          member_id: 'member-hq-head',
+          role: 'department_head',
+          is_admin_hq: true,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.departmentMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq department_head removing a member from the department they head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-hq-head',
+        archived_at: null,
+      });
+      prisma.departmentMember.findUnique.mockResolvedValue({
+        id: 'dm-1',
+        department_id: mockDepartmentId,
+        member_id: mockMemberId,
+      });
+      prisma.departmentMember.delete.mockResolvedValue({} as never);
+
+      await service.removeDepartmentMember(
+        mockDepartmentId,
+        mockMemberId,
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-hq',
+          member_id: 'member-hq-head',
+          role: 'department_head',
+          is_admin_hq: true,
+        },
+      );
+
+      expect(prisma.departmentMember.delete).toHaveBeenCalledTimes(1);
+      expect(auditLog).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('updateDepartment', () => {
+    it('should allow an own-department head update while stripping branch/head reassignment', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-l',
+        branch_id: 'branch-1',
+        archived_at: null,
+      });
+      prisma.department.update.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-l',
+        branch_id: 'branch-1',
+        description: 'Youth ministry for teens',
+        branch: { id: 'branch-1', name: 'Lekki Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      const result = await service.updateDepartment(
+        mockDepartmentId,
+        {
+          branchId: 'branch-2',
+          headMemberId: 'member-other',
+          description: 'Youth ministry for teens',
+        },
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-1',
+          member_id: 'member-l',
+          role: 'department_head',
+        },
+      );
+
+      const call = prisma.department.update.mock.calls[0][0] as { data: Record<string, unknown> };
+      expect(call.data.description).toBe('Youth ministry for teens');
+      expect(call.data.branch_id).toBeUndefined();
+      expect(call.data.head_member_id).toBeUndefined();
+      expect(result.branchId).toBe('branch-1');
+    });
+
+    it('should forbid a department_head updating a department they do not head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-other',
+        branch_id: 'branch-1',
+        archived_at: null,
+      });
+
+      await expect(
+        service.updateDepartment(
+          mockDepartmentId,
+          { description: 'Youth ministry for teens' },
+          mockChurchId,
+          mockUserId,
+          {
+            church_id: mockChurchId,
+            branch_id: 'branch-1',
+            member_id: 'member-l',
+            role: 'department_head',
+          },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.department.update).not.toHaveBeenCalled();
+    });
+
+    it('should forbid an admin-hq department_head updating a department they do not head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-other',
+        branch_id: 'branch-1',
+        archived_at: null,
+      });
+
+      await expect(
+        service.updateDepartment(
+          mockDepartmentId,
+          { description: 'Choir practice' },
+          mockChurchId,
+          mockUserId,
+          {
+            church_id: mockChurchId,
+            branch_id: 'branch-hq',
+            member_id: 'member-hq-head',
+            role: 'department_head',
+            is_admin_hq: true,
+          },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.department.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow an admin-hq department_head updating their own department without stripping branch/head', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-hq-head',
+        branch_id: 'branch-hq',
+        archived_at: null,
+      });
+      prisma.branch.findFirst.mockResolvedValue({ id: 'branch-3' });
+      prisma.member.findFirst.mockResolvedValue({
+        id: 'member-hq-head',
+        branch_id: 'branch-3',
+      });
+      prisma.department.update.mockResolvedValue({
+        ...mockDepartment,
+        head_member_id: 'member-hq-head',
+        branch_id: 'branch-3',
+        description: 'Choir practice',
+        branch: { id: 'branch-3', name: 'Ikeja Campus' },
+      });
+      prisma.member.findMany.mockResolvedValue([]);
+
+      const result = await service.updateDepartment(
+        mockDepartmentId,
+        { branchId: 'branch-3', headMemberId: 'member-hq-head', description: 'Choir practice' },
+        mockChurchId,
+        mockUserId,
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-hq',
+          member_id: 'member-hq-head',
+          role: 'department_head',
+          is_admin_hq: true,
+        },
+      );
+
+      const call = prisma.department.update.mock.calls[0][0] as { data: Record<string, unknown> };
+      expect(call.data.description).toBe('Choir practice');
+      expect(call.data.branch_id).toBe('branch-3');
+      expect(call.data.head_member_id).toBe('member-hq-head');
+      expect(result.branchId).toBe('branch-3');
     });
   });
 

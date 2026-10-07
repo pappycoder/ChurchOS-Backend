@@ -217,6 +217,16 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Department writes are now ownership-scoped for HQ department heads too** (an HQ head who also heads a department may edit **only that department** while still viewing all departments church-wide; the previous HQ-exemption made them read-only everywhere). Walks the same matrix as the cell-group ownership rules:
+  - **`src/admin/admin.service.ts` — `assertDepartmentHeadOwnership`** no longer exempts `is_admin_hq` viewers (the `&& !viewer?.is_admin_hq` was dropped): every department write path now requires `department.head_member_id === viewer.member_id` for **all** department heads, HQ or not. Doc comment updated accordingly.
+  - **`assertDepartmentHeadHqReadOnly` deleted** along with its three call sites; each "HQ-head-on-others'-departments" case now fails with the same 403 as any non-owner head:
+  - `updateDepartment` → `assertDepartmentHeadOwnership(viewer, existing)` (was `assertDepartmentHeadHqReadOnly`).
+  - `addDepartmentMember` → `assertDepartmentHeadOwnership(viewer, existing)` (was `assertDepartmentHeadHqReadOnly`).
+  - `removeDepartmentMember` → `assertDepartmentHeadOwnership(viewer, existing)` (was `assertDepartmentHeadHqReadOnly`).
+  - `restrictedHead` is unchanged (`isDepartmentHead && !viewer?.is_admin_hq`), so an HQ head editing **their own** department still keeps branch/head reassignment rights (not stripped). HQ read scope stays church-wide and `isBranchRestricted` is still false for HQ.
+  - **Tests** (`test/unit/admin/admin.service.spec.ts`, 97 → 105 — new `updateDepartment` describe): the four HQ "forbid" tests retitled to "a department they do not head" semantics (`head_member_id: 'member-other'`) — update, add member, remove member, plus an HQ-no-member-profile 403 on update; new positive tests — HQ owns-head update allowed (branch_id/head_member_id kept, fields applied), HQ owns-head add member allowed, HQ owns-head remove member allowed, HQ on another's department 403 on update.
+  - Verification: `npx tsc --noEmit`, `npm run build`, `npm run lint` clean; full suite **54 suites / 1116 tests green** (was 1108); admin.service suite 105/105.
+
 - **Cell-group writes are now ownership-scoped for HQ cell leaders too** (aligns the backend with the web's `canManageMembers` gate so the UI promise — "a cell leader manages only the group they lead" — can no longer be bypassed against the API, and walks the same matrix as the non-HQ leader rules already enforced).
   - **`src/admin/admin.service.ts` — `assertCellLeaderOwnership`** no longer exempts `is_admin_hq` viewers (the `&& !viewer?.is_admin_hq` was dropped): every cell-group write path now requires `group.leader_id === viewer.member_id` for **all** cell leaders, HQ or not. Doc comment updated accordingly.
   - **`assertCellLeaderHqReadOnly` deleted** along with its three call sites; each "HQ-leader-on-others'-groups" case now fails with the same 403 as any non-owner leader:

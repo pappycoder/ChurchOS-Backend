@@ -243,10 +243,8 @@ export class AdminService {
       throw new NotFoundException('Department is archived');
     }
 
-    // An admin-HQ department head is read-only (view + export only).
-    this.assertDepartmentHeadHqReadOnly(viewer);
-
-    // A branch-restricted department head may only update their own department.
+    // A department head may only update the department they head (HQ heads
+    // included — they view every department but edit only their own).
     this.assertDepartmentHeadOwnership(viewer, existing);
 
     // A branch-restricted department head may change every field EXCEPT the
@@ -507,9 +505,8 @@ export class AdminService {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // An admin-HQ department head is read-only; a branch-restricted head may
-    // only manage their own department.
-    this.assertDepartmentHeadHqReadOnly(viewer);
+    // A department head may only manage the department they head (HQ heads
+    // included — they view every department but edit only their own).
     this.assertDepartmentHeadOwnership(viewer, department);
 
     // Verify the member belongs to this church
@@ -593,9 +590,8 @@ export class AdminService {
       throw new NotFoundException(`Department ${departmentId} not found`);
     }
 
-    // An admin-HQ department head is read-only; a branch-restricted head may
-    // only manage their own department.
-    this.assertDepartmentHeadHqReadOnly(viewer);
+    // A department head may only manage the department they head (HQ heads
+    // included — they view every department but edit only their own).
     this.assertDepartmentHeadOwnership(viewer, department);
 
     // Verify the member is assigned to this department
@@ -911,10 +907,12 @@ export class AdminService {
   }
 
   /**
-   * A branch-restricted `department_head` may only manage the department(s)
-   * they head — mirrors `resolveDepartmentScope`. Admin-HQ department heads
-   * are read-only (see `assertDepartmentHeadHqReadOnly`), so they never reach
-   * this ownership check.
+   * A `department_head` may only manage the department(s) they head — mirrors
+   * `resolveDepartmentScope` (a head's list is already filtered to the
+   * department they head). Admin-HQ department heads used to be read-only and
+   * never reached this check; now the ownership rule applies to every
+   * department head, HQ or not, so an HQ head can also edit the single
+   * department they head while viewing all others.
    *
    * @param viewer - The request profile-derived viewer context, if any
    * @param department - The department being acted on (must be pre-fetched
@@ -927,26 +925,10 @@ export class AdminService {
   ): void {
     const isDepartmentHead =
       viewer?.role === 'department_head' || viewer?.roles?.includes('department_head');
-    if (isDepartmentHead && !viewer?.is_admin_hq) {
+    if (isDepartmentHead) {
       if (!viewer?.member_id || department.head_member_id !== viewer.member_id) {
         throw new ForbiddenException('You can only manage your own department');
       }
-    }
-  }
-
-  /**
-   * An admin-HQ department_head is read-only: they can view and export every
-   * department church-wide, but editing, adding members, or removing members
-   * is Forbidden for them. Non-HQ department heads are unaffected (own-department
-   * writes, enforced by `assertDepartmentHeadOwnership`).
-   */
-  private assertDepartmentHeadHqReadOnly(viewer: ViewerScope | null | undefined): void {
-    const isDepartmentHead =
-      viewer?.role === 'department_head' || viewer?.roles?.includes('department_head');
-    if (isDepartmentHead && viewer?.is_admin_hq) {
-      throw new ForbiddenException(
-        'HQ department heads can view and export departments but cannot edit them',
-      );
     }
   }
 
