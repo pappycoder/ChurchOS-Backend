@@ -29,7 +29,7 @@ describe('AssetsController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('covers all 25 routes with a granular surface permission (reads 9, creates 5, updates 9, deletes 2)', () => {
+  it('covers all 26 routes with a granular surface permission (reads 10, creates 5, updates 9, deletes 2)', () => {
     const readCount =
       (source.match(/@RequirePermissions\('assets:list:read'\)/g)?.length ?? 0) +
       (source.match(/@RequirePermissions\('assets:categories:read'\)/g)?.length ?? 0) +
@@ -48,7 +48,7 @@ describe('AssetsController permission decorators', () => {
     const deleteCount =
       (source.match(/@RequirePermissions\('assets:list:delete'\)/g)?.length ?? 0) +
       (source.match(/@RequirePermissions\('assets:categories:delete'\)/g)?.length ?? 0);
-    expect(readCount).toBe(9);
+    expect(readCount).toBe(10);
     expect(createCount).toBe(5);
     expect(updateCount).toBe(9);
     expect(deleteCount).toBe(2);
@@ -69,6 +69,14 @@ describe('AssetsController permission decorators', () => {
     const block = blockBetween('async createCategory(\n', 'async listCategories(');
     expect(block).toContain("@Get('categories')");
     expect(block).toContain("@RequirePermissions('assets:categories:read')");
+  });
+
+  it('requires assets:list:read on GET /assets/stats (declared before :assetId)', () => {
+    const block = blockBetween("@Get('stats')", 'async getAssetsSummary(');
+    expect(block).toContain("@RequirePermissions('assets:list:read')");
+    expect(block).toContain('@UseInterceptors(CacheInterceptor)');
+    expect(block).toContain('@CacheTTL(300)');
+    expect(block).toBeDefined();
   });
 
   it('requires assets:list:read on GET /assets/:assetId', () => {

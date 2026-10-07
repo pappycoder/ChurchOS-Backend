@@ -150,7 +150,10 @@ export class AdminService {
     });
 
     // Resolve the assigned heads' names for the responses
-    const heads = await this.resolveDepartmentHeads(churchId, departments.flatMap((d) => d));
+    const heads = await this.resolveDepartmentHeads(
+      churchId,
+      departments.flatMap((d) => d),
+    );
 
     // Map each department to a response DTO with member info
     return departments.map((d) =>
@@ -607,9 +610,7 @@ export class AdminService {
     // record as a successful no-op instead of a 404 the UI surfaces as a
     // "Failed to remove member" error.
     if (!existing) {
-      this.logger.log(
-        `Member ${memberId} not in department ${departmentId}: no-op removal`,
-      );
+      this.logger.log(`Member ${memberId} not in department ${departmentId}: no-op removal`);
       return;
     }
 
@@ -2068,9 +2069,7 @@ export class AdminService {
       })) ?? [];
 
     // Build a lookup map keyed by member ID
-    return new Map(
-      heads.map((m) => [m.id, { first_name: m.first_name, last_name: m.last_name }]),
-    );
+    return new Map(heads.map((m) => [m.id, { first_name: m.first_name, last_name: m.last_name }]));
   }
 
   /**

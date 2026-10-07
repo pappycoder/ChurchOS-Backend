@@ -14,6 +14,7 @@ export * from './create-asset.dto';
 export * from './update-asset.dto';
 export * from './list-assets.dto';
 export * from './asset-response.dto';
+export * from './asset-summary-response.dto';
 export * from './create-maintenance.dto';
 export * from './maintenance-response.dto';
 export * from './depreciation-response.dto';

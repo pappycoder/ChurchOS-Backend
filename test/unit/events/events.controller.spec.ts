@@ -75,7 +75,10 @@ describe('EventsController archive/restore permission decorators', () => {
   });
 
   it('requires events:registrations:update on DELETE /events/:eventId/register/:memberId', () => {
-    const block = blockBetween("@Delete(':eventId/register/:memberId')", 'async cancelRegistration(');
+    const block = blockBetween(
+      "@Delete(':eventId/register/:memberId')",
+      'async cancelRegistration(',
+    );
     expect(block).toContain("@RequirePermissions('events:registrations:update')");
   });
 

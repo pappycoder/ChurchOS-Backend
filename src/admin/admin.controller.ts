@@ -219,7 +219,13 @@ export class AdminController {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to add the member to the department
-    return this.adminService.addDepartmentMember(departmentId, dto, churchId, user.sub, req.profile);
+    return this.adminService.addDepartmentMember(
+      departmentId,
+      dto,
+      churchId,
+      user.sub,
+      req.profile,
+    );
   }
 
   /**

@@ -574,4 +574,72 @@ describe('VisitorsService', () => {
       expect(prismaMock.visitor.delete).toHaveBeenCalled();
     });
   });
+
+  describe('getVisitorsSummary', () => {
+    it('should return all four stats from parallel counts', async () => {
+      const result = await service.getVisitorsSummary(churchId);
+      expect(result).toEqual({ total: 1, newThisMonth: 1, inFollowUp: 1, converted: 1 });
+      expect(prismaMock.visitor.count).toHaveBeenCalledTimes(4);
+    });
+
+    it('should scope every count to the church and exclude deleted/archived visitors', async () => {
+      await service.getVisitorsSummary(churchId);
+      for (const call of (prismaMock.visitor.count as jest.Mock).mock.calls) {
+        expect(call[0].where.church_id).toBe(churchId);
+        expect(call[0].where.deleted_at).toBeNull();
+        expect(call[0].where.archived_at).toBeNull();
+      }
+    });
+
+    it('should count new visitors since the start of the current UTC month', async () => {
+      await service.getVisitorsSummary(churchId);
+      const newWhere = (prismaMock.visitor.count as jest.Mock).mock.calls[1][0].where;
+      const expectedStart = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      expect(newWhere.first_visit_date).toEqual({ gte: expectedStart });
+    });
+
+    it('should scope the in-follow-up count to active statuses without conversion', async () => {
+      await service.getVisitorsSummary(churchId);
+      const followUpWhere = (prismaMock.visitor.count as jest.Mock).mock.calls[2][0].where;
+      expect(followUpWhere.follow_up_status.in).toEqual([
+        'new',
+        'contacted',
+        'follow_up_scheduled',
+        'interested',
+      ]);
+      expect(followUpWhere.converted_member_id).toBeNull();
+    });
+
+    it('should count converted visitors via member link or converted status', async () => {
+      await service.getVisitorsSummary(churchId);
+      const convertedWhere = (prismaMock.visitor.count as jest.Mock).mock.calls[3][0].where;
+      expect(convertedWhere.OR).toEqual([
+        { converted_member_id: { not: null } },
+        { follow_up_status: 'converted' },
+      ]);
+    });
+
+    it('should branch-scope a non-HQ viewer to their branch plus untagged visitors', async () => {
+      await service.getVisitorsSummary(churchId, {
+        church_id: churchId,
+        branch_id: 'branch-1',
+        role: 'cell_leader',
+      });
+      const where = (prismaMock.visitor.count as jest.Mock).mock.calls[0][0].where;
+      expect(where.AND[0].OR).toEqual([{ branch_id: 'branch-1' }, { branch_id: null }]);
+    });
+
+    it('should not branch-scope an HQ viewer', async () => {
+      await service.getVisitorsSummary(churchId, {
+        church_id: churchId,
+        branch_id: 'branch-1',
+        role: 'church_admin',
+        is_admin_hq: true,
+      });
+      const where = (prismaMock.visitor.count as jest.Mock).mock.calls[0][0].where;
+      expect(where.AND).toBeUndefined();
+    });
+  });
 });

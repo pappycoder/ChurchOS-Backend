@@ -206,12 +206,25 @@ describe('MediaService', () => {
   });
 
   describe('getFolders', () => {
-    it('should return unique folder names', async () => {
-      prisma.mediaAsset.groupBy.mockResolvedValue([{ folder: 'profiles' }, { folder: 'sermons' }]);
+    it('should return folder names with counts and newest timestamps', async () => {
+      prisma.mediaAsset.groupBy.mockResolvedValue([
+        {
+          folder: 'profiles',
+          _count: { _all: 12 },
+          _max: { created_at: new Date('2026-10-01T08:00:00.000Z') },
+        },
+        { folder: 'sermons', _count: { _all: 4 }, _max: { created_at: null } },
+      ]);
 
       const result = await service.getFolders(mockChurchId);
 
-      expect(result).toEqual(['profiles', 'sermons']);
+      expect(result).toEqual([
+        { folder: 'profiles', count: 12, newestAt: '2026-10-01T08:00:00.000Z' },
+        { folder: 'sermons', count: 4, newestAt: null },
+      ]);
+      expect(prisma.mediaAsset.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({ _count: { _all: true }, _max: { created_at: true } }),
+      );
     });
   });
 

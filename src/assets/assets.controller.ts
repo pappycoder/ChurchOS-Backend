@@ -24,12 +24,14 @@ import {
   Query,
   Request,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import {
   ApiCreateEndpoint,
   ApiDeleteEndpoint,
@@ -47,6 +49,7 @@ import { AssetsService } from './assets.service';
 import {
   AssetCategoryResponseDto,
   AssetResponseDto,
+  AssetSummaryResponseDto,
   CreateAssetCategoryDto,
   CreateAssetDto,
   CreateLoanDto,
@@ -222,6 +225,22 @@ export class AssetsController {
         totalPages: Math.ceil(result.total / result.limit),
       },
     };
+  }
+
+  /**
+   * Returns asset register summary stats.
+   */
+  @Get('stats')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
+  @RequirePermissions('assets:list:read')
+  @ApiOkResponse({ type: AssetSummaryResponseDto })
+  @ApiOperation({
+    summary: 'Asset summary',
+    description: 'Returns active asset count and purchase/current valuation totals in one request.',
+  })
+  async getAssetsSummary(@Request() req: AuthenticatedRequest): Promise<AssetSummaryResponseDto> {
+    return this.assetsService.getAssetsSummary(this.getChurchId(req));
   }
 
   /**

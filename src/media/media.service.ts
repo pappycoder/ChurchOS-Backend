@@ -21,6 +21,7 @@ import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { MediaResponseDto } from './dto/media-response.dto';
 import { ListLibraryDto } from './dto/list-library.dto';
 import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
+import { MediaFolderSummaryDto } from './dto/media-folder-summary.dto';
 import sharp from 'sharp';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -328,16 +329,25 @@ export class MediaService {
   }
 
   /**
-   * Gets unique folder list for the church's media assets.
+   * Gets folder summaries for the church's media assets — each folder name
+   * with an asset count and the newest asset's timestamp. The web media
+   * library derives per-folder stats from this instead of walking the entire
+   * asset list.
    */
-  async getFolders(churchId: string): Promise<string[]> {
+  async getFolders(churchId: string): Promise<MediaFolderSummaryDto[]> {
     const result = await this.prisma.mediaAsset.groupBy({
       by: ['folder'],
       where: { church_id: churchId },
+      _count: { _all: true },
+      _max: { created_at: true },
       orderBy: { folder: 'asc' },
     });
 
-    return result.map((r) => r.folder);
+    return result.map((r) => ({
+      folder: r.folder,
+      count: r._count._all,
+      newestAt: r._max.created_at ? r._max.created_at.toISOString() : null,
+    }));
   }
 
   /**

@@ -39,6 +39,7 @@ import {
   UpdateAssetDto,
   ListAssetsDto,
   AssetResponseDto,
+  AssetSummaryResponseDto,
   CreateMaintenanceDto,
   MaintenanceResponseDto,
   DepreciationResponseDto,
@@ -428,6 +429,29 @@ export class AssetsService {
       total,
       page,
       limit,
+    };
+  }
+
+  /**
+   * Returns asset register stats (count + valuation) for dashboard cards.
+   * Computed in a single aggregate over active (non-archived) assets.
+   *
+   * @param churchId - Church ID
+   * @returns Active asset count and purchase/current value totals
+   */
+  async getAssetsSummary(churchId: string): Promise<AssetSummaryResponseDto> {
+    const where: Prisma.AssetWhereInput = { church_id: churchId, archived_at: null };
+
+    const agg = await this.prisma.asset.aggregate({
+      where,
+      _count: { _all: true },
+      _sum: { purchase_price: true, current_value: true },
+    });
+
+    return {
+      totalAssets: agg._count._all ?? 0,
+      totalPurchaseValue: agg._sum.purchase_price ?? 0,
+      totalCurrentValue: agg._sum.current_value ?? 0,
     };
   }
 

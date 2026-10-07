@@ -36,6 +36,10 @@ import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { RecordCashDto } from './dto/record-cash.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
 import { ListTransactionsDto } from './dto/list-transactions.dto';
+import {
+  TransactionSummaryResponseDto,
+  GivingTrendPointDto,
+} from './dto/transaction-summary-response.dto';
 import { CreateRecurringGivingDto } from './dto/create-recurring-giving.dto';
 import { RecurringGivingResponseDto } from './dto/recurring-giving-response.dto';
 import { ListRecurringGivingDto } from './dto/list-recurring-giving.dto';
@@ -855,17 +859,22 @@ export class GivingService {
   // ─── TRANSACTION QUERIES ─────────────────────────────────────────
 
   /**
-   * Lists transactions with pagination and filters.
+   * Builds the church-scoped Prisma where clause shared by transaction
+   * list and summary queries (branch scope + all list filters).
+   *
+   * @param churchId - The church tenant scope
+   * @param query - List/query DTO filters
+   * @param viewer - Optional viewer for branch scoping
+   * @param defaultStatus - Status to apply when the query omits one
+   *   (used by the summary so totals always mean "successful" by default)
+   * @returns A Prisma TransactionWhereInput
    */
-  async listTransactions(
+  private buildTransactionWhere(
     churchId: string,
     query: ListTransactionsDto,
     viewer?: ViewerScope | null,
-  ): Promise<{ data: TransactionResponseDto[]; total: number }> {
-    const page = query.page || 1;
-    const limit = query.limit || 20;
-    const skip = (page - 1) * limit;
-
+    defaultStatus?: string,
+  ): Prisma.TransactionWhereInput {
     const where: Prisma.TransactionWhereInput = { church_id: churchId };
 
     // Branch-scope for non-HQ viewers (transactions carry an optional branch_id).
@@ -878,7 +887,11 @@ export class GivingService {
     if (query.memberId) where.member_id = query.memberId;
     if (query.serviceId) where.service_id = query.serviceId;
     if (query.eventId) where.event_id = query.eventId;
-    if (query.status) where.status = query.status as Prisma.EnumTransactionStatusFilter;
+    if (query.status) {
+      where.status = query.status as Prisma.EnumTransactionStatusFilter;
+    } else if (defaultStatus) {
+      where.status = defaultStatus as Prisma.EnumTransactionStatusFilter;
+    }
     if (query.type) where.type = query.type as Prisma.EnumTransactionTypeFilter;
     if (query.gateway)
       where.payment_gateway = query.gateway as 'paystack' | 'flutterwave' | 'manual';
@@ -888,6 +901,23 @@ export class GivingService {
       if (query.startDate) where.created_at.gte = new Date(query.startDate);
       if (query.endDate) where.created_at.lte = new Date(query.endDate + 'T23:59:59.999Z');
     }
+
+    return where;
+  }
+
+  /**
+   * Lists transactions with pagination and filters.
+   */
+  async listTransactions(
+    churchId: string,
+    query: ListTransactionsDto,
+    viewer?: ViewerScope | null,
+  ): Promise<{ data: TransactionResponseDto[]; total: number }> {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where = this.buildTransactionWhere(churchId, query, viewer);
 
     const orderBy: Prisma.TransactionOrderByWithRelationInput[] = [];
     if (query.sortBy) {
@@ -915,6 +945,72 @@ export class GivingService {
     return {
       data: items.map((t) => this.mapTransactionToDto(t)),
       total,
+    };
+  }
+
+  /**
+   * Returns aggregated giving totals for the dashboard stat cards and
+   * trend chart: month-to-date total, all-time total, transaction count,
+   * and a 30-day daily trend. Defaults to successful transactions but
+   * honors the same category/member/service/event/type/gateway filters as
+   * listTransactions (an explicit `status` overrides the success default).
+   */
+  async getTransactionsSummary(
+    churchId: string,
+    query: ListTransactionsDto,
+    viewer?: ViewerScope | null,
+  ): Promise<TransactionSummaryResponseDto> {
+    const now = new Date();
+
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    const trendStart = new Date(now);
+    trendStart.setUTCHours(0, 0, 0, 0);
+    trendStart.setUTCDate(trendStart.getUTCDate() - 29);
+
+    const trendEnd = new Date(now);
+    trendEnd.setUTCHours(23, 59, 59, 999);
+
+    const where = this.buildTransactionWhere(churchId, query, viewer, 'success');
+
+    const [monthAgg, allTimeAgg, trendRows] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { ...where, created_at: { gte: monthStart } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where,
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.transaction.findMany({
+        where: { ...where, created_at: { gte: trendStart, lte: trendEnd } },
+        select: { amount: true, created_at: true },
+        orderBy: { created_at: 'asc' },
+      }),
+    ]);
+
+    const dailyTotals = new Map<string, number>();
+    for (let i = 0; i < 30; i++) {
+      const day = new Date(trendStart);
+      day.setUTCDate(day.getUTCDate() + i);
+      dailyTotals.set(day.toISOString().slice(0, 10), 0);
+    }
+    for (const row of trendRows) {
+      const key = new Date(row.created_at).toISOString().slice(0, 10);
+      dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + row.amount);
+    }
+
+    const trend: GivingTrendPointDto[] = Array.from(dailyTotals, ([date, total]) => ({
+      date,
+      total,
+    }));
+
+    return {
+      monthTotal: monthAgg._sum.amount ?? 0,
+      allTimeTotal: allTimeAgg._sum.amount ?? 0,
+      count: allTimeAgg._count._all ?? 0,
+      trend,
     };
   }
 

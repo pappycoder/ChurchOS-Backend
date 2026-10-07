@@ -8,17 +8,20 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
   Request,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { VisitorsService } from './visitors.service';
 import { CreateVisitorDto } from './dto/create-visitor.dto';
 import { UpdateVisitorDto } from './dto/update-visitor.dto';
 import { ConvertVisitorDto } from './dto/convert-visitor.dto';
 import { ListVisitorsDto } from './dto/list-visitors.dto';
 import { VisitorResponseDto } from './dto/visitor-response.dto';
+import { VisitorSummaryResponseDto } from './dto/visitor-summary-response.dto';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -72,6 +75,23 @@ export class VisitorsController {
         totalPages: Math.ceil(result.total / (query.limit || 20)),
       },
     };
+  }
+
+  @Get('stats')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
+  @RequirePermissions('visitors:list:read')
+  @ApiOkResponse({ type: VisitorSummaryResponseDto })
+  @ApiOperation({
+    summary: 'Visitor summary',
+    description:
+      'Returns total, new-this-month, in-follow-up, and converted visitor counts in one request.',
+  })
+  async getVisitorsSummary(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<VisitorSummaryResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.visitorsService.getVisitorsSummary(churchId, req.profile);
   }
 
   @Get(':visitorId')

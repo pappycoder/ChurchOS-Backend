@@ -304,12 +304,7 @@ describe('AdminService', () => {
       prisma.department.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.removeDepartmentMember(
-          mockDepartmentId,
-          mockMemberId,
-          mockChurchId,
-          mockUserId,
-        ),
+        service.removeDepartmentMember(mockDepartmentId, mockMemberId, mockChurchId, mockUserId),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.departmentMember.delete).not.toHaveBeenCalled();
     });

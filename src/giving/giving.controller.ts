@@ -20,6 +20,7 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
   Request,
   Res,
   Headers,
@@ -30,7 +31,7 @@ import {
 } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { RawBodyRequest } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader, ApiOkResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -46,6 +47,7 @@ import {
   ApiDeleteEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { GivingService } from './giving.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -54,6 +56,7 @@ import { CategoryResponseDto } from './dto/category-response.dto';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { RecordCashDto } from './dto/record-cash.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
+import { TransactionSummaryResponseDto } from './dto/transaction-summary-response.dto';
 import { ListTransactionsDto } from './dto/list-transactions.dto';
 import { CreateRecurringGivingDto } from './dto/create-recurring-giving.dto';
 import { RecurringGivingResponseDto } from './dto/recurring-giving-response.dto';
@@ -453,6 +456,27 @@ export class GivingController {
         totalPages: Math.ceil(result.total / (query.limit || 20)),
       },
     };
+  }
+
+  /**
+   * Return aggregated giving totals (month, all-time, count, 30-day trend).
+   */
+  @Get('transactions/summary')
+  @RequirePermissions('giving:records:read')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
+  @ApiOkResponse({ type: TransactionSummaryResponseDto })
+  @ApiOperation({
+    summary: 'Giving summary',
+    description:
+      'Returns month-to-date and all-time totals, a successful-transaction count, and a 30-day trend.',
+  })
+  async getTransactionsSummary(
+    @Query() query: ListTransactionsDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TransactionSummaryResponseDto> {
+    const churchId = req.profile?.church_id || '';
+    return this.givingService.getTransactionsSummary(churchId, query, req.profile);
   }
 
   /**

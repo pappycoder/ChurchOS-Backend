@@ -30,11 +30,13 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiOkResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import {
   AuthenticatedRequest,
   CurrentUser,
@@ -52,6 +54,7 @@ import { UploadMediaDto } from './dto/upload-media.dto';
 import { MediaResponseDto } from './dto/media-response.dto';
 import { ListLibraryDto } from './dto/list-library.dto';
 import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
+import { MediaFolderSummaryDto } from './dto/media-folder-summary.dto';
 
 /**
  * Controller for media upload operations.
@@ -175,12 +178,17 @@ export class MediaController {
    * Gets unique folder list for the church's media library.
    */
   @Get('library/folders')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300)
   @RequirePermissions('media:folders:read')
+  @ApiOkResponse({ type: MediaFolderSummaryDto, isArray: true })
   @ApiOperation({
     summary: 'List media folders',
-    description: 'Returns unique folder names used in the church media library.',
+    description: 'Returns each media folder with its asset count and newest asset timestamp.',
   })
-  async getFolders(@Request() req: AuthenticatedRequest): Promise<{ data: string[] }> {
+  async getFolders(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ data: MediaFolderSummaryDto[] }> {
     const churchId = req.profile?.church_id || '';
     const folders = await this.mediaService.getFolders(churchId);
     return { data: folders };

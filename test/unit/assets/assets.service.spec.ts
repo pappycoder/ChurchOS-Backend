@@ -310,6 +310,45 @@ describe('AssetsService', () => {
     });
   });
 
+  describe('getAssetsSummary', () => {
+    it('should return count and valuation totals from a single aggregate', async () => {
+      prisma.asset.aggregate.mockResolvedValue({
+        _count: { _all: 42 },
+        _sum: { purchase_price: 12500000, current_value: 9800000 },
+      });
+
+      const result = await service.getAssetsSummary(mockChurchId);
+
+      expect(result).toEqual({
+        totalAssets: 42,
+        totalPurchaseValue: 12500000,
+        totalCurrentValue: 9800000,
+      });
+      expect(prisma.asset.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { church_id: mockChurchId, archived_at: null },
+          _count: { _all: true },
+          _sum: { purchase_price: true, current_value: true },
+        }),
+      );
+    });
+
+    it('should default null sums and counts to zero', async () => {
+      prisma.asset.aggregate.mockResolvedValue({
+        _count: { _all: 0 },
+        _sum: { purchase_price: null, current_value: null },
+      });
+
+      const result = await service.getAssetsSummary(mockChurchId);
+
+      expect(result).toEqual({
+        totalAssets: 0,
+        totalPurchaseValue: 0,
+        totalCurrentValue: 0,
+      });
+    });
+  });
+
   describe('getAsset', () => {
     it('should return asset by ID', async () => {
       prisma.asset.findFirst.mockResolvedValue(mockAsset);

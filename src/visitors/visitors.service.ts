@@ -12,6 +12,7 @@ import { UpdateVisitorDto } from './dto/update-visitor.dto';
 import { ConvertVisitorDto } from './dto/convert-visitor.dto';
 import { ListVisitorsDto } from './dto/list-visitors.dto';
 import { VisitorResponseDto } from './dto/visitor-response.dto';
+import { VisitorSummaryResponseDto } from './dto/visitor-summary-response.dto';
 import { ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
 
@@ -156,6 +157,60 @@ export class VisitorsService {
       data: visitors.map((v) => this.toResponseDto(v)),
       total,
     };
+  }
+
+  /**
+   * Returns visitor follow-up stats for the dashboard stat cards: total
+   * active visitors, new visitors this month, visitors in an active follow-up
+   * funnel, and converted visitors. Mirrors `findAll` scoping — soft-deleted
+   * (converted) and archived visitors are excluded, and branch-restricted
+   * viewers only see their own branch plus untagged legacy visitors.
+   */
+  async getVisitorsSummary(
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<VisitorSummaryResponseDto> {
+    const conditions: Prisma.VisitorWhereInput[] = [];
+
+    if (viewer && !viewer.is_admin_hq && viewer.branch_id) {
+      conditions.push({
+        OR: [{ branch_id: viewer.branch_id }, { branch_id: null }],
+      });
+    }
+
+    const baseWhere: Prisma.VisitorWhereInput = {
+      church_id: churchId,
+      deleted_at: null,
+      archived_at: null,
+      ...(conditions.length ? { AND: conditions } : {}),
+    };
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    const [total, newThisMonth, inFollowUp, converted] = await Promise.all([
+      this.prisma.visitor.count({ where: baseWhere }),
+      this.prisma.visitor.count({
+        where: { ...baseWhere, first_visit_date: { gte: monthStart } },
+      }),
+      this.prisma.visitor.count({
+        where: {
+          ...baseWhere,
+          follow_up_status: {
+            in: ['new', 'contacted', 'follow_up_scheduled', 'interested'],
+          },
+          converted_member_id: null,
+        },
+      }),
+      this.prisma.visitor.count({
+        where: {
+          ...baseWhere,
+          OR: [{ converted_member_id: { not: null } }, { follow_up_status: 'converted' }],
+        },
+      }),
+    ]);
+
+    return { total, newThisMonth, inFollowUp, converted };
   }
 
   async findOne(id: string, churchId: string): Promise<VisitorResponseDto> {

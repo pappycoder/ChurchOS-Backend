@@ -37,7 +37,11 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'senior_pastor', description: 'Senior/lead pastor with near-full access' },
   { name: 'church_admin', description: 'Church administrator with full access' },
   { name: 'branch_pastor', description: 'Branch/campus pastor with limited admin access' },
-  { name: 'department_head', description: 'Department leader with member-level access plus management of their own department' },
+  {
+    name: 'department_head',
+    description:
+      'Department leader with member-level access plus management of their own department',
+  },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
   {

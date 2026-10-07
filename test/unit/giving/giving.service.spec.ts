@@ -1066,6 +1066,116 @@ describe('GivingService', () => {
     });
   });
 
+  describe('getTransactionsSummary', () => {
+    const stubSummaryAggregates = (monthTotal: number, allTimeTotal: number, count: number) => {
+      (model('transaction') as unknown as { aggregate: jest.Mock }).aggregate
+        .mockResolvedValueOnce({ _sum: { amount: monthTotal } })
+        .mockResolvedValueOnce({ _sum: { amount: allTimeTotal }, _count: { _all: count } });
+    };
+
+    const summaryWhereCalls = () => {
+      const calls = [
+        ...(model('transaction').aggregate as jest.Mock).mock.calls,
+        ...model('transaction').findMany.mock.calls,
+      ] as [Record<string, unknown>][];
+      return calls.map((c) => c[0].where as Record<string, unknown>);
+    };
+
+    beforeEach(() => {
+      (model('transaction') as unknown as { aggregate: jest.Mock }).aggregate = jest
+        .fn()
+        .mockResolvedValue({ _sum: { amount: 0 }, _count: { _all: 0 } });
+    });
+
+    it('should return month/all-time totals, count, and a 30-day zero-filled trend', async () => {
+      stubSummaryAggregates(1500, 5000, 42);
+      model('transaction').findMany.mockResolvedValue([
+        { amount: 1000, created_at: new Date('2026-10-05T09:00:00.000Z') },
+        { amount: 500, created_at: new Date('2026-10-05T18:00:00.000Z') },
+      ]);
+
+      const result = await service.getTransactionsSummary(mockChurchId, {});
+
+      expect(result.monthTotal).toBe(1500);
+      expect(result.allTimeTotal).toBe(5000);
+      expect(result.count).toBe(42);
+      expect(result.trend).toHaveLength(30);
+      expect(result.trend[0].total).toBe(0);
+      expect(result.trend.find((p) => p.date === '2026-10-05')).toEqual({
+        date: '2026-10-05',
+        total: 1500,
+      });
+    });
+
+    it('should default the status filter to success across all three queries', async () => {
+      stubSummaryAggregates(0, 0, 0);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.getTransactionsSummary(mockChurchId, {});
+
+      const wheres = summaryWhereCalls();
+      expect(wheres).toHaveLength(3);
+      for (const where of wheres) {
+        expect(where.status).toBe('success');
+        expect(where.church_id).toBe(mockChurchId);
+      }
+    });
+
+    it('should honor an explicit status override', async () => {
+      stubSummaryAggregates(0, 0, 0);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.getTransactionsSummary(mockChurchId, { status: 'failed' });
+
+      for (const { status } of summaryWhereCalls()) {
+        expect(status).toBe('failed');
+      }
+    });
+
+    it('should propagate list filters into the aggregate where clauses', async () => {
+      stubSummaryAggregates(0, 0, 0);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.getTransactionsSummary(mockChurchId, { categoryId: mockCategoryId });
+
+      for (const where of summaryWhereCalls()) {
+        expect(where.category_id).toBe(mockCategoryId);
+      }
+    });
+
+    it('should scope the month window to the current calendar month', async () => {
+      stubSummaryAggregates(0, 0, 0);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.getTransactionsSummary(mockChurchId, {});
+
+      const monthWhere = (model('transaction').aggregate as jest.Mock).mock.calls[0][0].where as {
+        created_at: { gte: Date };
+      };
+      expect(monthWhere.created_at.gte.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+    });
+
+    it('should branch-scope a non-HQ viewer in every query', async () => {
+      stubSummaryAggregates(0, 0, 0);
+      model('transaction').findMany.mockResolvedValue([]);
+
+      await service.getTransactionsSummary(
+        mockChurchId,
+        {},
+        {
+          church_id: mockChurchId,
+          branch_id: 'branch-a',
+          role: 'treasurer',
+          is_admin_hq: false,
+        },
+      );
+
+      for (const { branch_id } of summaryWhereCalls()) {
+        expect(branch_id).toBe('branch-a');
+      }
+    });
+  });
+
   describe('getTransactionById', () => {
     it('should return transaction by ID', async () => {
       model('transaction').findUnique.mockResolvedValue(mockTransaction);
