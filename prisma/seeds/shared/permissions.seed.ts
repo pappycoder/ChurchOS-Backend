@@ -473,6 +473,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'giving:create',
     'giving:read',
     'giving:update',
+    // Giving records use the service list for the service filter dropdown.
+    'attendance:services:read',
     // Reports — read
     'reports:read',
     // Assets — create + read + update + delete
