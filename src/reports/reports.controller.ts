@@ -8,6 +8,7 @@
 
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Body,
@@ -45,7 +46,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
-  @RequirePermissions('reports:read')
+  @RequirePermissions('reports:financial:read')
   @ApiOperation({
     summary: 'Financial report',
     description: 'Giving totals, trends, and breakdown by category.',
@@ -70,7 +71,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
-  @RequirePermissions('reports:read')
+  @RequirePermissions('reports:attendance:read')
   @ApiOperation({
     summary: 'Attendance report',
     description: 'Attendance totals, trends, and breakdown by service.',
@@ -95,7 +96,7 @@ export class ReportsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(600)
   @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
-  @RequirePermissions('reports:read')
+  @RequirePermissions('reports:members:read')
   @ApiOperation({
     summary: 'Member report',
     description: 'Member demographics, growth, and activity summary.',
@@ -117,13 +118,17 @@ export class ReportsController {
    * Export a report as CSV.
    */
   @Post('export')
-  @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
-  @RequirePermissions('reports:read')
+  @RequirePermissions('reports:view')
   @ApiOperation({ summary: 'Export report', description: 'Export report data as CSV.' })
   async exportReport(
     @Body() dto: ExportReportDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ data: unknown; format: string }> {
+    const requiredPermission = `reports:${dto.type}:read`;
+    if (!req.profile?.permissions?.includes(requiredPermission)) {
+      throw new ForbiddenException(`Access denied. Missing permissions: ${requiredPermission}`);
+    }
+
     const churchId = req.profile?.church_id || '';
 
     let reportData: unknown;

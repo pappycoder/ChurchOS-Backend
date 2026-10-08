@@ -111,6 +111,7 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   visitors: ['list', 'new', 'followup'],
   assets: ['list', 'categories', 'maintenance', 'loans'],
   forms: ['list', 'submissions'],
+  reports: ['financial', 'attendance', 'members'],
 };
 
 /**
@@ -232,6 +233,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'reports:read',
     'reports:update',
     'reports:delete',
+    'reports:financial:read',
+    'reports:attendance:read',
+    'reports:members:read',
     // Forms — full access
     'forms:create',
     'forms:read',
@@ -337,8 +341,10 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'profiles:read',
     // WhatsApp — read
     'whatsapp:read',
-    // Reports — read
-    'reports:read',
+    // Reports — attendance and members only
+    'reports:view',
+    'reports:attendance:read',
+    'reports:members:read',
     // Forms — create + read + update
     'forms:create',
     'forms:read',
@@ -443,8 +449,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'visitors:update',
     // Pastoral — read
     'pastoral:read',
-    // Reports — read
-    'reports:read',
+    // Reports — members only
+    'reports:view',
+    'reports:members:read',
     // Assets — create + read + update
     'assets:create',
     'assets:read',
@@ -475,8 +482,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'giving:update',
     // Giving records use the service list for the service filter dropdown.
     'attendance:services:read',
-    // Reports — read
-    'reports:read',
+    // Reports — financial only
+    'reports:view',
+    'reports:financial:read',
     // Assets — create + read + update + delete
     'assets:create',
     'assets:read',
