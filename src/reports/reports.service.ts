@@ -10,6 +10,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   FinancialReportDto,
@@ -184,28 +185,31 @@ export class ReportsService {
     churchId: string,
     startDate?: string,
     endDate?: string,
+    branchId?: string,
   ): Promise<MemberReportDto> {
     const start = startDate
       ? new Date(startDate)
       : new Date(new Date().setMonth(new Date().getMonth() - 12));
     const end = endDate ? new Date(endDate) : new Date();
 
+    const memberWhere: Prisma.MemberWhereInput = { church_id: churchId };
+    if (branchId) memberWhere.branch_id = branchId;
     const [totalMembers, newMembers, byStatus, byGender] = await Promise.all([
-      this.prisma.member.count({ where: { church_id: churchId } }),
+      this.prisma.member.count({ where: memberWhere }),
       this.prisma.member.count({
         where: {
-          church_id: churchId,
+          ...memberWhere,
           created_at: { gte: start, lte: end },
         },
       }),
       this.prisma.member.groupBy({
         by: ['status'],
-        where: { church_id: churchId },
+        where: memberWhere,
         _count: true,
       }),
       this.prisma.member.groupBy({
         by: ['gender'],
-        where: { church_id: churchId, gender: { not: null } },
+        where: { ...memberWhere, gender: { not: null } },
         _count: true,
       }),
     ]);
@@ -222,7 +226,7 @@ export class ReportsService {
 
     const activeMembers = statusBreakdown.find((s) => s.status === 'active')?.count || 0;
 
-    const monthlyGrowth = await this.getMonthlyMemberGrowth(churchId, start, end);
+    const monthlyGrowth = await this.getMonthlyMemberGrowth(churchId, start, end, branchId);
 
     this.logger.log(`Member report generated for church ${churchId}`);
 
@@ -286,12 +290,15 @@ export class ReportsService {
     churchId: string,
     start: Date,
     end: Date,
+    branchId?: string,
   ): Promise<MonthlyTrendDto[]> {
+    const where: Prisma.MemberWhereInput = {
+      church_id: churchId,
+      created_at: { gte: start, lte: end },
+    };
+    if (branchId) where.branch_id = branchId;
     const members = await this.prisma.member.findMany({
-      where: {
-        church_id: churchId,
-        created_at: { gte: start, lte: end },
-      },
+      where,
       select: { created_at: true },
     });
 

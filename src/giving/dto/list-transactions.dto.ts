@@ -29,6 +29,11 @@ export class ListTransactionsDto {
   @IsOptional()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by branch ID (HQ viewers only)' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by member ID' })
   @IsUUID()
   @IsOptional()

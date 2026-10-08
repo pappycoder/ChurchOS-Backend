@@ -476,10 +476,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'assets:delete',
     // Church Settings — read
     'church_settings:read',
-    // Members — read
-    'members:read',
-    // Member floor — read (everything a normal member can see/do)
-    'events:read',
+    // Event calendar — read (no staff event list or registrations)
+    'events:calendar:read',
     'sermons:read',
     'media:read',
     'profiles:read',

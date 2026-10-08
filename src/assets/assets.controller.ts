@@ -214,7 +214,11 @@ export class AssetsController {
     data: AssetResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    const result = await this.assetsService.listAssets(this.getChurchId(req), query);
+    const scopedQuery = {
+      ...query,
+      branchId: req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
+    };
+    const result = await this.assetsService.listAssets(this.getChurchId(req), scopedQuery);
 
     return {
       data: result.items,
@@ -239,8 +243,12 @@ export class AssetsController {
     summary: 'Asset summary',
     description: 'Returns active asset count and purchase/current valuation totals in one request.',
   })
-  async getAssetsSummary(@Request() req: AuthenticatedRequest): Promise<AssetSummaryResponseDto> {
-    return this.assetsService.getAssetsSummary(this.getChurchId(req));
+  async getAssetsSummary(
+    @Query('branchId') branchId: string | undefined,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<AssetSummaryResponseDto> {
+    const effectiveBranchId = req.profile?.is_admin_hq ? branchId : req.profile?.branch_id;
+    return this.assetsService.getAssetsSummary(this.getChurchId(req), effectiveBranchId);
   }
 
   /**

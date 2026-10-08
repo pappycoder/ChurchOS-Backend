@@ -881,6 +881,8 @@ export class GivingService {
     const scope = this.branchScope.resolve(viewer);
     if (!scope.churchOnly && scope.branchId) {
       where.branch_id = scope.branchId;
+    } else if (scope.churchOnly && query.branchId) {
+      where.branch_id = query.branchId;
     }
 
     if (query.categoryId) where.category_id = query.categoryId;

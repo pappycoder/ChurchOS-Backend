@@ -59,7 +59,7 @@ export class ReportsController {
       churchId,
       query.startDate,
       query.endDate,
-      query.branchId,
+      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
     );
   }
 
@@ -84,7 +84,7 @@ export class ReportsController {
       churchId,
       query.startDate,
       query.endDate,
-      query.branchId,
+      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
     );
   }
 
@@ -105,7 +105,12 @@ export class ReportsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<MemberReportDto> {
     const churchId = req.profile?.church_id || '';
-    return this.reportsService.getMemberReport(churchId, query.startDate, query.endDate);
+    return this.reportsService.getMemberReport(
+      churchId,
+      query.startDate,
+      query.endDate,
+      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
+    );
   }
 
   /**
@@ -128,7 +133,7 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
-          dto.branchId,
+          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
         );
         break;
       case 'attendance':
@@ -136,7 +141,7 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
-          dto.branchId,
+          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
         );
         break;
       case 'members':
@@ -144,6 +149,7 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
+          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
         );
         break;
       default:

@@ -439,8 +439,9 @@ export class AssetsService {
    * @param churchId - Church ID
    * @returns Active asset count and purchase/current value totals
    */
-  async getAssetsSummary(churchId: string): Promise<AssetSummaryResponseDto> {
+  async getAssetsSummary(churchId: string, branchId?: string): Promise<AssetSummaryResponseDto> {
     const where: Prisma.AssetWhereInput = { church_id: churchId, archived_at: null };
+    if (branchId) where.branch_id = branchId;
 
     const agg = await this.prisma.asset.aggregate({
       where,
