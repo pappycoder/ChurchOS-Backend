@@ -135,17 +135,25 @@ export class CacheInterceptor implements NestInterceptor {
 
   /**
    * Builds a unique cache key from the request method, URL, query params,
-   * the authenticated tenant, and the tenant's current cache version.
+   * the authenticated tenant, the viewer's effective branch scope, and the
+   * tenant's current cache version.
    *
    * Including church_id prevents cached responses from leaking across
-   * churches (multi-tenant isolation). Including the cache version means any
-   * write to the church (via CacheVersionInterceptor) changes the key and
-   * forces a recompute — stale data can never be served.
+   * churches (multi-tenant isolation). Including the branch scope prevents
+   * leakage WITHIN a church: an admin-HQ viewer (church-wide) and a
+   * branch-restricted viewer hitting the same URL would otherwise share one
+   * entry and could be served each other's scope. Including the cache version
+   * means any write to the church (via CacheVersionInterceptor) changes the
+   * key and forces a recompute — stale data can never be served.
    */
   private async buildCacheKey(request: Request): Promise<string> {
     const queryString = request.url.includes('?') ? request.url.split('?')[1] || '' : '';
     const path = request.route?.path || request.url.split('?')[0];
-    const churchId = (request as AuthenticatedRequest).profile?.church_id || 'global';
+    const profile = (request as AuthenticatedRequest).profile;
+    const churchId = profile?.church_id || 'global';
+    // Effective branch scope: admin-HQ holders see the whole church ('hq');
+    // everyone else is pinned to their own branch (or 'none' when unassigned).
+    const scope = profile?.is_admin_hq ? 'hq' : profile?.branch_id || 'none';
 
     let version = '0';
     try {
@@ -155,7 +163,7 @@ export class CacheInterceptor implements NestInterceptor {
       // gets a short TTL and is recomputed on the next mutation.
     }
 
-    return `cache:${request.method}:${churchId}:${version}:${path}:${queryString}`;
+    return `cache:${request.method}:${churchId}:${scope}:${version}:${path}:${queryString}`;
   }
 
   /**
