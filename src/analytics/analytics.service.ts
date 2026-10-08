@@ -141,48 +141,38 @@ export class AnalyticsService {
       ...(scope.branchId ? { branch_id: scope.branchId } : {}),
     };
 
-    const [
-      totalMembers,
-      activeMembers,
-      newMembers,
-      totalBranches,
-      totalAttendance,
-      givingAggregate,
-      atRiskCount,
-      upcomingEvents,
-      pendingSubmissions,
-      engagementCounts,
-    ] = await Promise.all([
-      this.prisma.member.count({ where: memberWhere }),
-      this.prisma.member.count({ where: { ...memberWhere, status: 'active' } }),
-      this.prisma.member.count({
-        where: {
-          ...memberWhere,
-          ...(memberSinceFilter ? { member_since: memberSinceFilter } : {}),
-        },
-      }),
-      this.prisma.branch.count({
-        where: {
-          church_id: churchId,
-          ...(scope.branchId ? { id: scope.branchId } : {}),
-        },
-      }),
-      this.prisma.attendance.count({ where: attendanceWhere }),
-      this.prisma.transaction.aggregate({
-        where: givingWhere,
-        _sum: { amount: true },
-      }),
-      this.prisma.riskScore.count({
-        where: {
-          church_id: churchId,
-          level: { in: ['high', 'critical'] },
-          ...(scope.branchId ? { member: { branch_id: scope.branchId } } : {}),
-        },
-      }),
-      this.prisma.event.count({ where: eventWhere }),
-      this.prisma.formSubmission.count({ where: { church_id: churchId, status: 'pending' } }),
-      this.getEngagementDistribution(churchId, scope.branchId),
-    ]);
+    // Keep aggregation reads serial to limit per-request Postgres connections.
+    const totalMembers = await this.prisma.member.count({ where: memberWhere });
+    const activeMembers = await this.prisma.member.count({ where: { ...memberWhere, status: 'active' } });
+    const newMembers = await this.prisma.member.count({
+      where: {
+        ...memberWhere,
+        ...(memberSinceFilter ? { member_since: memberSinceFilter } : {}),
+      },
+    });
+    const totalBranches = await this.prisma.branch.count({
+      where: {
+        church_id: churchId,
+        ...(scope.branchId ? { id: scope.branchId } : {}),
+      },
+    });
+    const totalAttendance = await this.prisma.attendance.count({ where: attendanceWhere });
+    const givingAggregate = await this.prisma.transaction.aggregate({
+      where: givingWhere,
+      _sum: { amount: true },
+    });
+    const atRiskCount = await this.prisma.riskScore.count({
+      where: {
+        church_id: churchId,
+        level: { in: ['high', 'critical'] },
+        ...(scope.branchId ? { member: { branch_id: scope.branchId } } : {}),
+      },
+    });
+    const upcomingEvents = await this.prisma.event.count({ where: eventWhere });
+    const pendingSubmissions = await this.prisma.formSubmission.count({
+      where: { church_id: churchId, status: 'pending' },
+    });
+    const engagementCounts = await this.getEngagementDistribution(churchId, scope.branchId);
 
     return {
       totalMembers,
@@ -211,12 +201,10 @@ export class AnalyticsService {
         score,
         ...(branchId ? { member: { branch_id: branchId } } : {}),
       }) as Prisma.EngagementScoreWhereInput;
-    const [highly, moderately, low, disengaged] = await Promise.all([
-      this.prisma.engagementScore.count({ where: where({ gte: 80 }) }),
-      this.prisma.engagementScore.count({ where: where({ gte: 50, lt: 80 }) }),
-      this.prisma.engagementScore.count({ where: where({ gte: 20, lt: 50 }) }),
-      this.prisma.engagementScore.count({ where: where({ lt: 20 }) }),
-    ]);
+    const highly = await this.prisma.engagementScore.count({ where: where({ gte: 80 }) });
+    const moderately = await this.prisma.engagementScore.count({ where: where({ gte: 50, lt: 80 }) });
+    const low = await this.prisma.engagementScore.count({ where: where({ gte: 20, lt: 50 }) });
+    const disengaged = await this.prisma.engagementScore.count({ where: where({ lt: 20 }) });
 
     return { highlyEngaged: highly, moderatelyEngaged: moderately, lowEngaged: low, disengaged };
   }
@@ -250,62 +238,59 @@ export class AnalyticsService {
 
     const successWhere: Prisma.TransactionWhereInput = { ...baseWhere, status: 'success' };
 
-    const [
-      aggregate,
-      byCategoryRaw,
-      byBranchRaw,
-      byTypeRaw,
-      byStatusRaw,
-      topDonorsRaw,
-      recurringPlans,
-      transactions,
-    ] = await Promise.all([
-      this.prisma.transaction.aggregate({
-        where: successWhere,
-        _sum: { amount: true },
-        _count: { amount: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['category_id'],
-        where: successWhere,
-        _sum: { amount: true },
-        _count: { amount: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['branch_id'],
-        where: successWhere,
-        _sum: { amount: true },
-        _count: { amount: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['type'],
-        where: successWhere,
-        _sum: { amount: true },
-        _count: { amount: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['status'],
-        where: baseWhere,
-        _count: { id: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['member_id'],
-        where: { ...successWhere, member_id: { not: null } },
-        _sum: { amount: true },
-        _count: { amount: true },
-        orderBy: { _sum: { amount: 'desc' } },
-        take: 10,
-      }),
-      this.prisma.recurringGiving.findMany({
-        where: { church_id: churchId, is_active: true },
-        select: { amount: true, frequency: true },
-      }),
-      this.prisma.transaction.findMany({
-        where: successWhere,
-        select: { created_at: true, amount: true },
-        orderBy: { created_at: 'asc' },
-      }),
-    ]);
+    // Keep this aggregation serial. Fanning out eight independent Prisma
+    // operations per page request can exhaust the limited Postgres session
+    // pool when multiple users open analytics at once.
+    const aggregate = await this.prisma.transaction.aggregate({
+      where: successWhere,
+      _sum: { amount: true },
+      _count: { amount: true },
+    });
+    const byCategoryRaw = await this.prisma.transaction.groupBy({
+      by: ['category_id'],
+      where: successWhere,
+      _sum: { amount: true },
+      _count: { amount: true },
+    });
+    const byBranchRaw = await this.prisma.transaction.groupBy({
+      by: ['branch_id'],
+      where: successWhere,
+      _sum: { amount: true },
+      _count: { amount: true },
+    });
+    const byTypeRaw = await this.prisma.transaction.groupBy({
+      by: ['type'],
+      where: successWhere,
+      _sum: { amount: true },
+      _count: { amount: true },
+    });
+    const byStatusRaw = await this.prisma.transaction.groupBy({
+      by: ['status'],
+      where: baseWhere,
+      _count: { id: true },
+    });
+    const topDonorsRaw = await this.prisma.transaction.groupBy({
+      by: ['member_id'],
+      where: { ...successWhere, member_id: { not: null } },
+      _sum: { amount: true },
+      _count: { amount: true },
+      orderBy: { _sum: { amount: 'desc' } },
+      take: 10,
+    });
+    const recurringBranchId = scope.churchOnly ? branchId : scope.branchId;
+    const recurringPlans = await this.prisma.recurringGiving.findMany({
+      where: {
+        church_id: churchId,
+        is_active: true,
+        ...(recurringBranchId ? { member: { branch_id: recurringBranchId } } : {}),
+      },
+      select: { amount: true, frequency: true },
+    });
+    const transactions = await this.prisma.transaction.findMany({
+      where: successWhere,
+      select: { created_at: true, amount: true },
+      orderBy: { created_at: 'asc' },
+    });
 
     const categoryIds = byCategoryRaw.map((c) => c.category_id).filter(Boolean) as string[];
     const categories = categoryIds.length
@@ -424,33 +409,31 @@ export class AnalyticsService {
       baseWhere.service = { branch_id: scope.branchId };
     }
 
-    const [total, members, visitors, bySourceRaw, attendanceRecords] = await Promise.all([
-      this.prisma.attendance.count({ where: baseWhere }),
-      this.prisma.attendance.count({
-        where: { ...baseWhere, member_id: { not: null } },
-      }),
-      this.prisma.attendance.count({
-        where: { ...baseWhere, member_id: null },
-      }),
-      this.prisma.attendance.groupBy({
-        by: ['source'],
-        where: baseWhere,
-        _count: { id: true },
-      }),
-      this.prisma.attendance.findMany({
-        where: baseWhere,
-        select: {
-          id: true,
-          checkin_at: true,
-          member_id: true,
-          visitor_name: true,
-          service: {
-            select: { id: true, name: true, branch_id: true, branch: { select: { name: true } } },
-          },
+    const total = await this.prisma.attendance.count({ where: baseWhere });
+    const members = await this.prisma.attendance.count({
+      where: { ...baseWhere, member_id: { not: null } },
+    });
+    const visitors = await this.prisma.attendance.count({
+      where: { ...baseWhere, member_id: null },
+    });
+    const bySourceRaw = await this.prisma.attendance.groupBy({
+      by: ['source'],
+      where: baseWhere,
+      _count: { id: true },
+    });
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        checkin_at: true,
+        member_id: true,
+        visitor_name: true,
+        service: {
+          select: { id: true, name: true, branch_id: true, branch: { select: { name: true } } },
         },
-        orderBy: { checkin_at: 'asc' },
-      }),
-    ]);
+      },
+      orderBy: { checkin_at: 'asc' },
+    });
 
     const bySource: Record<string, number> = {};
     for (const s of bySourceRaw) {
@@ -564,22 +547,20 @@ export class AnalyticsService {
       church_id: churchId,
       ...(scope.branchId ? { branch_id: scope.branchId } : {}),
     };
-    const [members, statusCounts, genderCounts] = await Promise.all([
-      this.prisma.member.findMany({
-        where,
-        select: { id: true, status: true, gender: true, date_of_birth: true, member_since: true },
-      }),
-      this.prisma.member.groupBy({
-        by: ['status'],
-        where,
-        _count: { id: true },
-      }),
-      this.prisma.member.groupBy({
-        by: ['gender'],
-        where,
-        _count: { id: true },
-      }),
-    ]);
+    const members = await this.prisma.member.findMany({
+      where,
+      select: { id: true, status: true, gender: true, date_of_birth: true, member_since: true },
+    });
+    const statusCounts = await this.prisma.member.groupBy({
+      by: ['status'],
+      where,
+      _count: { id: true },
+    });
+    const genderCounts = await this.prisma.member.groupBy({
+      by: ['gender'],
+      where,
+      _count: { id: true },
+    });
 
     const total = members.length;
 
@@ -783,17 +764,15 @@ export class AnalyticsService {
       ...(createdFilter ? { created_at: createdFilter } : {}),
     };
 
-    const [messageStats, broadcasts] = await Promise.all([
-      this.prisma.message.groupBy({
-        by: ['channel', 'status'],
-        where: messageWhere,
-        _count: { id: true },
-      }),
-      this.prisma.broadcast.findMany({
-        where: broadcastWhere,
-        select: { status: true, total_recipients: true },
-      }),
-    ]);
+    const messageStats = await this.prisma.message.groupBy({
+      by: ['channel', 'status'],
+      where: messageWhere,
+      _count: { id: true },
+    });
+    const broadcasts = await this.prisma.broadcast.findMany({
+      where: broadcastWhere,
+      select: { status: true, total_recipients: true },
+    });
 
     const channelMap = new Map<string, ChannelStatsDto>();
 

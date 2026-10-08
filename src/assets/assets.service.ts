@@ -408,21 +408,21 @@ export class AssetsService {
       ];
     }
 
-    const [assets, total] = await Promise.all([
-      this.prisma.asset.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: 'desc' },
-        include: {
-          category: true,
-          branch: { select: { name: true } },
-          department: { select: { name: true } },
-          custodian: { select: { first_name: true, last_name: true } },
-        },
-      }),
-      this.prisma.asset.count({ where }),
-    ]);
+    // Run these as separate awaited queries so a list request uses only one
+    // database connection at a time under the capped Postgres session pool.
+    const assets = await this.prisma.asset.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { created_at: 'desc' },
+      include: {
+        category: true,
+        branch: { select: { name: true } },
+        department: { select: { name: true } },
+        custodian: { select: { first_name: true, last_name: true } },
+      },
+    });
+    const total = await this.prisma.asset.count({ where });
 
     return {
       items: assets.map((asset) => this.mapAsset(asset as AssetWithRelations)),

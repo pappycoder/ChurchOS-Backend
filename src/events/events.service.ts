@@ -1920,17 +1920,15 @@ export class EventsService {
       throw new NotFoundException('Event not found');
     }
 
-    const [registered, checkedInRegistrations, attendanceCount] = await Promise.all([
-      this.prisma.eventRegistration.count({
-        where: { event_id: eventId, church_id: churchId },
-      }),
-      this.prisma.eventRegistration.count({
-        where: { event_id: eventId, church_id: churchId, checked_in: true },
-      }),
-      this.prisma.attendance.count({
-        where: { event_id: eventId, church_id: churchId },
-      }),
-    ]);
+    const registered = await this.prisma.eventRegistration.count({
+      where: { event_id: eventId, church_id: churchId },
+    });
+    const checkedInRegistrations = await this.prisma.eventRegistration.count({
+      where: { event_id: eventId, church_id: churchId, checked_in: true },
+    });
+    const attendanceCount = await this.prisma.attendance.count({
+      where: { event_id: eventId, church_id: churchId },
+    });
 
     const walkIns = attendanceCount - checkedInRegistrations;
     const noShows = registered - checkedInRegistrations;

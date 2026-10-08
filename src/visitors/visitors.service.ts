@@ -188,27 +188,23 @@ export class VisitorsService {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    const [total, newThisMonth, inFollowUp, converted] = await Promise.all([
-      this.prisma.visitor.count({ where: baseWhere }),
-      this.prisma.visitor.count({
-        where: { ...baseWhere, first_visit_date: { gte: monthStart } },
-      }),
-      this.prisma.visitor.count({
-        where: {
-          ...baseWhere,
-          follow_up_status: {
-            in: ['new', 'contacted', 'follow_up_scheduled', 'interested'],
-          },
-          converted_member_id: null,
-        },
-      }),
-      this.prisma.visitor.count({
-        where: {
-          ...baseWhere,
-          OR: [{ converted_member_id: { not: null } }, { follow_up_status: 'converted' }],
-        },
-      }),
-    ]);
+    const total = await this.prisma.visitor.count({ where: baseWhere });
+    const newThisMonth = await this.prisma.visitor.count({
+      where: { ...baseWhere, first_visit_date: { gte: monthStart } },
+    });
+    const inFollowUp = await this.prisma.visitor.count({
+      where: {
+        ...baseWhere,
+        follow_up_status: { in: ['new', 'contacted', 'follow_up_scheduled', 'interested'] },
+        converted_member_id: null,
+      },
+    });
+    const converted = await this.prisma.visitor.count({
+      where: {
+        ...baseWhere,
+        OR: [{ converted_member_id: { not: null } }, { follow_up_status: 'converted' }],
+      },
+    });
 
     return { total, newThisMonth, inFollowUp, converted };
   }

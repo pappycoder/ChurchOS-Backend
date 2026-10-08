@@ -975,22 +975,20 @@ export class GivingService {
 
     const where = this.buildTransactionWhere(churchId, query, viewer, 'success');
 
-    const [monthAgg, allTimeAgg, trendRows] = await Promise.all([
-      this.prisma.transaction.aggregate({
-        where: { ...where, created_at: { gte: monthStart } },
-        _sum: { amount: true },
-      }),
-      this.prisma.transaction.aggregate({
-        where,
-        _sum: { amount: true },
-        _count: { _all: true },
-      }),
-      this.prisma.transaction.findMany({
-        where: { ...where, created_at: { gte: trendStart, lte: trendEnd } },
-        select: { amount: true, created_at: true },
-        orderBy: { created_at: 'asc' },
-      }),
-    ]);
+    const monthAgg = await this.prisma.transaction.aggregate({
+      where: { ...where, created_at: { gte: monthStart } },
+      _sum: { amount: true },
+    });
+    const allTimeAgg = await this.prisma.transaction.aggregate({
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const trendRows = await this.prisma.transaction.findMany({
+      where: { ...where, created_at: { gte: trendStart, lte: trendEnd } },
+      select: { amount: true, created_at: true },
+      orderBy: { created_at: 'asc' },
+    });
 
     const dailyTotals = new Map<string, number>();
     for (let i = 0; i < 30; i++) {

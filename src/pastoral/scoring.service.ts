@@ -258,21 +258,19 @@ export class ScoringService {
     low_engagement: number;
     disengaged: number;
   }> {
-    // Count members in each engagement tier in parallel
-    const [highlyEngaged, moderatelyEngaged, lowEngagement, disengaged] = await Promise.all([
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { gte: 70 } },
-      }),
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { gte: 40, lt: 70 } },
-      }),
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { gte: 20, lt: 40 } },
-      }),
-      this.prisma.engagementScore.count({
-        where: { church_id: churchId, score: { lt: 20 } },
-      }),
-    ]);
+    // Keep the dashboard aggregate queries serial to limit pool usage.
+    const highlyEngaged = await this.prisma.engagementScore.count({
+      where: { church_id: churchId, score: { gte: 70 } },
+    });
+    const moderatelyEngaged = await this.prisma.engagementScore.count({
+      where: { church_id: churchId, score: { gte: 40, lt: 70 } },
+    });
+    const lowEngagement = await this.prisma.engagementScore.count({
+      where: { church_id: churchId, score: { gte: 20, lt: 40 } },
+    });
+    const disengaged = await this.prisma.engagementScore.count({
+      where: { church_id: churchId, score: { lt: 20 } },
+    });
 
     // Return the distribution as a structured object
     return {
@@ -327,45 +325,23 @@ export class ScoringService {
     _churchId: string,
     cutoffDate: Date,
   ): Promise<Record<string, number>> {
-    // Fetch all raw activity data in parallel for the lookback period
-    const [attendanceCount, givingCount, givingTotal, eventCount, messageCount] = await Promise.all(
-      [
-        this.prisma.attendance.count({
-          where: {
-            member_id: memberId,
-            checkin_at: { gte: cutoffDate },
-          },
-        }),
-        this.prisma.transaction.count({
-          where: {
-            member_id: memberId,
-            status: 'success',
-            created_at: { gte: cutoffDate },
-          },
-        }),
-        this.prisma.transaction.aggregate({
-          where: {
-            member_id: memberId,
-            status: 'success',
-            created_at: { gte: cutoffDate },
-          },
-          _sum: { amount: true },
-        }),
-        this.prisma.eventRegistration.count({
-          where: {
-            member_id: memberId,
-            created_at: { gte: cutoffDate },
-          },
-        }),
-        this.prisma.message.count({
-          where: {
-            member_id: memberId,
-            direction: 'outbound',
-            created_at: { gte: cutoffDate },
-          },
-        }),
-      ],
-    );
+    // Read member activity serially so scoring does not fan out connections.
+    const attendanceCount = await this.prisma.attendance.count({
+      where: { member_id: memberId, checkin_at: { gte: cutoffDate } },
+    });
+    const givingCount = await this.prisma.transaction.count({
+      where: { member_id: memberId, status: 'success', created_at: { gte: cutoffDate } },
+    });
+    const givingTotal = await this.prisma.transaction.aggregate({
+      where: { member_id: memberId, status: 'success', created_at: { gte: cutoffDate } },
+      _sum: { amount: true },
+    });
+    const eventCount = await this.prisma.eventRegistration.count({
+      where: { member_id: memberId, created_at: { gte: cutoffDate } },
+    });
+    const messageCount = await this.prisma.message.count({
+      where: { member_id: memberId, direction: 'outbound', created_at: { gte: cutoffDate } },
+    });
 
     // Compute the total number of weeks in the lookback window
     const totalWeeks = LOOKBACK_WEEKS;
@@ -402,33 +378,21 @@ export class ScoringService {
     memberStatus: string,
     cutoffDate: Date,
   ): Promise<Record<string, number>> {
-    // Fetch raw activity data and last activity in parallel
-    const [recentAttendance, recentGiving, recentMessages, lastActivity] = await Promise.all([
-      this.prisma.attendance.count({
-        where: {
-          member_id: memberId,
-          checkin_at: { gte: cutoffDate },
-        },
-      }),
-      this.prisma.transaction.count({
-        where: {
-          member_id: memberId,
-          status: 'success',
-          created_at: { gte: cutoffDate },
-        },
-      }),
-      this.prisma.message.count({
-        where: {
-          member_id: memberId,
-          created_at: { gte: cutoffDate },
-        },
-      }),
-      this.prisma.attendance.findFirst({
-        where: { member_id: memberId },
-        orderBy: { checkin_at: 'desc' },
-        select: { checkin_at: true },
-      }),
-    ]);
+    // Keep member risk reads serial to limit concurrent database connections.
+    const recentAttendance = await this.prisma.attendance.count({
+      where: { member_id: memberId, checkin_at: { gte: cutoffDate } },
+    });
+    const recentGiving = await this.prisma.transaction.count({
+      where: { member_id: memberId, status: 'success', created_at: { gte: cutoffDate } },
+    });
+    const recentMessages = await this.prisma.message.count({
+      where: { member_id: memberId, created_at: { gte: cutoffDate } },
+    });
+    const lastActivity = await this.prisma.attendance.findFirst({
+      where: { member_id: memberId },
+      orderBy: { checkin_at: 'desc' },
+      select: { checkin_at: true },
+    });
 
     // Compute the total number of weeks in the lookback window
     const totalWeeks = LOOKBACK_WEEKS;
@@ -678,8 +642,7 @@ export class ScoringService {
       orderBy.push({ score: 'desc' });
     }
 
-    const [riskScores, total] = await Promise.all([
-      this.prisma.riskScore.findMany({
+    const riskScores = await this.prisma.riskScore.findMany({
         where,
         include: {
           member: {
@@ -696,9 +659,8 @@ export class ScoringService {
         orderBy,
         skip,
         take: limit,
-      }),
-      this.prisma.riskScore.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.riskScore.count({ where });
 
     const data: RiskScoreResponseDto[] = riskScores.map((row) => ({
       id: row.id,
@@ -771,8 +733,7 @@ export class ScoringService {
       orderBy.push({ score: 'desc' });
     }
 
-    const [engagementScores, total] = await Promise.all([
-      this.prisma.engagementScore.findMany({
+    const engagementScores = await this.prisma.engagementScore.findMany({
         where,
         include: {
           member: {
@@ -787,9 +748,8 @@ export class ScoringService {
         orderBy,
         skip,
         take: limit,
-      }),
-      this.prisma.engagementScore.count({ where }),
-    ]);
+      });
+    const total = await this.prisma.engagementScore.count({ where });
 
     const data: EngagementScoreResponseDto[] = engagementScores.map((row) => ({
       id: row.id,
@@ -849,10 +809,10 @@ export class ScoringService {
       throw new NotFoundException('Member not found in this church');
     }
 
-    const [riskScore, engagementScore] = await Promise.all([
-      this.prisma.riskScore.findUnique({ where: { member_id: memberId } }),
-      this.prisma.engagementScore.findUnique({ where: { member_id: memberId } }),
-    ]);
+    const riskScore = await this.prisma.riskScore.findUnique({ where: { member_id: memberId } });
+    const engagementScore = await this.prisma.engagementScore.findUnique({
+      where: { member_id: memberId },
+    });
 
     const risk =
       riskScore && riskScore.church_id === churchId

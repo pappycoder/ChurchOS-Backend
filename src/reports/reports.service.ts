@@ -53,19 +53,17 @@ export class ReportsService {
       where.branch_id = branchId;
     }
 
-    const [transactions, categoryBreakdown] = await Promise.all([
-      this.prisma.transaction.aggregate({
-        where,
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['category_id'],
-        where,
-        _sum: { amount: true },
-        _count: true,
-      }),
-    ]);
+    const transactions = await this.prisma.transaction.aggregate({
+      where,
+      _sum: { amount: true },
+      _count: true,
+    });
+    const categoryBreakdown = await this.prisma.transaction.groupBy({
+      by: ['category_id'],
+      where,
+      _sum: { amount: true },
+      _count: true,
+    });
 
     const grandTotal = Number(transactions._sum.amount) || 0;
     const transactionCount = transactions._count || 0;
@@ -129,20 +127,18 @@ export class ReportsService {
       serviceWhere.branch_id = branchId;
     }
 
-    const [totalAttendance, serviceCount, byService] = await Promise.all([
-      this.prisma.attendance.aggregate({
-        where: attendanceWhere,
-        _count: true,
-      }),
-      this.prisma.service.count({ where: serviceWhere }),
-      this.prisma.service.findMany({
-        where: serviceWhere,
-        select: {
-          name: true,
-          _count: { select: { attendance: true } },
-        },
-      }),
-    ]);
+    const totalAttendance = await this.prisma.attendance.aggregate({
+      where: attendanceWhere,
+      _count: true,
+    });
+    const serviceCount = await this.prisma.service.count({ where: serviceWhere });
+    const byService = await this.prisma.service.findMany({
+      where: serviceWhere,
+      select: {
+        name: true,
+        _count: { select: { attendance: true } },
+      },
+    });
 
     const total = totalAttendance._count || 0;
 
@@ -194,25 +190,23 @@ export class ReportsService {
 
     const memberWhere: Prisma.MemberWhereInput = { church_id: churchId };
     if (branchId) memberWhere.branch_id = branchId;
-    const [totalMembers, newMembers, byStatus, byGender] = await Promise.all([
-      this.prisma.member.count({ where: memberWhere }),
-      this.prisma.member.count({
-        where: {
-          ...memberWhere,
-          created_at: { gte: start, lte: end },
-        },
-      }),
-      this.prisma.member.groupBy({
-        by: ['status'],
-        where: memberWhere,
-        _count: true,
-      }),
-      this.prisma.member.groupBy({
-        by: ['gender'],
-        where: { ...memberWhere, gender: { not: null } },
-        _count: true,
-      }),
-    ]);
+    const totalMembers = await this.prisma.member.count({ where: memberWhere });
+    const newMembers = await this.prisma.member.count({
+      where: {
+        ...memberWhere,
+        created_at: { gte: start, lte: end },
+      },
+    });
+    const byStatus = await this.prisma.member.groupBy({
+      by: ['status'],
+      where: memberWhere,
+      _count: true,
+    });
+    const byGender = await this.prisma.member.groupBy({
+      by: ['gender'],
+      where: { ...memberWhere, gender: { not: null } },
+      _count: true,
+    });
 
     const statusBreakdown: MemberStatusDto[] = byStatus.map((s) => ({
       status: s.status,

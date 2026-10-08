@@ -700,11 +700,10 @@ export class AdminController {
   async recalculateScores(@Req() req: AuthenticatedRequest) {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
-    // Run engagement and risk score calculations in parallel
-    const [engagementScored, riskScored] = await Promise.all([
-      this.scoringService.calculateEngagementScores(churchId),
-      this.scoringService.calculateRiskScores(churchId),
-    ]);
+    // Score jobs perform many database reads per member; run them one at a time
+    // so a manual recalculation does not compete for the whole connection pool.
+    const engagementScored = await this.scoringService.calculateEngagementScores(churchId);
+    const riskScored = await this.scoringService.calculateRiskScores(churchId);
     // Return the counts of members scored in each category
     return { engagementScored, riskScored };
   }
