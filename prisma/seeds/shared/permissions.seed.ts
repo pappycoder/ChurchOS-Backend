@@ -388,6 +388,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   department_head: [
+    // Branch names are needed for the locked branch selector; the API only
+    // returns this viewer's own branch unless is_admin_hq is enabled.
+    'branches:read',
     // Member floor — read (everything a normal member can see/do)
     'events:read',
     'sermons:read',
@@ -463,6 +466,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   treasurer: [
+    // Branch names are needed for HQ branch filters; branch-scoped viewers
+    // only receive their own branch from the API.
+    'branches:read',
     // Giving — create + read + update
     'giving:create',
     'giving:read',
@@ -490,6 +496,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   cell_leader: [
+    'branches:read',
     // Events — read (member parity)
     'events:read',
     // Sermons — read (member parity)
@@ -509,6 +516,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   member: [
+    'branches:read',
     // Events — read
     'events:read',
     // Sermons — read
@@ -526,7 +534,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEntries(
   Object.entries(RAW_DEFAULT_PERMISSION_MATRIX).map(([role, perms]) => [
     role,
-    expandPermissions(perms),
+    // All roles need to resolve their own branch name for locked branch
+    // filters. BranchesService limits non-HQ callers to their assigned branch.
+    expandPermissions([...perms, 'branches:read']),
   ]),
 );
 

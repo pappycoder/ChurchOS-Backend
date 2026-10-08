@@ -32,7 +32,9 @@ import { AuditLoggingService } from '../../common/services/audit-logging.service
 import { RolePermission } from '@prisma/client';
 
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
-const CACHE_PREFIX = 'perms:';
+// Bump the namespace when changing seeded role mappings so deployments don't
+// keep serving permission arrays cached under the previous template set.
+const CACHE_PREFIX = 'perms:v2:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [

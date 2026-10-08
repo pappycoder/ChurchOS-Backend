@@ -116,8 +116,8 @@ export class BranchesService {
     // powers their filter dropdowns without leaking other branches). admin-hq
     // holders and church admins see every branch.
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly && scope.branchId) {
-      where.id = scope.branchId;
+    if (!scope.churchOnly) {
+      where.id = scope.branchId ?? '00000000-0000-0000-0000-000000000000';
     }
 
     if (query.search) {
