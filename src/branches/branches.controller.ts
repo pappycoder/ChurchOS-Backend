@@ -85,7 +85,8 @@ export class BranchesController {
   }
 
   @Get()
-  @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
+  // Read access is permission-driven; non-HQ viewers are restricted to their
+  // own branch by BranchesService.findAll().
   @RequirePermissions('branches:read')
   @ApiPaginatedResponse(BranchResponseDto)
   @ApiListEndpoint('List branches', 'Returns a paginated list of branches for the church.')
