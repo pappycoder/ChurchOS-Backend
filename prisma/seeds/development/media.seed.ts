@@ -26,6 +26,20 @@ type MediaDefinition = [
   folder: string,
 ];
 
+// Build storage URLs from the environment so seeded rows point at the real
+// Supabase project instead of a hardcoded custom domain. The old
+// `https://storage.churchos.dev/...` host has no valid TLS (SNI) and made every
+// seeded media thumbnail fail with `net::ERR_FAILED` / SW `no-response`.
+const SUPABASE_URL = (process.env.SUPABASE_URL ?? 'https://your-project.supabase.co').replace(
+  /\/+$/,
+  '',
+);
+const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'media';
+
+function storagePublicUrl(path: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+}
+
 // ── Sermon definitions ──────────────────────────────────────────────
 const SERMON_DEFS: SermonDefinition[] = [
   [
@@ -43,21 +57,21 @@ const SERMON_DEFS: SermonDefinition[] = [
 const MEDIA_DEFS: MediaDefinition[] = [
   [
     'logo-main.png',
-    'https://storage.churchos.dev/media/logo-main.png',
+    storagePublicUrl('media/logo-main.png'),
     'image/png',
     245000,
     'branding',
   ],
   [
     'youth-camp-poster.jpg',
-    'https://storage.churchos.dev/media/youth-camp-poster.jpg',
+    storagePublicUrl('media/youth-camp-poster.jpg'),
     'image/jpeg',
     820000,
     'events',
   ],
   [
     'welcome-video.mp4',
-    'https://storage.churchos.dev/media/welcome-video.mp4',
+    storagePublicUrl('media/welcome-video.mp4'),
     'video/mp4',
     15800000,
     'videos',
@@ -86,6 +100,12 @@ export async function seedMedia(
     });
 
     if (existing) {
+      // Re-seed repairs rows written when the (broken) custom storage domain
+      // was hardcoded here.
+      await prisma.sermon.update({
+        where: { id: existing.id },
+        data: { audio_url: storagePublicUrl('sermons/audio-sample.mp3') },
+      });
       sermonCount++;
       console.log(`  ℹ️ Sermon already exists: ${title}`);
       continue;
@@ -101,7 +121,7 @@ export async function seedMedia(
         series_name: seriesName || undefined,
         tags: ['seed'],
         description: `Seeded sermon: ${title}`,
-        audio_url: 'https://storage.churchos.dev/sermons/audio-sample.mp3',
+        audio_url: storagePublicUrl('sermons/audio-sample.mp3'),
         duration_seconds: 2700,
       },
     });
@@ -158,6 +178,12 @@ export async function seedMedia(
     });
 
     if (existing) {
+      // Keep existing rows pointing at the current storage host (re-seed
+      // rewrites stale custom-domain URLs from earlier seed versions).
+      await prisma.mediaAsset.update({
+        where: { id: existing.id },
+        data: { url },
+      });
       mediaCount++;
       console.log(`  ℹ️ Media already exists: ${filename}`);
       continue;
