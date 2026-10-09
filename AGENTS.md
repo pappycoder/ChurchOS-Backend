@@ -217,6 +217,8 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- **Giving receipt PDF redesign**: reusable print colors, branded headers and page footers, bundled Unicode fonts, amount panel, grouped donor and contribution details, wrapped field values, and overflow pagination. Nest copies the PDF font and logo assets into dist. Existing receipt eligibility, scope, and receipt numbering remain unchanged.
+
 - Email trash queries now select only deleted copies; active mailboxes exclude deleted copies. Boolean query parsing preserves explicit false values and validates invalid input.
 
 - Inbox read permission now also grants email compose permission for template and custom roles. Added treasurer compose seed grant and advanced the permission cache to v11.

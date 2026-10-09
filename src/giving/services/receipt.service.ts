@@ -12,6 +12,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { randomBytes } from 'crypto';
+import {
+  PDF_COLORS as colors,
+  preparePdf,
+  drawPdfHeader,
+  drawPdfFooters,
+} from '../../common/pdf/pdf-design';
 
 /**
  * Transaction data needed for receipt generation.
@@ -49,7 +55,7 @@ export class ReceiptService {
       try {
         const doc = new PDFDocument({
           size: 'A4',
-          margin: 50,
+          margins: { top: 145, bottom: 72, left: 50, right: 50 },
           bufferPages: true,
           info: {
             Title: `Giving Receipt - ${data.receiptNumber}`,
@@ -63,99 +69,103 @@ export class ReceiptService {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        // Header
-        doc.fontSize(24).font('Helvetica-Bold').text(data.churchName, { align: 'center' });
-        doc.moveDown(0.3);
+        preparePdf(doc);
+        drawPdfHeader(doc, 'Giving receipt');
+        doc.on('pageAdded', () => drawPdfHeader(doc, 'Giving receipt'));
+        const contentWidth = doc.page.width - 100;
+        let y = 148;
 
-        if (data.churchAddress) {
-          doc.fontSize(10).font('Helvetica').text(data.churchAddress, { align: 'center' });
-          doc.moveDown(0.3);
-        }
-
-        doc.fontSize(10).font('Helvetica').text('GIVING RECEIPT', { align: 'center' });
-        doc.moveDown(1);
-
-        // Divider line
-        doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#333333');
-        doc.moveDown(0.5);
-
-        // Receipt number and date
-        doc.fontSize(11).font('Helvetica-Bold').text('Receipt Number:', { continued: true });
-        doc.font('Helvetica').text(`  ${data.receiptNumber}`);
-        doc.moveDown(0.3);
-
-        doc.font('Helvetica-Bold').text('Date:', { continued: true });
-        doc.font('Helvetica').text(`  ${this.formatDate(data.createdAt)}`);
-        doc.moveDown(0.3);
-
-        doc.font('Helvetica-Bold').text('Payment Method:', { continued: true });
-        doc.font('Helvetica').text(`  ${this.formatPaymentMethod(data.paymentMethod)}`);
-        doc.moveDown(1);
-
-        // Divider
-        doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#333333');
-        doc.moveDown(0.5);
-
-        // Payer info (if member)
-        if (data.memberName) {
-          doc.fontSize(11).font('Helvetica-Bold').text('Received From:', { continued: true });
-          doc.font('Helvetica').text(`  ${data.memberName}`);
-          doc.moveDown(0.3);
-
-          if (data.memberEmail) {
-            doc.font('Helvetica-Bold').text('Email:', { continued: true });
-            doc.font('Helvetica').text(`  ${data.memberEmail}`);
-            doc.moveDown(0.5);
+        const ensureSpace = (height: number) => {
+          if (y + height > doc.page.height - 78) {
+            doc.addPage();
+            y = 148;
           }
-        } else {
-          doc.fontSize(11).font('Helvetica-Bold').text('Received From:', { continued: true });
-          doc.font('Helvetica').text('  Anonymous Donor');
-          doc.moveDown(0.5);
-        }
-
-        // Amount section
-        doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#333333');
-        doc.moveDown(0.5);
-
-        doc.fontSize(14).font('Helvetica-Bold').text('Category:', { continued: true });
-        doc.font('Helvetica').text(`  ${data.categoryName}`);
-        doc.moveDown(0.5);
-
-        doc
-          .fontSize(20)
-          .font('Helvetica-Bold')
-          .fillColor('#2d6a4f')
-          .text(
-            `${data.currency} ${data.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
-            {
-              align: 'center',
-            },
+        };
+        const paragraph = (text: string, size = 10, bold = false, color = colors.ink) => {
+          doc.font(bold ? 'ChurchOSSans-Bold' : 'ChurchOSSans').fontSize(size);
+          const height = doc.heightOfString(text, { width: contentWidth, lineGap: 3 });
+          ensureSpace(height + 8);
+          doc.fillColor(color).text(text, 50, y, { width: contentWidth, lineGap: 3 });
+          y = doc.y + 8;
+        };
+        const heading = (label: string) => {
+          ensureSpace(55);
+          doc
+            .font('ChurchOSSans-Bold')
+            .fontSize(9)
+            .fillColor(colors.blue)
+            .text(label.toUpperCase(), 50, y, { width: contentWidth });
+          y += 23;
+        };
+        const field = (label: string, value: string) => {
+          doc.font('ChurchOSSans').fontSize(10);
+          const height = Math.max(
+            26,
+            doc.heightOfString(value, { width: contentWidth - 135, lineGap: 3 }) + 12,
           );
-        doc.moveDown(1);
+          ensureSpace(height);
+          doc
+            .font('ChurchOSSans')
+            .fontSize(9)
+            .fillColor(colors.muted)
+            .text(label, 50, y + 4, { width: 125 });
+          doc
+            .font('ChurchOSSans')
+            .fontSize(10)
+            .fillColor(colors.ink)
+            .text(value, 185, y + 3, { width: contentWidth - 135, lineGap: 3 });
+          y = Math.max(y + height, doc.y + 9);
+          doc
+            .moveTo(50, y - 5)
+            .lineTo(doc.page.width - 50, y - 5)
+            .lineWidth(0.4)
+            .stroke(colors.line);
+        };
 
-        // Divider
-        doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#333333');
-        doc.moveDown(1);
+        paragraph(data.churchName, 22, true);
+        if (data.churchAddress) paragraph(data.churchAddress, 10, false, colors.muted);
+        y += 12;
 
-        // QR Code data (text-based for simplicity — can be upgraded to actual QR)
-        const qrData = this.generateVerificationData(data);
+        // A clear amount panel distinguishes the financial value from metadata.
+        ensureSpace(96);
+        doc.roundedRect(50, y, contentWidth, 82, 10).fill(colors.soft);
         doc
+          .font('ChurchOSSans-Bold')
           .fontSize(8)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(`Verification Code: ${qrData}`, { align: 'center' });
-        doc.moveDown(0.3);
+          .fillColor(colors.muted)
+          .text('AMOUNT RECEIVED', 68, y + 16);
+        const amount = `${data.currency} ${data.amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        let amountSize = 28;
+        doc.font('ChurchOSSans-Bold').fontSize(amountSize);
+        while (amountSize > 12 && doc.widthOfString(amount) > contentWidth - 36)
+          doc.fontSize(--amountSize);
+        doc.fillColor(colors.ink).text(amount, 68, y + 34, { width: contentWidth - 36 });
+        y += 104;
 
-        // Footer
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text('This receipt serves as proof of your giving.', { align: 'center' });
-        doc.moveDown(0.2);
-        doc.text('Thank you for your generous contribution.', { align: 'center' });
-        doc.moveDown(0.2);
-        doc.text(`Generated on ${this.formatDate(new Date())} — ChurchOS`, { align: 'center' });
+        heading('Received from');
+        field('Donor', data.memberName || 'Anonymous Donor');
+        if (data.memberEmail) field('Email', data.memberEmail);
+        y += 17;
+
+        heading('Contribution details');
+        field('Receipt number', data.receiptNumber);
+        field('Date', this.formatDate(data.createdAt));
+        field('Category', data.categoryName || 'Unspecified');
+        field('Payment method', this.formatPaymentMethod(data.paymentMethod));
+        field('Transaction reference', data.id);
+        y += 17;
+
+        heading('Receipt reference');
+        paragraph(this.generateVerificationData(data), 9, true, colors.muted);
+        y += 8;
+        paragraph('Thank you for your generosity.', 13, true);
+        paragraph(
+          'This receipt serves as proof of your giving. Keep it for your records.',
+          9,
+          false,
+          colors.muted,
+        );
+        drawPdfFooters(doc, new Date());
 
         doc.end();
       } catch (error) {
