@@ -1,3 +1,4 @@
+import { addDesignedSheet, initializeWorkbook } from '../common/excel/excel-design';
 /**
  * @file members.service.ts
  * @description Business logic for church member management.
@@ -821,75 +822,56 @@ export class MembersService {
     });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'ChurchOS';
-    workbook.created = new Date();
-
-    const sheet = workbook.addWorksheet('Members', {
-      properties: { defaultColWidth: 18 },
-    });
+    initializeWorkbook(workbook);
 
     const hasSensitiveAccess = viewerPermissions.some((permission) =>
       ['members:update', 'members:delete'].includes(permission),
     );
 
-    // Add headers
-    sheet.columns = [
-      { header: 'ID', key: 'id', width: 36 },
-      { header: 'First Name', key: 'firstName', width: 15 },
-      { header: 'Last Name', key: 'lastName', width: 15 },
-      { header: 'Email', key: 'email', width: 25 },
-      { header: 'Phone', key: 'phone', width: 18 },
-      { header: 'WhatsApp Number', key: 'whatsappNumber', width: 18 },
-      { header: 'Date of Birth', key: 'dateOfBirth', width: 14 },
-      { header: 'Gender', key: 'gender', width: 10 },
-      { header: 'Address', key: 'address', width: 30 },
-      { header: 'City', key: 'city', width: 15 },
-      { header: 'State', key: 'state', width: 15 },
-      { header: 'Status', key: 'status', width: 12 },
-      { header: 'Member Since', key: 'memberSince', width: 14 },
-      { header: 'Notes', key: 'notes', width: 30 },
-      { header: 'Created At', key: 'createdAt', width: 20 },
+    const columns = [
+      { label: 'ID', key: 'id', width: 36 },
+      { label: 'First Name', key: 'firstName', width: 15 },
+      { label: 'Last Name', key: 'lastName', width: 15 },
+      { label: 'Email', key: 'email', width: 25 },
+      { label: 'Phone', key: 'phone', width: 18 },
+      { label: 'WhatsApp Number', key: 'whatsappNumber', width: 18 },
+      { label: 'Date of Birth', key: 'dateOfBirth', width: 14 },
+      { label: 'Gender', key: 'gender', width: 10 },
+      { label: 'Address', key: 'address', width: 30 },
+      { label: 'City', key: 'city', width: 15 },
+      { label: 'State', key: 'state', width: 15 },
+      { label: 'Status', key: 'status', width: 12 },
+      { label: 'Member Since', key: 'memberSince', width: 14 },
+      { label: 'Notes', key: 'notes', width: 30 },
+      { label: 'Created At', key: 'createdAt', width: 20 },
     ];
-
-    // Style header row
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF1E3A5F' }, // Dark blue
-    };
-    headerRow.alignment = { horizontal: 'center' };
-
-    // Add data rows
-    members.forEach((m) => {
-      sheet.addRow({
-        id: m.id,
-        firstName: m.first_name,
-        lastName: m.last_name,
-        email: hasSensitiveAccess ? m.email || '' : '',
-        phone: hasSensitiveAccess ? m.phone || '' : '',
-        whatsappNumber: hasSensitiveAccess ? m.whatsapp_number || '' : '',
-        dateOfBirth: hasSensitiveAccess ? m.date_of_birth?.toISOString().split('T')[0] || '' : '',
-        gender: hasSensitiveAccess ? m.gender || '' : '',
-        address: hasSensitiveAccess ? m.address || '' : '',
-        city: hasSensitiveAccess ? m.city || '' : '',
-        state: hasSensitiveAccess ? m.state || '' : '',
-        status: m.status,
-        memberSince: m.member_since.toISOString().split('T')[0],
-        notes: hasSensitiveAccess ? m.notes || '' : '',
-        createdAt: m.created_at.toISOString(),
-      });
-    });
-
-    // Auto-filter
-    sheet.autoFilter = {
-      from: 'A1',
-      to: `O${members.length + 1}`,
-    };
-
-    // Freeze header row
-    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    const data = members.map((m) => ({
+      id: m.id,
+      firstName: m.first_name,
+      lastName: m.last_name,
+      email: hasSensitiveAccess ? m.email || '' : '',
+      phone: hasSensitiveAccess ? m.phone || '' : '',
+      whatsappNumber: hasSensitiveAccess ? m.whatsapp_number || '' : '',
+      dateOfBirth: hasSensitiveAccess ? m.date_of_birth?.toISOString().split('T')[0] || '' : '',
+      gender: hasSensitiveAccess ? m.gender || '' : '',
+      address: hasSensitiveAccess ? m.address || '' : '',
+      city: hasSensitiveAccess ? m.city || '' : '',
+      state: hasSensitiveAccess ? m.state || '' : '',
+      status: m.status,
+      memberSince: m.member_since.toISOString().split('T')[0],
+      notes: hasSensitiveAccess ? m.notes || '' : '',
+      createdAt: m.created_at.toISOString(),
+    }));
+    addDesignedSheet(
+      workbook,
+      {
+        name: 'Members',
+        columns,
+        data,
+        metadata: [{ label: 'Scope', value: where.branch_id ? 'Selected branch' : 'All branches' }],
+      },
+      0,
+    );
 
     const buffer = await workbook.xlsx.writeBuffer();
 

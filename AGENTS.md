@@ -213,6 +213,9 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 
 ## Changelog
 
+- **2026-10-10** — Redesigned XLSX exports with reusable workbook styling, native filterable tables, frozen headers, numeric formatting, dropdown validation, and filter-aware counts. Member template retains first-row import headers and scoped branch choices; existing export privacy and branch scope are preserved.
+
+
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
