@@ -56,19 +56,58 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
+    const isServerless = Boolean(
+      process.env.VERCEL ||
+        process.env.AWS_LAMBDA_FUNCTION_NAME ||
+        process.env.LAMBDA_TASK_ROOT ||
+        process.env.FUNCTION_TARGET,
+    );
+    const connectionString = PrismaService.getConnectionString(isServerless);
     const poolConfig: PoolConfig = {
-      connectionString: process.env.DATABASE_URL,
-      max: parseInt(process.env.DB_POOL_MAX ?? '10', 10),
-      idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
-      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS ?? '0', 10),
+      connectionString,
+      // Serverless instances scale horizontally, so a larger local pool can
+      // multiply into more database clients than the shared pooler allows.
+      max: isServerless ? 1 : parseInt(process.env.DB_POOL_MAX ?? '10', 10),
+      idleTimeoutMillis: parseInt(
+        process.env.DB_IDLE_TIMEOUT_MS ?? (isServerless ? '1000' : '10000'),
+        10,
+      ),
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS ?? '15000', 10),
     };
 
     const adapter = new PrismaPg(poolConfig);
     super({ adapter });
 
     this.logger.log(
-      `Connection pool configured: max=${poolConfig.max}, idleTimeout=${poolConfig.idleTimeoutMillis}ms, connectTimeout=${poolConfig.connectionTimeoutMillis}ms`,
+      `Connection pool configured: max=${poolConfig.max}, idleTimeout=${poolConfig.idleTimeoutMillis}ms, connectTimeout=${poolConfig.connectionTimeoutMillis}ms, serverless=${isServerless}`,
     );
+  }
+
+  /**
+   * Supabase's session pooler caps client sessions to its configured pool size.
+   * Serverless instances should use its transaction pooler instead. The
+   * transaction pooler uses port 6543 and needs PgBouncer compatibility mode
+   * so Prisma does not use prepared statements across pooled transactions.
+   */
+  private static getConnectionString(isServerless: boolean): string | undefined {
+    const configuredUrl = process.env.DATABASE_URL;
+    if (!configuredUrl || !isServerless) return configuredUrl;
+
+    try {
+      const url = new URL(configuredUrl);
+      if (
+        url.hostname.endsWith('.pooler.supabase.com') &&
+        (!url.port || url.port === '5432')
+      ) {
+        url.port = '6543';
+        url.searchParams.set('pgbouncer', 'true');
+        return url.toString();
+      }
+    } catch {
+      // Leave validation and connection errors to the PostgreSQL driver.
+    }
+
+    return configuredUrl;
   }
 
   /**
