@@ -154,8 +154,10 @@ export function generateAllPermissions(): { name: string; resource: string; acti
  * Derives hierarchical grants from a role's coarse grant set so its visible
  * menus never change:
  *  - holding any `resource:<action>` grants `resource:view`
- *  - holding `resource:<action>` grants the same `<action>` on every surface
- *    (`resource:<surface>:<action>`)
+ *  - holding `resource:<action>` grants the same `<action>` on every regular
+ *    surface (`resource:<surface>:<action>`)
+ *  - `own` surfaces are explicit scope grants and are never inferred from a
+ *    church-wide resource permission
  */
 export function expandPermissions(base: string[]): string[] {
   const expanded = new Set(base);
@@ -169,6 +171,7 @@ export function expandPermissions(base: string[]): string[] {
     expanded.add(`${resource}:view`);
     const surfaces = SURFACES[resource] ?? [];
     for (const surface of surfaces) {
+      if (surface === 'own') continue;
       for (const action of CRUD_ACTIONS) {
         if (actions.has(action)) {
           expanded.add(`${resource}:${surface}:${action}`);
