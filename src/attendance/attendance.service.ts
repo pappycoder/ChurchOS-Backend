@@ -50,11 +50,13 @@ export class AttendanceService {
     dto: CreateServiceDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<ServiceResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const service = await this.prisma.service.create({
       data: {
         church_id: churchId,
-        branch_id: dto.branchId || null,
+        branch_id: scope.churchOnly ? dto.branchId || null : scope.branchId || null,
         name: dto.name,
         category: dto.category ?? 'adult',
         day_of_week: dto.dayOfWeek ?? null,

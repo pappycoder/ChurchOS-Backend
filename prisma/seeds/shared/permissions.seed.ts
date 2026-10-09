@@ -460,6 +460,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Attendance — dashboard, services, and report only (no check-in or records)
     'attendance:dashboard:read',
     'attendance:services:read',
+    'attendance:services:create',
     'attendance:reports:read',
     // Giving — dashboard and categories only; categories may be created
     'giving:dashboard:read',

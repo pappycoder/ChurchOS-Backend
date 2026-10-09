@@ -72,7 +72,7 @@ export class AttendanceController {
     @Request() req: AuthenticatedRequest,
   ): Promise<ServiceResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.attendanceService.createService(dto, churchId, user.id);
+    return this.attendanceService.createService(dto, churchId, user.id, req.profile);
   }
 
   @Get('services')
