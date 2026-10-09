@@ -172,14 +172,12 @@ export class GivingService {
       where.is_active = isActive;
     }
 
-    const [categories, total] = await Promise.all([
-      this.prisma.givingCategory.findMany({
-        where,
-        orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
-        ...(limit ? { skip: ((page || 1) - 1) * limit, take: limit } : {}),
-      }),
-      this.prisma.givingCategory.count({ where }),
-    ]);
+    const categories = await this.prisma.givingCategory.findMany({
+      where,
+      orderBy: [{ display_order: 'asc' }, { name: 'asc' }],
+      ...(limit ? { skip: ((page || 1) - 1) * limit, take: limit } : {}),
+    });
+    const total = await this.prisma.givingCategory.count({ where });
 
     return { data: categories.map((c) => this.mapCategoryToDto(c)), total };
   }
@@ -928,21 +926,19 @@ export class GivingService {
       orderBy.push({ created_at: 'desc' });
     }
 
-    const [items, total] = await Promise.all([
-      this.prisma.transaction.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          category: true,
-          member: { select: { first_name: true, last_name: true } },
-          service: { select: { name: true } },
-          event: { select: { title: true } },
-        },
-      }),
-      this.prisma.transaction.count({ where }),
-    ]);
+    const items = await this.prisma.transaction.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+      include: {
+        category: true,
+        member: { select: { first_name: true, last_name: true } },
+        service: { select: { name: true } },
+        event: { select: { title: true } },
+      },
+    });
+    const total = await this.prisma.transaction.count({ where });
 
     return {
       data: items.map((t) => this.mapTransactionToDto(t)),
@@ -1171,18 +1167,16 @@ export class GivingService {
       where.is_active = query.isActive;
     }
 
-    const [items, total] = await Promise.all([
-      this.prisma.recurringGiving.findMany({
-        where,
-        orderBy: { created_at: 'desc' },
-        skip,
-        take: limit,
-        include: {
-          member: { select: { first_name: true, last_name: true } },
-        },
-      }),
-      this.prisma.recurringGiving.count({ where }),
-    ]);
+    const items = await this.prisma.recurringGiving.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+      },
+    });
+    const total = await this.prisma.recurringGiving.count({ where });
 
     // Batch-fetch category names
     const categoryIds = [...new Set(items.map((r) => r.category_id))];

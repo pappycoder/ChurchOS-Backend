@@ -137,18 +137,16 @@ export class BranchesService {
       orderBy.push({ name: 'asc' });
     }
 
-    const [branches, total] = await Promise.all([
-      this.prisma.branch.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          _count: { select: { members: true } },
-        },
-      }),
-      this.prisma.branch.count({ where }),
-    ]);
+    const branches = await this.prisma.branch.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+      include: {
+        _count: { select: { members: true } },
+      },
+    });
+    const total = await this.prisma.branch.count({ where });
 
     const data = branches.map((b) => this.mapToResponseDto(b, b._count.members));
 

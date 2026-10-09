@@ -141,16 +141,14 @@ export class AttendanceService {
       orderBy.push({ name: 'asc' });
     }
 
-    const [services, total] = await Promise.all([
-      this.prisma.service.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: { _count: { select: { attendance: true } } },
-      }),
-      this.prisma.service.count({ where }),
-    ]);
+    const services = await this.prisma.service.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+      include: { _count: { select: { attendance: true } } },
+    });
+    const total = await this.prisma.service.count({ where });
 
     return {
       data: services.map((s) => this.mapToServiceResponse(s)),

@@ -65,18 +65,16 @@ export class NotificationsService {
       where.created_at = createdAt;
     }
 
-    const [notifications, total, unreadCount] = await Promise.all([
-      this.prisma.notification.findMany({
-        where,
-        orderBy: { created_at: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.notification.count({ where }),
-      this.prisma.notification.count({
-        where: { ...where, read_at: null },
-      }),
-    ]);
+    const notifications = await this.prisma.notification.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      skip,
+      take: limit,
+    });
+    const total = await this.prisma.notification.count({ where });
+    const unreadCount = await this.prisma.notification.count({
+      where: { ...where, read_at: null },
+    });
 
     return {
       data: notifications.map((n) => this.mapNotificationToDto(n)),
