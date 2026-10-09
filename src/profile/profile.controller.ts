@@ -41,7 +41,7 @@ import {
 import { InviteUserDto } from './dto/invite-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
   SupabaseUser,
@@ -224,6 +224,7 @@ export class ProfileController {
    * List all profiles for the church (paginated, filterable).
    */
   @Get()
+  @RequirePermissions('profiles:read')
   @ApiPaginatedResponse(ProfileResponseDto)
   @ApiOperation({
     summary: 'List profiles',
@@ -249,6 +250,7 @@ export class ProfileController {
    * Get a single profile by ID (same-church access).
    */
   @Get(':profileId')
+  @RequirePermissions('profiles:read')
   @ApiGetEndpoint(
     'Get profile by ID',
     'Retrieves a single profile by UUID. Must be in the same church.',
@@ -267,7 +269,7 @@ export class ProfileController {
    */
   @Patch(':profileId')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
     'Update user details',
@@ -296,7 +298,7 @@ export class ProfileController {
    */
   @Patch(':profileId/role')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
+  @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
     'Update user role',
@@ -325,7 +327,7 @@ export class ProfileController {
    */
   @Patch(':profileId/roles')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
     'Update user roles',
@@ -354,7 +356,7 @@ export class ProfileController {
    */
   @Delete(':profileId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
+  @RequirePermissions('profiles:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
     'Deactivate profile',
@@ -377,7 +379,7 @@ export class ProfileController {
    */
   @Post('invite')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:create')
   @ApiCreateEndpoint(
     'Invite a new user',
     'Sends an email invitation and creates a Profile record for the new user.',
@@ -397,7 +399,7 @@ export class ProfileController {
    */
   @Post(':profileId/deactivate')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Deactivate user',
@@ -419,7 +421,7 @@ export class ProfileController {
    */
   @Post(':profileId/activate')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Reactivate user',
@@ -441,7 +443,7 @@ export class ProfileController {
    */
   @Post(':profileId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Archive user',
@@ -463,7 +465,7 @@ export class ProfileController {
    */
   @Post(':profileId/restore-archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Restore user from archive',
@@ -485,7 +487,7 @@ export class ProfileController {
    */
   @Post(':profileId/reset-password')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Reset user password',
@@ -507,7 +509,7 @@ export class ProfileController {
    */
   @Post(':profileId/force-signout')
   @UseGuards(RolesGuard)
-  @RequireRoles('super_admin', 'senior_pastor', 'church_admin')
+  @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
     'Force sign-out',

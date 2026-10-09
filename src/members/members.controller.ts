@@ -35,7 +35,6 @@ import { ListMembersDto } from './dto/list-members.dto';
 import { MemberResponseDto } from './dto/member-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -59,7 +58,6 @@ export class MembersController {
    * Create a new church member.
    */
   @Post()
-  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
   @RequirePermissions('members:new:create')
   @ApiCreateEndpoint(
     'Create a new member',
@@ -213,7 +211,6 @@ export class MembersController {
    * Update a member's details (partial update).
    */
   @Patch(':memberId')
-  @RequireRoles('church_admin', 'senior_pastor', 'secretary')
   @RequirePermissions('members:all:update')
   @ApiUpdateEndpoint(
     'Update member details',
@@ -233,7 +230,6 @@ export class MembersController {
    * Soft-delete a member (set status to inactive).
    */
   @Delete(':memberId')
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('members:all:delete')
   @ApiDeleteEndpoint(
     'Delete a member',
@@ -253,7 +249,6 @@ export class MembersController {
    * Restore a soft-deleted member (set status back to active).
    */
   @Post(':memberId/restore')
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -273,7 +268,6 @@ export class MembersController {
    * Archive a member.
    */
   @Post(':memberId/archive')
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -293,7 +287,6 @@ export class MembersController {
    * Restore an archived member.
    */
   @Post(':memberId/restore-archive')
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -313,7 +306,6 @@ export class MembersController {
    * Bulk import members from CSV/JSON data.
    */
   @Post('bulk-import')
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('members:import:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -400,7 +392,7 @@ export class MembersController {
    * Add an admin note to a member.
    */
   @Post(':memberId/notes')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('members:all:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Add admin note',

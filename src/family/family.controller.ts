@@ -29,7 +29,6 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
@@ -66,7 +65,6 @@ export class FamilyController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a family', 'Creates a new family record.')
@@ -137,7 +135,6 @@ export class FamilyController {
    */
   @Patch(':familyId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Update a family')
@@ -162,7 +159,6 @@ export class FamilyController {
    */
   @Delete(':familyId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('families:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a family')
@@ -188,7 +184,6 @@ export class FamilyController {
    */
   @Post(':familyId/members')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Add member to family' })
@@ -214,7 +209,6 @@ export class FamilyController {
    */
   @Delete(':familyId/members/:memberId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove member from family' })
@@ -240,7 +234,6 @@ export class FamilyController {
    */
   @Post(':familyId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:update')
   @ApiOperation({ summary: 'Archive a family' })
   @ApiParam({ name: 'familyId', description: 'Family UUID' })
@@ -263,7 +256,6 @@ export class FamilyController {
    */
   @Post(':familyId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('families:update')
   @ApiOperation({ summary: 'Restore an archived family' })
   @ApiParam({ name: 'familyId', description: 'Family UUID' })

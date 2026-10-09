@@ -32,7 +32,6 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiQuery } from '@nestj
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -74,7 +73,6 @@ export class AdminController {
    */
   @Post('departments')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('departments:create')
   @ApiOperation({ summary: 'Create a new department' })
   async createDepartment(
@@ -92,7 +90,6 @@ export class AdminController {
    * Lists all departments for the church.
    */
   @Get('departments')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head')
   @RequirePermissions('departments:read')
   @ApiOperation({ summary: 'List departments' })
   async listDepartments(
@@ -110,7 +107,6 @@ export class AdminController {
    * Gets a single department by ID.
    */
   @Get('departments/:departmentId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head')
   @RequirePermissions('departments:read')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Get a department by ID' })
@@ -128,7 +124,6 @@ export class AdminController {
    * Updates a department.
    */
   @Patch('departments/:departmentId')
-  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Update a department' })
@@ -150,7 +145,6 @@ export class AdminController {
    */
   @Post('departments/:departmentId/archive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Archive a department' })
@@ -168,7 +162,6 @@ export class AdminController {
    */
   @Post('departments/:departmentId/restore')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Restore an archived department' })
@@ -186,7 +179,6 @@ export class AdminController {
    */
   @Delete('departments/:departmentId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin')
   @RequirePermissions('departments:delete')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Delete a department (must have no members)' })
@@ -206,7 +198,6 @@ export class AdminController {
    */
   @Post('departments/:departmentId/members')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiOperation({ summary: 'Add a member to a department' })
@@ -233,7 +224,6 @@ export class AdminController {
    */
   @Delete('departments/:departmentId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin', 'senior_pastor', 'department_head')
   @RequirePermissions('departments:update')
   @ApiParam({ name: 'departmentId', type: String })
   @ApiParam({ name: 'memberId', type: String })
@@ -263,7 +253,6 @@ export class AdminController {
    */
   @Post('cell-groups')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @RequirePermissions('cell_groups:create')
   @ApiOperation({ summary: 'Create a new cell group' })
   async createCellGroup(
@@ -281,7 +270,6 @@ export class AdminController {
    * Lists all cell groups for the church.
    */
   @Get('cell-groups')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'List cell groups' })
   @ApiQuery({
@@ -318,7 +306,7 @@ export class AdminController {
    * Finds nearest cell groups based on geolocation.
    */
   @Get('cell-groups/nearest')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'member', 'cell_leader')
+  @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'Find nearest cell groups by location' })
   async findNearestGroups(
     @Query('latitude') latitude: number,
@@ -338,7 +326,6 @@ export class AdminController {
   @Get('cell-groups/export')
   @Header('Content-Type', 'text/csv')
   @Header('Content-Disposition', 'attachment; filename="cell-groups.csv"')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiOperation({ summary: 'Export cell groups as CSV' })
   @ApiQuery({
@@ -374,7 +361,6 @@ export class AdminController {
    * Gets a single cell group by ID.
    */
   @Get('cell-groups/:groupId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Get a cell group by ID' })
@@ -392,7 +378,6 @@ export class AdminController {
    * Updates a cell group.
    */
   @Patch('cell-groups/:groupId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Update a cell group' })
@@ -414,7 +399,6 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/archive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Archive a cell group' })
@@ -432,7 +416,6 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/restore')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Restore an archived cell group' })
@@ -450,7 +433,6 @@ export class AdminController {
    */
   @Delete('cell-groups/:groupId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin', 'senior_pastor')
   @RequirePermissions('cell_groups:delete')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Delete a cell group' })
@@ -472,7 +454,6 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/members')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Add a member to a cell group' })
@@ -498,7 +479,6 @@ export class AdminController {
    */
   @Delete('cell-groups/:groupId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'cell_leader')
   @RequirePermissions('cell_groups:update')
   @ApiParam({ name: 'groupId', type: String })
   @ApiParam({ name: 'memberId', type: String })
@@ -523,7 +503,6 @@ export class AdminController {
    * Lists members of a cell group.
    */
   @Get('cell-groups/:groupId/members')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader')
   @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group members' })
@@ -539,7 +518,6 @@ export class AdminController {
    */
   @Post('cell-groups/:groupId/attendance')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'cell_leader')
   @RequirePermissions('cell_groups:create')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Record cell group attendance' })
@@ -568,14 +546,6 @@ export class AdminController {
    * Lists attendance records for a cell group.
    */
   @Get('cell-groups/:groupId/attendance')
-  @RequireRoles(
-    'church_admin',
-    'senior_pastor',
-    'branch_pastor',
-    'secretary',
-    'department_head',
-    'cell_leader',
-  )
   @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group attendance' })
@@ -592,14 +562,6 @@ export class AdminController {
    * Gets attendance summary for a cell group.
    */
   @Get('cell-groups/:groupId/attendance/summary')
-  @RequireRoles(
-    'church_admin',
-    'senior_pastor',
-    'branch_pastor',
-    'secretary',
-    'department_head',
-    'cell_leader',
-  )
   @RequirePermissions('cell_groups:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Get cell group attendance summary' })
@@ -617,7 +579,7 @@ export class AdminController {
    * Gets members needing pastoral attention (high/critical risk).
    */
   @Get('dashboard/attention')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('pastoral:risk-scores:read')
   @ApiOperation({ summary: 'Get members needing pastoral attention' })
   async getMembersNeedingAttention(
     @Query('limit') limit: number,
@@ -633,7 +595,7 @@ export class AdminController {
    * Gets engagement distribution across the church.
    */
   @Get('dashboard/engagement')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('pastoral:engagement:read')
   @ApiOperation({ summary: 'Get engagement score distribution' })
   async getEngagementDistribution(@Req() req: AuthenticatedRequest) {
     // Extract church ID from the authenticated user's profile
@@ -646,7 +608,7 @@ export class AdminController {
    * Gets rising stars — members with rapidly improving engagement.
    */
   @Get('dashboard/rising-stars')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('pastoral:engagement:read')
   @ApiOperation({ summary: 'Get rising star members' })
   async getRisingStars(@Query('limit') limit: number, @Req() req: AuthenticatedRequest) {
     // Extract church ID from the authenticated user's profile
@@ -659,7 +621,7 @@ export class AdminController {
    * Gets follow-up suggestions for a specific member.
    */
   @Get('dashboard/follow-up/:memberId')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:risk-scores:read')
   @ApiParam({ name: 'memberId', type: String })
   @ApiOperation({
     summary: 'Get follow-up suggestions for a member',
@@ -677,7 +639,7 @@ export class AdminController {
    * Gets follow-up suggestions for all high/critical risk members.
    */
   @Get('dashboard/follow-up')
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
+  @RequirePermissions('pastoral:risk-scores:read')
   @ApiOperation({
     summary: 'Get batch follow-up suggestions',
     description:
@@ -714,7 +676,6 @@ export class AdminController {
    * Lists all churches (super_admin only).
    */
   @Get('churches')
-  @RequireRoles('super_admin')
   @RequirePermissions('church:read')
   @ApiOperation({
     summary: 'List all churches',
@@ -729,8 +690,7 @@ export class AdminController {
    * Gets cross-church analytics (super_admin only).
    */
   @Get('analytics/cross-church')
-  @RequireRoles('super_admin')
-  @RequirePermissions('analytics:read')
+  @RequirePermissions('analytics:dashboard:read')
   @ApiOperation({
     summary: 'Cross-church analytics',
     description: 'Aggregates key metrics across all churches for super_admin oversight.',

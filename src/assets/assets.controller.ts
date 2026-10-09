@@ -30,7 +30,6 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import {
   ApiCreateEndpoint,
@@ -67,8 +66,6 @@ import {
   UpdateLoanDto,
 } from './dto';
 
-const WRITE_ROLES = ['church_admin', 'branch_pastor', 'secretary', 'treasurer'] as const;
-
 @ApiTags('Assets')
 @ApiBearerAuth('supabase-auth')
 @UseGuards(JwtAuthGuard)
@@ -85,7 +82,6 @@ export class AssetsController {
    */
   @Post('categories')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:categories:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create an asset category')
@@ -115,7 +111,6 @@ export class AssetsController {
    */
   @Patch('categories/:categoryId')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:categories:update')
   @ApiUpdateEndpoint('Update an asset category')
   @ApiParam({ name: 'categoryId', description: 'Asset category UUID' })
@@ -133,7 +128,6 @@ export class AssetsController {
    */
   @Delete('categories/:categoryId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer')
   @RequirePermissions('assets:categories:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete an asset category')
@@ -152,7 +146,6 @@ export class AssetsController {
    */
   @Post('categories/:categoryId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:categories:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive an asset category')
@@ -170,7 +163,6 @@ export class AssetsController {
    */
   @Post('categories/:categoryId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:categories:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore an archived asset category')
@@ -188,7 +180,6 @@ export class AssetsController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:list:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Register a new asset')
@@ -270,7 +261,6 @@ export class AssetsController {
    */
   @Patch(':assetId')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:list:update')
   @ApiUpdateEndpoint('Update an asset')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -288,7 +278,6 @@ export class AssetsController {
    */
   @Delete(':assetId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer')
   @RequirePermissions('assets:list:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete an asset')
@@ -307,7 +296,6 @@ export class AssetsController {
    */
   @Post(':assetId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive an asset')
@@ -325,7 +313,6 @@ export class AssetsController {
    */
   @Post(':assetId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore an archived asset')
@@ -343,7 +330,6 @@ export class AssetsController {
    */
   @Post(':assetId/qr')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:list:create')
   @ApiCreateEndpoint('Generate asset QR code')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -402,7 +388,6 @@ export class AssetsController {
    */
   @Post(':assetId/maintenance')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:maintenance:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create asset maintenance record')
@@ -435,7 +420,6 @@ export class AssetsController {
    */
   @Patch(':assetId/maintenance/:maintenanceId')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:maintenance:update')
   @ApiUpdateEndpoint('Update asset maintenance record')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -461,7 +445,6 @@ export class AssetsController {
    */
   @Post(':assetId/depreciation')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer')
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Record asset depreciation')
@@ -507,7 +490,6 @@ export class AssetsController {
    */
   @Post(':assetId/loans')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:loans:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Loan an asset')
@@ -540,7 +522,6 @@ export class AssetsController {
    */
   @Patch(':assetId/loans/:loanId/return')
   @UseGuards(RolesGuard)
-  @RequireRoles(...WRITE_ROLES)
   @RequirePermissions('assets:loans:update')
   @ApiUpdateEndpoint('Return a loaned asset')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })

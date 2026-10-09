@@ -20,7 +20,6 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
@@ -45,7 +44,6 @@ export class ReportsController {
   @Get('financial')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
-  @RequireRoles('church_admin', 'senior_pastor', 'treasurer')
   @RequirePermissions('reports:financial:read')
   @ApiOperation({
     summary: 'Financial report',
@@ -70,7 +68,6 @@ export class ReportsController {
   @Get('attendance')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
   @RequirePermissions('reports:attendance:read')
   @ApiOperation({
     summary: 'Attendance report',
@@ -95,7 +92,6 @@ export class ReportsController {
   @Get('members')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(600)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')
   @RequirePermissions('reports:members:read')
   @ApiOperation({
     summary: 'Member report',

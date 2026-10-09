@@ -69,6 +69,9 @@ export const RESOURCES = [
   'roles',
   'forms',
   'pastoral',
+  'pastoral_confidential',
+  'pastoral_restricted',
+  'pastoral_moderation',
   'departments',
   'cell_groups',
   'assets',
@@ -79,6 +82,8 @@ export const RESOURCES = [
   'church_settings',
   'visitors',
   'users',
+  'webhooks',
+  'diagnostics',
   'emails',
   'appointments',
 ] as const;
@@ -101,7 +106,7 @@ export type Action = (typeof ACTIONS)[number];
 // intentionally have NO surface map — they stay coarse `resource:action`.
 
 export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
-  members: ['all', 'new', 'import'],
+  members: ['all', 'new', 'import', 'own'],
   attendance: ['dashboard', 'services', 'checkin', 'records', 'reports'],
   giving: ['dashboard', 'categories', 'records', 'reports', 'recurring'],
   events: ['calendar', 'list', 'checkin', 'registrations', 'tickets'],
@@ -111,7 +116,10 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   visitors: ['list', 'new', 'followup'],
   assets: ['list', 'categories', 'maintenance', 'loans'],
   forms: ['list', 'submissions'],
+  departments: ['own'],
+  cell_groups: ['own'],
   reports: ['financial', 'attendance', 'members'],
+  analytics: ['dashboard', 'giving', 'attendance', 'members', 'events', 'communication'],
 };
 
 /**
@@ -200,6 +208,13 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:read',
     'events:update',
     'events:delete',
+    // Analytics — all dashboards
+    'analytics:dashboard:read',
+    'analytics:giving:read',
+    'analytics:attendance:read',
+    'analytics:members:read',
+    'analytics:events:read',
+    'analytics:communication:read',
     // Sermons — full access
     'sermons:create',
     'sermons:read',
@@ -246,6 +261,10 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'pastoral:read',
     'pastoral:update',
     'pastoral:delete',
+    'pastoral_confidential:read',
+    'pastoral_restricted:read',
+    'pastoral_moderation:update',
+    'pastoral_moderation:delete',
     // Departments — full access
     'departments:create',
     'departments:read',
@@ -276,9 +295,13 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'broadcasts:read',
     'broadcasts:update',
     'broadcasts:delete',
-    // Analytics — view + read
-    'analytics:view',
-    'analytics:read',
+    // Analytics — all dashboards
+    'analytics:dashboard:read',
+    'analytics:giving:read',
+    'analytics:attendance:read',
+    'analytics:members:read',
+    'analytics:events:read',
+    'analytics:communication:read',
     // Church Settings — read + update
     'church_settings:read',
     'church_settings:update',
@@ -308,6 +331,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // ALL permissions (same as super_admin, but not locked)
     ...generateAllPermissions().map((p) => p.name),
     // Roles & permissions management (menus + API):
+    'roles:create',
     'roles:read',
     'roles:update',
   ],
@@ -353,6 +377,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'pastoral:create',
     'pastoral:read',
     'pastoral:update',
+    'pastoral_confidential:read',
     // Departments — read
     'departments:read',
     // Cell Groups — create + read + update
@@ -373,9 +398,13 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Broadcasts — create + read
     'broadcasts:create',
     'broadcasts:read',
-    // Analytics — view + read
-    'analytics:view',
-    'analytics:read',
+    // Analytics — all dashboards
+    'analytics:dashboard:read',
+    'analytics:giving:read',
+    'analytics:attendance:read',
+    'analytics:members:read',
+    'analytics:events:read',
+    'analytics:communication:read',
     // Visitors — create + read + update
     'visitors:create',
     'visitors:read',
@@ -394,6 +423,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   department_head: [
+    'members:own:read',
     // Branch names are needed for the locked branch selector; the API only
     // returns this viewer's own branch unless is_admin_hq is enabled.
     'branches:read',
@@ -403,9 +433,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:read',
     'profiles:read',
     'church:read',
-    // Departments — read + update (manage their own headed department)
+    // Departments — read and manage only headed departments
     'departments:read',
     'departments:update',
+    'departments:own:read',
+    'departments:own:update',
   ],
 
   secretary: [
@@ -500,14 +532,14 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:read',
     'profiles:read',
     'church:read',
-    // Analytics — view + read
-    'analytics:view',
-    'analytics:read',
+    // Analytics — giving only
+    'analytics:giving:read',
     // Emails — read
     'emails:read',
   ],
 
   cell_leader: [
+    'members:own:read',
     'branches:read',
     // Events — read (member parity)
     'events:read',
@@ -522,12 +554,16 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Cell Groups — read + create + update (the ONLY additions over member:
     // editing their own group, adding/removing members, and recording
     // attendance — all enforced to their OWN group server-side)
+    'cell_groups:own:read',
     'cell_groups:read',
     'cell_groups:create',
     'cell_groups:update',
+    'cell_groups:own:create',
+    'cell_groups:own:update',
   ],
 
   member: [
+    'members:own:read',
     'branches:read',
     // Events — read
     'events:read',

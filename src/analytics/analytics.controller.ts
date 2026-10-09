@@ -14,7 +14,7 @@ import { Controller, Get, Query, Req, UseGuards, UseInterceptors } from '@nestjs
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { AnalyticsService } from './analytics.service';
@@ -42,7 +42,7 @@ export class AnalyticsController {
   @Get('dashboard')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(180)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('analytics:dashboard:read')
   @ApiOperation({ summary: 'Get unified dashboard overview' })
   @ApiOkResponse({ description: 'Dashboard data retrieved', type: DashboardResponseDto })
   async getDashboard(
@@ -60,7 +60,7 @@ export class AnalyticsController {
   @Get('giving')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'treasurer')
+  @RequirePermissions('analytics:giving:read')
   @ApiOperation({ summary: 'Get giving analytics' })
   @ApiOkResponse({ description: 'Giving analytics retrieved', type: GivingAnalyticsResponseDto })
   async getGivingAnalytics(
@@ -78,7 +78,7 @@ export class AnalyticsController {
   @Get('attendance')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(180)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('analytics:attendance:read')
   @ApiOperation({ summary: 'Get attendance analytics' })
   @ApiOkResponse({
     description: 'Attendance analytics retrieved',
@@ -99,7 +99,7 @@ export class AnalyticsController {
   @Get('members')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(600)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('analytics:members:read')
   @ApiOperation({ summary: 'Get member analytics' })
   @ApiOkResponse({ description: 'Member analytics retrieved', type: MemberAnalyticsResponseDto })
   async getMemberAnalytics(@Req() req: AuthenticatedRequest): Promise<MemberAnalyticsResponseDto> {
@@ -114,7 +114,7 @@ export class AnalyticsController {
   @Get('events')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(180)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('analytics:events:read')
   @ApiOperation({ summary: 'Get event analytics' })
   @ApiOkResponse({ description: 'Event analytics retrieved', type: EventAnalyticsResponseDto })
   async getEventAnalytics(
@@ -132,7 +132,7 @@ export class AnalyticsController {
   @Get('communication')
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(300)
-  @RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')
+  @RequirePermissions('analytics:communication:read')
   @ApiOperation({ summary: 'Get communication analytics' })
   @ApiOkResponse({
     description: 'Communication analytics retrieved',

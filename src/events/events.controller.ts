@@ -23,12 +23,10 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -75,7 +73,6 @@ export class EventsController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:create')
   @ApiCreateEndpoint('Create a new event', 'Creates a new church event.')
   async createEvent(
@@ -95,7 +92,6 @@ export class EventsController {
    */
   @Get()
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('events:list:read')
   @ApiPaginatedResponse(EventResponseDto)
   @ApiOperation({
@@ -122,6 +118,7 @@ export class EventsController {
    * @returns Paginated list of tickets with event and member details
    */
   @Get('management/tickets')
+  @RequirePermissions('events:tickets:read')
   @ApiOperation({
     summary: 'List all tickets',
     description:
@@ -136,10 +133,7 @@ export class EventsController {
     @Request() req?: AuthenticatedRequest,
   ) {
     const churchId = req?.profile?.church_id || '';
-    const roles = req?.profile?.roles || ([req?.profile?.role].filter(Boolean) as string[]);
-    // Cell group leaders are treated exactly like members for tickets: they
-    // only ever see (and claim) their own tickets.
-    const isStaff = roles.some((r) => r !== 'member' && r !== 'cell_leader');
+    const isStaff = !!req?.profile?.permissions?.includes('events:tickets:create');
 
     return this.eventsService.listAllTickets(churchId, {
       eventId,
@@ -180,7 +174,7 @@ export class EventsController {
    */
   @Patch(':eventId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
+  @RequirePermissions('events:update')
   @ApiUpdateEndpoint('Update event details')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
   async updateEvent(
@@ -202,7 +196,6 @@ export class EventsController {
    */
   @Post(':eventId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:update')
   @ApiOperation({ summary: 'Archive an event' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -224,7 +217,6 @@ export class EventsController {
    */
   @Post(':eventId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:update')
   @ApiOperation({ summary: 'Restore an archived event' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -246,7 +238,6 @@ export class EventsController {
    */
   @Delete(':eventId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('events:delete')
   @ApiDeleteEndpoint('Delete an event')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -272,7 +263,6 @@ export class EventsController {
    */
   @Post(':eventId/tiers')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:tickets:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a ticket tier', 'Creates a pricing tier for a paid event.')
@@ -322,7 +312,6 @@ export class EventsController {
    */
   @Patch(':eventId/tiers/:tierId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:tickets:update')
   @ApiUpdateEndpoint('Update a ticket tier')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -355,7 +344,6 @@ export class EventsController {
    */
   @Post(':eventId/tiers/:tierId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:tickets:update')
   @ApiOperation({ summary: 'Archive a ticket tier' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -380,7 +368,6 @@ export class EventsController {
    */
   @Post(':eventId/tiers/:tierId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:tickets:update')
   @ApiOperation({ summary: 'Restore an archived ticket tier' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -405,7 +392,6 @@ export class EventsController {
    */
   @Delete(':eventId/tiers/:tierId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:tickets:delete')
   @ApiDeleteEndpoint('Delete a ticket tier')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -464,7 +450,6 @@ export class EventsController {
    */
   @Get(':eventId/registrations')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('events:registrations:read')
   @ApiListEndpoint('List event registrations', 'Lists all registrations for an event.')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -486,7 +471,6 @@ export class EventsController {
    */
   @Delete(':eventId/register/:memberId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:registrations:update')
   @ApiOperation({
     summary: 'Cancel registration',
@@ -517,6 +501,7 @@ export class EventsController {
    */
   @Post(':eventId/tickets')
   @UseGuards(RolesGuard)
+  @RequirePermissions('events:tickets:read')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a ticket',
@@ -530,20 +515,10 @@ export class EventsController {
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ) {
-    const roles = req.profile?.roles || ([req.profile?.role].filter(Boolean) as string[]);
-    // Cell group leaders are treated exactly like members for tickets — they
-    // may only self-claim (enforced in the service).
-    const isStaff = roles.some((r) => r !== 'member' && r !== 'cell_leader');
+    const isStaff = !!req.profile?.permissions?.includes('events:tickets:create');
 
-    // Full staff path: require events:create permission (existing admin guard).
-    // Members and cell group leaders fall through to the member self-claim path.
-    if (isStaff) {
-      const hasPerm = req.profile?.permissions?.includes('events:tickets:create') || false;
-      if (!hasPerm) {
-        throw new ForbiddenException('You do not have permission to create tickets');
-      }
-    } else {
-      // Member / cell_leader self-claim path: can only self-assign (enforced
+    if (!isStaff) {
+      // Users without ticket creation permission can only self-assign (enforced
       // in service). memberId is optional — when omitted the service resolves
       // the caller's own member profile (auto-create and link if none).
       if (dto.visitorId) {
@@ -580,7 +555,6 @@ export class EventsController {
    */
   @Post(':eventId/tickets/validate')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('events:checkin:create')
   @ApiOperation({
     summary: 'Validate ticket',
@@ -600,7 +574,6 @@ export class EventsController {
 
   @Post(':eventId/check-in')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:checkin:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -620,7 +593,6 @@ export class EventsController {
 
   @Post(':eventId/check-in/walk-in')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor')
   @RequirePermissions('events:checkin:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({

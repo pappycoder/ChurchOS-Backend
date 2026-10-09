@@ -23,7 +23,6 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -62,7 +61,6 @@ export class BranchesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('branches:create')
   @ApiCreateEndpoint(
     'Create a branch',
@@ -105,7 +103,6 @@ export class BranchesController {
   }
 
   @Get(':branchId')
-  @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')
   @RequirePermissions('branches:read')
   @ApiGetEndpoint('Get branch', 'Retrieves a single branch by ID with member count.')
   /**
@@ -123,7 +120,6 @@ export class BranchesController {
   }
 
   @Patch(':branchId')
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('branches:update')
   @ApiUpdateEndpoint(
     'Update a branch',
@@ -148,7 +144,6 @@ export class BranchesController {
   }
 
   @Delete(':branchId')
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('branches:delete')
   @ApiDeleteEndpoint(
     'Delete a branch',
@@ -172,7 +167,6 @@ export class BranchesController {
 
   @Post(':branchId/archive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('branches:update')
   /**
    * Archives a branch. Archived branches drop out of active lists.
@@ -192,7 +186,6 @@ export class BranchesController {
 
   @Post(':branchId/restore')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('branches:update')
   /**
    * Restores an archived branch.

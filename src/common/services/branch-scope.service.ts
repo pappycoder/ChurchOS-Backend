@@ -13,6 +13,7 @@ export interface ViewerScope {
   member_id?: string;
   role: string;
   roles?: string[];
+  permissions?: string[];
   /** HQ override: when true, the viewer sees data from ALL branches in their church */
   is_admin_hq?: boolean;
 }
@@ -119,9 +120,10 @@ export class BranchScopeService {
       return { churchOnly: true };
     }
 
-    const isCellLeader = viewer.role === 'cell_leader' || viewer.roles?.includes('cell_leader');
+    const hasOwnScope = viewer.permissions?.includes('cell_groups:own:read') &&
+      !viewer.permissions?.includes('cell_groups:delete');
 
-    if (isCellLeader) {
+    if (hasOwnScope) {
       return { churchOnly: false, leaderId: viewer.member_id };
     }
 
@@ -153,10 +155,10 @@ export class BranchScopeService {
       return { churchOnly: true };
     }
 
-    const isDepartmentHead =
-      viewer.role === 'department_head' || viewer.roles?.includes('department_head');
+    const hasOwnScope = viewer.permissions?.includes('departments:own:read') &&
+      !viewer.permissions?.includes('departments:delete');
 
-    if (isDepartmentHead) {
+    if (hasOwnScope) {
       return { churchOnly: false, headId: viewer.member_id };
     }
 

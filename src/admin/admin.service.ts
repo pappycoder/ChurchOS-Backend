@@ -250,9 +250,8 @@ export class AdminService {
     // A branch-restricted department head may change every field EXCEPT the
     // branch and head — reassigning those is church-admin-only. The payload is
     // silently stripped (never an error) so clients can keep sending the full form.
-    const restrictedHead =
-      (viewer?.role === 'department_head' || viewer?.roles?.includes('department_head')) &&
-      !viewer?.is_admin_hq;
+    const restrictedHead = !!viewer?.permissions?.includes('departments:own:update') &&
+      !viewer.permissions.includes('departments:delete') && !viewer?.is_admin_hq;
 
     // Validate the branch + head assignments when the caller is allowed to set them
     if (!restrictedHead) {
@@ -898,7 +897,8 @@ export class AdminService {
     viewer: ViewerScope | null | undefined,
     group: { leader_id: string | null },
   ): void {
-    const isCellLeader = viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader');
+    const isCellLeader = !!viewer?.permissions?.includes('cell_groups:own:update') &&
+      !viewer.permissions.includes('cell_groups:delete');
     if (isCellLeader) {
       if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
         throw new ForbiddenException('You can only manage your own cell group');
@@ -923,8 +923,8 @@ export class AdminService {
     viewer: ViewerScope | null | undefined,
     department: { head_member_id: string | null },
   ): void {
-    const isDepartmentHead =
-      viewer?.role === 'department_head' || viewer?.roles?.includes('department_head');
+    const isDepartmentHead = !!viewer?.permissions?.includes('departments:own:update') &&
+      !viewer.permissions.includes('departments:delete');
     if (isDepartmentHead) {
       if (!viewer?.member_id || department.head_member_id !== viewer.member_id) {
         throw new ForbiddenException('You can only manage your own department');
@@ -1011,9 +1011,8 @@ export class AdminService {
     // payload is silently stripped (never an error) so clients can keep
     // sending the full form. An admin-HQ cell leader editing their own group
     // keeps the branch/leader controls (they are not branch-restricted).
-    const restrictedLeader =
-      (viewer?.role === 'cell_leader' || viewer?.roles?.includes('cell_leader')) &&
-      !viewer?.is_admin_hq;
+    const restrictedLeader = !!viewer?.permissions?.includes('cell_groups:own:update') &&
+      !viewer.permissions.includes('cell_groups:delete') && !viewer?.is_admin_hq;
 
     // Apply partial updates to the cell group record
     const updated = await this.prisma.cellGroup.update({

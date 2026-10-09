@@ -26,7 +26,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
   CurrentUser,
@@ -55,7 +55,7 @@ export class BroadcastController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('broadcasts:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint(
     'Create a broadcast',
@@ -74,6 +74,7 @@ export class BroadcastController {
    * Lists broadcasts with pagination and filters.
    */
   @Get()
+  @RequirePermissions('broadcasts:read')
   @ApiPaginatedResponse(BroadcastResponseDto)
   @ApiOperation({ summary: 'List broadcasts', description: 'List broadcast campaigns.' })
   async findAll(@Query() query: ListBroadcastsDto, @Request() req: AuthenticatedRequest) {
@@ -94,6 +95,7 @@ export class BroadcastController {
    * Gets a single broadcast by ID.
    */
   @Get(':broadcastId')
+  @RequirePermissions('broadcasts:read')
   @ApiGetEndpoint('Get broadcast by ID')
   @ApiParam({ name: 'broadcastId', description: 'Broadcast UUID' })
   async findOne(
@@ -109,7 +111,7 @@ export class BroadcastController {
    */
   @Patch(':broadcastId/cancel')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('broadcasts:update')
   @ApiUpdateEndpoint('Cancel a broadcast')
   @ApiParam({ name: 'broadcastId', description: 'Broadcast UUID' })
   async cancel(

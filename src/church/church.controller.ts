@@ -23,7 +23,6 @@ import {
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -63,7 +62,7 @@ export class ChurchController {
   constructor(private readonly churchService: ChurchService) {}
 
   @Get()
-  @RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary', 'treasurer', 'member')
+  @RequirePermissions('church:read')
   @ApiGetEndpoint(
     'Get church details',
     'Retrieves the current church details including branch and member counts.',
@@ -79,7 +78,6 @@ export class ChurchController {
   }
 
   @Patch()
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('church:update')
   @ApiUpdateEndpoint(
     'Update church details',
@@ -102,7 +100,7 @@ export class ChurchController {
   }
 
   @Patch('email')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church:update')
   @ApiUpdateEndpoint(
     'Update the unified church email',
     'Changes the email everywhere it lives for the acting admin: sign-in credential (Supabase Auth), profile contact record, and the church public contact email.',
@@ -125,7 +123,6 @@ export class ChurchController {
 
   @Post('archive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('church:update')
   @ApiUpdateEndpoint(
     'Archive church',
@@ -147,7 +144,6 @@ export class ChurchController {
 
   @Post('restore')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('church_admin', 'super_admin')
   @RequirePermissions('church:update')
   @ApiUpdateEndpoint(
     'Restore archived church',
@@ -168,7 +164,7 @@ export class ChurchController {
   }
 
   @Get('config')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church_settings:read')
   @ApiGetEndpoint(
     'Get church configuration',
     'Retrieves all configuration key-value pairs for the church.',
@@ -184,7 +180,7 @@ export class ChurchController {
   }
 
   @Patch('config')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('church_settings:update')
   @ApiUpdateEndpoint(
     'Update church configuration',
     'Upserts configuration key-value pairs for the church.',
@@ -207,7 +203,6 @@ export class ChurchController {
 
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('church_admin')
   @RequirePermissions('church:update')
   @ApiCreateEndpoint(
     'Invite staff member',
@@ -230,7 +225,7 @@ export class ChurchController {
   }
 
   @Get('staff')
-  @RequireRoles('church_admin')
+  @RequirePermissions('profiles:read')
   @ApiGetEndpoint(
     'List staff members',
     'Returns a paginated list of all staff profiles for the church.',
@@ -265,7 +260,7 @@ export class ChurchController {
   }
 
   @Patch('staff/:profileId/role')
-  @RequireRoles('church_admin')
+  @RequirePermissions('profiles:update')
   @ApiUpdateEndpoint('Update staff role', 'Changes the role of a staff member within the church.')
   /**
    * Updates a staff member's role.
@@ -286,7 +281,6 @@ export class ChurchController {
   }
 
   @Delete('staff/:profileId')
-  @RequireRoles('church_admin')
   @RequirePermissions('church:update')
   @ApiDeleteEndpoint(
     'Remove staff member',

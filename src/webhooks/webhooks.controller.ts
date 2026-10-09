@@ -10,7 +10,7 @@ import { Controller, Get, Post, Delete, Param, Body, UseGuards, Req } from '@nes
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { WebhooksService } from './webhooks.service';
 import { CreateWebhookSubscriptionDto } from './dto/create-webhook-subscription.dto';
@@ -30,7 +30,7 @@ export class WebhooksController {
    * Create a webhook subscription.
    */
   @Post()
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:create')
   @ApiOperation({ summary: 'Create webhook', description: 'Subscribe to outbound webhook events.' })
   async create(
     @Body() dto: CreateWebhookSubscriptionDto,
@@ -44,7 +44,7 @@ export class WebhooksController {
    * List all webhook subscriptions.
    */
   @Get()
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:read')
   @ApiOperation({
     summary: 'List webhooks',
     description: 'List all webhook subscriptions for the church.',
@@ -58,7 +58,7 @@ export class WebhooksController {
    * Deactivate a webhook subscription.
    */
   @Delete(':webhookId')
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:update')
   @ApiOperation({
     summary: 'Deactivate webhook',
     description: 'Deactivate a webhook subscription.',
@@ -75,7 +75,7 @@ export class WebhooksController {
    * List delivery history for a subscription.
    */
   @Get(':webhookId/deliveries')
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:read')
   @ApiOperation({
     summary: 'Delivery history',
     description: 'View delivery attempts for a webhook.',
@@ -92,7 +92,7 @@ export class WebhooksController {
    * Fire a test delivery.
    */
   @Post(':webhookId/test')
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:update')
   @ApiOperation({ summary: 'Test webhook', description: 'Send a test ping to the webhook URL.' })
   async testDelivery(
     @Param('webhookId') webhookId: string,
@@ -106,7 +106,7 @@ export class WebhooksController {
    * Archive a webhook subscription.
    */
   @Post(':webhookId/archive')
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:update')
   @ApiOperation({
     summary: 'Archive webhook',
     description: 'Set archived_at — hides the subscription from active lists until restored.',
@@ -123,7 +123,7 @@ export class WebhooksController {
    * Restore an archived webhook subscription.
    */
   @Post(':webhookId/restore')
-  @RequireRoles('church_admin')
+  @RequirePermissions('webhooks:update')
   @ApiOperation({
     summary: 'Restore webhook',
     description: 'Clears archived_at — brings the subscription back into active lists.',

@@ -35,7 +35,6 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader, ApiOkResponse } from '
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
@@ -80,7 +79,6 @@ export class GivingController {
    */
   @Post('categories')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer', 'secretary')
   @RequirePermissions('giving:categories:create')
   @ApiCreateEndpoint('Create a giving category', 'Creates a new giving category for the church.')
   async createCategory(
@@ -141,7 +139,6 @@ export class GivingController {
    */
   @Patch('categories/:categoryId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Update a giving category', 'Updates a giving category with partial data.')
   async updateCategory(
@@ -159,7 +156,6 @@ export class GivingController {
    */
   @Delete('categories/:categoryId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('giving:categories:delete')
   @ApiDeleteEndpoint('Delete a giving category', 'Deactivates a giving category.')
   async deleteCategory(
@@ -178,7 +174,6 @@ export class GivingController {
   @Post('categories/:categoryId/archive')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer', 'secretary')
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Archive a giving category', 'Archives a giving category.')
   async archiveCategory(
@@ -196,7 +191,6 @@ export class GivingController {
   @Post('categories/:categoryId/restore')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'treasurer', 'secretary')
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Restore a giving category', 'Restores an archived giving category.')
   async restoreCategory(
@@ -304,7 +298,6 @@ export class GivingController {
   @Post('cash')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'secretary', 'treasurer')
   @RequirePermissions('giving:records:create')
   @ApiCreateEndpoint(
     'Record cash/bank giving',

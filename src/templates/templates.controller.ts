@@ -27,7 +27,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
   CurrentUser,
@@ -63,7 +63,7 @@ export class TemplatesController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('templates:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a message template')
   async create(
@@ -83,6 +83,7 @@ export class TemplatesController {
    * @returns Paginated list of templates
    */
   @Get()
+  @RequirePermissions('templates:read')
   @ApiPaginatedResponse(TemplateResponseDto)
   @ApiOperation({ summary: 'List templates', description: 'List message templates with filters.' })
   async findAll(@Query() query: ListTemplatesDto, @Request() req: AuthenticatedRequest) {
@@ -109,7 +110,7 @@ export class TemplatesController {
    */
   @Post(':templateId/publish')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Publish a template',
@@ -140,6 +141,7 @@ export class TemplatesController {
    * @returns Template response
    */
   @Get(':templateId')
+  @RequirePermissions('templates:read')
   @ApiGetEndpoint('Get template by ID')
   @ApiParam({ name: 'templateId', description: 'Template UUID' })
   async findOne(
@@ -161,7 +163,7 @@ export class TemplatesController {
    */
   @Patch(':templateId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Update a template')
   @ApiParam({ name: 'templateId', description: 'Template UUID' })
@@ -177,7 +179,7 @@ export class TemplatesController {
 
   @Post(':templateId/archive')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Archive a template',
@@ -198,7 +200,7 @@ export class TemplatesController {
 
   @Post(':templateId/restore')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin', 'branch_pastor', 'secretary')
+  @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restore an archived template',
@@ -227,7 +229,7 @@ export class TemplatesController {
    */
   @Delete(':templateId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
+  @RequirePermissions('templates:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a template')
   @ApiParam({ name: 'templateId', description: 'Template UUID' })

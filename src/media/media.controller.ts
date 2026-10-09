@@ -34,7 +34,6 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { RequireRoles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import {
@@ -214,7 +213,6 @@ export class MediaController {
    */
   @Patch('library/:assetId/permissions')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('media:library:update')
   @ApiUpdateEndpoint('Update media permissions')
   @ApiParam({ name: 'assetId', description: 'Media asset UUID' })
@@ -233,7 +231,6 @@ export class MediaController {
    */
   @Delete('library/:assetId')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('media:library:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a media asset')
@@ -250,7 +247,6 @@ export class MediaController {
 
   @Delete(':path(*)')
   @UseGuards(RolesGuard)
-  @RequireRoles('church_admin')
   @RequirePermissions('media:library:delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

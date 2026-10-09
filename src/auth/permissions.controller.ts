@@ -21,10 +21,10 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { RequirePermissions } from './decorators/permissions.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { RequireRoles } from './decorators/roles.decorator';
 import { PermissionsService } from './services/permissions.service';
 import { CurrentUser, CurrentUserProfile } from '../common/decorators/current-user.decorator';
 import {
@@ -44,7 +44,7 @@ export class PermissionsController {
   // ─── Create a Custom Role ─────────────────────────────────
 
   @Post()
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:create')
   @ApiOperation({ summary: 'Create a custom role owned by this church' })
   @ApiResponse({
     status: 201,
@@ -74,7 +74,7 @@ export class PermissionsController {
   // ─── List All Roles with Permissions ─────────────────────
 
   @Get()
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:read')
   @ApiOperation({ summary: 'List all roles with their effective permissions for this church' })
   @ApiResponse({
     status: 200,
@@ -91,7 +91,7 @@ export class PermissionsController {
   // ─── Get Permissions for a Specific Role ─────────────────
 
   @Get(':roleName/permissions')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:read')
   @ApiOperation({ summary: 'Get effective permissions for a specific role' })
   @ApiResponse({
     status: 200,
@@ -109,7 +109,7 @@ export class PermissionsController {
   // ─── Set Permissions for a Role ──────────────────────────
 
   @Put(':roleName/permissions')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set permissions for a role (replaces all current permissions)' })
   @ApiResponse({
@@ -131,7 +131,7 @@ export class PermissionsController {
   // ─── Reset Role to Defaults ──────────────────────────────
 
   @Post(':roleName/reset')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset a role to global default permissions' })
   @ApiResponse({
@@ -151,7 +151,7 @@ export class PermissionsController {
   // ─── List All Available Permissions ──────────────────────
 
   @Get('/all')
-  @RequireRoles('church_admin', 'super_admin')
+  @RequirePermissions('roles:read')
   @ApiOperation({ summary: 'List all available permissions (resource:action pairs)' })
   @ApiResponse({ status: 200, description: 'All permissions returned' })
   async getAllPermissions() {

@@ -142,19 +142,19 @@ export class PastoralService {
   /**
    * Lists pastoral notes with pagination and filtering.
    *
-   * Respects confidentiality levels based on the requesting user's role.
+   * Respects confidentiality permissions granted to the requesting user.
    * Returns decrypted content in the response.
    *
    * @param query - List/filter parameters
    * @param churchId - Church ID for tenant scoping
-   * @param userRole - Requesting user's role (for confidentiality filtering)
+   * @param userPermissions - Effective permissions (for confidentiality filtering)
    * @param userId - Requesting user's ID (for restricted note access)
    * @returns Paginated list of pastoral notes
    */
   async listNotes(
     query: ListPastoralNotesDto,
     churchId: string,
-    userRole: string,
+    userPermissions: string[],
     userId: string,
   ): Promise<{
     data: PastoralNoteResponseDto[];
@@ -192,7 +192,7 @@ export class PastoralService {
 
     // Apply confidentiality-based access control filter for the user's role
     const memberId = await this.resolveMemberId(userId);
-    const confidentialityFilter = this.getConfidentialityFilter(userRole, memberId);
+    const confidentialityFilter = this.getConfidentialityFilter(userPermissions, memberId);
     if (confidentialityFilter) {
       where.AND = confidentialityFilter;
     }
@@ -237,7 +237,7 @@ export class PastoralService {
    *
    * @param noteId - Pastoral note ID
    * @param churchId - Church ID for tenant scoping
-   * @param userRole - Requesting user's role
+   * @param userPermissions - Effective permissions
    * @param userId - Requesting user's ID
    * @returns Pastoral note with decrypted content
    * @throws NotFoundException if note not found
@@ -246,7 +246,7 @@ export class PastoralService {
   async getNoteById(
     noteId: string,
     churchId: string,
-    userRole: string,
+    userPermissions: string[],
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
     // Fetch the note by ID scoped to the church
@@ -265,7 +265,7 @@ export class PastoralService {
 
     // Verify the user has access based on the note's confidentiality level
     const memberId = await this.resolveMemberId(userId);
-    this.checkConfidentialityAccess(note, userRole, memberId);
+    this.checkConfidentialityAccess(note, userPermissions, memberId);
 
     // Decrypt the content and map to response DTO
     const decryptedContent = this.decrypt(note.content);
@@ -279,7 +279,7 @@ export class PastoralService {
    * @param dto - Update data
    * @param churchId - Church ID for tenant scoping
    * @param userId - User performing the update
-   * @param userRole - User's role
+   * @param userPermissions - Effective user permissions
    * @returns Updated pastoral note
    * @throws NotFoundException if note not found
    * @throws ForbiddenException if user is not the author or admin
@@ -289,7 +289,7 @@ export class PastoralService {
     dto: UpdatePastoralNoteDto,
     churchId: string,
     userId: string,
-    userRole: string,
+    userPermissions: string[],
   ): Promise<PastoralNoteResponseDto> {
     // Resolve Supabase user ID to member ID for ownership check
     const memberId = await this.resolveMemberId(userId);
@@ -310,7 +310,7 @@ export class PastoralService {
     }
 
     // Enforce that only the author or admin/pastor can update
-    if (existing.author_id !== memberId && !['church_admin', 'senior_pastor'].includes(userRole)) {
+    if (existing.author_id !== memberId && !userPermissions.includes('pastoral_moderation:update')) {
       throw new ForbiddenException('Only the author or admin can update this note');
     }
 
@@ -366,13 +366,13 @@ export class PastoralService {
    * @param noteId - Pastoral note ID
    * @param churchId - Church ID for tenant scoping
    * @param userId - User performing the delete
-   * @param userRole - User's role
+   * @param userPermissions - Effective user permissions
    */
   async deleteNote(
     noteId: string,
     churchId: string,
     userId: string,
-    userRole: string,
+    userPermissions: string[],
   ): Promise<void> {
     // Resolve Supabase user ID to member ID for ownership check
     const memberId = await this.resolveMemberId(userId);
@@ -390,7 +390,7 @@ export class PastoralService {
     // Enforce dual authorization for restricted notes (admin or senior pastor only)
     if (
       existing.confidentiality === 'restricted' &&
-      !['church_admin', 'senior_pastor'].includes(userRole)
+      !userPermissions.includes('pastoral_moderation:delete')
     ) {
       throw new ForbiddenException(
         'Restricted pastoral notes require admin or senior pastor to delete',
@@ -401,7 +401,7 @@ export class PastoralService {
     if (
       existing.confidentiality !== 'restricted' &&
       existing.author_id !== memberId &&
-      !['church_admin', 'senior_pastor'].includes(userRole)
+      !userPermissions.includes('pastoral_moderation:delete')
     ) {
       throw new ForbiddenException('Only the author or admin can delete this note');
     }
@@ -670,28 +670,27 @@ export class PastoralService {
   }
 
   /**
-   * Builds a confidentiality-based access filter based on user role.
+   * Builds a confidentiality-based access filter based on permissions.
    *
-   * @param userRole - User's role in the church
+   * @param userPermissions - Effective permissions
    * @param userId - User's member ID
    * @returns Prisma filter object or null if no restriction needed
    */
   private getConfidentialityFilter(
-    userRole: string,
+    userPermissions: string[],
     userId: string | null,
   ): Prisma.PastoralNoteWhereInput | null {
     // Check if the user is an admin or pastor role
-    const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
+    const canReadConfidential = userPermissions.includes('pastoral_confidential:read');
+    const canReadRestricted = userPermissions.includes('pastoral_restricted:read');
 
-    if (isAdminOrPastor) {
-      // Admins/pastors see standard, confidential, and their own restricted notes
-      const restrictedFilter: Prisma.PastoralNoteWhereInput[] = userId
-        ? [{ confidentiality: 'restricted', author_id: userId }]
-        : [];
+    if (canReadConfidential || canReadRestricted) {
+      const allowed: Prisma.PastoralNoteWhereInput[] = [{ confidentiality: 'standard' }];
+      if (canReadConfidential) allowed.push({ confidentiality: 'confidential' });
+      if (canReadRestricted) allowed.push({ confidentiality: 'restricted' });
+      else if (userId) allowed.push({ confidentiality: 'restricted', author_id: userId });
 
-      return {
-        OR: [{ confidentiality: { in: ['standard', 'confidential'] } }, ...restrictedFilter],
-      };
+      return { OR: allowed };
     }
 
     // Regular staff only see standard (non-confidential) notes
@@ -702,13 +701,13 @@ export class PastoralService {
    * Checks if a user has access to a note based on its confidentiality level.
    *
    * @param note - Pastoral note record
-   * @param userRole - User's role
+   * @param userPermissions - Effective permissions
    * @param userId - User's member ID
    * @throws ForbiddenException if access is denied
    */
   private checkConfidentialityAccess(
     note: { confidentiality: string; author_id: string },
-    userRole: string,
+    userPermissions: string[],
     userId: string | null,
   ): void {
     // Allow all staff to access standard notes
@@ -717,17 +716,18 @@ export class PastoralService {
     }
 
     // Check if the user has elevated privileges
-    const isAdminOrPastor = ['church_admin', 'senior_pastor', 'branch_pastor'].includes(userRole);
+    const canReadConfidential = userPermissions.includes('pastoral_confidential:read');
+    const canReadRestricted = userPermissions.includes('pastoral_restricted:read');
 
     // Allow pastors and admin to access confidential notes
-    if (note.confidentiality === 'confidential' && isAdminOrPastor) {
+    if (note.confidentiality === 'confidential' && canReadConfidential) {
       return; // Pastors and admin can access confidential
     }
 
     // For restricted notes, allow the author or senior pastor/admin
     if (note.confidentiality === 'restricted') {
       if (note.author_id === userId) return; // Author can always access
-      if (userRole === 'church_admin' || userRole === 'senior_pastor') return;
+      if (canReadRestricted) return;
     }
 
     // Deny access for all other cases
