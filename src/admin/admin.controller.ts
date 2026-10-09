@@ -94,13 +94,19 @@ export class AdminController {
   @ApiOperation({ summary: 'List departments' })
   async listDepartments(
     @Query('archived') archived: string,
+    @Query('branchId') branchId: string | undefined,
     @Req() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto[]> {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to list the scoped departments (admin-hq sees all;
     // department_head sees only the department(s) they head)
-    return this.adminService.listDepartments(churchId, archived === 'true', req.profile);
+    return this.adminService.listDepartments(
+      churchId,
+      archived === 'true',
+      req.profile,
+      branchId,
+    );
   }
 
   /**

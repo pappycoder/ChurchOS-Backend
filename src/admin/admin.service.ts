@@ -124,6 +124,7 @@ export class AdminService {
     churchId: string,
     archived: boolean = false,
     viewer?: ViewerScope | null,
+    requestedBranchId?: string,
   ): Promise<DepartmentResponseDto[]> {
     // Department heads see only departments they lead. Other branch-scoped
     // viewers see their branch departments; HQ viewers see all departments.
@@ -140,6 +141,9 @@ export class AdminService {
         archived_at: archived ? { not: null } : null,
         ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
         ...(!scope.churchOnly && !isHeadScope ? branchDepartmentScope : {}),
+        ...(scope.churchOnly && requestedBranchId
+          ? { OR: [{ branch_id: requestedBranchId }, { branch_id: null }] }
+          : {}),
       },
       include: {
         department_members: {
