@@ -109,7 +109,7 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   members: ['all', 'new', 'import', 'own'],
   attendance: ['dashboard', 'services', 'checkin', 'records', 'reports'],
   giving: ['dashboard', 'categories', 'records', 'reports', 'recurring'],
-  events: ['calendar', 'all', 'list', 'checkin', 'registrations', 'tickets'],
+  events: ['calendar', 'all', 'list', 'checkin', 'registrations', 'tickets', 'ticket-records'],
   sermons: ['list', 'new', 'series', 'speakers'],
   media: ['library', 'upload', 'folders'],
   pastoral: ['notes', 'life-events', 'risk-scores', 'engagement'],
@@ -172,7 +172,7 @@ export function expandPermissions(base: string[]): string[] {
     expanded.add(`${resource}:view`);
     const surfaces = SURFACES[resource] ?? [];
     for (const surface of surfaces) {
-      if (surface === 'own') continue;
+      if (surface === 'own' || surface === 'ticket-records') continue;
       for (const action of CRUD_ACTIONS) {
         if (actions.has(action)) {
           expanded.add(`${resource}:${surface}:${action}`);
@@ -470,9 +470,17 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:calendar:read',
     'events:list:read',
     'events:registrations:read',
-    // Member floor — read (everything a normal member can see/do)
+    'events:tickets:read',
+    'events:ticket-records:read',
+    // Sermons and media — content management within the viewer's branch scope
+    'sermons:create',
     'sermons:read',
+    'sermons:update',
+    'sermons:delete',
+    'media:create',
     'media:read',
+    'media:update',
+    'media:delete',
     // Church — read
     'church:read',
     // Branches — read

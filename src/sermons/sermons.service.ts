@@ -221,12 +221,12 @@ export class SermonsService {
   /**
    * Deletes a sermon.
    */
-  async deleteSermon(sermonId: string, churchId: string, userId: string): Promise<void> {
+  async deleteSermon(sermonId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<void> {
     const existing = await this.prisma.sermon.findFirst({
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException(`Sermon not found`);
     }
 
@@ -260,12 +260,13 @@ export class SermonsService {
     sermonId: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException('Sermon not found');
     }
 
@@ -306,12 +307,13 @@ export class SermonsService {
     sermonId: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException('Sermon not found');
     }
 

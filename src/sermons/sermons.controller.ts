@@ -180,7 +180,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<void> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.deleteSermon(sermonId, churchId, user.sub);
+    return this.sermonsService.deleteSermon(sermonId, churchId, user.sub, req.profile);
   }
 
   /**
@@ -198,7 +198,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.archiveSermon(sermonId, churchId, user.sub);
+    return this.sermonsService.archiveSermon(sermonId, churchId, user.sub, req.profile);
   }
 
   /**
@@ -216,7 +216,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.restoreSermon(sermonId, churchId, user.sub);
+    return this.sermonsService.restoreSermon(sermonId, churchId, user.sub, req.profile);
   }
 
   // ─── BOOKMARKS ──────────────────────────────────────────────────

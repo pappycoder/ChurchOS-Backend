@@ -133,7 +133,9 @@ export class EventsController {
     @Request() req?: AuthenticatedRequest,
   ) {
     const churchId = req?.profile?.church_id || '';
-    const isStaff = !!req?.profile?.permissions?.includes('events:tickets:create');
+    const isStaff = !!req?.profile?.permissions?.some((permission) =>
+      ['events:ticket-records:read', 'events:tickets:create'].includes(permission),
+    );
 
     return this.eventsService.listAllTickets(churchId, {
       eventId,
