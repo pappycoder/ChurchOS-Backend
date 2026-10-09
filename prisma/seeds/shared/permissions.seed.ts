@@ -109,7 +109,7 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   members: ['all', 'new', 'import', 'own'],
   attendance: ['dashboard', 'services', 'checkin', 'records', 'reports'],
   giving: ['dashboard', 'categories', 'records', 'reports', 'recurring'],
-  events: ['calendar', 'list', 'checkin', 'registrations', 'tickets'],
+  events: ['calendar', 'all', 'list', 'checkin', 'registrations', 'tickets'],
   sermons: ['list', 'new', 'series', 'speakers'],
   media: ['library', 'upload', 'folders'],
   pastoral: ['notes', 'life-events', 'risk-scores', 'engagement'],
@@ -427,8 +427,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Branch names are needed for the locked branch selector; the API only
     // returns this viewer's own branch unless is_admin_hq is enabled.
     'branches:read',
-    // Member floor — read (everything a normal member can see/do)
-    'events:read',
+    // Ticket booking — read event listings and claim/view personal tickets.
+    // Separate grants keep staff-only event and registration menus hidden.
+    'events:calendar:read',
+    'events:list:read',
+    'events:tickets:read',
     'sermons:read',
     'media:read',
     'profiles:read',
@@ -526,8 +529,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'assets:delete',
     // Church Settings — read
     'church_settings:read',
-    // Event calendar — read (no staff event list or registrations)
+    // Calendar and personal ticket booking. Listing access feeds the booking
+    // flow; the separate all-menu permission is intentionally not granted.
     'events:calendar:read',
+    'events:list:read',
+    'events:tickets:read',
     'sermons:read',
     'media:read',
     'profiles:read',
