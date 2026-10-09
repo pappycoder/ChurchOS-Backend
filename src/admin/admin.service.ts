@@ -125,9 +125,8 @@ export class AdminService {
     archived: boolean = false,
     viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto[]> {
-    // A branch-restricted department_head sees only the department(s) they
-    // head. The head scope is detected by key presence ('headId') so a viewer
-    // with no linked member can never fall through to the unfiltered list.
+    // Department heads see only departments they lead. Other branch-scoped
+    // viewers see their branch departments; HQ viewers see all departments.
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     const isHeadScope = !scope.churchOnly && 'headId' in scope;
 
@@ -137,6 +136,9 @@ export class AdminService {
         church_id: churchId,
         archived_at: archived ? { not: null } : null,
         ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
+        ...(!scope.churchOnly && !isHeadScope
+          ? { branch_id: scope.branchId || '' }
+          : {}),
       },
       include: {
         department_members: {
@@ -185,6 +187,9 @@ export class AdminService {
         id: departmentId,
         church_id: churchId,
         ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
+        ...(!scope.churchOnly && !isHeadScope
+          ? { branch_id: scope.branchId || '' }
+          : {}),
       },
       include: {
         department_members: {

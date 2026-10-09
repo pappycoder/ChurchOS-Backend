@@ -94,6 +94,7 @@ export class GivingController {
    * List all giving categories.
    */
   @Get('categories')
+  @RequirePermissions('giving:categories:read')
   @ApiPaginatedResponse(CategoryResponseDto)
   @ApiOperation({
     summary: 'List giving categories',
@@ -125,6 +126,7 @@ export class GivingController {
    * Get a single giving category.
    */
   @Get('categories/:categoryId')
+  @RequirePermissions('giving:categories:read')
   @ApiGetEndpoint('Get a giving category', 'Retrieves a single giving category by ID.')
   async getCategory(
     @Param('categoryId') categoryId: string,
@@ -347,7 +349,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.givingService.listRecurringGiving(churchId, query);
+    const result = await this.givingService.listRecurringGiving(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {

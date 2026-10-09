@@ -1154,12 +1154,19 @@ export class GivingService {
   async listRecurringGiving(
     churchId: string,
     query: ListRecurringGivingDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: RecurringGivingResponseDto[]; total: number }> {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.RecurringGivingWhereInput = { church_id: churchId };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) {
+      where.member = { is: { branch_id: scope.branchId || '' } };
+    } else if (query.branchId) {
+      where.member = { is: { branch_id: query.branchId } };
+    }
     if (query.isActive !== undefined) {
       where.is_active = query.isActive;
     }

@@ -136,21 +136,20 @@ export class BranchScopeService {
    * - `admin-hq` holders see every department in the church.
    * - `department_head` (without admin-hq) sees ONLY the department(s) they
    *   head (`head_member_id` = their linked member id).
-   * - everyone else (church_admin, senior_pastor, branch_pastor, secretary,
-   *   treasurer, member, …) sees every department in the church — departments
-   *   are NOT branch-scoped for them.
+   * - other branch-scoped viewers see departments assigned to their branch.
+   * - HQ viewers see departments across the church.
    *
    * @param viewer - The request profile.
    * @returns
-   *   `{ churchOnly: true }` for admin-hq holders and everyone except a
-   *   branch-restricted department_head;
+   *   `{ churchOnly: true }` for admin-hq holders;
    *   `{ headId }` for a branch-restricted department_head (own-department only).
+   *   `{ branchId }` for other branch-scoped viewers.
    */
   resolveDepartmentScope(
     viewer?: ViewerScope | null,
   ):
     | { churchOnly: true; headId?: undefined; branchId?: undefined }
-    | { churchOnly: false; headId?: string; branchId?: undefined } {
+    | { churchOnly: false; headId?: string; branchId?: string } {
     if (!viewer || viewer.is_admin_hq) {
       return { churchOnly: true };
     }
@@ -162,6 +161,6 @@ export class BranchScopeService {
       return { churchOnly: false, headId: viewer.member_id };
     }
 
-    return { churchOnly: true };
+    return { churchOnly: false, branchId: viewer.branch_id };
   }
 }

@@ -5,10 +5,15 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListRecurringGivingDto {
+  @ApiPropertyOptional({ description: 'Filter by branch ID (HQ viewers only)' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @Type(() => Number)
   @IsInt()
