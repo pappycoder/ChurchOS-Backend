@@ -130,6 +130,7 @@ export class EventsController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('branchId') branchId?: string,
     @Request() req?: AuthenticatedRequest,
   ) {
     const churchId = req?.profile?.church_id || '';
@@ -141,10 +142,11 @@ export class EventsController {
       eventId,
       status,
       search,
+      branchId,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
       ...(isStaff ? {} : { memberId: req?.profile?.member_id ?? '' }),
-    });
+    }, req?.profile);
   }
 
   /**
@@ -457,10 +459,11 @@ export class EventsController {
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
   async listRegistrations(
     @Param('eventId') eventId: string,
+    @Query('branchId') branchId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<RegistrationResponseDto[]> {
     const churchId = req.profile?.church_id || '';
-    return this.eventsService.listRegistrations(eventId, churchId);
+    return this.eventsService.listRegistrations(eventId, churchId, req.profile, branchId);
   }
 
   /**
@@ -536,13 +539,11 @@ export class EventsController {
       dto.tierId,
       churchId,
       user.sub,
-      isStaff
-        ? undefined
-        : {
+      {
             memberId: req.profile?.member_id,
             branchId: req.profile?.branch_id,
             isAdminHq: req.profile?.is_admin_hq,
-            enforceSelf: true,
+            enforceSelf: !isStaff,
           },
     );
   }

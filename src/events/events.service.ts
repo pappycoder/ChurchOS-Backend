@@ -430,7 +430,9 @@ export class EventsService {
       page: number;
       limit: number;
       memberId?: string;
+      branchId?: string;
     },
+    viewer?: ViewerScope | null,
   ) {
     const { eventId, status, search, page, limit, memberId } = filters;
     const skip = (page - 1) * limit;
@@ -440,6 +442,14 @@ export class EventsService {
         church_id: churchId,
       },
     };
+    const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? filters.branchId : scope.branchId;
+    if (!scope.churchOnly || branchId) {
+      where.event = { church_id: churchId, OR: [{ branch_id: branchId ?? null }, { branch_id: null }] };
+      const members = await this.prisma.member.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } });
+      const visitors = await this.prisma.visitor.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } });
+      where.AND = [{ OR: [{ member_id: { in: members.map((member) => member.id) } }, { visitor_id: { in: visitors.map((visitor) => visitor.id) } }] }];
+    }
 
     if (memberId !== undefined) {
       where.member_id = memberId || '';
@@ -1251,6 +1261,10 @@ export class EventsService {
     }
 
     // Members may only claim a ticket for themselves. Staff can assign to anyone.
+    if (viewer && !viewer.isAdminHq && event.branch_id && event.branch_id !== viewer.branchId) {
+      throw new ForbiddenException('This event belongs to another branch');
+    }
+    if (viewer && !memberId && !visitorId) memberId = viewer.memberId ?? await this.ensureMemberId(userId) ?? undefined;
     if (viewer?.enforceSelf) {
       // Resolve the caller's own member profile, auto-creating and linking a
       // Member record on the fly when the profile has none (same convention as
@@ -1293,6 +1307,7 @@ export class EventsService {
       if (!member) {
         throw new NotFoundException('Member not found');
       }
+      if (viewer && !viewer.isAdminHq && member.branch_id !== viewer.branchId) throw new ForbiddenException('Member belongs to another branch');
 
       const existingTicket = await this.prisma.ticket.findFirst({
         where: {
@@ -1313,6 +1328,7 @@ export class EventsService {
       if (!visitor) {
         throw new NotFoundException('Visitor not found');
       }
+      if (viewer && !viewer.isAdminHq && visitor.branch_id !== viewer.branchId) throw new ForbiddenException('Visitor belongs to another branch');
 
       const existingTicket = await this.prisma.ticket.findFirst({
         where: {
@@ -1574,7 +1590,7 @@ export class EventsService {
    * @returns Array of registration responses
    * @throws NotFoundException if event doesn't exist
    */
-  async listRegistrations(eventId: string, churchId: string): Promise<RegistrationResponseDto[]> {
+  async listRegistrations(eventId: string, churchId: string, viewer?: ViewerScope | null, requestedBranchId?: string): Promise<RegistrationResponseDto[]> {
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, church_id: churchId },
     });
@@ -1582,9 +1598,13 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && event.branch_id && event.branch_id !== scope.branchId) throw new ForbiddenException('This event belongs to another branch');
+    const branchId = scope.churchOnly ? requestedBranchId : scope.branchId;
+    const members = !scope.churchOnly || branchId ? await this.prisma.member.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } }) : null;
 
     const registrations = await this.prisma.eventRegistration.findMany({
-      where: { event_id: eventId },
+      where: { event_id: eventId, ...(members ? { member_id: { in: members.map((member) => member.id) } } : {}) },
       orderBy: { created_at: 'desc' },
     });
 

@@ -472,6 +472,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:registrations:read',
     'events:tickets:read',
     'events:ticket-records:read',
+    'events:tickets:create',
     // Sermons and media — content management within the viewer's branch scope
     'sermons:create',
     'sermons:read',
