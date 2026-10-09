@@ -926,19 +926,28 @@ export class GivingService {
       orderBy.push({ created_at: 'desc' });
     }
 
+    const handleListError = (error: unknown): never => {
+      const branchScope = this.branchScope.resolve(viewer);
+      this.logger.error(
+        `Failed to list giving transactions (church=${churchId}, branch=${branchScope.branchId ?? 'all'}, hq=${branchScope.churchOnly})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    };
+
     const items = await this.prisma.transaction.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limit,
-      include: {
-        category: true,
-        member: { select: { first_name: true, last_name: true } },
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-      },
-    });
-    const total = await this.prisma.transaction.count({ where });
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          category: true,
+          member: { select: { first_name: true, last_name: true } },
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+        },
+      }).catch(handleListError);
+    const total = await this.prisma.transaction.count({ where }).catch(handleListError);
 
     return {
       data: items.map((t) => this.mapTransactionToDto(t)),

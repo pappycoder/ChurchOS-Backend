@@ -129,6 +129,9 @@ export class AdminService {
     // viewers see their branch departments; HQ viewers see all departments.
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     const isHeadScope = !scope.churchOnly && 'headId' in scope;
+    const branchDepartmentScope = scope.branchId
+      ? { OR: [{ branch_id: scope.branchId }, { branch_id: null }] }
+      : { branch_id: '' };
 
     // Query all departments for the church with their members
     const departments = await this.prisma.department.findMany({
@@ -136,9 +139,7 @@ export class AdminService {
         church_id: churchId,
         archived_at: archived ? { not: null } : null,
         ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
-        ...(!scope.churchOnly && !isHeadScope
-          ? { branch_id: scope.branchId || '' }
-          : {}),
+        ...(!scope.churchOnly && !isHeadScope ? branchDepartmentScope : {}),
       },
       include: {
         department_members: {
@@ -180,6 +181,9 @@ export class AdminService {
     // they head; other departments resolve to a silent 404 for them.
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     const isHeadScope = !scope.churchOnly && 'headId' in scope;
+    const branchDepartmentScope = scope.branchId
+      ? { OR: [{ branch_id: scope.branchId }, { branch_id: null }] }
+      : { branch_id: '' };
 
     // Fetch the department by ID scoped to the church
     const department = await this.prisma.department.findFirst({
@@ -187,9 +191,7 @@ export class AdminService {
         id: departmentId,
         church_id: churchId,
         ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
-        ...(!scope.churchOnly && !isHeadScope
-          ? { branch_id: scope.branchId || '' }
-          : {}),
+        ...(!scope.churchOnly && !isHeadScope ? branchDepartmentScope : {}),
       },
       include: {
         department_members: {
