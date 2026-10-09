@@ -217,6 +217,11 @@ All notable changes to this project are documented below. Update this section wi
 
 ### [Unreleased]
 
+- Email trash queries now select only deleted copies; active mailboxes exclude deleted copies. Boolean query parsing preserves explicit false values and validates invalid input.
+
+- Inbox read permission now also grants email compose permission for template and custom roles. Added treasurer compose seed grant and advanced the permission cache to v11.
+
+
 - **Dev media seed no longer points at a broken custom storage domain.** `prisma/seeds/development/media.seed.ts` hardcoded `https://storage.churchos.dev/...` for the seeded media assets and sermon audio. That host has no valid TLS/SNI (`curl` → `tlsv1 unrecognized name`), so every seeded thumbnail/audio failed to load in the web app (and the service worker logged a synthetic `no-response`) — unrelated to the API, which was healthy. The seed now builds public URLs from `process.env.SUPABASE_URL` + `SUPABASE_STORAGE_BUCKET` in the real shape `…/storage/v1/object/public/<bucket>/<path>` (fallbacks `https://your-project.supabase.co` / `media`), and both the media-asset and sermon branches **update the `url`/`audio_url` of already-existing rows** so re-seeding repairs databases that were seeded with the old domain.
   - `prisma/seeds/development/media.seed.ts` — added `storagePublicUrl()` helper + env constants; replaced 4 hardcoded URLs; existing-row branches now `update` the URL instead of skipping.
   - Scope: seed-only. No controller/service/DTO change; the storage bucket objects themselves (logo-main.png, youth-camp-poster.jpg, welcome-video.mp4, sermons/audio-sample.mp3) must exist for the thumbnails to render — the TLS/`no-response` failures are removed regardless. The web counterpart (same-origin SW hardening + cache-shape fix) is in `ChurchOS-Web/AGENTS.md`.

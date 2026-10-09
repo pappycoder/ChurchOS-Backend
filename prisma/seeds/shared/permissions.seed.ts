@@ -557,8 +557,9 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'church:read',
     // Analytics — giving only
     'analytics:giving:read',
-    // Emails — read
+    // Inbox access includes composing messages.
     'emails:read',
+    'emails:create',
   ],
 
   cell_leader: [

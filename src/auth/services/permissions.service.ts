@@ -34,7 +34,7 @@ import { RolePermission } from '@prisma/client';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v10:';
+const CACHE_PREFIX = 'perms:v11:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -119,6 +119,10 @@ export class PermissionsService {
     }
 
     const permissions = await this.resolvePermissions(churchId, roleName);
+    // Inbox access includes composing messages, for template and custom roles.
+    if (permissions.includes('emails:read') && !permissions.includes('emails:create')) {
+      permissions.push('emails:create');
+    }
     try {
       await this.redis.set(cacheKey, permissions, CACHE_TTL_SECONDS);
     } catch (err) {

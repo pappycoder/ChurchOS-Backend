@@ -149,7 +149,9 @@ export class EmailService {
     includeTrashed = false,
   ): Promise<EmailListEnvelopeDto> {
     const skip = (page - 1) * limit;
-    const trashFilter = includeTrashed ? {} : { deleted_at: null };
+    const trashFilter = includeTrashed
+      ? { deleted_at: { not: null } }
+      : { deleted_at: null };
 
     if (box === EmailBox.Sent) {
       const where: Prisma.EmailMessageWhereInput = {

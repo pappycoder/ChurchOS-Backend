@@ -7,11 +7,11 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsBoolean, IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 /**
- * The mailbox view to list. `inbox` = received copies (with trash included via
+ * The mailbox view to list. `inbox` = received copies (with trash selected via
  * `includeTrashed`), `sent` = copies the user sent.
  */
 export enum EmailBox {
@@ -48,10 +48,15 @@ export class ListEmailsDto {
   box?: EmailBox;
 
   @ApiPropertyOptional({
-    description: 'Include trashed messages in the result (true = show trash)',
+    description: 'Select deleted messages only (true = trash; false = active messages)',
     example: false,
   })
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
+  @IsBoolean()
   @IsOptional()
   includeTrashed?: boolean;
 }
