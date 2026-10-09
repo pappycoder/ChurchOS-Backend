@@ -476,6 +476,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Branch names are needed for HQ branch filters; branch-scoped viewers
     // only receive their own branch from the API.
     'branches:read',
+    // Department names are needed when creating branch assets.
+    'departments:read',
     // Giving — create + read + update
     'giving:create',
     'giving:read',
