@@ -61,7 +61,15 @@ export class AdminService {
     dto: CreateDepartmentDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
+    const scope = this.branchScope.resolveDepartmentScope(viewer);
+    if (!scope.churchOnly && 'headId' in scope) {
+      throw new ForbiddenException(
+        'Branch-scoped department heads cannot create departments',
+      );
+    }
+
     // Validate parent department exists within the same church if provided
     if (dto.parentId) {
       const parent = await this.prisma.department.findFirst({

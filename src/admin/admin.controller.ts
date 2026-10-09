@@ -83,7 +83,7 @@ export class AdminController {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to create the department
-    return this.adminService.createDepartment(dto, churchId, user.sub);
+    return this.adminService.createDepartment(dto, churchId, user.sub, req.profile);
   }
 
   /**
