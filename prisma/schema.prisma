@@ -146,11 +146,14 @@ model Church {
   branches                 Branch[]
   profiles                 Profile[]
   members                  Member[]
+  families                 Family[]
   services                 Service[]
   giving_categories        GivingCategory[]
   transactions             Transaction[]
   events                   Event[]
   messages                 Message[]
+  templates                Template[]
+  forms                    Form[]
   departments              Department[]
   cell_groups              CellGroup[]
   asset_categories         AssetCategory[]
@@ -195,6 +198,12 @@ model Branch {
   assets       Asset[]
   cellGroups   CellGroup[]
   departments  Department[]
+  families     Family[]
+  givingCategories GivingCategory[]
+  templates    Template[]
+  sermons      Sermon[]
+  mediaAssets  MediaAsset[]
+  forms        Form[]
 
   @@index([church_id])
   @@map("branches")
@@ -284,15 +293,18 @@ model Member {
 model Family {
   id          String    @id @default(uuid())
   church_id   String
+  branch_id   String?
   name        String
   head_id     String?
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt
   archived_at DateTime? // Set when archived
 
+  church         Church         @relation(fields: [church_id], references: [id])
+  branch         Branch?        @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   family_members FamilyMember[]
 
-  @@index([church_id])
+  @@index([church_id, branch_id])
   @@map("families")
 }
 
@@ -368,6 +380,7 @@ model Attendance {
 model GivingCategory {
   id            String    @id @default(uuid())
   church_id     String
+  branch_id     String?
   name          String
   description   String?
   display_order Int       @default(0)
@@ -378,9 +391,10 @@ model GivingCategory {
   archived_at   DateTime? // Set when archived
 
   church       Church        @relation(fields: [church_id], references: [id])
+  branch       Branch?       @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   transactions Transaction[]
 
-  @@index([church_id])
+  @@index([church_id, branch_id])
   @@map("giving_categories")
 }
 
@@ -566,6 +580,7 @@ model Message {
 model Template {
   id              String    @id @default(uuid())
   church_id       String
+  branch_id       String?
   name            String
   content         String
   channel         String // whatsapp, sms, email
@@ -580,9 +595,11 @@ model Template {
   updated_at      DateTime  @updatedAt
   archived_at     DateTime? // Set when archived
 
+  church     Church      @relation(fields: [church_id], references: [id])
+  branch     Branch?     @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   broadcasts Broadcast[]
 
-  @@index([church_id])
+  @@index([church_id, branch_id])
   @@index([church_id, channel, status])
   @@map("templates")
 }
@@ -632,6 +649,7 @@ model BroadcastRecipient {
 model Sermon {
   id                  String    @id @default(uuid())
   church_id           String
+  branch_id           String?
   title               String
   speaker             String?
   sermon_date         DateTime
@@ -646,7 +664,8 @@ model Sermon {
   updated_at          DateTime  @updatedAt
   archived_at         DateTime? // Set when archived
 
-  church Church @relation(fields: [church_id], references: [id])
+  church Church  @relation(fields: [church_id], references: [id])
+  branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
 
   bookmarks SermonBookmark[]
 
@@ -674,6 +693,7 @@ model SermonBookmark {
 model MediaAsset {
   id          String   @id @default(uuid())
   church_id   String
+  branch_id   String?
   filename    String
   url         String
   mime_type   String
@@ -682,9 +702,10 @@ model MediaAsset {
   permissions String   @default("members") // public, members, leadership
   created_at  DateTime @default(now())
 
-  church Church @relation(fields: [church_id], references: [id])
+  church Church  @relation(fields: [church_id], references: [id])
+  branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
 
-  @@index([church_id, folder])
+  @@index([church_id, branch_id, folder])
   @@map("media_assets")
 }
 
@@ -1006,6 +1027,7 @@ model AssetScanLog {
 model Form {
   id           String     @id @default(uuid())
   church_id    String
+  branch_id    String?
   title        String
   description  String?
   fields       Json       @default("[]") // Array of field definitions
@@ -1019,9 +1041,11 @@ model Form {
   updated_at   DateTime   @updatedAt
   archived_at  DateTime? // Set when archived
 
+  church      Church           @relation(fields: [church_id], references: [id])
+  branch      Branch?          @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   submissions FormSubmission[]
 
-  @@index([church_id])
+  @@index([church_id, branch_id])
   @@index([church_id, status])
   @@index([church_id, is_template])
   @@map("forms")

@@ -5,9 +5,14 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateSermonDto {
+  @ApiPropertyOptional({ description: 'Branch that owns this sermon' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiProperty({ description: 'Sermon title', example: 'Walking in Faith' })
   @IsString()
   @IsNotEmpty()

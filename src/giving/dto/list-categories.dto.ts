@@ -5,10 +5,15 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class ListCategoriesDto {
+  @ApiPropertyOptional({ description: 'Filter categories by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Page number (applies when limit is provided)', default: 1 })
   @Type(() => Number)
   @IsInt()

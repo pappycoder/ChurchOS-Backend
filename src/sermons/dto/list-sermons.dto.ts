@@ -5,10 +5,15 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListSermonsDto {
+  @ApiPropertyOptional({ description: 'Filter sermons by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @Type(() => Number)
   @IsInt()

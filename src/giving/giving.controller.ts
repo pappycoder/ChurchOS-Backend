@@ -87,7 +87,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<CategoryResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.createCategory(dto, churchId, user.sub);
+    return this.givingService.createCategory(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -108,6 +108,8 @@ export class GivingController {
       query.page,
       query.limit,
       query.archived,
+      query.branchId,
+      req.profile,
     );
     // Without a limit all rows are returned; report that as a single page.
     const effectiveLimit = query.limit || result.total || 1;

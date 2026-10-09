@@ -16,6 +16,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
   ValidateNested,
@@ -24,6 +25,11 @@ import { FormStatus } from '@prisma/client';
 import { FormFieldDto } from './form-field.dto';
 
 export class CreateFormDto {
+  @ApiPropertyOptional({ description: 'Branch that owns this form' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiProperty({ description: 'Form title', example: 'Membership Application' })
   @IsString()
   @IsNotEmpty()

@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { MediaResponseDto } from './dto/media-response.dto';
 import { ListLibraryDto } from './dto/list-library.dto';
 import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
@@ -88,6 +89,7 @@ export class MediaService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {
     this.bucket = this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'media');
   }
@@ -107,8 +109,11 @@ export class MediaService {
     folder: string,
     churchId: string,
     userId?: string,
+    viewer?: ViewerScope | null,
+    branchId?: string,
   ): Promise<MediaResponseDto> {
     this.validateFile(file, true);
+    const scope = this.branchScope.resolve(viewer);
 
     const optimized = await this.optimizeImage(file.buffer);
     const ext = 'webp';
@@ -134,6 +139,7 @@ export class MediaService {
     const asset = await this.prisma.mediaAsset.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? branchId ?? null : scope.branchId ?? null,
         filename,
         url: urlData.publicUrl,
         mime_type: 'image/webp',
@@ -180,8 +186,11 @@ export class MediaService {
     folder: string,
     churchId: string,
     userId?: string,
+    viewer?: ViewerScope | null,
+    branchId?: string,
   ): Promise<MediaResponseDto> {
     this.validateFile(file, false);
+    const scope = this.branchScope.resolve(viewer);
 
     const ext = file.originalname.split('.').pop() || 'bin';
     const filename = `${randomUUID()}.${ext}`;
@@ -204,6 +213,7 @@ export class MediaService {
     const asset = await this.prisma.mediaAsset.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? branchId ?? null : scope.branchId ?? null,
         filename,
         url: urlData.publicUrl,
         mime_type: file.mimetype,
@@ -265,6 +275,7 @@ export class MediaService {
   async listLibrary(
     dto: ListLibraryDto,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: MediaAssetResponseDto[]; total: number }> {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
@@ -273,6 +284,9 @@ export class MediaService {
     const where: Prisma.MediaAssetWhereInput = {
       church_id: churchId,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && dto.branchId) where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
 
     if (dto.folder) {
       where.folder = { contains: dto.folder, mode: 'insensitive' };
@@ -316,12 +330,12 @@ export class MediaService {
   /**
    * Gets a single media asset by ID.
    */
-  async getAsset(assetId: string, churchId: string): Promise<MediaAssetResponseDto> {
+  async getAsset(assetId: string, churchId: string, viewer?: ViewerScope | null): Promise<MediaAssetResponseDto> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
 
-    if (!asset) {
+    if (!asset || (asset.branch_id && !this.branchScope.isVisible(viewer, asset.branch_id))) {
       throw new NotFoundException('Media asset not found');
     }
 
@@ -353,12 +367,12 @@ export class MediaService {
   /**
    * Deletes a media asset from both the database and Supabase Storage.
    */
-  async deleteAsset(assetId: string, churchId: string, userId?: string): Promise<void> {
+  async deleteAsset(assetId: string, churchId: string, userId?: string, viewer?: ViewerScope | null): Promise<void> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
 
-    if (!asset) {
+    if (!asset || (asset.branch_id && !this.branchScope.isVisible(viewer, asset.branch_id))) {
       throw new NotFoundException('Media asset not found');
     }
 
@@ -392,12 +406,13 @@ export class MediaService {
     permissions: string,
     churchId: string,
     userId?: string,
+    viewer?: ViewerScope | null,
   ): Promise<MediaAssetResponseDto> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
 
-    if (!asset) {
+    if (!asset || (asset.branch_id && !this.branchScope.isVisible(viewer, asset.branch_id))) {
       throw new NotFoundException('Media asset not found');
     }
 

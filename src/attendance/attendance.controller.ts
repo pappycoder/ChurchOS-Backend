@@ -283,7 +283,7 @@ export class AttendanceController {
     @Request() req: AuthenticatedRequest,
   ): Promise<AttendanceSummaryDto> {
     const churchId = req.profile?.church_id || '';
-    return this.attendanceService.getAttendanceSummary(churchId, startDate, endDate, branchId);
+    return this.attendanceService.getAttendanceSummary(churchId, startDate, endDate, branchId, req.profile);
   }
 
   @Get('attendance/trends')
@@ -325,6 +325,7 @@ export class AttendanceController {
       branchId,
       startDate,
       endDate,
+      req.profile,
     );
   }
 

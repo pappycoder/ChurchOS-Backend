@@ -20,6 +20,11 @@ export class CreateFamilyDto {
   @IsOptional()
   @IsString()
   headId?: string;
+
+  @ApiPropertyOptional({ description: 'Branch to assign the family to (HQ viewers only)' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 }
 
 export class AddFamilyMemberDto {

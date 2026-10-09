@@ -9,10 +9,15 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsIn, IsInt, Min, Max, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsInt, Min, Max, IsBoolean, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListTemplatesDto {
+  @ApiPropertyOptional({ description: 'Filter templates by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)

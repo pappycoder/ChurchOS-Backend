@@ -76,7 +76,7 @@ export class FormsController {
     @CurrentUser() user: SupabaseUser,
     @Request() req: AuthenticatedRequest,
   ): Promise<FormResponseDto> {
-    return this.formsService.createForm(this.getChurchId(req), dto, user.sub);
+    return this.formsService.createForm(this.getChurchId(req), dto, user.sub, req.profile);
   }
 
   /**
@@ -92,7 +92,7 @@ export class FormsController {
     data: FormResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    const result = await this.formsService.listForms(this.getChurchId(req), query);
+    const result = await this.formsService.listForms(this.getChurchId(req), query, req.profile);
 
     return {
       data: result.items,
@@ -115,7 +115,7 @@ export class FormsController {
     @Param('formId') formId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<FormResponseDto> {
-    return this.formsService.getForm(this.getChurchId(req), formId);
+    return this.formsService.getForm(this.getChurchId(req), formId, req.profile);
   }
 
   /**
@@ -287,7 +287,7 @@ export class FormsController {
     data: FormSubmissionResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    const result = await this.formsService.listSubmissions(this.getChurchId(req), formId, query);
+    const result = await this.formsService.listSubmissions(this.getChurchId(req), formId, query, req.profile);
 
     return {
       data: result.items,

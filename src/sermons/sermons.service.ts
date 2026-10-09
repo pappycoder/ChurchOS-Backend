@@ -12,6 +12,7 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { CreateSermonDto } from './dto/create-sermon.dto';
 import { UpdateSermonDto } from './dto/update-sermon.dto';
 import { SermonResponseDto } from './dto/sermon-response.dto';
@@ -29,6 +30,7 @@ export class SermonsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -38,10 +40,13 @@ export class SermonsService {
     dto: CreateSermonDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const sermon = await this.prisma.sermon.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
         title: dto.title,
         speaker: dto.speaker,
         sermon_date: new Date(dto.sermonDate),
@@ -74,6 +79,7 @@ export class SermonsService {
   async listSermons(
     dto: ListSermonsDto,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: SermonResponseDto[]; total: number }> {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
@@ -83,6 +89,9 @@ export class SermonsService {
       church_id: churchId,
       archived_at: dto.archived === true ? { not: null } : null,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && dto.branchId) where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
 
     if (dto.speaker) {
       where.speaker = { contains: dto.speaker, mode: 'insensitive' };
@@ -144,12 +153,12 @@ export class SermonsService {
   /**
    * Gets a single sermon by ID.
    */
-  async getSermon(sermonId: string, churchId: string): Promise<SermonResponseDto> {
+  async getSermon(sermonId: string, churchId: string, viewer?: ViewerScope | null): Promise<SermonResponseDto> {
     const sermon = await this.prisma.sermon.findFirst({
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!sermon) {
+    if (!sermon || (sermon.branch_id && !this.branchScope.isVisible(viewer, sermon.branch_id))) {
       throw new NotFoundException(`Sermon not found`);
     }
 
@@ -164,12 +173,13 @@ export class SermonsService {
     dto: UpdateSermonDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException(`Sermon not found`);
     }
 
@@ -564,13 +574,15 @@ export class SermonsService {
   /**
    * Returns distinct series names with sermon counts for the church.
    */
-  async listSeries(churchId: string): Promise<{ name: string; count: number; lastDate: string }[]> {
+  async listSeries(churchId: string, viewer?: ViewerScope | null): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const scope = this.branchScope.resolve(viewer);
     const rows = await this.prisma.sermon.groupBy({
       by: ['series_name'],
       where: {
         church_id: churchId,
         series_name: { not: null },
         archived_at: null,
+        ...(!scope.churchOnly ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] } : {}),
       },
       _count: { id: true },
       _max: { sermon_date: true },
@@ -591,13 +603,16 @@ export class SermonsService {
    */
   async listSpeakers(
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ name: string; count: number; lastDate: string }[]> {
+    const scope = this.branchScope.resolve(viewer);
     const rows = await this.prisma.sermon.groupBy({
       by: ['speaker'],
       where: {
         church_id: churchId,
         speaker: { not: null },
         archived_at: null,
+        ...(!scope.churchOnly ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] } : {}),
       },
       _count: { id: true },
       _max: { sermon_date: true },

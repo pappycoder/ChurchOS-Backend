@@ -190,21 +190,34 @@ export class AppointmentsService {
     churchId: string,
     profileId: string,
     q: ListAppointmentsDtoLike,
+    profile?: { is_admin_hq?: boolean; branch_id?: string | null; permissions?: string[] },
   ): Promise<AppointmentListEnvelopeDto> {
+    const canReadBranch = profile?.permissions?.includes('appointments:branch:read') ?? false;
     const where: Prisma.AppointmentWhereInput = {
       church_id: churchId,
-      OR: [{ person_id: profileId }, { pastor_id: profileId }],
       archived_at: q.archived === true ? { not: null } : null,
     };
+    if (canReadBranch) {
+      if (profile?.is_admin_hq) {
+        if (q.branchId) where.branch_id = q.branchId;
+      } else {
+        where.branch_id = profile?.branch_id ?? '';
+      }
+    } else {
+      where.AND = [{ OR: [{ person_id: profileId }, { pastor_id: profileId }] }];
+    }
 
     if (q.status) where.status = q.status;
     if (q.search) {
       const s = q.search.trim();
       if (s) {
-        where.OR = [
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          { OR: [
           { title: { contains: s, mode: 'insensitive' } },
           { location: { contains: s, mode: 'insensitive' } },
           { notes: { contains: s, mode: 'insensitive' } },
+          ] },
         ];
       }
     }
@@ -229,7 +242,7 @@ export class AppointmentsService {
     ]);
 
     const data = await Promise.all(rows.map((r) => this.buildDetail(r, churchId)));
-    const summary = await this.countByStatus(churchId, profileId, q);
+    const summary = await this.countByStatus(churchId, profileId, q, profile);
     return { data, total, summary };
   }
 
@@ -651,11 +664,20 @@ export class AppointmentsService {
     churchId: string,
     profileId: string,
     q: ListAppointmentsDtoLike,
+    profile?: { is_admin_hq?: boolean; branch_id?: string | null; permissions?: string[] },
   ): Promise<Record<string, number>> {
     const activeWhere: Prisma.AppointmentWhereInput = {
       church_id: churchId,
-      OR: [{ person_id: profileId }, { pastor_id: profileId }],
     };
+    if (profile?.permissions?.includes('appointments:branch:read')) {
+      if (profile.is_admin_hq) {
+        if (q.branchId) activeWhere.branch_id = q.branchId;
+      } else {
+        activeWhere.branch_id = profile.branch_id ?? '';
+      }
+    } else {
+      activeWhere.OR = [{ person_id: profileId }, { pastor_id: profileId }];
+    }
     if (q.startDate || q.endDate) {
       activeWhere.scheduled_at = {
         ...(q.startDate ? { gte: new Date(`${q.startDate}T00:00:00.000Z`) } : {}),
@@ -712,6 +734,7 @@ interface ListAppointmentsDtoLike {
   startDate?: string;
   endDate?: string;
   search?: string;
+  branchId?: string;
 }
 
 interface ListAppointmentContactsLike {

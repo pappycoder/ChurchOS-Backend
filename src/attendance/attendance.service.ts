@@ -115,8 +115,8 @@ export class AttendanceService {
 
     // Scoped to the viewer's own branch unless they hold the admin-hq override.
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly && scope.branchId) {
-      where.branch_id = scope.branchId;
+    if (!scope.churchOnly) {
+      where.branch_id = scope.branchId ?? null;
     } else if (query.branchId && scope.churchOnly) {
       where.branch_id = query.branchId;
     }
@@ -727,11 +727,16 @@ export class AttendanceService {
     // service/event. Restrict non-HQ viewers to records whose service OR event
     // belongs to their branch.
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly && scope.branchId) {
-      where.OR = [
-        { service: { branch_id: scope.branchId } },
-        { event: { branch_id: scope.branchId } },
-      ];
+    if (!scope.churchOnly) {
+      where.AND = [{ OR: [
+        { service: { branch_id: scope.branchId ?? null } },
+        { event: { branch_id: scope.branchId ?? null } },
+      ] }];
+    } else if (scope.churchOnly && query.branchId) {
+      where.AND = [{ OR: [
+        { service: { branch_id: query.branchId } },
+        { event: { branch_id: query.branchId } },
+      ] }];
     }
 
     if (query.serviceId) where.service_id = query.serviceId;
@@ -810,8 +815,11 @@ export class AttendanceService {
     startDate?: string,
     endDate?: string,
     branchId?: string,
+    viewer?: ViewerScope | null,
   ): Promise<AttendanceSummaryDto> {
     const where: Prisma.AttendanceWhereInput = { church_id: churchId };
+    const scope = this.branchScope.resolve(viewer);
+    const effectiveBranchId = scope.churchOnly ? branchId : scope.branchId;
 
     if (startDate || endDate) {
       where.checkin_at = {};
@@ -819,8 +827,8 @@ export class AttendanceService {
       if (endDate) where.checkin_at.lte = new Date(endDate);
     }
 
-    if (branchId) {
-      where.service = { branch_id: branchId };
+    if (!scope.churchOnly || effectiveBranchId) {
+      where.OR = [{ service: { branch_id: effectiveBranchId ?? null } }, { event: { branch_id: effectiveBranchId ?? null } }];
     }
 
     const [totalCheckIns, memberCheckIns, visitorCheckIns, bySourceRaw, byCategoryRaw, genderRows] =
@@ -876,6 +884,7 @@ export class AttendanceService {
     branchId?: string,
     startDate?: string,
     endDate?: string,
+    viewer?: ViewerScope | null,
   ): Promise<AttendanceTrendDto[]> {
     // Explicit range wins over the rolling N-day window.
     const checkinAt: Prisma.DateTimeFilter = {};
@@ -892,9 +901,11 @@ export class AttendanceService {
       church_id: churchId,
       checkin_at: checkinAt,
     };
+    const scope = this.branchScope.resolve(viewer);
+    const effectiveBranchId = scope.churchOnly ? branchId : scope.branchId;
 
-    if (branchId) {
-      where.service = { branch_id: branchId };
+    if (!scope.churchOnly || effectiveBranchId) {
+      where.OR = [{ service: { branch_id: effectiveBranchId ?? null } }, { event: { branch_id: effectiveBranchId ?? null } }];
     }
 
     const records = await this.prisma.attendance.findMany({

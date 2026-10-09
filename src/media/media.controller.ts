@@ -112,7 +112,7 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadImage(file, folder, churchId, user.sub);
+    return this.mediaService.uploadImage(file, folder, churchId, user.sub, req.profile, dto.branchId);
   }
 
   @Post('upload')
@@ -152,7 +152,7 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadFile(file, folder, churchId, user.sub);
+    return this.mediaService.uploadFile(file, folder, churchId, user.sub, req.profile, dto.branchId);
   }
 
   /**
@@ -170,7 +170,7 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: MediaAssetResponseDto[]; total: number }> {
     const churchId = req.profile?.church_id || '';
-    return this.mediaService.listLibrary(dto, churchId);
+    return this.mediaService.listLibrary(dto, churchId, req.profile);
   }
 
   /**
@@ -205,7 +205,7 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaAssetResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.mediaService.getAsset(assetId, churchId);
+    return this.mediaService.getAsset(assetId, churchId, req.profile);
   }
 
   /**
@@ -223,7 +223,7 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaAssetResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.mediaService.updatePermissions(assetId, permissions, churchId, user.sub);
+    return this.mediaService.updatePermissions(assetId, permissions, churchId, user.sub, req.profile);
   }
 
   /**
@@ -241,7 +241,7 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.mediaService.deleteAsset(assetId, churchId, user.sub);
+    await this.mediaService.deleteAsset(assetId, churchId, user.sub, req.profile);
     return { success: true };
   }
 

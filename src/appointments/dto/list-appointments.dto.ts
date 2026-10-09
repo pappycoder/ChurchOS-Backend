@@ -7,7 +7,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsISO8601, IsInt, IsIn, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsISO8601, IsInt, IsIn, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { APPOINTMENT_STATUS } from './appointment-response.dto';
 
@@ -15,6 +15,11 @@ import { APPOINTMENT_STATUS } from './appointment-response.dto';
  * DTO for listing appointments in the current user's scope.
  */
 export class ListAppointmentsDto {
+  @ApiPropertyOptional({ description: 'Filter appointments by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Page number', default: 1, example: 1 })
   @Type(() => Number)
   @IsInt()

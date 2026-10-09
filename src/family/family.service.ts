@@ -22,6 +22,7 @@ import { UpdateFamilyDto } from './dto/update-family.dto';
 import { ListFamiliesDto } from './dto/list-families.dto';
 import { FamilyResponseDto } from './dto/family-response.dto';
 import { Prisma } from '@prisma/client';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 
 @Injectable()
 export class FamilyService {
@@ -30,6 +31,7 @@ export class FamilyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -44,10 +46,13 @@ export class FamilyService {
     dto: CreateFamilyDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<FamilyResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const family = await this.prisma.family.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? dto.branchId : scope.branchId,
         name: dto.name,
         head_id: dto.headId,
       },
@@ -76,6 +81,7 @@ export class FamilyService {
   async listFamilies(
     churchId: string,
     query: ListFamiliesDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: FamilyResponseDto[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -85,6 +91,12 @@ export class FamilyService {
       church_id: churchId,
       archived_at: query.archived === true ? { not: null } : null,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) {
+      where.OR = [{ branch_id: scope.branchId ?? null }, { branch_id: null }];
+    } else if (scope.churchOnly && query.branchId) {
+      where.OR = [{ branch_id: query.branchId }, { branch_id: null }];
+    }
 
     if (query.search) {
       where.name = { contains: query.search, mode: 'insensitive' };
@@ -123,9 +135,20 @@ export class FamilyService {
    * @returns Family response with member details
    * @throws NotFoundException if family doesn't exist or belongs to another church
    */
-  async getFamilyById(familyId: string, churchId: string): Promise<FamilyResponseDto> {
+  async getFamilyById(
+    familyId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<FamilyResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const family = await this.prisma.family.findFirst({
-      where: { id: familyId, church_id: churchId },
+      where: {
+        id: familyId,
+        church_id: churchId,
+        ...(!scope.churchOnly
+          ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }
+          : {}),
+      },
       include: {
         family_members: {
           include: {
@@ -159,12 +182,13 @@ export class FamilyService {
     dto: UpdateFamilyDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<FamilyResponseDto> {
     const existing = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException('Family not found');
     }
 
@@ -177,7 +201,7 @@ export class FamilyService {
     if (dto.headId !== undefined) updateData.head_id = dto.headId;
 
     if (Object.keys(updateData).length === 0) {
-      return this.getFamilyById(familyId, churchId);
+      return this.getFamilyById(familyId, churchId, viewer);
     }
 
     await this.prisma.family.update({
@@ -196,7 +220,7 @@ export class FamilyService {
     });
 
     this.logger.log(`Family updated: ${familyId}`);
-    return this.getFamilyById(familyId, churchId);
+    return this.getFamilyById(familyId, churchId, viewer);
   }
 
   /**
@@ -247,12 +271,13 @@ export class FamilyService {
     dto: AddFamilyMemberDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<FamilyResponseDto> {
     const family = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!family) {
+    if (!family || (family.branch_id && !this.branchScope.isVisible(viewer, family.branch_id))) {
       throw new NotFoundException('Family not found');
     }
 
@@ -313,12 +338,13 @@ export class FamilyService {
     memberId: string,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<FamilyResponseDto> {
     const family = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!family) {
+    if (!family || (family.branch_id && !this.branchScope.isVisible(viewer, family.branch_id))) {
       throw new NotFoundException('Family not found');
     }
 
@@ -362,12 +388,12 @@ export class FamilyService {
    * @throws NotFoundException if the family is missing or not in this church
    * @throws ConflictException if the family is already archived
    */
-  async archive(familyId: string, churchId: string, userId: string): Promise<FamilyResponseDto> {
+  async archive(familyId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<FamilyResponseDto> {
     const existing = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException('Family not found');
     }
 
@@ -404,12 +430,12 @@ export class FamilyService {
    * @throws NotFoundException if the family is missing or not in this church
    * @throws ConflictException if the family is not currently archived
    */
-  async restore(familyId: string, churchId: string, userId: string): Promise<FamilyResponseDto> {
+  async restore(familyId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<FamilyResponseDto> {
     const existing = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
       throw new NotFoundException('Family not found');
     }
 

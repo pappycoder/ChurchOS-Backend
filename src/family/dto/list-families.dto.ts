@@ -29,6 +29,11 @@ export class ListFamiliesDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by branch (HQ viewers only)' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
   @ApiPropertyOptional({
     description: 'List archived families only (default: active only)',
     default: false,

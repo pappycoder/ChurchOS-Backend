@@ -7,7 +7,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SERVICE_CATEGORIES } from './create-service.dto';
 
@@ -15,6 +15,11 @@ import { SERVICE_CATEGORIES } from './create-service.dto';
  * DTO for listing attendance records with pagination and filters.
  */
 export class ListAttendanceDto {
+  @ApiPropertyOptional({ description: 'Filter attendance by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Page number', default: 1, minimum: 1 })
   @Type(() => Number)
   @IsInt()

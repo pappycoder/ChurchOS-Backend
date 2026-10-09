@@ -22,6 +22,7 @@ import { randomUUID } from 'node:crypto';
 import { Form, FormSubmission, FormStatus, Prisma, SubmissionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import {
   CreateFormDto,
   CreateFormSubmissionDto,
@@ -57,6 +58,7 @@ export class FormsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   // ─── Forms ────────────────────────────────────────────────
@@ -69,12 +71,14 @@ export class FormsService {
    * @param userId - ID of the user creating the form
    * @returns Created form response
    */
-  async createForm(churchId: string, dto: CreateFormDto, userId: string): Promise<FormResponseDto> {
+  async createForm(churchId: string, dto: CreateFormDto, userId: string, viewer?: ViewerScope | null): Promise<FormResponseDto> {
     this.validateFieldDefinitions(dto.fields);
+    const scope = this.branchScope.resolve(viewer);
 
     const form = await this.prisma.form.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
         title: dto.title,
         description: dto.description,
         fields: dto.fields as unknown as Prisma.InputJsonValue,
@@ -109,6 +113,7 @@ export class FormsService {
   async listForms(
     churchId: string,
     query: ListFormsDto,
+    viewer?: ViewerScope | null,
   ): Promise<PaginatedResult<FormResponseDto>> {
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit = query.limit && query.limit > 0 ? query.limit : 20;
@@ -118,6 +123,9 @@ export class FormsService {
       church_id: churchId,
       archived_at: query.archived === true ? { not: null } : null,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && query.branchId) where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
 
     if (query.status) where.status = query.status;
     if (query.isTemplate !== undefined) where.is_template = query.isTemplate;
@@ -154,8 +162,9 @@ export class FormsService {
    * @param formId - Form ID
    * @returns Form response
    */
-  async getForm(churchId: string, formId: string): Promise<FormResponseDto> {
+  async getForm(churchId: string, formId: string, viewer?: ViewerScope | null): Promise<FormResponseDto> {
     const form = await this.findFormOrFail(churchId, formId);
+    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id)) throw new NotFoundException('Form not found');
     return this.mapForm(form);
   }
 
@@ -661,8 +670,10 @@ export class FormsService {
     churchId: string,
     formId: string,
     query: ListFormSubmissionsDto,
+    viewer?: ViewerScope | null,
   ): Promise<PaginatedResult<FormSubmissionResponseDto>> {
-    await this.findFormOrFail(churchId, formId);
+    const form = await this.findFormOrFail(churchId, formId);
+    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id)) throw new NotFoundException('Form not found');
 
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit = query.limit && query.limit > 0 ? query.limit : 20;

@@ -8,10 +8,15 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { FormStatus } from '@prisma/client';
 
 export class ListFormsDto {
+  @ApiPropertyOptional({ description: 'Filter forms by branch' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by form status', enum: FormStatus })
   @IsEnum(FormStatus)
   @IsOptional()

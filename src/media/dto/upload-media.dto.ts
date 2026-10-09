@@ -6,13 +6,18 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 /**
  * DTO for file upload requests.
  * Contains optional folder path and entity ID for organizing uploads.
  */
 export class UploadMediaDto {
+  @ApiPropertyOptional({ description: 'Branch that owns the uploaded media' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({
     description: 'Storage folder path (e.g., "churches", "branches", "profiles")',
     example: 'churches',

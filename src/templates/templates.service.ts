@@ -27,6 +27,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
+import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { UpdateTemplateDto } from './dto/update-template.dto';
 import { ListTemplatesDto } from './dto/list-templates.dto';
@@ -40,6 +41,7 @@ export class TemplatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly branchScope: BranchScopeService,
   ) {}
 
   /**
@@ -54,10 +56,13 @@ export class TemplatesService {
     dto: CreateTemplateDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<TemplateResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const template = await this.prisma.template.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
         name: dto.name,
         content: dto.content,
         channel: dto.channel,
@@ -92,6 +97,7 @@ export class TemplatesService {
   async findAll(
     churchId: string,
     query: ListTemplatesDto,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: TemplateResponseDto[]; total: number }> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -101,6 +107,9 @@ export class TemplatesService {
       church_id: churchId,
       archived_at: query.archived === true ? { not: null } : null,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && query.branchId) where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
 
     if (query.channel) where.channel = query.channel;
     if (query.status) where.status = query.status;

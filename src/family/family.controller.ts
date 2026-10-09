@@ -74,7 +74,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.createFamily(dto, churchId, user.sub);
+    return this.familyService.createFamily(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -93,7 +93,7 @@ export class FamilyController {
   })
   async findAll(@Query() query: ListFamiliesDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.familyService.listFamilies(churchId, query);
+    const result = await this.familyService.listFamilies(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {
@@ -121,7 +121,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.getFamilyById(familyId, churchId);
+    return this.familyService.getFamilyById(familyId, churchId, req.profile);
   }
 
   /**
@@ -146,7 +146,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.updateFamily(familyId, dto, churchId, user.sub);
+    return this.familyService.updateFamily(familyId, dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -195,7 +195,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.addMember(familyId, dto, churchId, user.sub);
+    return this.familyService.addMember(familyId, dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -221,7 +221,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.removeMember(familyId, memberId, churchId, user.sub);
+    return this.familyService.removeMember(familyId, memberId, churchId, user.sub, req.profile);
   }
 
   /**
@@ -243,7 +243,7 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.archive(familyId, churchId, user.sub);
+    return this.familyService.archive(familyId, churchId, user.sub, req.profile);
   }
 
   /**
@@ -265,6 +265,6 @@ export class FamilyController {
     @Request() req: AuthenticatedRequest,
   ): Promise<FamilyResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.familyService.restore(familyId, churchId, user.sub);
+    return this.familyService.restore(familyId, churchId, user.sub, req.profile);
   }
 }

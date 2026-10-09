@@ -120,6 +120,7 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   cell_groups: ['own'],
   reports: ['financial', 'attendance', 'members'],
   analytics: ['dashboard', 'giving', 'attendance', 'members', 'events', 'communication'],
+  appointments: ['branch'],
 };
 
 /**
@@ -436,7 +437,10 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:list:read',
     'events:tickets:read',
     'sermons:read',
+    'sermons:new:create',
     'media:read',
+    'media:create',
+    'media:update',
     'profiles:read',
     'church:read',
     // Departments — create church-wide when the viewer has HQ scope; the API
@@ -453,16 +457,18 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'members:create',
     'members:read',
     'members:update',
-    // Attendance — create + read + update
-    'attendance:create',
-    'attendance:read',
-    'attendance:update',
-    // Giving — read
-    'giving:read',
-    // Events — create + read + update
-    'events:create',
-    'events:read',
-    'events:update',
+    // Attendance — dashboard, services, and report only (no check-in or records)
+    'attendance:dashboard:read',
+    'attendance:services:read',
+    'attendance:reports:read',
+    // Giving — dashboard and categories only; categories may be created
+    'giving:dashboard:read',
+    'giving:categories:read',
+    'giving:categories:create',
+    // Events — calendar, event listing, and registrations; no check-in access
+    'events:calendar:read',
+    'events:list:read',
+    'events:registrations:read',
     // Member floor — read (everything a normal member can see/do)
     'sermons:read',
     'media:read',
@@ -483,22 +489,18 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Templates — create + read
     'templates:create',
     'templates:read',
-    // Visitors — create + read + update
-    'visitors:create',
-    'visitors:read',
-    'visitors:update',
-    // Pastoral — read
-    'pastoral:read',
-    // Reports — members only
+    // Reports — all three report types
     'reports:view',
+    'reports:financial:read',
+    'reports:attendance:read',
     'reports:members:read',
     // Assets — create + read + update
     'assets:create',
     'assets:read',
     'assets:update',
-    // Cell Groups — read + create (attendance recording)
+    // Departments and cell groups — branch-scoped read access
+    'departments:read',
     'cell_groups:read',
-    'cell_groups:create',
     // Users — read
     'users:read',
     // Emails — full access

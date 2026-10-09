@@ -64,7 +64,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.createSermon(dto, churchId, user.sub);
+    return this.sermonsService.createSermon(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -98,7 +98,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: SermonResponseDto[]; total: number }> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.listSermons(dto, churchId);
+    return this.sermonsService.listSermons(dto, churchId, req.profile);
   }
 
   /**
@@ -114,7 +114,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ name: string; count: number; lastDate: string }[]> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.listSeries(churchId);
+    return this.sermonsService.listSeries(churchId, req.profile);
   }
 
   /**
@@ -130,7 +130,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ name: string; count: number; lastDate: string }[]> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.listSpeakers(churchId);
+    return this.sermonsService.listSpeakers(churchId, req.profile);
   }
 
   /**
@@ -145,7 +145,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.getSermon(sermonId, churchId);
+    return this.sermonsService.getSermon(sermonId, churchId, req.profile);
   }
 
   /**
@@ -163,7 +163,7 @@ export class SermonsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<SermonResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.sermonsService.updateSermon(sermonId, dto, churchId, user.sub);
+    return this.sermonsService.updateSermon(sermonId, dto, churchId, user.sub, req.profile);
   }
 
   /**

@@ -120,7 +120,9 @@ export class GivingService {
     dto: CreateCategoryDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<CategoryResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
     const existing = await this.prisma.givingCategory.findFirst({
       where: { church_id: churchId, name: dto.name, archived_at: null },
     });
@@ -132,6 +134,7 @@ export class GivingService {
     const category = await this.prisma.givingCategory.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
         name: dto.name,
         description: dto.description,
         display_order: dto.displayOrder ?? 0,
@@ -163,11 +166,19 @@ export class GivingService {
     page?: number,
     limit?: number,
     archived?: boolean,
+    branchId?: string,
+    viewer?: ViewerScope | null,
   ): Promise<{ data: CategoryResponseDto[]; total: number }> {
     const where: Prisma.GivingCategoryWhereInput = {
       church_id: churchId,
       archived_at: archived === true ? { not: null } : null,
     };
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) {
+      where.OR = [{ branch_id: scope.branchId ?? null }, { branch_id: null }];
+    } else if (scope.churchOnly && branchId) {
+      where.OR = [{ branch_id: branchId }, { branch_id: null }];
+    }
     if (isActive !== undefined) {
       where.is_active = isActive;
     }

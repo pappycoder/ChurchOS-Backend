@@ -7,9 +7,14 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsArray, IsUUID } from 'class-validator';
 
 export class CreateTemplateDto {
+  @ApiPropertyOptional({ description: 'Branch that owns this template' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiProperty({ example: 'Welcome Message' })
   @IsString()
   name!: string;

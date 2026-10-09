@@ -72,7 +72,7 @@ export class TemplatesController {
     @Request() req: AuthenticatedRequest,
   ): Promise<TemplateResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.templatesService.create(dto, churchId, user.sub);
+    return this.templatesService.create(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -88,7 +88,7 @@ export class TemplatesController {
   @ApiOperation({ summary: 'List templates', description: 'List message templates with filters.' })
   async findAll(@Query() query: ListTemplatesDto, @Request() req: AuthenticatedRequest) {
     const churchId = req.profile?.church_id || '';
-    const result = await this.templatesService.findAll(churchId, query);
+    const result = await this.templatesService.findAll(churchId, query, req.profile);
     return {
       data: result.data,
       meta: {
