@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file events.service.spec.ts
  * @description Unit tests for EventsService.
@@ -72,13 +73,14 @@ describe('EventsService', () => {
     gatewayRegistry = new Map();
     service = new EventsService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       audit as unknown as AuditLoggingService,
       gatewayRegistry as never,
       {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
-      new BranchScopeService(),
+      new BranchScopeService(new RequestContextService()),
     );
   });
 
@@ -680,7 +682,7 @@ describe('EventsService', () => {
   describe('createTicket (member self-claim)', () => {
     const viewer = {
       memberId: undefined,
-      branchId: undefined,
+      branchId: 'branch-1',
       isAdminHq: false,
       enforceSelf: true,
     };
@@ -698,7 +700,7 @@ describe('EventsService', () => {
         first_name: 'John',
         last_name: 'Doe',
         church_id: mockChurchId,
-        branch_id: null,
+        branch_id: 'branch-1',
       });
       prisma.member.create.mockResolvedValue({ id: mockMemberId });
       prisma.profile.update.mockResolvedValue({});
@@ -707,7 +709,7 @@ describe('EventsService', () => {
         first_name: 'John',
         last_name: 'Doe',
         church_id: mockChurchId,
-        branch_id: null,
+        branch_id: 'branch-1',
       });
       (prisma.$transaction as unknown as jest.Mock).mockImplementation(
         (cb: (tx: unknown) => unknown) => cb(prisma),
@@ -759,7 +761,7 @@ describe('EventsService', () => {
         first_name: 'John',
         last_name: 'Doe',
         church_id: mockChurchId,
-        branch_id: null,
+        branch_id: 'branch-1',
       });
 
       await expect(
@@ -788,7 +790,7 @@ describe('EventsService', () => {
         first_name: 'John',
         last_name: 'Doe',
         church_id: mockChurchId,
-        branch_id: null,
+        branch_id: 'branch-1',
       });
 
       await expect(
@@ -840,7 +842,7 @@ describe('EventsService', () => {
     it('should allow claiming a church-wide (null-branch) event, like a member', async () => {
       prisma.event.findFirst.mockResolvedValue({
         ...mockEvent,
-        branch_id: null,
+        branch_id: 'branch-1',
         _count: { registrations: 0 },
         ticket_tiers: [],
       });

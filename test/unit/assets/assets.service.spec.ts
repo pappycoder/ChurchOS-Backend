@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file assets.service.spec.ts
  * @description Unit tests for AssetsService.
@@ -79,6 +80,7 @@ describe('AssetsService', () => {
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     service = new AssetsService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       audit as unknown as AuditLoggingService,
     );
   });

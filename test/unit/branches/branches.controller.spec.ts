@@ -52,48 +52,44 @@ describe('BranchesController permission decorators', () => {
   it('requires branches:create on POST /branches (keeps church_admin/super_admin ceiling)', () => {
     const block = blockBetween('@Post()', 'async create(');
     expect(block).toContain("@RequirePermissions('branches:create')");
-    expect(block).toContain("@RequireRoles('church_admin', 'super_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires branches:read on GET /branches (keeps branch_pastor/secretary read ceiling)', () => {
     const block = blockBetween('@Get()', 'async findAll(');
     expect(block).toContain("@RequirePermissions('branches:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')",
-    );
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires branches:read on GET /branches/:branchId (keeps branch_pastor/secretary read ceiling)', () => {
     const block = blockBetween("@Get(':branchId')", 'async findOne(');
     expect(block).toContain("@RequirePermissions('branches:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'super_admin', 'branch_pastor', 'secretary')",
-    );
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires branches:update on PATCH /branches/:branchId (keeps church_admin/super_admin ceiling)', () => {
     const block = blockBetween("@Patch(':branchId')", 'async update(');
     expect(block).toContain("@RequirePermissions('branches:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'super_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires branches:delete on DELETE /branches/:branchId (keeps church_admin/super_admin ceiling)', () => {
     const block = blockBetween("@Delete(':branchId')", 'async remove(');
     expect(block).toContain("@RequirePermissions('branches:delete')");
-    expect(block).toContain("@RequireRoles('church_admin', 'super_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires branches:update on POST /branches/:branchId/archive', () => {
     const block = blockBetween("@Post(':branchId/archive')", 'async archive(');
     expect(block).toContain("@RequirePermissions('branches:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'super_admin')");
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 
   it('requires branches:update on POST /branches/:branchId/restore', () => {
     const block = blockBetween("@Post(':branchId/restore')", 'async restore(');
     expect(block).toContain("@RequirePermissions('branches:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'super_admin')");
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 });

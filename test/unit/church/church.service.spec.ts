@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChurchService } from '../../../src/church/church.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -49,7 +50,7 @@ describe('ChurchService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService,
         ChurchService,
         { provide: PrismaService, useValue: prisma },
         { provide: SupabaseService, useValue: { client: supabaseClient } },

@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PastoralService } from '../../../src/pastoral/pastoral.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -46,7 +47,7 @@ describe('PastoralService', () => {
     prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService,
         PastoralService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },
@@ -179,7 +180,7 @@ describe('PastoralService', () => {
       };
       prisma.pastoralNote.findFirst.mockResolvedValue(noteWithEncrypted);
 
-      const result = await service.getNoteById('note-1', mockChurchId, 'branch_pastor', mockUserId);
+      const result = await service.getNoteById('note-1', mockChurchId, ['pastoral_confidential:read'], mockUserId);
 
       expect(result.content).toBe(plaintext);
     });
@@ -188,7 +189,7 @@ describe('PastoralService', () => {
       prisma.pastoralNote.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getNoteById('non-existent', mockChurchId, 'branch_pastor', mockUserId),
+        service.getNoteById('non-existent', mockChurchId, ['pastoral_confidential:read'], mockUserId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -200,7 +201,7 @@ describe('PastoralService', () => {
       });
 
       await expect(
-        service.getNoteById('note-1', mockChurchId, 'branch_pastor', mockUserId),
+        service.getNoteById('note-1', mockChurchId, ['pastoral_confidential:read'], mockUserId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -213,7 +214,7 @@ describe('PastoralService', () => {
         author_id: 'other-member',
       });
 
-      const result = await service.getNoteById('note-1', mockChurchId, 'church_admin', mockUserId);
+      const result = await service.getNoteById('note-1', mockChurchId, ['pastoral_confidential:read', 'pastoral_restricted:read', 'pastoral_moderation:update', 'pastoral_moderation:delete'], mockUserId);
       expect(result.content).toBe(plaintext);
     });
 
@@ -226,7 +227,7 @@ describe('PastoralService', () => {
         author_id: mockMemberId,
       });
 
-      const result = await service.getNoteById('note-1', mockChurchId, 'branch_pastor', mockUserId);
+      const result = await service.getNoteById('note-1', mockChurchId, ['pastoral_confidential:read'], mockUserId);
       expect(result.content).toBe(plaintext);
     });
   });
@@ -244,7 +245,7 @@ describe('PastoralService', () => {
         { content: 'Updated content' },
         mockChurchId,
         mockUserId,
-        'branch_pastor',
+        ['pastoral_confidential:read'],
       );
 
       expect(result.content).toBe('Updated content');
@@ -264,7 +265,7 @@ describe('PastoralService', () => {
           { content: 'Admin update' },
           mockChurchId,
           mockUserId,
-          'church_admin',
+          ['pastoral_confidential:read', 'pastoral_restricted:read', 'pastoral_moderation:update', 'pastoral_moderation:delete'],
         ),
       ).resolves.toBeDefined();
     });
@@ -281,7 +282,7 @@ describe('PastoralService', () => {
           { content: 'Unauthorized update' },
           mockChurchId,
           mockUserId,
-          'branch_pastor',
+          ['pastoral_confidential:read'],
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -298,7 +299,7 @@ describe('PastoralService', () => {
           { content: 'Attempted update' },
           mockChurchId,
           mockUserId,
-          'church_admin',
+          ['pastoral_confidential:read', 'pastoral_restricted:read', 'pastoral_moderation:update', 'pastoral_moderation:delete'],
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -309,7 +310,7 @@ describe('PastoralService', () => {
       prisma.pastoralNote.findFirst.mockResolvedValue(mockNote);
       prisma.pastoralNote.delete.mockResolvedValue(mockNote);
 
-      await service.deleteNote('note-1', mockChurchId, mockUserId, 'branch_pastor');
+      await service.deleteNote('note-1', mockChurchId, mockUserId, ['pastoral_confidential:read']);
 
       expect(prisma.pastoralNote.delete).toHaveBeenCalled();
       expect(auditLog).toHaveBeenCalled();
@@ -322,7 +323,7 @@ describe('PastoralService', () => {
       });
 
       await expect(
-        service.deleteNote('note-1', mockChurchId, mockUserId, 'branch_pastor'),
+        service.deleteNote('note-1', mockChurchId, mockUserId, ['pastoral_confidential:read']),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -335,7 +336,7 @@ describe('PastoralService', () => {
       const result = await service.listNotes(
         { page: 1, limit: 10 },
         mockChurchId,
-        'branch_pastor',
+        ['pastoral_confidential:read'],
         mockUserId,
       );
 
@@ -347,7 +348,7 @@ describe('PastoralService', () => {
       prisma.pastoralNote.findMany.mockResolvedValue([]);
       prisma.pastoralNote.count.mockResolvedValue(0);
 
-      await service.listNotes({ page: 1, limit: 10 }, mockChurchId, 'branch_pastor', mockUserId);
+      await service.listNotes({ page: 1, limit: 10 }, mockChurchId, ['pastoral_confidential:read'], mockUserId);
 
       expect(prisma.pastoralNote.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -365,7 +366,7 @@ describe('PastoralService', () => {
       const result = await service.listNotes(
         { page: 1, limit: 10, archived: true },
         mockChurchId,
-        'branch_pastor',
+        ['pastoral_confidential:read'],
         mockUserId,
       );
 

@@ -1,3 +1,5 @@
+jest.mock('../../../src/webhooks/safe-webhook-request', () => ({ sendWebhook: jest.fn() }));
+import { sendWebhook } from '../../../src/webhooks/safe-webhook-request';
 /**
  * @file webhook-delivery.processor.spec.ts
  * @description Unit tests for WebhookDeliveryProcessor.
@@ -38,7 +40,7 @@ describe('WebhookDeliveryProcessor', () => {
     };
     processor = new WebhookDeliveryProcessor(prisma as unknown as PrismaService);
     fetchMock = jest.fn();
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    (sendWebhook as jest.Mock).mockImplementation(async (url, body, headers) => { const response = await fetchMock(url, { body, headers }); return { status: response.status, body: await response.text() }; });
   });
 
   afterEach(() => {

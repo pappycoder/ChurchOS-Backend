@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file analytics.service.spec.ts
  * @description Unit tests for AnalyticsService.
@@ -77,7 +78,7 @@ describe('AnalyticsService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService,
         AnalyticsService,
         { provide: PrismaService, useValue: mockPrismaService },
         BranchScopeService,

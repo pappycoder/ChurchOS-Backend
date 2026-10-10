@@ -864,7 +864,7 @@ export class FormsService {
   /**
    * Validates submitted data against the form's field definitions.
    */
-  private validateSubmissionData(fields: FormFieldDto[], data: Record<string, unknown>): void {
+  validateSubmissionData(fields: FormFieldDto[], data: Record<string, unknown>): void {
     for (const field of fields) {
       const value = data[field.key];
       const isEmpty = value === undefined || value === null || value === '';

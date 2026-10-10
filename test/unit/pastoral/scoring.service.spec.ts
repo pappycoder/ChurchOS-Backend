@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { ScoringService } from '../../../src/pastoral/scoring.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { NotificationsService } from '../../../src/notifications/notifications.service';
@@ -15,7 +16,7 @@ describe('ScoringService', () => {
     prisma = createPrismaMock();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService,
         ScoringService,
         { provide: PrismaService, useValue: prisma },
         {

@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file whatsapp.service.spec.ts
  * @description Unit tests for WhatsAppService.
@@ -85,6 +86,7 @@ describe('WhatsAppService', () => {
 
     service = new WhatsAppService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
       termiiService as unknown as TermiiService,

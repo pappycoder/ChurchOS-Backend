@@ -18,6 +18,9 @@ describe('SyncService (e2e)', () => {
 
   const churchId = randomUUID();
   const memberId = randomUUID();
+  const branchId = randomUUID();
+
+  const viewer = { id: randomUUID(), church_id: churchId, role: 'church_admin', branch_id: branchId, is_admin_hq: true, permissions: ['members:all:read', 'members:new:create', 'members:all:update', 'members:all:delete', 'attendance:services:read', 'giving:categories:read'] };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,6 +34,7 @@ describe('SyncService (e2e)', () => {
     await prisma.church.create({
       data: { id: churchId, name: 'e2e-sync-church' },
     });
+    await prisma.branch.create({ data: { id: branchId, church_id: churchId, name: 'Offline branch' } });
   });
 
   afterAll(async () => {
@@ -40,12 +44,13 @@ describe('SyncService (e2e)', () => {
     await prisma.member.deleteMany({ where: { church_id: churchId } });
     await prisma.auditLog.deleteMany({ where: { church_id: churchId } });
     await prisma.syncQueue.deleteMany({ where: { church_id: churchId } });
+    await prisma.branch.deleteMany({ where: { church_id: churchId } });
     await prisma.church.deleteMany({ where: { id: churchId } });
     await prisma.$disconnect();
   });
 
   it('bootstraps a full camelCase snapshot', async () => {
-    const result = await service.bootstrap(churchId);
+    const result = await service.bootstrap(churchId, viewer);
 
     expect(result.churchId).toBe(churchId);
     expect(typeof result.revision).toBe('string');
@@ -65,7 +70,7 @@ describe('SyncService (e2e)', () => {
       },
     });
 
-    const first = await service.pullChanges(churchId, 'web');
+    const first = await service.pullChanges(churchId, 'web', undefined, undefined, viewer);
     expect(first.changes.length).toBeGreaterThanOrEqual(1);
 
     const memberChange = first.changes.find((c) => c.entityId === memberId);
@@ -81,11 +86,11 @@ describe('SyncService (e2e)', () => {
   });
 
   it('returns tombstones for deleted records and advances the watermark', async () => {
-    const before = await service.pullChanges(churchId, 'web');
+    const before = await service.pullChanges(churchId, 'web', undefined, undefined, viewer);
 
     await prisma.member.delete({ where: { id: memberId } });
 
-    const after = await service.pullChanges(churchId, 'web', 100, before.cursor ?? undefined);
+    const after = await service.pullChanges(churchId, 'web', 100, before.cursor ?? undefined, viewer);
     expect(after.changes.length).toBeGreaterThanOrEqual(1);
 
     const deleteChange = after.changes.find(
@@ -104,7 +109,7 @@ describe('SyncService (e2e)', () => {
         action: 'create',
         data: { firstName: 'Kelechi', lastName: 'Nwosu' },
       },
-    ]);
+    ], viewer);
 
     expect(result.accepted).toBe(1);
 
@@ -134,10 +139,10 @@ describe('SyncService (e2e)', () => {
 
     const result = await service.pushChanges(churchId, randomUUID(), [
       { entity: 'member', entityId: pushedMemberId, action: 'delete', data: {} },
-    ]);
+    ], viewer);
 
     expect(result.accepted).toBe(1);
-    expect(await prisma.member.findUnique({ where: { id: pushedMemberId } })).toBeNull();
+    expect(await prisma.member.findUnique({ where: { id: pushedMemberId } })).toMatchObject({ archived_at: expect.any(Date) });
   });
 
   it('purges expired and synced queue rows during cleanup', async () => {

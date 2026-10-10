@@ -1,3 +1,5 @@
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MediaService } from '../../../src/media/media.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
@@ -19,7 +21,7 @@ describe('MediaService', () => {
     id: mockAssetId,
     church_id: mockChurchId,
     filename: 'photo.webp',
-    url: 'https://xxx.supabase.co/storage/v1/object/public/media/profiles/11111111-1111-1111-1111-111111111111/photo.webp',
+    url: 'https://supabase.co/storage/v1/object/public/media/profiles/11111111-1111-1111-1111-111111111111/photo.webp',
     mime_type: 'image/webp',
     size_bytes: 45000,
     folder: 'profiles',
@@ -39,10 +41,10 @@ describe('MediaService', () => {
     prisma = createPrismaMock();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService, BranchScopeService,
         MediaService,
         { provide: SupabaseService, useValue: { client: { storage: { from: storageFrom } } } },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('media') } },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('media'), getOrThrow: jest.fn().mockReturnValue('https://supabase.co') } },
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
       ],
@@ -53,7 +55,8 @@ describe('MediaService', () => {
 
   describe('deleteFile', () => {
     it('should delete a file by path', async () => {
-      await service.deleteFile('churches/church-1/logo.webp');
+      prisma.mediaAsset.findFirst.mockResolvedValue({ ...mockAsset, storage_path: 'churches/church-1/logo.webp' });
+      await service.deleteFile('churches/church-1/logo.webp', 'church-1');
 
       expect(storageFrom).toHaveBeenCalledWith('media');
     });
@@ -61,6 +64,7 @@ describe('MediaService', () => {
 
   describe('deleteByUrl', () => {
     it('should extract path from URL and delete', async () => {
+      prisma.mediaAsset.findFirst.mockResolvedValue({ ...mockAsset, folder: 'churches' });
       await service.deleteByUrl(
         'https://supabase.co/storage/v1/object/public/media/churches/church-1/logo.webp',
       );

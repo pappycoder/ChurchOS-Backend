@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file attendance.service.spec.ts
  * @description Unit tests for AttendanceService category + visitor-link behavior.
@@ -102,8 +103,9 @@ describe('AttendanceService — categories & visitors', () => {
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     service = new AttendanceService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       audit as unknown as AuditLoggingService,
-      new BranchScopeService(),
+      new BranchScopeService(new RequestContextService()),
     );
   });
 

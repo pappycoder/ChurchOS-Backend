@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file email.service.spec.ts
  * @description Unit tests for EmailService.
@@ -85,7 +86,8 @@ function messageRow(overrides: Record<string, unknown> = {}): Record<string, unk
 beforeEach(() => {
   prisma = createPrismaMock();
   audit = { log: jest.fn().mockResolvedValue(undefined) };
-  service = new EmailService(prisma as never, audit as never);
+  service = new EmailService(prisma as never,
+      new RequestContextService(), audit as never);
 });
 
 describe('EmailService', () => {

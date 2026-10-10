@@ -1,3 +1,5 @@
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file sermons.service.spec.ts
  * @description Unit tests for SermonsService.
@@ -46,6 +48,7 @@ describe('SermonsService', () => {
     service = new SermonsService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
+      new BranchScopeService(new RequestContextService()),
     );
   });
 

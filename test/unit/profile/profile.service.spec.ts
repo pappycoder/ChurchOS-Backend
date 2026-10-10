@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file profile.service.spec.ts
  * @description Unit tests for ProfileService.
@@ -16,10 +17,7 @@ import { BranchScopeService } from '../../../src/common/services/branch-scope.se
 import { MediaService, MulterFile } from '../../../src/media/media.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { ConfigService } from '@nestjs/config';
-import { RedisService } from '../../../src/redis/redis.service';
 import { PermissionsService } from '../../../src/auth/services/permissions.service';
-import { ResendService } from '../../../src/communication/resend.service';
-import { hashTwoFactorCode } from '../../../src/profile/two-factor.util';
 import {
   NotFoundException,
   ForbiddenException,
@@ -46,8 +44,6 @@ describe('ProfileService', () => {
       };
     };
   };
-  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
-  let resend: { sendEmail: jest.Mock };
   let permissionsService: {
     getRolePermissions: jest.Mock;
     getAllPermissions: jest.Mock;
@@ -119,14 +115,6 @@ describe('ProfileService', () => {
         },
       },
     };
-    redis = {
-      set: jest.fn().mockResolvedValue(undefined),
-      get: jest.fn().mockResolvedValue(null),
-      del: jest.fn().mockResolvedValue(undefined),
-    };
-    resend = {
-      sendEmail: jest.fn().mockResolvedValue(undefined),
-    };
     permissionsService = {
       getRolePermissions: jest.fn().mockRejectedValue(new Error('Role not found')),
       getAllPermissions: jest.fn().mockResolvedValue([]),
@@ -145,14 +133,13 @@ describe('ProfileService', () => {
 
     service = new ProfileService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
       mediaService as unknown as MediaService,
       supabase as unknown as SupabaseService,
-      redis as unknown as RedisService,
       permissionsService as unknown as PermissionsService,
-      resend as unknown as ResendService,
-      new BranchScopeService(),
+      new BranchScopeService(new RequestContextService()),
     );
   });
 
@@ -481,78 +468,7 @@ describe('ProfileService', () => {
 
   // ─── LIST PROFILES ─────────────────────────────────────────────────
 
-  describe('Two-factor (2FA) lifecycle', () => {
-    it('should send an email-OTP code and store its digest for later verification', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue({
-        ...mockProfileWithRelations,
-        church: { name: 'Grace Community Church' },
-      });
-      redis.get.mockResolvedValue(null);
-
-      const result = await service.sendTwoFactorCode(mockUserId, 'enable');
-
-      expect(result.email).toContain('***');
-      expect(redis.set).toHaveBeenCalledWith(
-        expect.stringContaining('2fa:enable:'),
-        expect.any(String),
-        600,
-      );
-      expect(resend.sendEmail).toHaveBeenCalledWith(
-        'pastor@demo.com',
-        expect.stringContaining('two-factor'),
-        expect.stringContaining('<p>'),
-        mockChurchId,
-      );
-    });
-
-    it('should enable 2FA after verifying the emailed code', async () => {
-      const digest = hashTwoFactorCode('123456');
-      model(prisma, 'profile')
-        .findUnique.mockResolvedValueOnce({
-          ...mockProfileWithRelations,
-          two_factor_enabled: false,
-        })
-        .mockResolvedValueOnce({
-          ...mockProfileWithRelations,
-          two_factor_enabled: true,
-        });
-      redis.get.mockResolvedValue(JSON.stringify({ digest, attempts: 0 }));
-
-      const result = await service.toggleTwoFactor(mockUserId, 'enable', '123456');
-
-      expect(redis.del).toHaveBeenCalledWith(expect.stringContaining('2fa:enable:'));
-      expect(model(prisma, 'profile').update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { two_factor_enabled: true } }),
-      );
-      expect(result.twoFactorEnabled).toBe(true);
-    });
-
-    it('should reject an incorrect code and keep 2FA disabled', async () => {
-      const digest = hashTwoFactorCode('123456');
-      model(prisma, 'profile').findUnique.mockResolvedValue({
-        ...mockProfileWithRelations,
-        two_factor_enabled: false,
-      });
-      redis.get.mockResolvedValue(JSON.stringify({ digest, attempts: 0 }));
-
-      await expect(service.toggleTwoFactor(mockUserId, 'enable', '999999')).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
-    });
-
-    it('getTwoFactorEnabled returns the stored flag', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue({
-        two_factor_enabled: true,
-      });
-      await expect(service.getTwoFactorEnabled(mockUserId)).resolves.toBe(true);
-    });
-
-    it('getTwoFactorEnabled throws when no profile exists', async () => {
-      model(prisma, 'profile').findUnique.mockResolvedValue(null);
-      await expect(service.getTwoFactorEnabled(mockUserId)).rejects.toThrow(NotFoundException);
-    });
-  });
+  // Authenticator lifecycle coverage lives in authenticator.service.spec.ts.
 
   describe('listProfiles', () => {
     it('should return paginated profiles', async () => {

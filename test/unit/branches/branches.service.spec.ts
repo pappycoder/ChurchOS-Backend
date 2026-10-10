@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BranchesService } from '../../../src/branches/branches.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -36,7 +37,7 @@ describe('BranchesService', () => {
     mediaDelete = jest.fn();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService,
         BranchesService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },

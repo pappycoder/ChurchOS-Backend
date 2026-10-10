@@ -3,7 +3,7 @@
  *
  * The global PermissionsGuard only enforces routes that carry
  * @RequirePermissions. All report routes must carry granular
- * `reports:read` so the frontend permission gates match the server's
+ * `reports:view` so the frontend permission gates match the server's
  * enforcement layer, while the per-report role ceilings are preserved.
  *
  * Asserted against the source text to avoid pulling the controllers'
@@ -26,29 +26,27 @@ describe('ReportsController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('requires reports:read on GET /reports/financial (keeps church_admin/senior_pastor/treasurer ceiling)', () => {
+  it('requires reports:view on GET /reports/financial (keeps church_admin/senior_pastor/treasurer ceiling)', () => {
     const block = blockBetween("@Get('financial')", 'async getFinancialReport(');
-    expect(block).toContain("@RequirePermissions('reports:read')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'treasurer')");
+    expect(block).toContain("@RequirePermissions('reports:financial:read')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
-  it('requires reports:read on GET /reports/attendance (keeps church_admin/senior_pastor/branch_pastor ceiling)', () => {
+  it('requires reports:view on GET /reports/attendance (keeps church_admin/senior_pastor/branch_pastor ceiling)', () => {
     const block = blockBetween("@Get('attendance')", 'async getAttendanceReport(');
-    expect(block).toContain("@RequirePermissions('reports:read')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor')");
+    expect(block).toContain("@RequirePermissions('reports:attendance:read')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
-  it('requires reports:read on GET /reports/members (keeps church_admin/senior_pastor/branch_pastor/secretary ceiling)', () => {
+  it('requires reports:view on GET /reports/members (keeps church_admin/senior_pastor/branch_pastor/secretary ceiling)', () => {
     const block = blockBetween("@Get('members')", 'async getMemberReport(');
-    expect(block).toContain("@RequirePermissions('reports:read')");
-    expect(block).toContain(
-      "@RequireRoles('church_admin', 'senior_pastor', 'branch_pastor', 'secretary')",
-    );
+    expect(block).toContain("@RequirePermissions('reports:members:read')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
-  it('requires reports:read on POST /reports/export (keeps church_admin/senior_pastor/treasurer ceiling)', () => {
+  it('requires reports:view on POST /reports/export (keeps church_admin/senior_pastor/treasurer ceiling)', () => {
     const block = blockBetween("@Post('export')", 'async exportReport(');
-    expect(block).toContain("@RequirePermissions('reports:read')");
-    expect(block).toContain("@RequireRoles('church_admin', 'senior_pastor', 'treasurer')");
+    expect(block).toContain("@RequirePermissions('reports:view')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 });

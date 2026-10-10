@@ -38,7 +38,7 @@ describe('AuthService', () => {
   let refreshSessionMock: jest.Mock;
   let resetPasswordForEmailMock: jest.Mock;
   let signOutMock: jest.Mock;
-  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock; incr: jest.Mock; consume: jest.Mock };
   let resend: { sendEmail: jest.Mock };
   let audit: { log: jest.Mock };
   let config: { get: jest.Mock };
@@ -64,6 +64,7 @@ describe('AuthService', () => {
             create: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
             count: jest.fn(),
           };
         }
@@ -85,6 +86,8 @@ describe('AuthService', () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     redis = {
+      incr: jest.fn().mockResolvedValue(1),
+      consume: jest.fn().mockResolvedValue({ consumed: true }),
       set: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue(null),
       del: jest.fn().mockResolvedValue(undefined),
@@ -104,6 +107,7 @@ describe('AuthService', () => {
     service = new AuthService(
       prisma as unknown as PrismaService,
       {
+        createAuthClient: () => ({ auth: { signInWithPassword: signInMock, refreshSession: refreshSessionMock, resetPasswordForEmail: resetPasswordForEmailMock, verifyOtp: getUserByIdMock, updateUser: updateUserMock, getUser: getUserByIdMock, setSession: jest.fn().mockResolvedValue({ error: null }) } }),
         client: {
           auth: {
             signUp: signUpMock,
@@ -112,6 +116,7 @@ describe('AuthService', () => {
             refreshSession: refreshSessionMock,
             resetPasswordForEmail: resetPasswordForEmailMock,
             admin: {
+              generateLink: resetPasswordForEmailMock,
               signOut: signOutMock,
               getUserById: getUserByIdMock,
               updateUserById: adminUpdateUserByIdMock,
@@ -123,6 +128,8 @@ describe('AuthService', () => {
       audit as unknown as AuditLoggingService,
       config as unknown as ConfigService,
       resend as unknown as ResendService,
+      { approve: jest.fn().mockResolvedValue(undefined), attempt: jest.fn(), setup: jest.fn().mockResolvedValue({ factorId: 'factor-1', secret: 'secret', qrCode: 'qr', uri: 'uri' }), assertSession: jest.fn().mockResolvedValue(undefined) } as never,
+      { verifyToken: jest.fn().mockResolvedValue({ payload: { sub: mockUserId, session_id: 'session-1' } }) } as never,
     );
   });
 
@@ -374,7 +381,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('should fail open when Redis is unavailable during 2FA staging (issue session directly)', async () => {
+    it('should fail closed when Redis is unavailable during 2FA staging', async () => {
       signInMock.mockResolvedValue({
         data: {
           user: { id: mockUserId, email: loginDto.email },
@@ -399,10 +406,7 @@ describe('AuthService', () => {
       });
       redis.set.mockRejectedValue(new Error('connection refused'));
 
-      const result = await service.login(loginDto);
-
-      expect(result.requiresTwoFactor).toBeUndefined();
-      expect(result.accessToken).toBe('jwt-access-token');
+      await expect(service.login(loginDto)).rejects.toThrow(ServiceUnavailableException);
       expect(resend.sendEmail).not.toHaveBeenCalled();
     });
 
@@ -441,7 +445,7 @@ describe('AuthService', () => {
   // ─── TWO-FACTOR SIGN-IN ───────────────────────────────────────────
 
   describe('completeTwoFactorLogin', () => {
-    it('should return the withheld session when the OTP matches', async () => {
+    it('requires authenticator enrollment after valid legacy email verification', async () => {
       const digest = hashTwoFactorCode('123456');
       model(prisma, 'profile').findFirst.mockResolvedValue({
         id: mockProfileId,
@@ -460,6 +464,7 @@ describe('AuthService', () => {
             email: 'pastor@gracecommunity.com',
             profile: { profileId: mockProfileId, churchId: mockChurchId },
           },
+          expiresAt: Date.now() + 600000,
           digest,
           attempts: 0,
         }),
@@ -470,10 +475,11 @@ describe('AuthService', () => {
         code: '123456',
       });
 
-      expect(result.accessToken).toBe('jwt-access-token');
-      expect(result.refreshToken).toBe('jwt-refresh-token');
+      expect(result.accessToken).toBeUndefined();
+      expect(result.requiresTwoFactor).toBe(true);
+      expect(result.authenticatorSetup?.factorId).toBe('factor-1');
       expect(result.userId).toBe(mockUserId);
-      expect(redis.del).toHaveBeenCalledWith(`2fa:login:pending:${mockUserId}`);
+      expect(redis.consume).toHaveBeenCalledWith(`2fa:login:pending:${mockUserId}`);
     });
 
     it('should throw UnauthorizedException when the OTP is wrong', async () => {
@@ -524,7 +530,7 @@ describe('AuthService', () => {
       await service.logout(mockUserId, 'jwt-token', mockChurchId);
 
       expect(redis.set).toHaveBeenCalledWith('auth:blacklist:jwt-token', mockUserId, 3600);
-      expect(signOutMock).toHaveBeenCalledWith(mockUserId);
+      expect(signOutMock).toHaveBeenCalledWith('jwt-token');
 
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -541,16 +547,12 @@ describe('AuthService', () => {
 
   describe('forgotPassword', () => {
     it('should call Supabase resetPasswordForEmail', async () => {
-      resetPasswordForEmailMock.mockResolvedValue({ error: null });
+      resetPasswordForEmailMock.mockResolvedValue({ data: { properties: { hashed_token: 'recovery-hash' } }, error: null });
 
       await service.forgotPassword('pastor@gracecommunity.com');
 
-      expect(resetPasswordForEmailMock).toHaveBeenCalledWith(
-        'pastor@gracecommunity.com',
-        expect.objectContaining({
-          redirectTo: expect.stringContaining('reset-password'),
-        }),
-      );
+      expect(resetPasswordForEmailMock).toHaveBeenCalledWith({ type: 'recovery', email: 'pastor@gracecommunity.com' });
+      expect(resend.sendEmail).toHaveBeenCalled();
     });
 
     it('should not throw even if Supabase returns an error', async () => {
@@ -567,6 +569,7 @@ describe('AuthService', () => {
 
   describe('resetPassword', () => {
     it('should update password successfully', async () => {
+      getUserByIdMock.mockResolvedValue({ data: { user: { id: mockUserId }, session: { access_token: 'recovery-session' } }, error: null });
       updateUserMock.mockResolvedValue({ error: null });
 
       await expect(
@@ -577,8 +580,9 @@ describe('AuthService', () => {
     });
 
     it('should throw BadRequestException if token is invalid', async () => {
+      getUserByIdMock.mockResolvedValue({ data: { user: null, session: null }, error: { message: 'Expired' } });
       updateUserMock.mockResolvedValue({
-        error: { message: 'Token expired' },
+        error: { message: 'Token expired', status: 401 },
       });
 
       await expect(service.resetPassword('expired-token', 'NewPassword123!')).rejects.toThrow(
@@ -595,7 +599,7 @@ describe('AuthService', () => {
         data: { user: { id: mockUserId, email: 'pastor@church.com' } },
         error: null,
       });
-      signInMock.mockResolvedValue({ error: null });
+      signInMock.mockResolvedValue({ data: { session: { access_token: 'verified-password-token' } }, error: null });
       adminUpdateUserByIdMock.mockResolvedValue({ error: null });
 
       await expect(
@@ -610,7 +614,7 @@ describe('AuthService', () => {
       expect(adminUpdateUserByIdMock).toHaveBeenCalledWith(mockUserId, {
         password: 'NewPass456!',
       });
-      expect(signOutMock).toHaveBeenCalledWith(mockUserId);
+      expect(signOutMock).toHaveBeenCalledWith('verified-password-token', 'global');
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: mockUserId,
@@ -652,7 +656,7 @@ describe('AuthService', () => {
         data: { user: { id: mockUserId, email: 'pastor@church.com' } },
         error: null,
       });
-      signInMock.mockResolvedValue({ error: null });
+      signInMock.mockResolvedValue({ data: { session: { access_token: 'verified-password-token' } }, error: null });
       adminUpdateUserByIdMock.mockResolvedValue({
         error: { message: 'Update failed' },
       });
@@ -691,7 +695,7 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if refresh fails', async () => {
       refreshSessionMock.mockResolvedValue({
         data: { session: null },
-        error: { message: 'Token expired' },
+        error: { message: 'Token expired', status: 401 },
       });
 
       await expect(service.refreshSession('expired-token')).rejects.toThrow(UnauthorizedException);

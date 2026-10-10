@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file recurring-giving.service.spec.ts
  * @description Unit tests for recurring giving methods in GivingService.
@@ -124,7 +125,7 @@ describe('GivingService - Recurring Giving', () => {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
-      new BranchScopeService(),
+      new BranchScopeService(new RequestContextService()),
       {
         notify: jest.fn().mockResolvedValue(undefined),
       } as never,

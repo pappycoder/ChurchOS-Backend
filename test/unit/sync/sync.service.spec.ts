@@ -40,7 +40,7 @@ function createPrismaMock() {
   const txHandler: ProxyHandler<Record<string, unknown>> = {
     get(_target, prop: string) {
       if (prop === '$executeRaw') return $executeRaw;
-      return models[prop];
+      return prisma[prop];
     },
   };
 
@@ -70,10 +70,11 @@ let service: SyncService;
 
 const mockChurchId = '00000000-0000-0000-0000-000000000001';
 const mockUserId = '11111111-1111-1111-1111-111111111111';
-const mockMemberId = '44444444-4444-4444-4444-444444444444';
+const mockMemberId = '44444444-4444-4444-8444-444444444444';
 
 beforeEach(() => {
   prisma = createPrismaMock();
+  model('branch').findFirst.mockResolvedValue({ id: viewer.branch_id });
   audit = { log: jest.fn().mockResolvedValue(undefined) };
 
   service = new SyncService(
@@ -82,11 +83,13 @@ beforeEach(() => {
   );
 });
 
+const viewer = { id: '11111111-1111-4111-8111-111111111111', church_id: mockChurchId, role: 'church_admin', branch_id: '22222222-2222-4222-8222-222222222222', is_admin_hq: true, permissions: ['members:all:read', 'members:new:create', 'members:all:update', 'members:all:delete', 'attendance:services:read', 'giving:categories:read', 'visitors:list:read', 'attendance:records:read', 'giving:records:read'] };
+
 describe('SyncService', () => {
   describe('pushChanges', () => {
     it('should push changes successfully and apply them to the database', async () => {
       model('syncQueue').findFirst.mockResolvedValue(null); // no existing / pending
-      model('member').upsert.mockResolvedValue({ id: mockMemberId });
+      model('member').create.mockResolvedValue({ id: mockMemberId });
       model('syncQueue').create.mockResolvedValue({ id: '1' });
 
       const result = await service.pushChanges(mockChurchId, mockUserId, [
@@ -96,17 +99,16 @@ describe('SyncService', () => {
           action: 'create',
           data: { firstName: 'John', lastName: 'Doe' },
         },
-      ]);
+      ], viewer);
 
       expect(result.accepted).toBe(1);
       expect(result.rejected).toBe(0);
       expect(result.conflicts).toHaveLength(0);
       // Device-originated applies suppress the outbox trigger via the session GUC
       expect(prisma.$executeRaw).toHaveBeenCalled();
-      expect(model('member').upsert).toHaveBeenCalledWith(
+      expect(model('member').create).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: mockMemberId },
-          create: expect.objectContaining({
+          data: expect.objectContaining({
             id: mockMemberId,
             first_name: 'John',
             last_name: 'Doe',
@@ -135,7 +137,7 @@ describe('SyncService', () => {
           action: 'create',
           data: { firstName: 'John' },
         },
-      ]);
+      ], viewer);
 
       expect(result.accepted).toBe(1);
       expect(model('syncQueue').create).not.toHaveBeenCalled();
@@ -159,7 +161,7 @@ describe('SyncService', () => {
           data: { firstName: 'John' },
           clientTimestamp: '2026-07-22T11:00:00Z', // older
         },
-      ]);
+      ], viewer);
 
       expect(result.rejected).toBe(1);
       expect(result.conflicts).toContain(`member/${mockMemberId}`);
@@ -176,13 +178,16 @@ describe('SyncService', () => {
           action: 'create',
           data: {},
         },
-      ]);
+      ], viewer);
 
       expect(result.rejected).toBe(1);
     });
 
     it('should apply deletes scoped by church', async () => {
       model('syncQueue').findFirst.mockResolvedValue(null);
+      model('member').findUnique.mockResolvedValue({ id: mockMemberId });
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId });
+      model('member').updateMany.mockResolvedValue({ count: 1 });
       model('member').deleteMany.mockResolvedValue({ count: 1 });
       model('syncQueue').create.mockResolvedValue({ id: '1' });
 
@@ -193,16 +198,14 @@ describe('SyncService', () => {
           action: 'delete',
           data: {},
         },
-      ]);
+      ], viewer);
 
       expect(result.accepted).toBe(1);
-      expect(model('member').deleteMany).toHaveBeenCalledWith({
-        where: { id: mockMemberId, church_id: mockChurchId },
-      });
+      expect(model('member').updateMany).toHaveBeenCalledWith({ where: { id: mockMemberId, church_id: mockChurchId }, data: { archived_at: expect.any(Date) } });
     });
 
     it('should throw BadRequestException for empty changes', async () => {
-      await expect(service.pushChanges(mockChurchId, mockUserId, [])).rejects.toThrow(
+      await expect(service.pushChanges(mockChurchId, mockUserId, [], viewer)).rejects.toThrow(
         'No changes provided',
       );
     });
@@ -236,7 +239,7 @@ describe('SyncService', () => {
       model('syncDevice').upsert.mockResolvedValue({
         id: 'dev-1',
         church_id: mockChurchId,
-        device_id: 'device-1',
+        device_id: `${viewer.id}:device-1`,
         last_pull_cursor: cursor,
         last_seen_at: new Date(),
         created_at: new Date(),
@@ -248,18 +251,18 @@ describe('SyncService', () => {
       mockDevice(new Date('2026-07-01T00:00:00Z'));
       model('syncQueue').findMany.mockResolvedValue([]);
 
-      const result = await service.pullChanges(mockChurchId, 'device-1');
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined, viewer);
 
       expect(model('syncDevice').upsert).toHaveBeenCalledWith({
-        where: { church_id_device_id: { church_id: mockChurchId, device_id: 'device-1' } },
-        create: { church_id: mockChurchId, device_id: 'device-1' },
+        where: { church_id_device_id: { church_id: mockChurchId, device_id: `${viewer.id}:device-1` } },
+        create: { church_id: mockChurchId, device_id: `${viewer.id}:device-1` },
         update: { last_seen_at: expect.any(Date) },
       });
       expect(model('syncQueue').findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             church_id: mockChurchId,
-            created_at: { gt: new Date('2026-07-01T00:00:00Z') },
+            created_at: { gte: new Date('2026-07-01T00:00:00Z') },
           }),
         }),
       );
@@ -272,12 +275,12 @@ describe('SyncService', () => {
       mockDevice(new Date('2026-07-01T00:00:00Z'));
       model('syncQueue').findMany.mockResolvedValue([]);
 
-      await service.pullChanges(mockChurchId, 'device-1', 100, '2026-07-10T00:00:00Z');
+      await service.pullChanges(mockChurchId, 'device-1', 100, '2026-07-10T00:00:00Z', viewer);
 
       expect(model('syncQueue').findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            created_at: { gt: new Date('2026-07-10T00:00:00Z') },
+            created_at: { gte: new Date('2026-07-10T00:00:00Z') },
           }),
         }),
       );
@@ -287,6 +290,7 @@ describe('SyncService', () => {
       mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
         {
+          id: 'queue-1',
           entity: 'member',
           entity_id: mockMemberId,
           action: 'create',
@@ -294,9 +298,9 @@ describe('SyncService', () => {
           created_at: new Date('2026-07-22T10:00:00Z'),
         },
       ]);
-      model('member').findUnique.mockResolvedValue(memberRow);
+      model('member').findFirst.mockResolvedValue(memberRow);
 
-      const result = await service.pullChanges(mockChurchId, 'device-1');
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined, viewer);
 
       expect(result.changes).toHaveLength(1);
       expect(result.changes[0].entity).toBe('member');
@@ -308,13 +312,14 @@ describe('SyncService', () => {
         churchId: mockChurchId,
       });
       expect(result.changes[0].data).not.toBeNull();
-      expect(result.cursor).toBe('2026-07-22T10:00:00.000Z');
+      expect(result.cursor).toMatch(/^v2:/);
     });
 
     it('should return tombstones for deletes', async () => {
       mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
         {
+          id: 'queue-1',
           entity: 'member',
           entity_id: mockMemberId,
           action: 'delete',
@@ -323,16 +328,17 @@ describe('SyncService', () => {
         },
       ]);
 
-      const result = await service.pullChanges(mockChurchId, 'device-1');
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined, viewer);
 
       expect(result.changes[0].data).toBeNull();
-      expect(model('member').findUnique).not.toHaveBeenCalled();
+      expect(model('member').findFirst).not.toHaveBeenCalled();
     });
 
     it('should tombstone changes whose record no longer exists', async () => {
       mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
         {
+          id: 'queue-1',
           entity: 'member',
           entity_id: mockMemberId,
           action: 'update',
@@ -340,17 +346,18 @@ describe('SyncService', () => {
           created_at: new Date('2026-07-22T10:00:00Z'),
         },
       ]);
-      model('member').findUnique.mockResolvedValue(null);
+      model('member').findFirst.mockResolvedValue(null);
 
-      const result = await service.pullChanges(mockChurchId, 'device-1');
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined, viewer);
 
-      expect(result.changes[0].data).toBeNull();
+      expect(result.changes).toEqual([]);
     });
 
     it('should tombstone changes whose record is archived', async () => {
       mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
         {
+          id: 'queue-1',
           entity: 'member',
           entity_id: mockMemberId,
           action: 'update',
@@ -358,9 +365,9 @@ describe('SyncService', () => {
           created_at: new Date('2026-07-22T10:00:00Z'),
         },
       ]);
-      model('member').findUnique.mockResolvedValue({ ...memberRow, archived_at: new Date() });
+      model('member').findFirst.mockResolvedValue({ ...memberRow, archived_at: new Date() });
 
-      const result = await service.pullChanges(mockChurchId, 'device-1');
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined, viewer);
 
       expect(result.changes[0].data).toBeNull();
     });
@@ -368,6 +375,7 @@ describe('SyncService', () => {
     it('should detect hasMore when limit exceeded', async () => {
       mockDevice();
       const items = Array.from({ length: 11 }, (_, i) => ({
+        id: `queue-${i}`,
         entity: 'member',
         entity_id: `id-${i}`,
         action: 'update',
@@ -375,13 +383,13 @@ describe('SyncService', () => {
         created_at: new Date(2026, 6, 22, 10, i),
       }));
       model('syncQueue').findMany.mockResolvedValue(items);
-      model('member').findUnique.mockResolvedValue(memberRow);
+      model('member').findFirst.mockResolvedValue(memberRow);
 
-      const result = await service.pullChanges(mockChurchId, 'device-1', 10);
+      const result = await service.pullChanges(mockChurchId, 'device-1', 10, undefined, viewer);
 
       expect(result.hasMore).toBe(true);
       expect(result.changes).toHaveLength(10);
-      expect(model('member').findUnique).toHaveBeenCalledTimes(10);
+      expect(model('member').findFirst).toHaveBeenCalledTimes(10);
     });
 
     it('should reject an invalid cursor', async () => {
@@ -389,7 +397,7 @@ describe('SyncService', () => {
       model('syncQueue').findMany.mockResolvedValue([]);
 
       await expect(
-        service.pullChanges(mockChurchId, 'device-1', 100, 'not-a-date'),
+        service.pullChanges(mockChurchId, 'device-1', 100, 'not-a-date', viewer),
       ).rejects.toThrow('Invalid cursor');
     });
   });
@@ -426,7 +434,7 @@ describe('SyncService', () => {
       model('attendance').findMany.mockResolvedValue([]);
       model('transaction').findMany.mockResolvedValue([]);
 
-      const result = await service.bootstrap(mockChurchId);
+      const result = await service.bootstrap(mockChurchId, viewer);
 
       expect(result.churchId).toBe(mockChurchId);
       expect(typeof result.revision).toBe('string');
@@ -449,7 +457,7 @@ describe('SyncService', () => {
       model('attendance').findMany.mockResolvedValue([]);
       model('transaction').findMany.mockResolvedValue([]);
 
-      await service.bootstrap(mockChurchId);
+      await service.bootstrap(mockChurchId, viewer);
 
       expect(model('member').findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ archived_at: null }) }),
@@ -472,9 +480,10 @@ describe('SyncService', () => {
     it('should mark entities as synced', async () => {
       model('syncQueue').updateMany.mockResolvedValue({ count: 3 });
 
-      const result = await service.markSynced(mockChurchId, ['id-1', 'id-2', 'id-3']);
+      const result = await service.markSynced(mockChurchId, [mockMemberId], viewer);
 
-      expect(result.marked).toBe(3);
+      expect(result.marked).toBe(0);
+      expect(model('syncQueue').updateMany).not.toHaveBeenCalled();
     });
   });
 

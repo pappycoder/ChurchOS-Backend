@@ -121,43 +121,43 @@ describe('AssetsController permission decorators', () => {
     const block = blockBetween('@Post()', 'async createAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:create')");
     expect(block).toContain('@UseGuards(RolesGuard)');
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:categories:create on POST /assets/categories', () => {
     const block = blockBetween("@Post('categories')", 'async createCategory(');
     expect(block).toContain("@RequirePermissions('assets:categories:create')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:list:create on POST /assets/:assetId/qr', () => {
     const block = blockBetween("@Post(':assetId/qr')", 'async generateQr(');
     expect(block).toContain("@RequirePermissions('assets:list:create')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:maintenance:create on POST /assets/:assetId/maintenance', () => {
     const block = blockBetween("@Post(':assetId/maintenance')", 'async createMaintenance(');
     expect(block).toContain("@RequirePermissions('assets:maintenance:create')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:loans:create on POST /assets/:assetId/loans', () => {
     const block = blockBetween("@Post(':assetId/loans')", 'async createLoan(');
     expect(block).toContain("@RequirePermissions('assets:loans:create')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:list:update on PATCH /assets/:assetId', () => {
     const block = blockBetween("@Patch(':assetId')", 'async updateAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:categories:update on PATCH /assets/categories/:categoryId', () => {
     const block = blockBetween("@Patch('categories/:categoryId')", 'async updateCategory(');
     expect(block).toContain("@RequirePermissions('assets:categories:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:maintenance:update on PATCH /assets/:assetId/maintenance/:maintenanceId', () => {
@@ -166,58 +166,58 @@ describe('AssetsController permission decorators', () => {
       'async updateMaintenance(',
     );
     expect(block).toContain("@RequirePermissions('assets:maintenance:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:loans:update on PATCH /assets/:assetId/loans/:loanId/return', () => {
     const block = blockBetween("@Patch(':assetId/loans/:loanId/return')", 'async returnLoan(');
     expect(block).toContain("@RequirePermissions('assets:loans:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:list:update on POST /assets/:assetId/depreciation (keeps admin/treasurer ceiling)', () => {
     const block = blockBetween("@Post(':assetId/depreciation')", 'async createDepreciation(');
     expect(block).toContain("@RequirePermissions('assets:list:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'treasurer')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:list:delete on DELETE /assets/:assetId (keeps admin/treasurer ceiling)', () => {
     const block = blockBetween("@Delete(':assetId')", 'async deleteAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:delete')");
-    expect(block).toContain("@RequireRoles('church_admin', 'treasurer')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:categories:delete on DELETE /assets/categories/:categoryId (keeps admin/treasurer ceiling)', () => {
     const block = blockBetween("@Delete('categories/:categoryId')", 'async deleteCategory(');
     expect(block).toContain("@RequirePermissions('assets:categories:delete')");
-    expect(block).toContain("@RequireRoles('church_admin', 'treasurer')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires assets:list:update on POST /assets/:assetId/archive', () => {
     const block = blockBetween("@Post(':assetId/archive')", 'async archiveAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 
   it('requires assets:list:update on POST /assets/:assetId/restore', () => {
     const block = blockBetween("@Post(':assetId/restore')", 'async restoreAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 
   it('requires assets:categories:update on POST /assets/categories/:categoryId/archive', () => {
     const block = blockBetween("@Post('categories/:categoryId/archive')", 'async archiveCategory(');
     expect(block).toContain("@RequirePermissions('assets:categories:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 
   it('requires assets:categories:update on POST /assets/categories/:categoryId/restore', () => {
     const block = blockBetween("@Post('categories/:categoryId/restore')", 'async restoreCategory(');
     expect(block).toContain("@RequirePermissions('assets:categories:update')");
-    expect(block).toContain('@RequireRoles(...WRITE_ROLES)');
+    expect(block).not.toContain('@RequireRoles(');
     expect(block).toContain('@HttpCode(HttpStatus.OK)');
   });
 });

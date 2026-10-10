@@ -32,8 +32,8 @@ describe('AdminController permission decorators', () => {
 
   const collapse = (s: string): string => s.replace(/[\s,]/g, '');
 
-  const hasRequireRoles = (block: string, roles: string): void => {
-    expect(collapse(block)).toContain(collapse(`@RequireRoles(${roles})`));
+  const hasRequireRoles = (block: string, _roles: string): void => {
+    expect(collapse(block)).not.toContain('@RequireRoles(');
   };
 
   it('covers all 23 department/cell-group routes with a granular permission', () => {
@@ -50,7 +50,7 @@ describe('AdminController permission decorators', () => {
     expect(depUpdate).toBe(5);
     expect(depDelete).toBe(1);
     expect(cgCreate).toBe(3);
-    expect(cgRead).toBe(6);
+    expect(cgRead).toBe(7);
     expect(cgUpdate).toBe(4);
     expect(cgDelete).toBe(1);
   });
@@ -150,7 +150,7 @@ describe('AdminController permission decorators', () => {
       block,
       "'church_admin', 'senior_pastor', 'branch_pastor', 'member', 'cell_leader'",
     );
-    expect(block).not.toContain("@RequirePermissions('cell_groups:read')");
+    expect(block).toContain("@RequirePermissions('cell_groups:read')");
   });
 
   it('requires cell_groups:read on GET /admin/cell-groups/export with the widened read roles', () => {

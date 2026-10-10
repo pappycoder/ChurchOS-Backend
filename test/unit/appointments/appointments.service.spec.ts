@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file appointments.service.spec.ts
  * @description Unit tests for AppointmentsService (booking registry, With/Who model).
@@ -117,8 +118,9 @@ function personProfileRow(): Record<string, unknown> {
 beforeEach(() => {
   mocks = createPrismaMock();
   prisma = mocks.prisma;
+  (prisma.visitor as unknown as Record<string, jest.Mock>).findMany.mockImplementation(async () => { const row = await (prisma.visitor as unknown as Record<string, jest.Mock>).findFirst(); return row ? [row] : []; });
   audit = mocks.handl as { log: jest.Mock };
-  service = new AppointmentsService(prisma as never, audit as never);
+  service = new AppointmentsService(prisma as never, new RequestContextService(), { getUserPermissions: jest.fn().mockResolvedValue(['appointments:read']) } as never, audit as never);
 });
 
 function model(name: string): Record<string, jest.Mock> {
@@ -344,7 +346,7 @@ describe('AppointmentsService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             church_id: CHURCH,
-            OR: [{ person_id: SEC }, { pastor_id: SEC }],
+            AND: [{ OR: [{ person_id: SEC }, { pastor_id: SEC }] }],
             archived_at: null,
           }),
         }),

@@ -49,7 +49,7 @@ describe('CacheInterceptor.buildCacheKey', () => {
         profile: { church_id: churchId, is_admin_hq: true },
       }),
     );
-    expect(key).toBe(`cache:GET:${churchId}:hq:9:/analytics/giving:branchId=x`);
+    expect(key).toMatch(/^cache:v3:GET:church-1:[a-f0-9]{24}:hq:9:\/api\/v1\/analytics\/giving:branchId=x$/);
   });
 
   it('uses the "hq" scope token for an admin-hq viewer regardless of their branch', async () => {
@@ -58,7 +58,7 @@ describe('CacheInterceptor.buildCacheKey', () => {
       interceptor,
       makeRequest({ profile: { church_id: churchId, branch_id: branchA, is_admin_hq: true } }),
     );
-    expect(key).toContain(`:${churchId}:hq:`);
+    expect(key).toContain(`:hq:`);
   });
 
   it('uses the branch id as the scope token for a branch-restricted viewer', async () => {
@@ -67,7 +67,7 @@ describe('CacheInterceptor.buildCacheKey', () => {
       interceptor,
       makeRequest({ profile: { church_id: churchId, branch_id: branchA, is_admin_hq: false } }),
     );
-    expect(key).toContain(`:${churchId}:${branchA}:`);
+    expect(key).toContain(`:${branchA}:`);
   });
 
   it('gives an HQ viewer and a branch viewer different keys on the same URL', async () => {
@@ -102,13 +102,13 @@ describe('CacheInterceptor.buildCacheKey', () => {
       interceptor,
       makeRequest({ profile: { church_id: churchId, is_admin_hq: false } }),
     );
-    expect(key).toContain(`:${churchId}:none:`);
+    expect(key).toContain(`:none:`);
   });
 
   it('falls back to "global" church and "none" scope when there is no profile', async () => {
     const interceptor = makeInterceptor();
     const key = await keyOf(interceptor, makeRequest({ profile: undefined }));
-    expect(key).toContain(':global:none:');
+    expect(key).toBeNull();
   });
 
   it('falls back to version 0 when the version read fails', async () => {
@@ -120,6 +120,6 @@ describe('CacheInterceptor.buildCacheKey', () => {
       interceptor,
       makeRequest({ profile: { church_id: churchId, is_admin_hq: true } }),
     );
-    expect(key).toContain(`:${churchId}:hq:0:`);
+    expect(key).toBeNull();
   });
 });

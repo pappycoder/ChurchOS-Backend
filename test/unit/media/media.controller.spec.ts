@@ -53,19 +53,19 @@ describe('MediaController permission decorators', () => {
       'async updatePermissions(',
     );
     expect(block).toContain("@RequirePermissions('media:library:update')");
-    expect(block).toContain("@RequireRoles('church_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires media:library:delete on DELETE /media/library/:assetId', () => {
     const block = blockBetween("@Delete('library/:assetId')", 'async deleteAsset(');
     expect(block).toContain("@RequirePermissions('media:library:delete')");
-    expect(block).toContain("@RequireRoles('church_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('requires media:library:delete on the legacy DELETE /media/:path(*) storage delete', () => {
-    const block = blockBetween("@Delete(':path(*)')", 'async deleteFile(');
+    const block = blockBetween("@Delete('*path')", 'async deleteFile(');
     expect(block).toContain("@RequirePermissions('media:library:delete')");
-    expect(block).toContain("@RequireRoles('church_admin')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('keeps upload endpoints auth-only (no media:create lock on raw uploads)', () => {

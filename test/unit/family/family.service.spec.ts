@@ -1,3 +1,5 @@
+import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file family.service.spec.ts
  * @description Unit tests for FamilyService (archive/restore lifecycle + list filtering).
@@ -36,7 +38,7 @@ describe('FamilyService', () => {
     auditLog = jest.fn();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [RequestContextService, BranchScopeService,
         FamilyService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },

@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file members.service.spec.ts
  * @description Unit tests for MembersService.
@@ -90,12 +91,13 @@ describe('MembersService', () => {
 
     service = new MembersService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       audit as unknown as AuditLoggingService,
       {
         createNotification: jest.fn().mockResolvedValue({}),
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
-      new BranchScopeService(),
+      new BranchScopeService(new RequestContextService()),
     );
   });
 

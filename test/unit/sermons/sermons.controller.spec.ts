@@ -73,13 +73,13 @@ describe('SermonsController permission decorators', () => {
   it('guards POST /sermons/:sermonId/archive with role + sermons:update', () => {
     const block = blockBetween("@Post(':sermonId/archive')", 'async archiveSermon(');
     expect(block).toContain("@RequirePermissions('sermons:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'branch_pastor')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('guards POST /sermons/:sermonId/restore with role + sermons:update', () => {
     const block = blockBetween("@Post(':sermonId/restore')", 'async restoreSermon(');
     expect(block).toContain("@RequirePermissions('sermons:update')");
-    expect(block).toContain("@RequireRoles('church_admin', 'branch_pastor')");
+    expect(block).not.toContain('@RequireRoles(');
   });
 
   it('keeps bookmark endpoints auth-only (no permission leak to admin reads)', () => {

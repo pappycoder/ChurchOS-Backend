@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file broadcast.service.spec.ts
  * @description Unit tests for BroadcastService.
@@ -79,6 +80,7 @@ describe('BroadcastService', () => {
 
     service = new BroadcastService(
       prisma as unknown as PrismaService,
+      new RequestContextService(),
       audit as unknown as AuditLoggingService,
       {
         createNotification: jest.fn().mockResolvedValue({}),

@@ -1229,6 +1229,20 @@ model ChurchRolePermission {
   @@map("church_role_permissions")
 }
 
+// Durable acknowledgements are independent of the expiring change feed.
+model OfflineReceipt {
+  id           String   @id @default(uuid())
+  church_id    String
+  profile_id   String
+  mutation_id  String
+  payload_hash String
+  result       Json
+  created_at   DateTime @default(now())
+
+  @@unique([church_id, profile_id, mutation_id])
+  @@map("offline_receipts")
+}
+
 model SyncQueue {
   id         String    @id @default(uuid())
   church_id  String
