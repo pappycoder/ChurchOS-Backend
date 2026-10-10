@@ -1,3 +1,5 @@
+import { RequestContextService } from '../common/services/request-context.service';
+import { PermissionsService } from '../auth/services/permissions.service';
 /**
  * @file appointments.service.ts
  * @description Service for the appointment/booking registry (With/Who model).
@@ -90,6 +92,8 @@ export class AppointmentsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
+    private readonly permissionsService: PermissionsService,
     private readonly audit: AuditLoggingService,
   ) {}
 
@@ -213,11 +217,13 @@ export class AppointmentsService {
       if (s) {
         where.AND = [
           ...(Array.isArray(where.AND) ? where.AND : []),
-          { OR: [
-          { title: { contains: s, mode: 'insensitive' } },
-          { location: { contains: s, mode: 'insensitive' } },
-          { notes: { contains: s, mode: 'insensitive' } },
-          ] },
+          {
+            OR: [
+              { title: { contains: s, mode: 'insensitive' } },
+              { location: { contains: s, mode: 'insensitive' } },
+              { notes: { contains: s, mode: 'insensitive' } },
+            ],
+          },
         ];
       }
     }
@@ -539,8 +545,8 @@ export class AppointmentsService {
     const isPastor = roles.some((r) => (PASTOR_ROLES as readonly string[]).includes(r));
     const isSecretary = roles.includes('secretary');
     const isSuperAdmin = roles.includes('super_admin');
-    const atHqBranch = profile?.branch?.is_headquarters === true;
-    const isHq = profile?.is_admin_hq === true || atHqBranch;
+    const permissions = await this.permissionsService.getUserPermissions(churchId, roles);
+    const isHq = profile?.is_admin_hq === true || permissions.includes('data_scope:church:read');
 
     return {
       churchId,
@@ -605,11 +611,14 @@ export class AppointmentsService {
     churchId: string,
     profileId: string,
   ): Promise<AppointmentRow> {
+    const viewer = this.requestContext.getStore()?.viewer;
     const row = await this.prisma.appointment.findFirst({
       where: {
         id: appointmentId,
         church_id: churchId,
-        OR: [{ person_id: profileId }, { pastor_id: profileId }],
+        ...(viewer?.permissions?.includes('appointments:branch:read')
+          ? this.requestContext.branchWhere(churchId)
+          : { OR: [{ person_id: profileId }, { pastor_id: profileId }] }),
       },
     });
     if (!row) throw new NotFoundException('Appointment not found');

@@ -34,9 +34,17 @@ export interface RoleSeed {
 
 export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'super_admin', description: 'Platform administrator with full access (locked)' },
-  { name: 'senior_pastor', description: 'Senior/lead pastor with near-full access' },
+  {
+    name: 'senior_pastor',
+    description:
+      'Pastor with all operational pages, scoped to their branch unless Admin HQ is enabled',
+  },
   { name: 'church_admin', description: 'Church administrator with full access' },
-  { name: 'branch_pastor', description: 'Branch/campus pastor with limited admin access' },
+  {
+    name: 'branch_pastor',
+    description:
+      'Pastor with all operational pages, scoped to their branch unless Admin HQ is enabled',
+  },
   {
     name: 'department_head',
     description:
@@ -148,6 +156,16 @@ export function generateAllPermissions(): { name: string; resource: string; acti
       }
     }
   }
+  permissions.push({
+    name: 'branches:directory:read',
+    resource: 'branches:directory',
+    action: 'read',
+  });
+  permissions.push({
+    name: 'data_scope:church:read',
+    resource: 'data_scope:church',
+    action: 'read',
+  });
   return permissions;
 }
 
@@ -190,146 +208,22 @@ export function expandPermissions(base: string[]): string[] {
 // from the coarse grants — so per-role visible menus never change.
 // `super_admin` is handled separately (always ALL permissions, locked).
 
+// Pastors can use every operational page. Church configuration, branch
+// creation and church-wide account/permission administration stay admin-only.
+const pastorPermissions = generateAllPermissions()
+  .map((permission) => permission.name)
+  .filter((name) => {
+    const [resource, action] = name.split(':');
+    if (resource === 'church_settings' || resource === 'data_scope') return false;
+    if (name === 'branches:create') return false;
+    if (['church', 'roles', 'users', 'profiles', 'webhooks', 'diagnostics'].includes(resource)) {
+      return action === 'read' || action === 'view';
+    }
+    return !name.includes(':own:');
+  });
+
 const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
-  senior_pastor: [
-    // Members — full access
-    'members:create',
-    'members:read',
-    'members:update',
-    'members:delete',
-    // Attendance — full access
-    'attendance:create',
-    'attendance:read',
-    'attendance:update',
-    'attendance:delete',
-    // Giving — full access
-    'giving:create',
-    'giving:read',
-    'giving:update',
-    'giving:delete',
-    // Events — full access
-    'events:create',
-    'events:read',
-    'events:update',
-    'events:delete',
-    // Analytics — all dashboards
-    'analytics:dashboard:read',
-    'analytics:giving:read',
-    'analytics:attendance:read',
-    'analytics:members:read',
-    'analytics:events:read',
-    'analytics:communication:read',
-    // Sermons — full access
-    'sermons:create',
-    'sermons:read',
-    'sermons:update',
-    'sermons:delete',
-    // Media — full access
-    'media:create',
-    'media:read',
-    'media:update',
-    'media:delete',
-    // Church — read + update
-    'church:read',
-    'church:update',
-    // Branches — full access
-    'branches:create',
-    'branches:read',
-    'branches:update',
-    'branches:delete',
-    // Profiles — full access
-    'profiles:create',
-    'profiles:read',
-    'profiles:update',
-    'profiles:delete',
-    // WhatsApp — full access
-    'whatsapp:create',
-    'whatsapp:read',
-    'whatsapp:update',
-    'whatsapp:delete',
-    // Reports — full access
-    'reports:create',
-    'reports:read',
-    'reports:update',
-    'reports:delete',
-    'reports:financial:read',
-    'reports:attendance:read',
-    'reports:members:read',
-    // Forms — full access
-    'forms:create',
-    'forms:read',
-    'forms:update',
-    'forms:delete',
-    // Pastoral — full access
-    'pastoral:create',
-    'pastoral:read',
-    'pastoral:update',
-    'pastoral:delete',
-    'pastoral_confidential:read',
-    'pastoral_restricted:read',
-    'pastoral_moderation:update',
-    'pastoral_moderation:delete',
-    // Departments — full access
-    'departments:create',
-    'departments:read',
-    'departments:update',
-    'departments:delete',
-    // Cell Groups — full access
-    'cell_groups:create',
-    'cell_groups:read',
-    'cell_groups:update',
-    'cell_groups:delete',
-    // Assets — full access
-    'assets:create',
-    'assets:read',
-    'assets:update',
-    'assets:delete',
-    // Families — full access
-    'families:create',
-    'families:read',
-    'families:update',
-    'families:delete',
-    // Templates — full access
-    'templates:create',
-    'templates:read',
-    'templates:update',
-    'templates:delete',
-    // Broadcasts — full access
-    'broadcasts:create',
-    'broadcasts:read',
-    'broadcasts:update',
-    'broadcasts:delete',
-    // Analytics — all dashboards
-    'analytics:dashboard:read',
-    'analytics:giving:read',
-    'analytics:attendance:read',
-    'analytics:members:read',
-    'analytics:events:read',
-    'analytics:communication:read',
-    // Church Settings — read + update
-    'church_settings:read',
-    'church_settings:update',
-    // Visitors — full access
-    'visitors:create',
-    'visitors:read',
-    'visitors:update',
-    'visitors:delete',
-    // Users — full access
-    'users:create',
-    'users:read',
-    'users:update',
-    'users:delete',
-    // Emails — full access
-    'emails:create',
-    'emails:read',
-    'emails:update',
-    'emails:delete',
-    // Appointments — full access
-    'appointments:create',
-    'appointments:read',
-    'appointments:update',
-    'appointments:delete',
-  ],
+  senior_pastor: [...pastorPermissions],
 
   church_admin: [
     // ALL permissions (same as super_admin, but not locked)
@@ -340,91 +234,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'roles:update',
   ],
 
-  branch_pastor: [
-    // Members — read + update
-    'members:read',
-    'members:update',
-    // Attendance — create + read + update
-    'attendance:create',
-    'attendance:read',
-    'attendance:update',
-    // Giving — read
-    'giving:read',
-    // Events — create + read + update
-    'events:create',
-    'events:read',
-    'events:update',
-    // Sermons — create + read + update
-    'sermons:create',
-    'sermons:read',
-    'sermons:update',
-    // Media — create + read
-    'media:create',
-    'media:read',
-    // Church — read
-    'church:read',
-    // Branches — read
-    'branches:read',
-    // Profiles — read
-    'profiles:read',
-    // WhatsApp — read
-    'whatsapp:read',
-    // Reports — attendance and members only
-    'reports:view',
-    'reports:attendance:read',
-    'reports:members:read',
-    // Forms — create + read + update
-    'forms:create',
-    'forms:read',
-    'forms:update',
-    // Pastoral — create + read + update
-    'pastoral:create',
-    'pastoral:read',
-    'pastoral:update',
-    'pastoral_confidential:read',
-    // Departments — read
-    'departments:read',
-    // Cell Groups — create + read + update
-    'cell_groups:create',
-    'cell_groups:read',
-    'cell_groups:update',
-    // Assets — create + read + update
-    'assets:create',
-    'assets:read',
-    'assets:update',
-    // Families — create + read + update
-    'families:create',
-    'families:read',
-    'families:update',
-    // Templates — create + read
-    'templates:create',
-    'templates:read',
-    // Broadcasts — create + read
-    'broadcasts:create',
-    'broadcasts:read',
-    // Analytics — all dashboards
-    'analytics:dashboard:read',
-    'analytics:giving:read',
-    'analytics:attendance:read',
-    'analytics:members:read',
-    'analytics:events:read',
-    'analytics:communication:read',
-    // Visitors — create + read + update
-    'visitors:create',
-    'visitors:read',
-    'visitors:update',
-    // Users — read
-    'users:read',
-    // Emails — full access
-    'emails:create',
-    'emails:read',
-    'emails:update',
-    // Appointments — full access
-    'appointments:create',
-    'appointments:read',
-    'appointments:update',
-    'appointments:delete',
-  ],
+  branch_pastor: [...pastorPermissions],
 
   department_head: [
     'members:own:read',

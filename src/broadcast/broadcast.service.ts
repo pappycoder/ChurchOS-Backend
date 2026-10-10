@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file broadcast.service.ts
  * @description Business logic for broadcast messaging.
@@ -37,6 +38,7 @@ export class BroadcastService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
     private readonly notifications: NotificationsService,
     @InjectQueue('broadcast') private readonly broadcastQueue: Queue,
@@ -56,8 +58,14 @@ export class BroadcastService {
     churchId: string,
     userId: string,
   ): Promise<BroadcastResponseDto> {
+    const branchId = this.requestContext.branchWhere(churchId).branch_id;
+    if (branchId) dto.audienceFilter = { ...dto.audienceFilter, branchId };
     const template = await this.prisma.template.findFirst({
-      where: { id: dto.templateId, church_id: churchId },
+      where: {
+        id: dto.templateId,
+        church_id: churchId,
+        ...(branchId ? { OR: [{ branch_id: branchId }, { branch_id: null }] } : {}),
+      },
     });
 
     if (!template) {
@@ -147,7 +155,10 @@ export class BroadcastService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.BroadcastWhereInput = { church_id: churchId };
+    const where: Prisma.BroadcastWhereInput = {
+      church_id: churchId,
+      ...this.broadcastScope(churchId),
+    };
     if (query.status) where.status = query.status;
     if (query.channel) where.channel = query.channel;
 
@@ -179,7 +190,7 @@ export class BroadcastService {
    */
   async findById(broadcastId: string, churchId: string): Promise<BroadcastResponseDto> {
     const broadcast = await this.prisma.broadcast.findFirst({
-      where: { id: broadcastId, church_id: churchId },
+      where: { id: broadcastId, church_id: churchId, ...this.broadcastScope(churchId) },
     });
 
     if (!broadcast) {
@@ -199,7 +210,7 @@ export class BroadcastService {
    */
   async cancel(broadcastId: string, churchId: string, userId: string): Promise<void> {
     const broadcast = await this.prisma.broadcast.findFirst({
-      where: { id: broadcastId, church_id: churchId },
+      where: { id: broadcastId, church_id: churchId, ...this.broadcastScope(churchId) },
     });
 
     if (!broadcast) {
@@ -235,7 +246,7 @@ export class BroadcastService {
    */
   async processBroadcast(broadcastId: string, churchId: string): Promise<void> {
     const broadcast = await this.prisma.broadcast.findFirst({
-      where: { id: broadcastId, church_id: churchId },
+      where: { id: broadcastId, church_id: churchId, ...this.broadcastScope(churchId) },
       include: { template: true },
     });
 
@@ -324,6 +335,11 @@ export class BroadcastService {
   /**
    * Finds recipients matching the audience filter.
    */
+  private broadcastScope(churchId: string): Prisma.BroadcastWhereInput {
+    const branchId = this.requestContext.branchWhere(churchId).branch_id;
+    return branchId ? { audience_filter: { path: ['branchId'], equals: branchId } } : {};
+  }
+
   private async findRecipients(
     churchId: string,
     channel: string,
@@ -333,6 +349,7 @@ export class BroadcastService {
 
     if (filter.status) where.status = filter.status as Prisma.EnumMemberStatusFilter;
     if (filter.branchId) where.branch_id = filter.branchId;
+    Object.assign(where, this.requestContext.branchWhere(churchId));
     if (filter.gender) where.gender = filter.gender;
 
     if (filter.search) {

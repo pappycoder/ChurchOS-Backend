@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file scoring.service.ts
  * @description Service for calculating member engagement and risk scores.
@@ -62,6 +63,7 @@ export class ScoringService {
   constructor(
     // Inject PrismaService for database access
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     // Inject NotificationsService for risk alerts
     private readonly notifications: NotificationsService,
   ) {}
@@ -79,7 +81,11 @@ export class ScoringService {
 
     // Fetch all active members for the church
     const members = await this.prisma.member.findMany({
-      where: { church_id: churchId, status: 'active' },
+      where: {
+        church_id: churchId,
+        ...this.requestContext.branchWhere(churchId),
+        status: 'active',
+      },
       select: { id: true, first_name: true, last_name: true },
     });
 
@@ -137,7 +143,7 @@ export class ScoringService {
 
     // Fetch all members for the church (including inactive)
     const members = await this.prisma.member.findMany({
-      where: { church_id: churchId },
+      where: { church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       select: { id: true, status: true },
     });
 
@@ -190,7 +196,11 @@ export class ScoringService {
     this.logger.log(`Risk scores calculated for ${scored} members in church ${churchId}`);
 
     const highRiskMembers = await this.prisma.riskScore.findMany({
-      where: { church_id: churchId, level: { in: ['high', 'critical'] } },
+      where: {
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+        level: { in: ['high', 'critical'] },
+      },
       include: { member: { select: { id: true, first_name: true, last_name: true } } },
     });
 
@@ -227,6 +237,7 @@ export class ScoringService {
     return this.prisma.riskScore.findMany({
       where: {
         church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
         level: { in: ['high', 'critical'] },
       },
       include: {
@@ -260,16 +271,32 @@ export class ScoringService {
   }> {
     // Keep the dashboard aggregate queries serial to limit pool usage.
     const highlyEngaged = await this.prisma.engagementScore.count({
-      where: { church_id: churchId, score: { gte: 70 } },
+      where: {
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+        score: { gte: 70 },
+      },
     });
     const moderatelyEngaged = await this.prisma.engagementScore.count({
-      where: { church_id: churchId, score: { gte: 40, lt: 70 } },
+      where: {
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+        score: { gte: 40, lt: 70 },
+      },
     });
     const lowEngagement = await this.prisma.engagementScore.count({
-      where: { church_id: churchId, score: { gte: 20, lt: 40 } },
+      where: {
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+        score: { gte: 20, lt: 40 },
+      },
     });
     const disengaged = await this.prisma.engagementScore.count({
-      where: { church_id: churchId, score: { lt: 20 } },
+      where: {
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+        score: { lt: 20 },
+      },
     });
 
     // Return the distribution as a structured object
@@ -293,6 +320,7 @@ export class ScoringService {
     return this.prisma.engagementScore.findMany({
       where: {
         church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
         score: { gte: 50 },
       },
       include: {
@@ -464,7 +492,7 @@ export class ScoringService {
     churchId: string,
   ): Promise<{ riskScore: number; riskLevel: string; suggestions: string[] }> {
     const riskScore = await this.prisma.riskScore.findUnique({
-      where: { member_id: memberId },
+      where: { member_id: memberId, member: this.requestContext.branchWhere(churchId) },
     });
 
     if (!riskScore || riskScore.church_id !== churchId) {
@@ -615,7 +643,10 @@ export class ScoringService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.RiskScoreWhereInput = { church_id: churchId };
+    const where: Prisma.RiskScoreWhereInput = {
+      church_id: churchId,
+      AND: [{ member: this.requestContext.branchWhere(churchId) }],
+    };
 
     if (query.level) {
       where.level = query.level;
@@ -643,23 +674,23 @@ export class ScoringService {
     }
 
     const riskScores = await this.prisma.riskScore.findMany({
-        where,
-        include: {
-          member: {
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              email: true,
-              phone: true,
-              status: true,
-            },
+      where,
+      include: {
+        member: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            phone: true,
+            status: true,
           },
         },
-        orderBy,
-        skip,
-        take: limit,
-      });
+      },
+      orderBy,
+      skip,
+      take: limit,
+    });
     const total = await this.prisma.riskScore.count({ where });
 
     const data: RiskScoreResponseDto[] = riskScores.map((row) => ({
@@ -706,7 +737,10 @@ export class ScoringService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.EngagementScoreWhereInput = { church_id: churchId };
+    const where: Prisma.EngagementScoreWhereInput = {
+      church_id: churchId,
+      AND: [{ member: this.requestContext.branchWhere(churchId) }],
+    };
 
     if (query.bucket) {
       where.score = ScoringService.ENGAGEMENT_BUCKETS[query.bucket];
@@ -734,21 +768,21 @@ export class ScoringService {
     }
 
     const engagementScores = await this.prisma.engagementScore.findMany({
-        where,
-        include: {
-          member: {
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              email: true,
-            },
+      where,
+      include: {
+        member: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
           },
         },
-        orderBy,
-        skip,
-        take: limit,
-      });
+      },
+      orderBy,
+      skip,
+      take: limit,
+    });
     const total = await this.prisma.engagementScore.count({ where });
 
     const data: EngagementScoreResponseDto[] = engagementScores.map((row) => ({
@@ -801,7 +835,7 @@ export class ScoringService {
   }> {
     // Verify the member exists and belongs to this church
     const member = await this.prisma.member.findFirst({
-      where: { id: memberId, church_id: churchId },
+      where: { id: memberId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       select: { id: true },
     });
 

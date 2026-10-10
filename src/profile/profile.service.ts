@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file profile.service.ts
  * @description Business logic for profile management, photo upload, and role updates.
@@ -79,6 +80,7 @@ export class ProfileService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
     private readonly mediaService: MediaService,
@@ -285,7 +287,7 @@ export class ProfileService {
 
     // Branch-scope for non-HQ viewers (profiles carry branch_id).
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly && scope.branchId) {
+    if (!scope.churchOnly) {
       where.branch_id = scope.branchId;
     }
 
@@ -399,7 +401,12 @@ export class ProfileService {
       },
     });
 
-    if (!profile || profile.church_id !== churchId) {
+    if (
+      !profile ||
+      profile.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        profile.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Profile not found');
     }
 
@@ -486,7 +493,7 @@ export class ProfileService {
     }
 
     // super_admin is locked to ALL permissions
-    if (roleNames.includes('super_admin')) {
+    if (roleNames.includes('super_admin') || roleNames.includes('church_admin')) {
       const all = await this.permissionsService.getAllPermissions();
       for (const p of all) {
         const existing = details.get(p.name);
@@ -499,17 +506,22 @@ export class ProfileService {
             name: p.name,
             resource: p.resource,
             action: p.action,
-            grantedBy: ['super_admin'],
+            grantedBy: [roleNames.includes('super_admin') ? 'super_admin' : 'church_admin'],
           });
         }
       }
     }
 
-    return Array.from(details.values()).sort((a, b) =>
-      a.resource === b.resource
-        ? a.action.localeCompare(b.action)
-        : a.resource.localeCompare(b.resource),
+    const effectiveNames = new Set(
+      await this.permissionsService.getUserPermissions(churchId, roleNames),
     );
+    return Array.from(details.values())
+      .filter((permission) => effectiveNames.has(permission.name))
+      .sort((a, b) =>
+        a.resource === b.resource
+          ? a.action.localeCompare(b.action)
+          : a.resource.localeCompare(b.resource),
+      );
   }
 
   /**
@@ -1513,7 +1525,12 @@ export class ProfileService {
       avatarUrl: profile.avatar_url || undefined,
       mfaEnabled: profile.mfa_enabled,
       twoFactorEnabled: profile.two_factor_enabled,
-      isAdminHq: profile.is_admin_hq,
+      isAdminHq:
+        profile.is_admin_hq ||
+        !!extras?.permissions?.includes('data_scope:church:read') ||
+        !!extras?.effectivePermissions?.some(
+          (permission) => permission.name === 'data_scope:church:read',
+        ),
       status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),

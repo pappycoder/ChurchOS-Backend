@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file assets.service.ts
  * @description Service for asset and inventory management.
@@ -67,6 +68,7 @@ interface AssetWithRelations extends Asset {
 export class AssetsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
   ) {}
 
@@ -304,6 +306,7 @@ export class AssetsService {
     dto: CreateAssetDto,
     userId: string,
   ): Promise<AssetResponseDto> {
+    dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
     await this.validateAssetRelations(churchId, dto);
 
     const existingTag = await this.prisma.asset.findUnique({
@@ -396,6 +399,7 @@ export class AssetsService {
     if (dto.condition) where.condition = dto.condition;
     if (dto.categoryId) where.category_id = dto.categoryId;
     if (dto.branchId) where.branch_id = dto.branchId;
+    Object.assign(where, this.requestContext.branchWhere(churchId));
     if (dto.departmentId) where.department_id = dto.departmentId;
 
     if (dto.search) {
@@ -442,6 +446,7 @@ export class AssetsService {
   async getAssetsSummary(churchId: string, branchId?: string): Promise<AssetSummaryResponseDto> {
     const where: Prisma.AssetWhereInput = { church_id: churchId, archived_at: null };
     if (branchId) where.branch_id = branchId;
+    Object.assign(where, this.requestContext.branchWhere(churchId));
 
     const agg = await this.prisma.asset.aggregate({
       where,
@@ -465,7 +470,7 @@ export class AssetsService {
    */
   async getAsset(churchId: string, assetId: string): Promise<AssetResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       include: {
         category: true,
         branch: { select: { name: true } },
@@ -496,8 +501,10 @@ export class AssetsService {
     dto: UpdateAssetDto,
     userId: string,
   ): Promise<AssetResponseDto> {
+    if (dto.branchId !== undefined)
+      dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!asset) {
@@ -579,7 +586,7 @@ export class AssetsService {
    */
   async deleteAsset(churchId: string, assetId: string, userId: string): Promise<void> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!asset) {
@@ -616,7 +623,7 @@ export class AssetsService {
    */
   async archiveAsset(churchId: string, assetId: string, userId: string): Promise<AssetResponseDto> {
     const existing = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -663,7 +670,7 @@ export class AssetsService {
    */
   async restoreAsset(churchId: string, assetId: string, userId: string): Promise<AssetResponseDto> {
     const existing = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -726,7 +733,7 @@ export class AssetsService {
    */
   async getQrCode(churchId: string, assetId: string): Promise<QrResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       select: { id: true, qr_code: true },
     });
 
@@ -778,7 +785,7 @@ export class AssetsService {
     }
 
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       include: {
         category: true,
         branch: { select: { name: true } },
@@ -962,7 +969,7 @@ export class AssetsService {
     userId: string,
   ): Promise<DepreciationResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       include: { depreciation: { orderBy: { year: 'desc' }, take: 1 } },
     });
 
@@ -1059,7 +1066,7 @@ export class AssetsService {
     assetId: string,
   ): Promise<DepreciationSummaryResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       include: { depreciation: { orderBy: { year: 'asc' } } },
     });
 
@@ -1097,7 +1104,7 @@ export class AssetsService {
     userId: string,
   ): Promise<LoanResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!asset) {
@@ -1198,7 +1205,7 @@ export class AssetsService {
     userId: string,
   ): Promise<LoanResponseDto> {
     const asset = await this.prisma.asset.findFirst({
-      where: { id: assetId, church_id: churchId },
+      where: { id: assetId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!asset) {

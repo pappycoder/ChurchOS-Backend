@@ -168,7 +168,11 @@ export class BranchesService {
       },
     });
 
-    if (!branch || branch.church_id !== churchId) {
+    if (
+      !branch ||
+      branch.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, branch.id)
+    ) {
       throw new NotFoundException('Branch not found');
     }
 
@@ -193,7 +197,11 @@ export class BranchesService {
   ): Promise<BranchResponseDto> {
     const existing = await this.prisma.branch.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.id)
+    ) {
       throw new NotFoundException('Branch not found');
     }
 
@@ -271,7 +279,11 @@ export class BranchesService {
       include: { _count: { select: { members: true } } },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.id)
+    ) {
       throw new NotFoundException('Branch not found');
     }
 
@@ -314,7 +326,11 @@ export class BranchesService {
   async archive(id: string, churchId: string, userId: string): Promise<BranchResponseDto> {
     const existing = await this.prisma.branch.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.id)
+    ) {
       throw new NotFoundException('Branch not found');
     }
 
@@ -356,7 +372,11 @@ export class BranchesService {
   async restore(id: string, churchId: string, userId: string): Promise<BranchResponseDto> {
     const existing = await this.prisma.branch.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.id)
+    ) {
       throw new NotFoundException('Branch not found');
     }
 

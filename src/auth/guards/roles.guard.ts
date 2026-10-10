@@ -56,10 +56,15 @@ export class RolesGuard implements CanActivate {
 
     // Fetch the user's profile to get their roles and church context.
     // role is a text array ordered by rank desc; role[0] is the primary role.
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: user.sub },
-      select: { role: true, church_id: true },
-    });
+    const profile = request.profile
+      ? {
+          role: request.profile.roles ?? [request.profile.role],
+          church_id: request.profile.church_id,
+        }
+      : await this.prisma.profile.findUnique({
+          where: { user_id: user.sub },
+          select: { role: true, church_id: true },
+        });
 
     if (!profile) {
       throw new ForbiddenException('User profile not found');
@@ -69,10 +74,9 @@ export class RolesGuard implements CanActivate {
 
     // Populate permissions on the request for downstream use
     // This is cached in Redis by PermissionsService (15-min TTL)
-    const userPermissions = await this.permissionsService.getUserPermissions(
-      profile.church_id,
-      roleNames,
-    );
+    const userPermissions =
+      request.profile?.permissions ??
+      (await this.permissionsService.getUserPermissions(profile.church_id, roleNames));
 
     if (request.profile) {
       request.profile.permissions = userPermissions;

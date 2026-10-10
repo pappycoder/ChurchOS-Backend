@@ -78,7 +78,7 @@ export class ChurchController {
   }
 
   @Patch()
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiUpdateEndpoint(
     'Update church details',
     'Updates church details. Only church_admin and super_admin can update.',
@@ -100,7 +100,7 @@ export class ChurchController {
   }
 
   @Patch('email')
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiUpdateEndpoint(
     'Update the unified church email',
     'Changes the email everywhere it lives for the acting admin: sign-in credential (Supabase Auth), profile contact record, and the church public contact email.',
@@ -123,7 +123,7 @@ export class ChurchController {
 
   @Post('archive')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiUpdateEndpoint(
     'Archive church',
     "Sets archived_at on the church. Every request from this church's profiles is then rejected (except restore).",
@@ -144,7 +144,7 @@ export class ChurchController {
 
   @Post('restore')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiUpdateEndpoint(
     'Restore archived church',
     'Clears archived_at. The one request the middleware lets through for profiles of an archived church.',
@@ -203,7 +203,7 @@ export class ChurchController {
 
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiCreateEndpoint(
     'Invite staff member',
     'Sends a Supabase Auth invitation email and creates a Profile record for the new staff member.',
@@ -281,7 +281,7 @@ export class ChurchController {
   }
 
   @Delete('staff/:profileId')
-  @RequirePermissions('church:update')
+  @RequirePermissions('church_settings:update')
   @ApiDeleteEndpoint(
     'Remove staff member',
     'Soft-deletes a staff member by setting their role to "removed".',

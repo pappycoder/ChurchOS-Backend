@@ -10,7 +10,8 @@
  * @since 1.0.0
  */
 
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
+import type { ViewerScope } from './branch-scope.service';
 import { AsyncLocalStorage } from 'async_hooks';
 
 export interface RequestContextData {
@@ -18,6 +19,7 @@ export interface RequestContextData {
   churchId: string;
   branchId?: string;
   role: string;
+  viewer?: ViewerScope;
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<RequestContextData>();
@@ -58,6 +60,26 @@ export class RequestContextService {
    */
   getStore(): RequestContextData | undefined {
     return asyncLocalStorage.getStore();
+  }
+
+  /** Direct branch-owned records; missing branches fail closed. */
+  branchWhere(churchId: string): { branch_id?: string } {
+    const viewer = this.getStore()?.viewer;
+    if (!viewer || viewer.church_id !== churchId || viewer.is_admin_hq) return {};
+    return { branch_id: viewer.branch_id ?? '00000000-0000-0000-0000-000000000000' };
+  }
+
+  branchOrSharedWhere(churchId: string): { OR?: { branch_id: string | null }[] } {
+    const branchId = this.branchWhere(churchId).branch_id;
+    return branchId ? { OR: [{ branch_id: branchId }, { branch_id: null }] } : {};
+  }
+
+  branchIdForWrite(churchId: string, requested?: string | null): string | undefined {
+    const ownBranch = this.branchWhere(churchId).branch_id;
+    if (!ownBranch) return requested ?? undefined;
+    if (requested != null && requested !== ownBranch)
+      throw new ForbiddenException('You can only manage records in your branch');
+    return ownBranch;
   }
 
   /**

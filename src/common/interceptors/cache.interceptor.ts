@@ -163,7 +163,7 @@ export class CacheInterceptor implements NestInterceptor {
       // gets a short TTL and is recomputed on the next mutation.
     }
 
-    return `cache:${request.method}:${churchId}:${scope}:${version}:${path}:${queryString}`;
+    return `cache:v2:${request.method}:${churchId}:${scope}:${version}:${path}:${queryString}`;
   }
 
   /**

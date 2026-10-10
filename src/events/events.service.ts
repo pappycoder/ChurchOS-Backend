@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file events.service.ts
  * @description Business logic for event management, registration, and ticketing.
@@ -54,6 +55,7 @@ export class EventsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
     @Inject(PAYMENT_GATEWAY_REGISTRY)
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
@@ -79,7 +81,7 @@ export class EventsService {
     const event = await this.prisma.event.create({
       data: {
         church_id: churchId,
-        branch_id: dto.branchId || null,
+        branch_id: this.requestContext.branchIdForWrite(churchId, dto.branchId) ?? null,
         title: dto.title,
         description: dto.description,
         type: (dto.type as never) || 'service',
@@ -208,7 +210,11 @@ export class EventsService {
    */
   async getEvent(eventId: string, churchId: string): Promise<EventResponseDto> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       include: {
         _count: { select: { registrations: true } },
         ticket_tiers: { orderBy: { display_order: 'asc' } },
@@ -239,7 +245,7 @@ export class EventsService {
     userId: string,
   ): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -261,6 +267,7 @@ export class EventsService {
     if (dto.capacity !== undefined) data.capacity = dto.capacity;
     if (dto.isFree !== undefined) data.is_free = dto.isFree;
     if (dto.price !== undefined) data.price = dto.price;
+    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
     if (dto.branchId !== undefined)
       data.branch = dto.branchId ? { connect: { id: dto.branchId } } : { disconnect: true };
     if (dto.registrationFields !== undefined)
@@ -299,7 +306,7 @@ export class EventsService {
    */
   async archiveEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -342,7 +349,7 @@ export class EventsService {
    */
   async restoreEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -384,7 +391,7 @@ export class EventsService {
    */
   async deleteEvent(eventId: string, churchId: string, userId: string): Promise<void> {
     const existing = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
       include: { _count: { select: { registrations: true } } },
     });
 
@@ -445,10 +452,26 @@ export class EventsService {
     const scope = this.branchScope.resolve(viewer);
     const branchId = scope.churchOnly ? filters.branchId : scope.branchId;
     if (!scope.churchOnly || branchId) {
-      where.event = { church_id: churchId, OR: [{ branch_id: branchId ?? null }, { branch_id: null }] };
-      const members = await this.prisma.member.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } });
-      const visitors = await this.prisma.visitor.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } });
-      where.AND = [{ OR: [{ member_id: { in: members.map((member) => member.id) } }, { visitor_id: { in: visitors.map((visitor) => visitor.id) } }] }];
+      where.event = {
+        church_id: churchId,
+        OR: [{ branch_id: branchId ?? null }, { branch_id: null }],
+      };
+      const members = await this.prisma.member.findMany({
+        where: { church_id: churchId, branch_id: branchId ?? null },
+        select: { id: true },
+      });
+      const visitors = await this.prisma.visitor.findMany({
+        where: { church_id: churchId, branch_id: branchId ?? null },
+        select: { id: true },
+      });
+      where.AND = [
+        {
+          OR: [
+            { member_id: { in: members.map((member) => member.id) } },
+            { visitor_id: { in: visitors.map((visitor) => visitor.id) } },
+          ],
+        },
+      ];
     }
 
     if (memberId !== undefined) {
@@ -562,7 +585,11 @@ export class EventsService {
     description?: string,
   ): Promise<{ tierId: string }> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -608,7 +635,11 @@ export class EventsService {
    */
   async listTicketTiers(eventId: string, churchId: string) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -645,7 +676,11 @@ export class EventsService {
     userId: string,
   ) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -704,7 +739,11 @@ export class EventsService {
    */
   async archiveTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -755,7 +794,11 @@ export class EventsService {
    */
   async restoreTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -805,7 +848,11 @@ export class EventsService {
    */
   async deleteTicketTier(eventId: string, tierId: string, churchId: string, userId: string) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -875,7 +922,11 @@ export class EventsService {
     quantity: number = 1,
   ): Promise<RegistrationResponseDto> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       include: {
         _count: { select: { registrations: true } },
         ticket_tiers: true,
@@ -1252,7 +1303,11 @@ export class EventsService {
     },
   ) {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       include: { ticket_tiers: { orderBy: { display_order: 'asc' } } },
     });
 
@@ -1264,7 +1319,8 @@ export class EventsService {
     if (viewer && !viewer.isAdminHq && event.branch_id && event.branch_id !== viewer.branchId) {
       throw new ForbiddenException('This event belongs to another branch');
     }
-    if (viewer && !memberId && !visitorId) memberId = viewer.memberId ?? await this.ensureMemberId(userId) ?? undefined;
+    if (viewer && !memberId && !visitorId)
+      memberId = viewer.memberId ?? (await this.ensureMemberId(userId)) ?? undefined;
     if (viewer?.enforceSelf) {
       // Resolve the caller's own member profile, auto-creating and linking a
       // Member record on the fly when the profile has none (same convention as
@@ -1307,7 +1363,8 @@ export class EventsService {
       if (!member) {
         throw new NotFoundException('Member not found');
       }
-      if (viewer && !viewer.isAdminHq && member.branch_id !== viewer.branchId) throw new ForbiddenException('Member belongs to another branch');
+      if (viewer && !viewer.isAdminHq && member.branch_id !== viewer.branchId)
+        throw new ForbiddenException('Member belongs to another branch');
 
       const existingTicket = await this.prisma.ticket.findFirst({
         where: {
@@ -1328,7 +1385,8 @@ export class EventsService {
       if (!visitor) {
         throw new NotFoundException('Visitor not found');
       }
-      if (viewer && !viewer.isAdminHq && visitor.branch_id !== viewer.branchId) throw new ForbiddenException('Visitor belongs to another branch');
+      if (viewer && !viewer.isAdminHq && visitor.branch_id !== viewer.branchId)
+        throw new ForbiddenException('Visitor belongs to another branch');
 
       const existingTicket = await this.prisma.ticket.findFirst({
         where: {
@@ -1513,7 +1571,11 @@ export class EventsService {
     checkedInAt?: string;
   }> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1590,21 +1652,40 @@ export class EventsService {
    * @returns Array of registration responses
    * @throws NotFoundException if event doesn't exist
    */
-  async listRegistrations(eventId: string, churchId: string, viewer?: ViewerScope | null, requestedBranchId?: string): Promise<RegistrationResponseDto[]> {
+  async listRegistrations(
+    eventId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+    requestedBranchId?: string,
+  ): Promise<RegistrationResponseDto[]> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
       throw new NotFoundException('Event not found');
     }
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly && event.branch_id && event.branch_id !== scope.branchId) throw new ForbiddenException('This event belongs to another branch');
+    if (!scope.churchOnly && event.branch_id && event.branch_id !== scope.branchId)
+      throw new ForbiddenException('This event belongs to another branch');
     const branchId = scope.churchOnly ? requestedBranchId : scope.branchId;
-    const members = !scope.churchOnly || branchId ? await this.prisma.member.findMany({ where: { church_id: churchId, branch_id: branchId ?? null }, select: { id: true } }) : null;
+    const members =
+      !scope.churchOnly || branchId
+        ? await this.prisma.member.findMany({
+            where: { church_id: churchId, branch_id: branchId ?? null },
+            select: { id: true },
+          })
+        : null;
 
     const registrations = await this.prisma.eventRegistration.findMany({
-      where: { event_id: eventId, ...(members ? { member_id: { in: members.map((member) => member.id) } } : {}) },
+      where: {
+        event_id: eventId,
+        ...(members ? { member_id: { in: members.map((member) => member.id) } } : {}),
+      },
       orderBy: { created_at: 'desc' },
     });
 
@@ -1627,7 +1708,11 @@ export class EventsService {
     userId: string,
   ): Promise<void> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1679,7 +1764,11 @@ export class EventsService {
     userId: string,
   ): Promise<AttendanceResponseDto> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1751,7 +1840,11 @@ export class EventsService {
     userId: string,
   ): Promise<{ checkedIn: number; skipped: number }> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1830,7 +1923,11 @@ export class EventsService {
     userId: string,
   ): Promise<AttendanceResponseDto> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1908,7 +2005,11 @@ export class EventsService {
 
   async getEventAttendance(eventId: string, churchId: string): Promise<AttendanceResponseDto[]> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {
@@ -1933,7 +2034,11 @@ export class EventsService {
     churchId: string,
   ): Promise<{ registered: number; attended: number; noShows: number; walkIns: number }> {
     const event = await this.prisma.event.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!event) {

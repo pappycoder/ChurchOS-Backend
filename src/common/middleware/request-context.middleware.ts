@@ -19,6 +19,7 @@ import { RequestContextService } from '../services/request-context.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
+import { PermissionsService } from '../../auth/services/permissions.service';
 import { decodeJwt } from 'jose';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class RequestContextMiddleware implements NestMiddleware {
   constructor(
     private readonly requestContext: RequestContextService,
     private readonly prisma: PrismaService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
@@ -90,6 +92,10 @@ export class RequestContextMiddleware implements NestMiddleware {
         },
       });
       if (profile) {
+        const permissions = await this.permissionsService.getUserPermissions(
+          profile.church_id,
+          profile.role,
+        );
         authReq.profile = {
           id: profile.id,
           church_id: profile.church_id,
@@ -98,7 +104,8 @@ export class RequestContextMiddleware implements NestMiddleware {
           role: profile.role[0] ?? 'member',
           roles: profile.role,
           status: profile.status,
-          is_admin_hq: profile.is_admin_hq,
+          is_admin_hq: profile.is_admin_hq || permissions.includes('data_scope:church:read'),
+          permissions,
           church_archived_at: profile.church?.archived_at?.toISOString(),
         };
       }
@@ -125,6 +132,7 @@ export class RequestContextMiddleware implements NestMiddleware {
       churchId: profile?.church_id || '',
       branchId: profile?.branch_id,
       role: profile?.role || 'member',
+      viewer: profile,
     };
 
     this.requestContext.run(context, () => {

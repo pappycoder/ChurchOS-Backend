@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file whatsapp.service.ts
  * @description WhatsApp Business API integration service.
@@ -76,6 +77,7 @@ export class WhatsAppService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
     private readonly termiiService: TermiiService,
@@ -423,6 +425,15 @@ export class WhatsAppService {
     const where: Prisma.MessageWhereInput = {
       church_id: churchId,
     };
+
+    const branchId = this.requestContext.branchWhere(churchId).branch_id;
+    if (branchId) {
+      const members = await this.prisma.member.findMany({
+        where: { church_id: churchId, branch_id: branchId },
+        select: { id: true },
+      });
+      where.member_id = { in: members.map((member) => member.id) };
+    }
 
     if (phone) {
       where.phone = { contains: phone };

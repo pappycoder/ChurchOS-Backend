@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file email.service.ts
  * @description Service for internal in-app email (email-style private messaging).
@@ -69,6 +70,7 @@ export class EmailService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
   ) {}
 
@@ -149,9 +151,7 @@ export class EmailService {
     includeTrashed = false,
   ): Promise<EmailListEnvelopeDto> {
     const skip = (page - 1) * limit;
-    const trashFilter = includeTrashed
-      ? { deleted_at: { not: null } }
-      : { deleted_at: null };
+    const trashFilter = includeTrashed ? { deleted_at: { not: null } } : { deleted_at: null };
 
     if (box === EmailBox.Sent) {
       const where: Prisma.EmailMessageWhereInput = {
@@ -447,6 +447,7 @@ export class EmailService {
     if (branchId) {
       where.branch_id = branchId;
     }
+    Object.assign(where, this.requestContext.branchWhere(churchId));
     if (role && (MAIN_ROLES as readonly string[]).includes(role)) {
       where.role = { has: role };
     }
@@ -483,6 +484,7 @@ export class EmailService {
       where: {
         id: { in: ids },
         church_id: churchId,
+        ...this.requestContext.branchWhere(churchId),
       },
       select: {
         id: true,

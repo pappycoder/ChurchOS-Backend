@@ -1,3 +1,4 @@
+import { RequestContextService } from './request-context.service';
 import { Injectable } from '@nestjs/common';
 
 /**
@@ -49,6 +50,7 @@ export interface ResolvedBranchScope {
  */
 @Injectable()
 export class BranchScopeService {
+  constructor(private readonly requestContext: RequestContextService) {}
   /**
    * Resolves the branch-scoping rule for a viewer.
    *
@@ -58,6 +60,7 @@ export class BranchScopeService {
    *   `branchId` is the viewer's own branch (undefined when they have none).
    */
   resolve(viewer?: ViewerScope | null): ResolvedBranchScope {
+    viewer ??= this.requestContext.getStore()?.viewer;
     if (!viewer) {
       return { churchOnly: true };
     }
@@ -68,7 +71,7 @@ export class BranchScopeService {
 
     return {
       churchOnly: false,
-      branchId: viewer.branch_id,
+      branchId: viewer.branch_id ?? '00000000-0000-0000-0000-000000000000',
     };
   }
 
@@ -89,10 +92,11 @@ export class BranchScopeService {
    * @param rowBranchId - The branch a candidate row belongs to (may be null).
    */
   isVisible(viewer: ViewerScope | null | undefined, rowBranchId?: string | null): boolean {
-    if (!viewer || viewer.is_admin_hq) {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    if (this.resolve(viewer).churchOnly) {
       return true;
     }
-    return !!viewer.branch_id && viewer.branch_id === rowBranchId;
+    return !!viewer?.branch_id && viewer.branch_id === rowBranchId;
   }
 
   /**
@@ -116,18 +120,20 @@ export class BranchScopeService {
   ):
     | { churchOnly: true; leaderId?: undefined; branchId?: undefined }
     | { churchOnly: false; leaderId?: string; branchId?: string } {
-    if (!viewer || viewer.is_admin_hq) {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    if (this.resolve(viewer).churchOnly) {
       return { churchOnly: true };
     }
 
-    const hasOwnScope = viewer.permissions?.includes('cell_groups:own:read') &&
-      !viewer.permissions?.includes('cell_groups:delete');
+    const hasOwnScope =
+      viewer?.permissions?.includes('cell_groups:own:read') &&
+      !viewer?.permissions?.includes('cell_groups:delete');
 
     if (hasOwnScope) {
-      return { churchOnly: false, leaderId: viewer.member_id };
+      return { churchOnly: false, leaderId: viewer?.member_id };
     }
 
-    return { churchOnly: false, branchId: viewer.branch_id };
+    return { churchOnly: false, branchId: this.resolve(viewer).branchId };
   }
 
   /**
@@ -150,17 +156,19 @@ export class BranchScopeService {
   ):
     | { churchOnly: true; headId?: undefined; branchId?: undefined }
     | { churchOnly: false; headId?: string; branchId?: string } {
-    if (!viewer || viewer.is_admin_hq) {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    if (this.resolve(viewer).churchOnly) {
       return { churchOnly: true };
     }
 
-    const hasOwnScope = viewer.permissions?.includes('departments:own:read') &&
-      !viewer.permissions?.includes('departments:delete');
+    const hasOwnScope =
+      viewer?.permissions?.includes('departments:own:read') &&
+      !viewer?.permissions?.includes('departments:delete');
 
     if (hasOwnScope) {
-      return { churchOnly: false, headId: viewer.member_id };
+      return { churchOnly: false, headId: viewer?.member_id };
     }
 
-    return { churchOnly: false, branchId: viewer.branch_id };
+    return { churchOnly: false, branchId: this.resolve(viewer).branchId };
   }
 }

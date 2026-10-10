@@ -34,7 +34,7 @@ import { RolePermission } from '@prisma/client';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v11:';
+const CACHE_PREFIX = 'perms:v12:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -102,7 +102,7 @@ export class PermissionsService {
    * @returns Array of permission name strings (e.g., ["members:read", "members:update"])
    */
   async getPermissionsForRole(churchId: string, roleName: string): Promise<string[]> {
-    if (roleName === 'super_admin') {
+    if (roleName === 'super_admin' || roleName === 'church_admin') {
       return this.getAllPermissionNames();
     }
 
@@ -158,6 +158,19 @@ export class PermissionsService {
         permSet.add(p);
       }
     }
+    // Reserved grants cannot be inherited through custom role overrides or
+    // Admin HQ. HQ changes data scope only; it does not make someone an admin.
+    if (!roles.some((role) => role === 'church_admin' || role === 'super_admin')) {
+      for (const permission of permSet) {
+        if (
+          permission.startsWith('church_settings:') ||
+          permission === 'branches:create' ||
+          permission === 'data_scope:church:read'
+        ) {
+          permSet.delete(permission);
+        }
+      }
+    }
     return Array.from(permSet);
   }
 
@@ -170,7 +183,7 @@ export class PermissionsService {
    * @returns true if the role has the permission
    */
   async hasPermission(churchId: string, roleName: string, permission: string): Promise<boolean> {
-    const permissions = await this.getPermissionsForRole(churchId, roleName);
+    const permissions = await this.getUserPermissions(churchId, roleName);
     return permissions.includes(permission);
   }
 

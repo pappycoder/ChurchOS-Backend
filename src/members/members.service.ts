@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 import { addDesignedSheet, initializeWorkbook } from '../common/excel/excel-design';
 /**
  * @file members.service.ts
@@ -28,6 +29,7 @@ export class MembersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
@@ -76,7 +78,7 @@ export class MembersService {
     const member = await this.prisma.member.create({
       data: {
         church_id: churchId,
-        branch_id: dto.branchId || null,
+        branch_id: this.requestContext.branchIdForWrite(churchId, dto.branchId) ?? null,
         first_name: normalizedFirstName,
         last_name: normalizedLastName,
         email: normalizedEmail,
@@ -146,7 +148,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!member || member.church_id !== churchId) {
+    if (
+      !member ||
+      member.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, member.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -255,7 +261,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -295,6 +305,7 @@ export class MembersService {
     if (dto.city !== undefined) updateData.city = dto.city || null;
     if (dto.state !== undefined) updateData.state = dto.state || null;
     if (dto.status !== undefined) updateData.status = dto.status;
+    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
     if (dto.branchId !== undefined) updateData.branch = { connect: { id: dto.branchId } };
     if (dto.photoUrl !== undefined) updateData.photo_url = dto.photoUrl || null;
     if (dto.customFields !== undefined)
@@ -346,7 +357,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -382,7 +397,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -427,7 +446,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -474,7 +497,11 @@ export class MembersService {
       where: { id },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -614,7 +641,7 @@ export class MembersService {
           await this.prisma.member.create({
             data: {
               church_id: churchId,
-              branch_id: record.branchId || null,
+              branch_id: this.requestContext.branchIdForWrite(churchId, record.branchId) ?? null,
               first_name: record.firstName,
               last_name: record.lastName,
               email: record.email || null,
@@ -896,10 +923,14 @@ export class MembersService {
   ): Promise<{ qrData: string; memberId: string }> {
     const member = await this.prisma.member.findUnique({
       where: { id },
-      select: { id: true, church_id: true },
+      select: { id: true, church_id: true, branch_id: true },
     });
 
-    if (!member || member.church_id !== churchId) {
+    if (
+      !member ||
+      member.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, member.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -932,10 +963,14 @@ export class MembersService {
   > {
     const member = await this.prisma.member.findUnique({
       where: { id },
-      select: { id: true, church_id: true },
+      select: { id: true, church_id: true, branch_id: true },
     });
 
-    if (!member || member.church_id !== churchId) {
+    if (
+      !member ||
+      member.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, member.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -984,10 +1019,14 @@ export class MembersService {
   > {
     const member = await this.prisma.member.findUnique({
       where: { id },
-      select: { id: true, church_id: true },
+      select: { id: true, church_id: true, branch_id: true },
     });
 
-    if (!member || member.church_id !== churchId) {
+    if (
+      !member ||
+      member.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, member.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 
@@ -1029,10 +1068,14 @@ export class MembersService {
   ): Promise<{ success: boolean }> {
     const member = await this.prisma.member.findUnique({
       where: { id },
-      select: { id: true, church_id: true, notes: true, archived_at: true },
+      select: { id: true, church_id: true, branch_id: true, notes: true, archived_at: true },
     });
 
-    if (!member || member.church_id !== churchId) {
+    if (
+      !member ||
+      member.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, member.branch_id)
+    ) {
       throw new NotFoundException('Member not found');
     }
 

@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file attendance.service.ts
  * @description Business logic for attendance and service management.
@@ -40,6 +41,7 @@ export class AttendanceService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
     private readonly branchScope: BranchScopeService,
   ) {}
@@ -90,7 +92,11 @@ export class AttendanceService {
       include: { _count: { select: { attendance: true } } },
     });
 
-    if (!service || service.church_id !== churchId) {
+    if (
+      !service ||
+      service.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, service.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -166,7 +172,11 @@ export class AttendanceService {
   ): Promise<ServiceResponseDto> {
     const existing = await this.prisma.service.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -178,6 +188,7 @@ export class AttendanceService {
 
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.category !== undefined) updateData.category = dto.category;
+    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
     if (dto.branchId !== undefined)
       updateData.branch = dto.branchId ? { connect: { id: dto.branchId } } : { disconnect: true };
     if (dto.dayOfWeek !== undefined) updateData.day_of_week = dto.dayOfWeek;
@@ -213,7 +224,11 @@ export class AttendanceService {
   async deleteService(id: string, churchId: string, userId: string): Promise<{ success: boolean }> {
     const existing = await this.prisma.service.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -262,7 +277,11 @@ export class AttendanceService {
   async archiveService(id: string, churchId: string, userId: string): Promise<ServiceResponseDto> {
     const existing = await this.prisma.service.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -302,7 +321,11 @@ export class AttendanceService {
   async restoreService(id: string, churchId: string, userId: string): Promise<ServiceResponseDto> {
     const existing = await this.prisma.service.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, existing.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -358,7 +381,11 @@ export class AttendanceService {
       const service = await this.prisma.service.findUnique({
         where: { id: dto.serviceId },
       });
-      if (!service || service.church_id !== churchId) {
+      if (
+        !service ||
+        service.church_id !== churchId ||
+        !this.branchScope.isVisible(undefined, service.branch_id)
+      ) {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
@@ -479,7 +506,11 @@ export class AttendanceService {
       const service = await this.prisma.service.findUnique({
         where: { id: dto.serviceId },
       });
-      if (!service || service.church_id !== churchId) {
+      if (
+        !service ||
+        service.church_id !== churchId ||
+        !this.branchScope.isVisible(undefined, service.branch_id)
+      ) {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
@@ -632,7 +663,11 @@ export class AttendanceService {
       const service = await this.prisma.service.findUnique({
         where: { id: dto.serviceId },
       });
-      if (!service || service.church_id !== churchId) {
+      if (
+        !service ||
+        service.church_id !== churchId ||
+        !this.branchScope.isVisible(undefined, service.branch_id)
+      ) {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
@@ -730,15 +765,23 @@ export class AttendanceService {
     // belongs to their branch.
     const scope = this.branchScope.resolve(viewer);
     if (!scope.churchOnly) {
-      where.AND = [{ OR: [
-        { service: { branch_id: scope.branchId ?? null } },
-        { event: { branch_id: scope.branchId ?? null } },
-      ] }];
+      where.AND = [
+        {
+          OR: [
+            { service: { branch_id: scope.branchId ?? null } },
+            { event: { branch_id: scope.branchId ?? null } },
+          ],
+        },
+      ];
     } else if (scope.churchOnly && query.branchId) {
-      where.AND = [{ OR: [
-        { service: { branch_id: query.branchId } },
-        { event: { branch_id: query.branchId } },
-      ] }];
+      where.AND = [
+        {
+          OR: [
+            { service: { branch_id: query.branchId } },
+            { event: { branch_id: query.branchId } },
+          ],
+        },
+      ];
     }
 
     if (query.serviceId) where.service_id = query.serviceId;
@@ -787,7 +830,11 @@ export class AttendanceService {
       where: { id: serviceId },
     });
 
-    if (!service || service.church_id !== churchId) {
+    if (
+      !service ||
+      service.church_id !== churchId ||
+      !this.branchScope.isVisible(undefined, service.branch_id)
+    ) {
       throw new NotFoundException('Service not found');
     }
 
@@ -830,7 +877,10 @@ export class AttendanceService {
     }
 
     if (!scope.churchOnly || effectiveBranchId) {
-      where.OR = [{ service: { branch_id: effectiveBranchId ?? null } }, { event: { branch_id: effectiveBranchId ?? null } }];
+      where.OR = [
+        { service: { branch_id: effectiveBranchId ?? null } },
+        { event: { branch_id: effectiveBranchId ?? null } },
+      ];
     }
 
     const [totalCheckIns, memberCheckIns, visitorCheckIns, bySourceRaw, byCategoryRaw, genderRows] =
@@ -907,7 +957,10 @@ export class AttendanceService {
     const effectiveBranchId = scope.churchOnly ? branchId : scope.branchId;
 
     if (!scope.churchOnly || effectiveBranchId) {
-      where.OR = [{ service: { branch_id: effectiveBranchId ?? null } }, { event: { branch_id: effectiveBranchId ?? null } }];
+      where.OR = [
+        { service: { branch_id: effectiveBranchId ?? null } },
+        { event: { branch_id: effectiveBranchId ?? null } },
+      ];
     }
 
     const records = await this.prisma.attendance.findMany({

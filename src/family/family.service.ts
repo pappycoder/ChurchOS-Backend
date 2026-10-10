@@ -188,7 +188,10 @@ export class FamilyService {
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException('Family not found');
     }
 
@@ -236,7 +239,10 @@ export class FamilyService {
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Family not found');
     }
 
@@ -388,12 +394,20 @@ export class FamilyService {
    * @throws NotFoundException if the family is missing or not in this church
    * @throws ConflictException if the family is already archived
    */
-  async archive(familyId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<FamilyResponseDto> {
+  async archive(
+    familyId: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<FamilyResponseDto> {
     const existing = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException('Family not found');
     }
 
@@ -430,12 +444,20 @@ export class FamilyService {
    * @throws NotFoundException if the family is missing or not in this church
    * @throws ConflictException if the family is not currently archived
    */
-  async restore(familyId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<FamilyResponseDto> {
+  async restore(
+    familyId: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<FamilyResponseDto> {
     const existing = await this.prisma.family.findFirst({
       where: { id: familyId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException('Family not found');
     }
 

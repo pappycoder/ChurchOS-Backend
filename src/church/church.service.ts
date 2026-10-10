@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file Church management service with CRUD operations.
  * @module ChurchService
@@ -45,6 +46,7 @@ export class ChurchService {
    */
   constructor(
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     private readonly supabase: SupabaseService,
     private readonly audit: AuditLoggingService,
     private readonly media: MediaService,
@@ -57,11 +59,15 @@ export class ChurchService {
    * @throws NotFoundException if church not found
    */
   async getChurch(churchId: string): Promise<ChurchResponseDto> {
+    const branchId = this.requestContext.branchWhere(churchId).branch_id;
     const church = await this.prisma.church.findUnique({
       where: { id: churchId },
       include: {
         _count: {
-          select: { branches: true, members: true },
+          select: {
+            branches: branchId ? { where: { id: branchId } } : true,
+            members: branchId ? { where: { branch_id: branchId } } : true,
+          },
         },
       },
     });
@@ -485,7 +491,10 @@ export class ChurchService {
     const limit = Math.min(query.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProfileWhereInput = { church_id: churchId };
+    const where: Prisma.ProfileWhereInput = {
+      church_id: churchId,
+      ...this.requestContext.branchWhere(churchId),
+    };
 
     if (query.role) {
       where.role = { has: query.role };

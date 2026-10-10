@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file pastoral.service.ts
  * @description Business logic for pastoral note management with AES-256-GCM encryption.
@@ -68,6 +69,7 @@ export class PastoralService {
   constructor(
     // Inject PrismaService for database access
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     // Inject AuditLoggingService for mutation audit trails
     private readonly audit: AuditLoggingService,
   ) {
@@ -95,7 +97,11 @@ export class PastoralService {
 
     // Verify the subject member belongs to this church
     const subjectMember = await this.prisma.member.findFirst({
-      where: { id: dto.memberId, church_id: churchId },
+      where: {
+        id: dto.memberId,
+        church_id: churchId,
+        ...this.requestContext.branchWhere(churchId),
+      },
       select: { id: true },
     });
 
@@ -167,6 +173,7 @@ export class PastoralService {
     // Build the base where clause scoped to the church
     const where: Prisma.PastoralNoteWhereInput = {
       church_id: churchId,
+      member: this.requestContext.branchWhere(churchId),
       archived_at: query.archived === true ? { not: null } : null,
     };
 
@@ -251,7 +258,7 @@ export class PastoralService {
   ): Promise<PastoralNoteResponseDto> {
     // Fetch the note by ID scoped to the church
     const note = await this.prisma.pastoralNote.findFirst({
-      where: { id: noteId, church_id: churchId },
+      where: { id: noteId, church_id: churchId, member: this.requestContext.branchWhere(churchId) },
       include: {
         member: { select: { first_name: true, last_name: true } },
         author: { select: { first_name: true, last_name: true } },
@@ -296,7 +303,7 @@ export class PastoralService {
 
     // Fetch the existing note to verify it exists and check ownership
     const existing = await this.prisma.pastoralNote.findFirst({
-      where: { id: noteId, church_id: churchId },
+      where: { id: noteId, church_id: churchId, member: this.requestContext.branchWhere(churchId) },
     });
 
     // Throw NotFoundException if the note does not exist
@@ -310,7 +317,10 @@ export class PastoralService {
     }
 
     // Enforce that only the author or admin/pastor can update
-    if (existing.author_id !== memberId && !userPermissions.includes('pastoral_moderation:update')) {
+    if (
+      existing.author_id !== memberId &&
+      !userPermissions.includes('pastoral_moderation:update')
+    ) {
       throw new ForbiddenException('Only the author or admin can update this note');
     }
 
@@ -379,7 +389,7 @@ export class PastoralService {
 
     // Fetch the existing note to verify it exists and check confidentiality
     const existing = await this.prisma.pastoralNote.findFirst({
-      where: { id: noteId, church_id: churchId },
+      where: { id: noteId, church_id: churchId, member: this.requestContext.branchWhere(churchId) },
     });
 
     // Throw NotFoundException if the note does not exist
@@ -440,7 +450,7 @@ export class PastoralService {
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
     const existing = await this.prisma.pastoralNote.findFirst({
-      where: { id: noteId, church_id: churchId },
+      where: { id: noteId, church_id: churchId, member: this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -490,7 +500,7 @@ export class PastoralService {
     userId: string,
   ): Promise<PastoralNoteResponseDto> {
     const existing = await this.prisma.pastoralNote.findFirst({
-      where: { id: noteId, church_id: churchId },
+      where: { id: noteId, church_id: churchId, member: this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -795,7 +805,11 @@ export class PastoralService {
   ): Promise<LifeEventResponseDto> {
     // Verify the member belongs to this church
     const subjectMember = await this.prisma.member.findFirst({
-      where: { id: dto.memberId, church_id: churchId },
+      where: {
+        id: dto.memberId,
+        church_id: churchId,
+        ...this.requestContext.branchWhere(churchId),
+      },
       select: { id: true },
     });
 
@@ -855,6 +869,7 @@ export class PastoralService {
     // Build the base where clause scoped to the church
     const where: Prisma.LifeEventWhereInput = {
       church_id: churchId,
+      member: this.requestContext.branchWhere(churchId),
       archived_at: query.archived === true ? { not: null } : null,
     };
 
@@ -909,7 +924,11 @@ export class PastoralService {
   async getLifeEventById(eventId: string, churchId: string): Promise<LifeEventResponseDto> {
     // Fetch the life event by ID scoped to the church
     const event = await this.prisma.lifeEvent.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+      },
       include: {
         member: { select: { first_name: true, last_name: true } },
       },
@@ -934,7 +953,11 @@ export class PastoralService {
   async deleteLifeEvent(eventId: string, churchId: string, userId: string): Promise<void> {
     // Fetch the existing event to verify it exists
     const event = await this.prisma.lifeEvent.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+      },
     });
 
     // Throw NotFoundException if the event does not exist
@@ -977,7 +1000,11 @@ export class PastoralService {
     userId: string,
   ): Promise<LifeEventResponseDto> {
     const existing = await this.prisma.lifeEvent.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -1026,7 +1053,11 @@ export class PastoralService {
     userId: string,
   ): Promise<LifeEventResponseDto> {
     const existing = await this.prisma.lifeEvent.findFirst({
-      where: { id: eventId, church_id: churchId },
+      where: {
+        id: eventId,
+        church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -1077,6 +1108,7 @@ export class PastoralService {
     const events = await this.prisma.lifeEvent.findMany({
       where: {
         church_id: churchId,
+        member: this.requestContext.branchWhere(churchId),
         archived_at: null,
         date: { gte: now, lte: futureDate },
         notified: false,

@@ -1,3 +1,4 @@
+import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file admin.service.ts
  * @description Business logic for department and cell group management.
@@ -42,6 +43,7 @@ export class AdminService {
   constructor(
     // Inject PrismaService for database access
     private readonly prisma: PrismaService,
+    private readonly requestContext: RequestContextService,
     // Inject AuditLoggingService for mutation audit trails
     private readonly audit: AuditLoggingService,
     private readonly branchScope: BranchScopeService,
@@ -63,11 +65,10 @@ export class AdminService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
+    dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     if (!scope.churchOnly && 'headId' in scope) {
-      throw new ForbiddenException(
-        'Branch-scoped department heads cannot create departments',
-      );
+      throw new ForbiddenException('Branch-scoped department heads cannot create departments');
     }
 
     // Validate parent department exists within the same church if provided
@@ -248,9 +249,14 @@ export class AdminService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
+    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
     // Verify the department exists within this church
     const existing = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     // Throw NotFoundException if department does not exist
@@ -269,8 +275,10 @@ export class AdminService {
     // A branch-restricted department head may change every field EXCEPT the
     // branch and head — reassigning those is church-admin-only. The payload is
     // silently stripped (never an error) so clients can keep sending the full form.
-    const restrictedHead = !!viewer?.permissions?.includes('departments:own:update') &&
-      !viewer.permissions.includes('departments:delete') && !viewer?.is_admin_hq;
+    const restrictedHead =
+      !!viewer?.permissions?.includes('departments:own:update') &&
+      !viewer.permissions.includes('departments:delete') &&
+      !viewer?.is_admin_hq;
 
     // Validate the branch + head assignments when the caller is allowed to set them
     if (!restrictedHead) {
@@ -344,7 +352,11 @@ export class AdminService {
     userId: string,
   ): Promise<DepartmentResponseDto> {
     const existing = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -404,7 +416,11 @@ export class AdminService {
     userId: string,
   ): Promise<DepartmentResponseDto> {
     const existing = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -458,7 +474,11 @@ export class AdminService {
   async deleteDepartment(departmentId: string, churchId: string, userId: string): Promise<void> {
     // Fetch the department with member count
     const existing = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       include: { _count: { select: { department_members: true } } },
     });
 
@@ -509,7 +529,11 @@ export class AdminService {
   ): Promise<void> {
     // Verify the department exists within this church
     const department = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       select: { id: true, archived_at: true, head_member_id: true, branch_id: true },
     });
 
@@ -596,7 +620,11 @@ export class AdminService {
     // ran without ever loading the department, so any caller holding the route
     // permission could remove anyone from a cross-church department).
     const department = await this.prisma.department.findFirst({
-      where: { id: departmentId, church_id: churchId },
+      where: {
+        id: departmentId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       select: { id: true, archived_at: true, head_member_id: true },
     });
 
@@ -662,6 +690,7 @@ export class AdminService {
     churchId: string,
     userId: string,
   ): Promise<CellGroupResponseDto> {
+    dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
     // Create the cell group record in the database
     const group = await this.prisma.cellGroup.create({
       data: {
@@ -861,7 +890,11 @@ export class AdminService {
   ): Promise<CellGroupResponseDto> {
     // Fetch the cell group by ID scoped to the church
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
       include: { branch: { select: { id: true, name: true } } },
     });
 
@@ -916,7 +949,8 @@ export class AdminService {
     viewer: ViewerScope | null | undefined,
     group: { leader_id: string | null },
   ): void {
-    const isCellLeader = !!viewer?.permissions?.includes('cell_groups:own:update') &&
+    const isCellLeader =
+      !!viewer?.permissions?.includes('cell_groups:own:update') &&
       !viewer.permissions.includes('cell_groups:delete');
     if (isCellLeader) {
       if (!viewer?.member_id || group.leader_id !== viewer.member_id) {
@@ -942,7 +976,8 @@ export class AdminService {
     viewer: ViewerScope | null | undefined,
     department: { head_member_id: string | null },
   ): void {
-    const isDepartmentHead = !!viewer?.permissions?.includes('departments:own:update') &&
+    const isDepartmentHead =
+      !!viewer?.permissions?.includes('departments:own:update') &&
       !viewer.permissions.includes('departments:delete');
     if (isDepartmentHead) {
       if (!viewer?.member_id || department.head_member_id !== viewer.member_id) {
@@ -1007,9 +1042,14 @@ export class AdminService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<CellGroupResponseDto> {
+    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
     // Verify the cell group exists within this church
     const existing = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     // Throw NotFoundException if group does not exist
@@ -1030,8 +1070,10 @@ export class AdminService {
     // payload is silently stripped (never an error) so clients can keep
     // sending the full form. An admin-HQ cell leader editing their own group
     // keeps the branch/leader controls (they are not branch-restricted).
-    const restrictedLeader = !!viewer?.permissions?.includes('cell_groups:own:update') &&
-      !viewer.permissions.includes('cell_groups:delete') && !viewer?.is_admin_hq;
+    const restrictedLeader =
+      !!viewer?.permissions?.includes('cell_groups:own:update') &&
+      !viewer.permissions.includes('cell_groups:delete') &&
+      !viewer?.is_admin_hq;
 
     // Apply partial updates to the cell group record
     const updated = await this.prisma.cellGroup.update({
@@ -1093,7 +1135,11 @@ export class AdminService {
     userId: string,
   ): Promise<CellGroupResponseDto> {
     const existing = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -1145,7 +1191,11 @@ export class AdminService {
     userId: string,
   ): Promise<CellGroupResponseDto> {
     const existing = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!existing) {
@@ -1191,7 +1241,11 @@ export class AdminService {
   async deleteCellGroup(groupId: string, churchId: string, userId: string): Promise<void> {
     // Verify the cell group exists within this church
     const existing = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     // Throw NotFoundException if group does not exist
@@ -1232,7 +1286,11 @@ export class AdminService {
     viewer?: ViewerScope | null,
   ): Promise<void> {
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
@@ -1307,7 +1365,11 @@ export class AdminService {
     viewer?: ViewerScope | null,
   ): Promise<void> {
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
@@ -1366,7 +1428,11 @@ export class AdminService {
     }>
   > {
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
@@ -1416,7 +1482,11 @@ export class AdminService {
     }
 
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
@@ -1614,7 +1684,11 @@ export class AdminService {
     }>
   > {
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
@@ -1669,7 +1743,11 @@ export class AdminService {
     memberCount: number;
   }> {
     const group = await this.prisma.cellGroup.findFirst({
-      where: { id: groupId, church_id: churchId },
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...this.requestContext.branchOrSharedWhere(churchId),
+      },
     });
 
     if (!group) {
