@@ -262,6 +262,11 @@ export async function seedUsers(
       first_name: def.firstName,
       last_name: def.lastName,
       email: def.email,
+      // Development accounts use the shared demo password and must remain
+      // recoverable after someone enables 2FA while testing. The development
+      // seed resets local/backend MFA state for these seeded identities below.
+      mfa_enabled: false,
+      two_factor_enabled: false,
       ...(linkedMember
         ? { member_id: linkedMember.id, phone: linkedMember.phone ?? undefined }
         : {}),
@@ -299,6 +304,14 @@ export async function seedUsers(
         }
       }
     } else profile = await prisma.profile.update({ where: { id: profile.id }, data: profileData });
+
+    // These are shared development/demo identities. Remove backend-owned
+    // authenticators and session approvals so an old factor revision cannot
+    // strand a seeded user after the seed is rerun.
+    await prisma.$transaction([
+      prisma.verifiedMfaSession.deleteMany({ where: { user_id: userId } }),
+      prisma.profileAuthenticator.deleteMany({ where: { user_id: userId } }),
+    ]);
     return profile.id;
   };
 

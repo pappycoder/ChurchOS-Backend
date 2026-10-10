@@ -213,6 +213,7 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 
 ## Changelog
 
+- **2026-10-10: Reset MFA state for development seed accounts.** Re-running the development seed removes backend authenticator factors and verified MFA sessions for seeded demo identities and clears their 2FA flags, keeping shared-password accounts usable after MFA testing.
 - **2026-10-10: Backend-managed authenticator 2FA.** OTPAuth TOTP and locally generated QR enrollment, AES-256-GCM encrypted secrets with a dedicated `TWO_FACTOR_ENCRYPTION_KEY`, atomic replay protection, hashed one-use recovery codes and regeneration, and five-minute password-session challenges. Protected APIs require a backend approval bound to the verified Supabase session ID (12-hour maximum, stable across refresh); Supabase AAL2 alone cannot bypass this. Existing email/Supabase factors have a verification-before-enrollment migration path. Shared recovery-code UI requires saving codes before continuing. Apply migration `20261010180000_backend_authenticator`, configure the key, and deploy backend/web together; no permission seed needed.
 
 
