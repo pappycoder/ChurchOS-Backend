@@ -1,3 +1,5 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { RequestContextService } from '../common/services/request-context.service';
 import { addDesignedSheet, initializeWorkbook } from '../common/excel/excel-design';
 /**
@@ -12,7 +14,13 @@ import { addDesignedSheet, initializeWorkbook } from '../common/excel/excel-desi
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -593,6 +601,14 @@ export class MembersService {
     errors: Array<{ row: number; message: string }>;
     dryRun: boolean;
   }> {
+    if (!Array.isArray(records) || records.length < 1 || records.length > 100)
+      throw new BadRequestException('Import between 1 and 100 members per batch');
+    if (typeof dryRun !== 'boolean') throw new BadRequestException('dryRun must be a boolean');
+    const branches = await this.prisma.branch.findMany({
+      where: { church_id: churchId },
+      select: { id: true },
+    });
+    const validBranches = new Set(branches.map((branch) => branch.id));
     const errors: Array<{ row: number; message: string }> = [];
     let created = 0;
 
@@ -601,6 +617,29 @@ export class MembersService {
       const rowNum = i + 1;
 
       try {
+        const validation = await validate(plainToInstance(CreateMemberDto, record), {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          forbidUnknownValues: true,
+        });
+        if (validation.length) {
+          errors.push({
+            row: rowNum,
+            message:
+              validation.flatMap((issue) => Object.values(issue.constraints ?? {})).join('; ') ||
+              'Invalid member data',
+          });
+          continue;
+        }
+        const branchId = this.requestContext.branchIdForWrite(churchId, record.branchId);
+        if (branchId && !validBranches.has(branchId)) {
+          errors.push({ row: rowNum, message: 'Branch does not belong to this church' });
+          continue;
+        }
+        if (record.dateOfBirth && Number.isNaN(new Date(record.dateOfBirth).getTime())) {
+          errors.push({ row: rowNum, message: 'Invalid date of birth' });
+          continue;
+        }
         // Validate required fields
         if (!record.firstName || !record.lastName) {
           errors.push({ row: rowNum, message: 'First name and last name are required' });
@@ -781,6 +820,7 @@ export class MembersService {
 
     // Escape CSV values (handle commas, quotes, newlines)
     const escapeCsv = (value: string): string => {
+      if (/^[\s\u0000-\u001f]*[=+@-]/.test(value)) value = `'${value}`;
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;
       }

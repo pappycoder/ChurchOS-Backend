@@ -12,10 +12,16 @@
  * @since 1.0.0
  */
 
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  StreamableFile,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 
 /**
  * Standard API response wrapper.
@@ -63,12 +69,15 @@ interface PaginatedData<T> {
 export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
+    if (request.headers.authorization) response.setHeader('Cache-Control', 'private, no-store');
     const path = request.url;
     const requestId = (request as unknown as Record<string, unknown>)['requestId'] as
       string | undefined;
 
     return next.handle().pipe(
       map((data) => {
+        if (data instanceof StreamableFile) return data;
         // If data is null/undefined, return empty response
         if (data === null || data === undefined) {
           return {

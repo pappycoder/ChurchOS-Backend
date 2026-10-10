@@ -87,6 +87,25 @@ export class RedisService implements OnModuleDestroy {
     return (this._client as IORedis).getdel(key);
   }
 
+  /** Bounded SCAN iteration; Redis DEL does not expand glob patterns. */
+  async deleteMatching(pattern: string): Promise<void> {
+    let cursor = '0';
+    do {
+      if (this._driver === 'upstash') {
+        const page = await (this._client as UpstashRedis).scan(Number(cursor), {
+          match: pattern,
+          count: 100,
+        });
+        cursor = String(page[0]);
+        if (page[1].length) await (this._client as UpstashRedis).del(...page[1]);
+      } else {
+        const page = await (this._client as IORedis).scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = page[0];
+        if (page[1].length) await (this._client as IORedis).del(...page[1]);
+      }
+    } while (cursor !== '0');
+  }
+
   async del(key: string): Promise<void> {
     if (this._driver === 'upstash') {
       await (this._client as UpstashRedis).del(key);

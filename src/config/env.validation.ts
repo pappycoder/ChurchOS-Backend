@@ -9,76 +9,96 @@ import { z } from 'zod';
  * @see .env.example for the full list of environment variables
  */
 
-const envSchema = z.object({
-  // ─── Application ──────────────────────────────────────────
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  WEB_URL: z.url().default('http://localhost:3000'),
+const envSchema = z
+  .object({
+    // ─── Application ──────────────────────────────────────────
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+    WEB_URL: z.url().default('http://localhost:3000'),
 
-  // ─── Database (Prisma + PostgreSQL) ───────────────────────
-  DATABASE_URL: z.string().startsWith('postgresql://', {
-    message: 'DATABASE_URL must be a valid PostgreSQL connection string',
-  }),
-  DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
-  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
-  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(0).default(0),
+    // ─── Database (Prisma + PostgreSQL) ───────────────────────
+    DATABASE_URL: z.string().startsWith('postgresql://', {
+      message: 'DATABASE_URL must be a valid PostgreSQL connection string',
+    }),
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+    DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(0).default(0),
 
-  // ─── Supabase (Auth + Storage only) ───────────────────────
-  SUPABASE_URL: z.url({
-    message: 'SUPABASE_URL must be a valid URL (e.g., https://your-project.supabase.co)',
-  }),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
-  SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
-  SUPABASE_JWT_SECRET: z.string().optional(),
+    // ─── Supabase (Auth + Storage only) ───────────────────────
+    SUPABASE_URL: z.url({
+      message: 'SUPABASE_URL must be a valid URL (e.g., https://your-project.supabase.co)',
+    }),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
+    SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
+    SUPABASE_JWT_SECRET: z.string().optional(),
 
-  // ─── Redis (Cache + Queue) ────────────────────────────────
-  REDIS_URL: z.string().refine((val) => val.startsWith('redis://') || val.startsWith('https://'), {
-    message: 'REDIS_URL must start with redis:// (local) or https:// (Upstash)',
-  }),
-  UPSTASH_REDIS_TOKEN: z.string().optional(),
-
-  // ─── Payments (Optional for MVP, required for production) ─
-  PAYSTACK_SECRET_KEY: z.string().optional(),
-  PAYSTACK_PUBLIC_KEY: z.string().optional(),
-  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
-
-  // ─── Messaging (Termii — single platform for WhatsApp + SMS) ───
-  TERMII_API_KEY: z.string().optional(),
-  TERMII_FROM: z.string().default('ChurchOS'),
-  TERMII_WHATSAPP_DEVICE_ID: z.string().optional(),
-  TERMII_WEBHOOK_SECRET: z.string().optional(),
-  TERMII_DEFAULT_CHURCH_ID: z.string().optional(),
-  ENABLE_SMS_FALLBACK: z.coerce.boolean().default(false),
-
-  // ─── Email (Resend) ───────────────────────────────────────
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM: z.string().default('noreply@churchos.app'),
-
-  // ─── AI (Optional) ────────────────────────────────────────
-  OPENAI_API_KEY: z.string().optional(),
-
-  // ─── Storage (Supabase Storage) ──────────────────────────
-  SUPABASE_STORAGE_BUCKET: z.string().default('media'),
-  MAX_FILE_SIZE_MB: z.coerce.number().default(5),
-
-  // AES-256-GCM key for encrypting pastoral note content at rest
-  PASTORAL_ENCRYPTION_KEY: z
-    .string()
-    .min(16, 'PASTORAL_ENCRYPTION_KEY must be at least 16 characters')
-    .default('dev-only-change-in-production-32b'),
-
-  // Dedicated 32-byte hex key; no development fallback for authenticator secrets.
-  TWO_FACTOR_ENCRYPTION_KEY: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z
+    // ─── Redis (Cache + Queue) ────────────────────────────────
+    REDIS_URL: z
       .string()
-      .regex(/^[a-fA-F0-9]{64}$/, 'TWO_FACTOR_ENCRYPTION_KEY must be 64 hexadecimal characters')
-      .optional(),
-  ),
+      .refine((val) => val.startsWith('redis://') || val.startsWith('https://'), {
+        message: 'REDIS_URL must start with redis:// (local) or https:// (Upstash)',
+      }),
+    UPSTASH_REDIS_TOKEN: z.string().optional(),
 
-  // ─── Monitoring (Optional) ────────────────────────────────
-  SENTRY_DSN: z.string().optional(),
-});
+    // ─── Payments (Optional for MVP, required for production) ─
+    PAYSTACK_SECRET_KEY: z.string().optional(),
+    PAYSTACK_PUBLIC_KEY: z.string().optional(),
+    FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+
+    // ─── Messaging (Termii — single platform for WhatsApp + SMS) ───
+    TERMII_API_KEY: z.string().optional(),
+    TERMII_FROM: z.string().default('ChurchOS'),
+    TERMII_WHATSAPP_DEVICE_ID: z.string().optional(),
+    TERMII_WEBHOOK_SECRET: z.string().optional(),
+    TERMII_DEFAULT_CHURCH_ID: z.string().optional(),
+    ENABLE_SMS_FALLBACK: z
+      .preprocess((value) => value === true || value === 'true', z.boolean())
+      .default(false),
+
+    // ─── Email (Resend) ───────────────────────────────────────
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM: z.string().default('noreply@churchos.app'),
+
+    // ─── AI (Optional) ────────────────────────────────────────
+    OPENAI_API_KEY: z.string().optional(),
+
+    // ─── Storage (Supabase Storage) ──────────────────────────
+    SUPABASE_STORAGE_BUCKET: z.string().default('media'),
+    SUPABASE_PRIVATE_STORAGE_BUCKET: z.string().default('media-private'),
+    INTERNAL_PROXY_SECRET: z.string().min(32).optional(),
+    MAX_FILE_SIZE_MB: z.coerce.number().default(5),
+
+    // AES-256-GCM key for encrypting pastoral note content at rest
+    PASTORAL_ENCRYPTION_KEY: z
+      .string()
+      .min(16, 'PASTORAL_ENCRYPTION_KEY must be at least 16 characters')
+      .optional(),
+
+    // Dedicated 32-byte hex key; no development fallback for authenticator secrets.
+    TWO_FACTOR_ENCRYPTION_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .string()
+        .regex(/^[a-fA-F0-9]{64}$/, 'TWO_FACTOR_ENCRYPTION_KEY must be 64 hexadecimal characters')
+        .optional(),
+    ),
+
+    // ─── Monitoring (Optional) ────────────────────────────────
+    SENTRY_DSN: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.NODE_ENV === 'production' &&
+      (!value.PASTORAL_ENCRYPTION_KEY ||
+        value.PASTORAL_ENCRYPTION_KEY === 'dev-only-change-in-production-32b')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['PASTORAL_ENCRYPTION_KEY'],
+        message: 'A dedicated pastoral encryption key is required in production',
+      });
+    }
+  });
 
 /**
  * Parsed and validated environment variables.

@@ -1,7 +1,7 @@
 {
   "name": "churchos-backend",
   "version": "0.1.0",
-  "description": "ChurchOS Backend API — NestJS + Prisma + Supabase Auth",
+  "description": "ChurchOS Backend API \u2014 NestJS + Prisma + Supabase Auth",
   "private": true,
   "license": "GPL-3.0",
   "scripts": {
@@ -30,21 +30,24 @@
     "backfill-profile-emails": "ts-node -P tsconfig.scripts.json scripts/backfill-profile-emails.ts",
     "update-project-board": "bash scripts/update-project-board.sh",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "start:worker": "node dist/worker",
+    "storage:migrate-private": "ts-node -P tsconfig.scripts.json scripts/migrate-private-media.ts",
+    "pastoral:rotate-key": "ts-node -P tsconfig.scripts.json scripts/rotate-pastoral-key.ts"
   },
   "prisma": {
     "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.5",
-    "@nestjs/common": "^10.4.0",
-    "@nestjs/config": "^3.3.0",
-    "@nestjs/core": "^10.4.0",
-    "@nestjs/mapped-types": "2.1.1",
+    "@nestjs/common": "^11.1.18",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.1.18",
+    "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/passport": "^11.0.5",
-    "@nestjs/platform-express": "^10.4.0",
+    "@nestjs/platform-express": "^11.1.18",
     "@nestjs/schedule": "^6.1.3",
-    "@nestjs/swagger": "^7.4.0",
+    "@nestjs/swagger": "^11.0.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@sentry/nestjs": "^10.65.0",
@@ -55,7 +58,7 @@
     "bullmq": "^5.80.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "compression": "^1.8.1",
+    "compression": "^1.8.2",
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "helmet": "^8.3.0",
@@ -73,13 +76,13 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.17.2",
     "rxjs": "^7.8.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.4.0",
-    "@nestjs/schematics": "^10.2.0",
-    "@nestjs/testing": "^10.4.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.1.0",
+    "@nestjs/testing": "^11.1.18",
     "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.14",
@@ -105,5 +108,36 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.0"
+  },
+  "overrides": {
+    "proxy-addr": "^2.0.8",
+    "qs": "^6.16.0",
+    "source-map-js": "^1.2.2",
+    "fast-uri": "^3.1.8",
+    "browserslist": "^4.28.7",
+    "postcss": "^8.5.23",
+    "exceljs": {
+      "uuid": "^11.1.1"
+    },
+    "hono": "^4.13.7",
+    "@hono/node-server": "^1.19.15",
+    "deepmerge-ts": "^8.0.2",
+    "valibot": "^1.4.2",
+    "mysql2": "^3.23.1",
+    "multer": "^2.3.0",
+    "js-yaml": "^4.3.2",
+    "lodash": "^4.17.24",
+    "body-parser": "^2.2.2",
+    "brace-expansion@<2": "^1.1.21",
+    "brace-expansion@>=4": "^5.0.12",
+    "dompurify": "^3.4.16",
+    "file-type": "^21.3.2",
+    "fast-copy": "^4.1.0",
+    "ajv@>=7": "^8.18.0",
+    "brace-expansion@>=2 <3": "^2.1.7",
+    "handlebars": "^4.7.10",
+    "picomatch@>=4": "^4.0.7",
+    "@angular-devkit/core": "^19.2.24",
+    "@angular-devkit/schematics": "^19.2.24"
   }
 }

@@ -15,7 +15,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { BroadcastService } from '../../broadcast/broadcast.service';
 
-@Processor('broadcast')
+@Processor('broadcast', { concurrency: 1 })
 export class BroadcastProcessor extends WorkerHost {
   private readonly logger = new Logger(BroadcastProcessor.name);
 

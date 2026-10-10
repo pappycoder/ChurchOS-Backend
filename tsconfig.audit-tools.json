@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.scripts.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["scripts/migrate-private-media.ts", "scripts/rotate-pastoral-key.ts"]
+}

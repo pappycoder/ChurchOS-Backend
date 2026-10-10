@@ -28,7 +28,7 @@
 
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { InstrumentedPrismaPg } from './query-metrics';
 import type { PoolConfig } from 'pg';
 
 /**
@@ -58,9 +58,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor() {
     const isServerless = Boolean(
       process.env.VERCEL ||
-        process.env.AWS_LAMBDA_FUNCTION_NAME ||
-        process.env.LAMBDA_TASK_ROOT ||
-        process.env.FUNCTION_TARGET,
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.LAMBDA_TASK_ROOT ||
+      process.env.FUNCTION_TARGET,
     );
     const connectionString = PrismaService.getConnectionString(isServerless);
     const poolConfig: PoolConfig = {
@@ -75,7 +75,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS ?? '15000', 10),
     };
 
-    const adapter = new PrismaPg(poolConfig);
+    const adapter = new InstrumentedPrismaPg(poolConfig);
     super({ adapter });
 
     this.logger.log(
@@ -95,10 +95,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     try {
       const url = new URL(configuredUrl);
-      if (
-        url.hostname.endsWith('.pooler.supabase.com') &&
-        (!url.port || url.port === '5432')
-      ) {
+      if (url.hostname.endsWith('.pooler.supabase.com') && (!url.port || url.port === '5432')) {
         url.port = '6543';
         url.searchParams.set('pgbouncer', 'true');
         return url.toString();

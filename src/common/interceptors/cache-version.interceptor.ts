@@ -15,7 +15,8 @@
 
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { concatMap } from 'rxjs/operators';
+import { randomUUID } from 'node:crypto';
 import { Request } from 'express';
 import { RedisService } from '../../redis/redis.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
@@ -46,11 +47,19 @@ export class CacheVersionInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap(() => {
-        // Fire-and-forget: bumping the version must never block the response.
-        this.redis
-          .incr(`${CACHE_VERSION_PREFIX}${churchId}`, VERSION_TTL_SECONDS)
-          .catch((err) => this.logger.warn(`Cache version bump failed: ${(err as Error).message}`));
+      concatMap(async (data) => {
+        // Finish invalidation before clients receive the successful write.
+        // A unique version avoids counter reuse after Redis key expiration.
+        try {
+          await this.redis.set(
+            `${CACHE_VERSION_PREFIX}${churchId}`,
+            randomUUID(),
+            VERSION_TTL_SECONDS,
+          );
+        } catch (err) {
+          this.logger.warn(`Cache version update failed: ${(err as Error).message}`);
+        }
+        return data;
       }),
     );
   }

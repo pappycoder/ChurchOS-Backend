@@ -247,7 +247,7 @@ export class AppointmentsService {
       this.prisma.appointment.count({ where }),
     ]);
 
-    const data = await Promise.all(rows.map((r) => this.buildDetail(r, churchId)));
+    const data = await this.buildDetails(rows, churchId);
     const summary = await this.countByStatus(churchId, profileId, q, profile);
     return { data, total, summary };
   }
@@ -626,47 +626,57 @@ export class AppointmentsService {
   }
 
   private async buildDetail(row: AppointmentRow, churchId: string): Promise<AppointmentDto> {
-    const profileIds = [...new Set([row.person_id, row.pastor_id])];
+    return (await this.buildDetails([row], churchId))[0];
+  }
+
+  private async buildDetails(rows: AppointmentRow[], churchId: string): Promise<AppointmentDto[]> {
+    if (!rows.length) return [];
+    const profileIds = [...new Set(rows.flatMap((row) => [row.person_id, row.pastor_id]))];
+    const visitorIds = [
+      ...new Set(rows.map((row) => row.visitor_id).filter((id): id is string => !!id)),
+    ];
     const profiles = await this.prisma.profile.findMany({
       where: { id: { in: profileIds }, church_id: churchId },
       select: { id: true, first_name: true, last_name: true, role: true, avatar_url: true },
     });
-    const byId = new Map(profiles.map((r) => [r.id, r]));
-    const person = byId.get(row.person_id);
-    const pastor = byId.get(row.pastor_id);
+    const visitors = visitorIds.length
+      ? await this.prisma.visitor.findMany({
+          where: { id: { in: visitorIds }, church_id: churchId },
+          select: { id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+    const visitorsById = new Map(visitors.map((visitor) => [visitor.id, visitor]));
+    return rows.map((row) => {
+      const person = byId.get(row.person_id);
+      const pastor = byId.get(row.pastor_id);
+      const visitor = row.visitor_id ? visitorsById.get(row.visitor_id) : undefined;
+      const visitorName = visitor
+        ? [visitor.first_name, visitor.last_name].filter(Boolean).join(' ').trim()
+        : undefined;
+      const whoKind: 'profile' | 'visitor' = row.visitor_id ? 'visitor' : 'profile';
 
-    let visitorName: string | undefined;
-    if (row.visitor_id) {
-      const visitor = await this.prisma.visitor.findFirst({
-        where: { id: row.visitor_id, church_id: churchId },
-        select: { first_name: true, last_name: true },
-      });
-      if (visitor) {
-        visitorName = [visitor.first_name, visitor.last_name].filter(Boolean).join(' ').trim();
-      }
-    }
-    const whoKind: 'profile' | 'visitor' = row.visitor_id ? 'visitor' : 'profile';
-
-    return {
-      id: row.id,
-      title: row.title,
-      scheduledAt: row.scheduled_at.toISOString(),
-      pastorId: row.pastor_id,
-      pastorName: this.fullName(pastor),
-      pastorRole: pastor ? (pastor.role as string[])[0] : undefined,
-      pastorAvatarUrl: pastor?.avatar_url ?? undefined,
-      personId: row.person_id,
-      personName: whoKind === 'visitor' ? (visitorName ?? '') : this.fullName(person),
-      personAvatarUrl: whoKind === 'visitor' ? undefined : (person?.avatar_url ?? undefined),
-      whoKind,
-      visitorId: row.visitor_id ?? undefined,
-      visitorName,
-      location: row.location ?? undefined,
-      notes: row.notes ?? undefined,
-      status: row.status,
-      createdAt: row.created_at.toISOString(),
-      archivedAt: row.archived_at ? row.archived_at.toISOString() : undefined,
-    };
+      return {
+        id: row.id,
+        title: row.title,
+        scheduledAt: row.scheduled_at.toISOString(),
+        pastorId: row.pastor_id,
+        pastorName: this.fullName(pastor),
+        pastorRole: pastor ? (pastor.role as string[])[0] : undefined,
+        pastorAvatarUrl: pastor?.avatar_url ?? undefined,
+        personId: row.person_id,
+        personName: whoKind === 'visitor' ? (visitorName ?? '') : this.fullName(person),
+        personAvatarUrl: whoKind === 'visitor' ? undefined : (person?.avatar_url ?? undefined),
+        whoKind,
+        visitorId: row.visitor_id ?? undefined,
+        visitorName,
+        location: row.location ?? undefined,
+        notes: row.notes ?? undefined,
+        status: row.status,
+        createdAt: row.created_at.toISOString(),
+        archivedAt: row.archived_at ? row.archived_at.toISOString() : undefined,
+      };
+    });
   }
 
   private async countByStatus(

@@ -11,6 +11,7 @@
 
 import {
   Controller,
+  Get,
   Post,
   Put,
   Patch,
@@ -48,6 +49,18 @@ import { RateLimit, RateLimitGuard, RATE_LIMITS } from '../common/guards/rate-li
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('session')
+  @UseGuards(JwtAuthGuard)
+  @Header('Cache-Control', 'private, no-store')
+  session(@CurrentUser() user: SupabaseUser) {
+    return {
+      userId: user.sub,
+      email: user.email ?? '',
+      expiresAt: user.exp,
+      sessionEstablished: true,
+    };
+  }
 
   /**
    * Register a new church admin account.
@@ -210,7 +223,6 @@ export class AuthController {
    * Returns new access and refresh tokens.
    */
   @Post('refresh')
-  @UseGuards(JwtAuthGuard, RateLimitGuard)
   @RateLimit(RATE_LIMITS.auth)
   @ApiBearerAuth('supabase-auth')
   @HttpCode(HttpStatus.OK)

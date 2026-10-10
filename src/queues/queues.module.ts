@@ -20,6 +20,7 @@
  * @since 1.0.0
  */
 
+import { workersEnabled } from './workers-enabled';
 import { Module, forwardRef, OnModuleDestroy, Logger } from '@nestjs/common';
 import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -79,16 +80,18 @@ const DEFAULT_JOB_OPTIONS = {
     SyncModule,
     forwardRef(() => BroadcastModule),
   ],
-  providers: [
-    WhatsAppOutboundProcessor,
-    EmailOutboundProcessor,
-    SmsOutboundProcessor,
-    RecurringGivingProcessor,
-    NightlyJobsProcessor,
-    BroadcastProcessor,
-    DeadLetterProcessor,
-    NightlyScheduler,
-  ],
+  providers: workersEnabled()
+    ? [
+        WhatsAppOutboundProcessor,
+        EmailOutboundProcessor,
+        SmsOutboundProcessor,
+        RecurringGivingProcessor,
+        NightlyJobsProcessor,
+        BroadcastProcessor,
+        DeadLetterProcessor,
+        NightlyScheduler,
+      ]
+    : [],
   exports: [BullModule],
 })
 export class QueuesModule implements OnModuleDestroy {

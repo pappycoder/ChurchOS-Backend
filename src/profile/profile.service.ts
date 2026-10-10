@@ -443,18 +443,17 @@ export class ProfileService {
   ): Promise<PermissionDetailDto[]> {
     const details = new Map<string, PermissionDetailDto>();
 
-    const results = await Promise.all(
-      roleNames.map(async (roleName) => {
-        try {
-          return {
-            roleName,
-            role: await this.permissionsService.getRolePermissions(churchId, roleName),
-          };
-        } catch {
-          return { roleName, role: null };
-        }
-      }),
-    );
+    const results = [];
+    for (const roleName of roleNames) {
+      try {
+        results.push({
+          roleName,
+          role: await this.permissionsService.getRolePermissions(churchId, roleName),
+        });
+      } catch {
+        results.push({ roleName, role: null });
+      }
+    }
 
     for (const { roleName, role } of results) {
       if (!role) continue;
@@ -1076,8 +1075,6 @@ export class ProfileService {
       throw new BadRequestException('Cannot deactivate a super_admin user');
     }
 
-    const supabase = this.supabase.client;
-
     // Mark the profile inactive so the auth layer rejects future requests
     await this.prisma.profile.update({
       where: { id: profileId },
@@ -1086,10 +1083,7 @@ export class ProfileService {
 
     await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: profile.user_id } });
     // Invalidate the user's active sessions so deactivation takes effect immediately
-    const { error } = await supabase.auth.admin.signOut(profile.user_id);
-    if (error) {
-      this.logger.warn(`Supabase sign-out warning: ${error.message}`);
-    }
+    // Local approvals are authoritative; the admin SDK cannot sign out a UUID.
 
     await this.audit.log({
       userId,
@@ -1175,12 +1169,7 @@ export class ProfileService {
     }
 
     await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: profile.user_id } });
-    const supabase = this.supabase.client;
-    const { error } = await supabase.auth.admin.signOut(profile.user_id);
-
-    if (error) {
-      this.logger.warn(`Force sign-out warning: ${error.message}`);
-    }
+    // Revoked approval blocks both existing JWTs and provider-refreshed tokens.
 
     await this.audit.log({
       userId,

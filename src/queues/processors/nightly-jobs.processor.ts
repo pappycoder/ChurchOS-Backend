@@ -23,7 +23,7 @@ import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncService } from '../../sync/sync.service';
 
-@Processor('nightly-jobs')
+@Processor('nightly-jobs', { concurrency: 1 })
 export class NightlyJobsProcessor extends WorkerHost {
   private readonly logger = new Logger(NightlyJobsProcessor.name);
 

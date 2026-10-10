@@ -16,7 +16,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { GivingService } from '../../giving/giving.service';
 
-@Processor('recurring-giving')
+@Processor('recurring-giving', { concurrency: 1 })
 export class RecurringGivingProcessor extends WorkerHost {
   private readonly logger = new Logger(RecurringGivingProcessor.name);
 

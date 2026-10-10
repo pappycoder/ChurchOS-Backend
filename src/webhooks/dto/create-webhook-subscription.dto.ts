@@ -14,7 +14,7 @@ export class CreateWebhookSubscriptionDto {
     description: 'URL to receive webhook payloads',
     example: 'https://example.com/webhooks/churchos',
   })
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_protocol: true, disallow_auth: true })
   @IsNotEmpty()
   url!: string;
 

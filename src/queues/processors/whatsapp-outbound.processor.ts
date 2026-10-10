@@ -40,7 +40,7 @@ type WhatsAppTemplateJob = Job<{
   messageId?: string;
 }>;
 
-@Processor('whatsapp-outbound')
+@Processor('whatsapp-outbound', { concurrency: 1 })
 export class WhatsAppOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(WhatsAppOutboundProcessor.name);
 

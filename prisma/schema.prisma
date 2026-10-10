@@ -429,6 +429,7 @@ model Transaction {
   service  Service?        @relation(fields: [service_id], references: [id], onDelete: SetNull)
   event    Event?          @relation(fields: [event_id], references: [id], onDelete: SetNull)
 
+  @@index([church_id, branch_id, created_at])
   @@index([church_id, member_id, created_at])
   @@index([church_id, service_id])
   @@index([payment_reference])
@@ -693,6 +694,9 @@ model SermonBookmark {
 }
 
 model MediaAsset {
+  uploaded_by_user_id String?
+  storage_path String?
+  storage_bucket String?
   id          String   @id @default(uuid())
   church_id   String
   branch_id   String?
@@ -941,6 +945,7 @@ model Asset {
   scan_logs    AssetScanLog[]
 
   @@unique([church_id, asset_tag])
+  @@index([church_id, branch_id, created_at])
   @@index([church_id])
   @@index([church_id, status])
   @@index([church_id, category_id])
@@ -1229,12 +1234,15 @@ model SyncQueue {
   church_id  String
   entity     String
   entity_id  String
+  mutation_id String?
   action     String // create, update, delete
   data       Json
   synced     Boolean   @default(false)
   synced_at  DateTime?
   created_at DateTime  @default(now())
 
+  @@unique([church_id, mutation_id])
+  @@index([church_id, created_at, id])
   @@index([synced, created_at])
   @@map("sync_queue")
 }
@@ -1265,6 +1273,7 @@ model Notification {
 
   @@index([church_id, profile_id, read_at])
   @@map("notifications")
+  @@index([church_id, profile_id, created_at])
 }
 
 // Internal in-app email: a message body (email_messages) with per-recipient

@@ -14,10 +14,18 @@
  * @since 1.0.0
  */
 
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  Logger,
+  HttpException,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
+import { queryMetrics } from '../../prisma/query-metrics';
 import { randomUUID } from 'crypto';
 
 /**
@@ -38,8 +46,8 @@ export class LoggingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
 
-    const { method, url, ip } = request;
-    const userAgent = request.get('user-agent') || '';
+    const { method } = request;
+    const url = request.originalUrl.split('?')[0];
     const requestId = randomUUID();
 
     // Attach request ID to request and response header for tracing
@@ -47,24 +55,30 @@ export class LoggingInterceptor implements NestInterceptor {
     (request as unknown as Record<string, unknown>)['requestId'] = requestId;
     response.setHeader('X-Request-Id', requestId);
 
-    const startTime = Date.now();
+    const metrics = queryMetrics.getStore();
+    const startTime = metrics?.startedAt ?? performance.now();
 
     return next.handle().pipe(
       tap({
         next: () => {
           const { statusCode } = response;
-          const duration = Date.now() - startTime;
+          const duration = Math.round(performance.now() - startTime);
 
+          if (!response.headersSent)
+            response.setHeader(
+              'Server-Timing',
+              `app;dur=${duration}, db;dur=${Math.round(metrics?.milliseconds ?? 0)}`,
+            );
           this.logger.log(
-            `${method} ${url} ${statusCode} ${duration}ms - ${ip} - ${userAgent} - ${requestId}`,
+            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} requestId=${requestId}`,
           );
         },
         error: (error) => {
-          const statusCode = response.statusCode || 500;
-          const duration = Date.now() - startTime;
+          const statusCode = error instanceof HttpException ? error.getStatus() : 500;
+          const duration = Math.round(performance.now() - startTime);
 
           this.logger.error(
-            `${method} ${url} ${statusCode} ${duration}ms - ${ip} - ${userAgent} - ${requestId}`,
+            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} requestId=${requestId}`,
             error instanceof Error ? error.stack : String(error),
           );
         },

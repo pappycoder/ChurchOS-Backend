@@ -1,0 +1,9 @@
+ALTER TABLE "sync_queue" ADD COLUMN "mutation_id" TEXT;
+CREATE UNIQUE INDEX "sync_queue_church_id_mutation_id_key" ON "sync_queue"("church_id", "mutation_id");
+CREATE INDEX "sync_queue_church_id_created_at_id_idx" ON "sync_queue"("church_id", "created_at", "id");
+ALTER TABLE "media_assets" ADD COLUMN "storage_path" TEXT;
+ALTER TABLE "media_assets" ADD COLUMN "storage_bucket" TEXT;
+CREATE INDEX "transactions_church_id_branch_id_created_at_idx" ON "transactions"("church_id", "branch_id", "created_at");
+CREATE INDEX "assets_church_id_branch_id_created_at_idx" ON "assets"("church_id", "branch_id", "created_at");
+CREATE INDEX "notifications_church_id_profile_id_created_at_idx" ON "notifications"("church_id", "profile_id", "created_at");
+ALTER TABLE "media_assets" ADD COLUMN "uploaded_by_user_id" TEXT;

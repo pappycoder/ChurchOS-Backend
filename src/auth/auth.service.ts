@@ -101,7 +101,7 @@ export class AuthService {
         authError.message?.includes('too many') ||
         authError.status === 429
       ) {
-        this.logger.warn(`Supabase signUp rate limited for ${dto.email}`);
+        this.logger.warn('Registration rate limited');
         throw new HttpException(
           'Too many registration attempts. Please try again in a few minutes.',
           HttpStatus.TOO_MANY_REQUESTS,
@@ -161,7 +161,7 @@ export class AuthService {
         },
       });
 
-      this.logger.log(`User registered: ${dto.email} → ${result.church.name}`);
+      this.logger.log('Account registered');
 
       return {
         userId,
@@ -205,13 +205,13 @@ export class AuthService {
         error.message?.includes('too many') ||
         error.status === 429
       ) {
-        this.logger.warn(`Login rate limited for ${dto.email}`);
+        this.logger.warn('Login rate limited');
         throw new HttpException(
           'Too many login attempts. Please try again in a few minutes.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
-      this.logger.warn(`Login failed for ${dto.email}: ${error.message}`);
+      this.logger.warn('Login credentials rejected');
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -327,8 +327,8 @@ export class AuthService {
       // the caller can prompt the user to retry / request the code again.
       try {
         await this.sendLoginCode(userId, recipient, profile.church.name ?? 'ChurchOS');
-      } catch (err) {
-        this.logger.error(`Failed to send 2FA login code to ${recipient}: ${this.msg(err)}`);
+      } catch {
+        this.logger.error('Unable to deliver legacy 2FA migration code');
         // Best-effort cleanup of the pending (unverifiable) session.
         await this.redis
           .del(`2fa:login:pending:${userId}`)
@@ -340,7 +340,7 @@ export class AuthService {
         );
       }
 
-      this.logger.log(`2FA required for login: ${email}`);
+      this.logger.log(`2FA required for user ${userId}`);
       return {
         requiresTwoFactor: true,
         twoFactorEmail: maskTwoFactorEmail(recipient),
@@ -350,8 +350,9 @@ export class AuthService {
     }
 
     await this.auditSuccessfulLogin(session, false);
-    this.logger.log(`User logged in: ${email}`);
+    this.logger.log(`User logged in: ${userId}`);
 
+    await this.authenticator.approve(userId, session.accessToken!, 'password-session');
     return session;
   }
 
@@ -690,7 +691,11 @@ export class AuthService {
   async logout(userId: string, token: string, churchId: string): Promise<void> {
     await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: userId } });
     // Calculate TTL from JWT expiry (default 3600s if we can't parse)
-    const ttlSeconds = 3600;
+    const { payload } = await this.jwks.verifyToken(token);
+    const ttlSeconds = Math.max(
+      1,
+      (payload.exp ?? Math.floor(Date.now() / 1000) + 3600) - Math.floor(Date.now() / 1000),
+    );
 
     // Blacklist the token in Redis (non-fatal: a Redis outage must not block logout)
     try {
@@ -702,7 +707,7 @@ export class AuthService {
     }
 
     // Revoke all sessions in Supabase (invalidates refresh tokens)
-    const { error } = await this.supabase.client.auth.admin.signOut(userId);
+    const { error } = await this.supabase.client.auth.admin.signOut(token);
     if (error) {
       this.logger.warn(`Failed to revoke Supabase sessions for user ${userId}: ${error.message}`);
     }
@@ -728,23 +733,30 @@ export class AuthService {
    * @param email - Email address to send reset link to
    * @param redirectTo - URL to redirect to after password reset
    */
-  async forgotPassword(email: string, redirectTo?: string): Promise<void> {
-    const webUrl = this.config.get<string>('WEB_URL', 'http://localhost:3000');
-    const redirectUrl = redirectTo || `${webUrl}/reset-password`;
-
-    // TODO: Send the reset email via Resend (branded template with expiry
-    // details and support contact) — generate the link via
-    // supabase.auth.admin.generateLink and email it ourselves instead of
-    // relying on Supabase's default reset template.
-    const { error } = await this.supabase.client.auth.resetPasswordForEmail(email, {
-      redirectTo: redirectUrl,
-    });
-
-    if (error) {
-      this.logger.error(`Forgot password failed for ${email}: ${error.message}`);
-      // Don't throw — always return success to prevent email enumeration
-    } else {
-      this.logger.log(`Password reset email sent to: ${email}`);
+  async forgotPassword(email: string, _redirectTo?: string): Promise<void> {
+    // Generate a recovery-only token hash and deliver it without establishing
+    // a session on the shared admin client. Never accept an arbitrary redirect.
+    try {
+      const { data, error } = await this.supabase.client.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+      });
+      if (error || !data.properties?.hashed_token) return;
+      const link = new URL(
+        '/reset-password',
+        this.config.get<string>('WEB_URL', 'http://localhost:3000'),
+      );
+      link.searchParams.set('token_hash', data.properties.hashed_token);
+      const safeLink = link.href.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      await this.resend.sendEmail(
+        email,
+        'Reset your ChurchOS password',
+        `<h2>Reset your password</h2><p>Use the button below to choose a new password. This link can be used once.</p><p><a href="${safeLink}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+        '',
+      );
+    } catch {
+      // Uniform public response prevents account enumeration. No tokens in logs.
+      this.logger.warn('Password recovery email could not be delivered');
     }
   }
 
@@ -755,16 +767,21 @@ export class AuthService {
    * @param newPassword - New password to set
    * @throws BadRequestException if token is invalid or expired
    */
-  async resetPassword(_token: string, newPassword: string): Promise<void> {
-    const { error } = await this.supabase.client.auth.updateUser({
-      password: newPassword,
-    });
-
-    if (error) {
-      this.logger.error(`Password reset failed: ${error.message}`);
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    // Only a recovery token may establish this isolated password-reset session.
+    const client = this.supabase.createAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ token_hash: token, type: 'recovery' });
+    if (error || !data.user || !data.session) {
       throw new BadRequestException('Invalid or expired recovery token');
     }
-
+    const { error: updateError } = await client.auth.updateUser({ password: newPassword });
+    if (updateError) throw new BadRequestException('Unable to reset your password');
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: data.user.id } });
+    const { error: revokeError } = await this.supabase.client.auth.admin.signOut(
+      data.session.access_token,
+      'global',
+    );
+    if (revokeError) this.logger.warn('Provider session revocation failed after password reset');
     this.logger.log('Password reset completed successfully');
   }
 
@@ -803,10 +820,12 @@ export class AuthService {
     }
 
     // Verify current password
-    const { error: signInError } = await this.supabase.createAuthClient().auth.signInWithPassword({
-      email: userData.user.email,
-      password: currentPassword,
-    });
+    const { data: verifiedPassword, error: signInError } = await this.supabase
+      .createAuthClient()
+      .auth.signInWithPassword({
+        email: userData.user.email,
+        password: currentPassword,
+      });
 
     if (signInError) {
       this.logger.warn(`Change password verification failed for ${userId}: ${signInError.message}`);
@@ -826,7 +845,10 @@ export class AuthService {
     // Revoke existing sessions so other devices must re-authenticate.
     // Access tokens stay valid until expiry, so the current device keeps
     // working until its next refresh.
-    const { error: signOutError } = await this.supabase.client.auth.admin.signOut(userId);
+    const { error: signOutError } = await this.supabase.client.auth.admin.signOut(
+      verifiedPassword.session!.access_token,
+      'global',
+    );
     if (signOutError) {
       this.logger.warn(
         `Failed to revoke sessions after password change for ${userId}: ${signOutError.message}`,
@@ -859,11 +881,16 @@ export class AuthService {
     refreshToken: string;
     expiresAt: number;
   }> {
+    if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096) {
+      throw new BadRequestException('A valid refresh token is required');
+    }
     const { data, error } = await this.supabase.createAuthClient().auth.refreshSession({
       refresh_token: refreshToken,
     });
 
     if (error) {
+      if (!error.status || error.status >= 500)
+        throw new ServiceUnavailableException('Session refresh is temporarily unavailable');
       this.logger.warn(`Session refresh failed: ${error.message}`);
       throw new UnauthorizedException('Invalid or expired refresh token');
     }

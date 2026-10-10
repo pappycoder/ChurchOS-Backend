@@ -10,8 +10,16 @@
  * @since 1.0.0
  */
 
-import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
-import { Request } from 'express';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+  Logger,
+  HttpException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { AuthenticatedRequest } from '../../common/decorators/current-user.decorator';
+import { errors } from 'jose';
 import { JwksService } from '../services/jwks.service';
 import { SupabaseJwtPayload } from '../strategies/jwt.strategy';
 import { AuthenticatorService } from '../services/authenticator.service';
@@ -21,7 +29,7 @@ import { RedisService } from '../../redis/redis.service';
  * JWT authentication guard for Supabase Auth tokens.
  *
  * Uses the `jose` library to verify JWTs against Supabase's remote JWKS.
- * Works with both ES256 (new Supabase) and HS256 (legacy) tokens.
+ * Supports the configured Supabase asymmetric signing keys.
  *
  * Apply to any route that requires a valid JWT:
  *
@@ -45,7 +53,7 @@ export class JwtAuthGuard {
   ) {}
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -54,8 +62,10 @@ export class JwtAuthGuard {
 
     const token = authHeader.slice(7);
 
-    return this.jwksService
-      .verifyToken(token)
+    const verification = request.verifiedJwt
+      ? Promise.resolve({ payload: request.verifiedJwt })
+      : this.jwksService.verifyToken(token);
+    return verification
       .then(async ({ payload }) => {
         if (!payload.sub) {
           throw new UnauthorizedException('Invalid token: missing subject claim');
@@ -76,7 +86,7 @@ export class JwtAuthGuard {
           throw new UnauthorizedException('Token has been revoked');
         }
 
-        await this.authenticator.assertSession(payload);
+        await this.authenticator.assertSession(payload, request.profile);
 
         // Map JWT payload to SupabaseJwtPayload
         // Include both `sub` and `id` (mapped from sub) for compatibility
@@ -98,12 +108,15 @@ export class JwtAuthGuard {
         return true;
       })
       .catch((error) => {
-        if (error instanceof UnauthorizedException) {
+        if (error instanceof HttpException) {
           throw error;
         }
         const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(`JWT verification failed: ${message}`);
-        throw new UnauthorizedException('Invalid or expired token');
+        if (error instanceof errors.JOSEError) {
+          throw new UnauthorizedException('Invalid or expired token');
+        }
+        throw new ServiceUnavailableException('Unable to verify your session. Please try again.');
       });
   }
 }

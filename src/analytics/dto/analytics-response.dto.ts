@@ -229,7 +229,11 @@ export class DashboardResponseDto {
   @ApiProperty({ description: 'Pending form submissions' })
   pendingSubmissions!: number;
 
-  @ApiProperty({ description: 'Engagement score distribution', type: 'object' })
+  @ApiProperty({
+    description: 'Engagement score distribution',
+    type: 'object',
+    additionalProperties: true,
+  })
   engagementDistribution!: Record<string, number>;
 }
 
@@ -255,13 +259,21 @@ export class GivingAnalyticsResponseDto {
   @ApiProperty({ description: 'Breakdown by transaction type', type: [TypeBreakdownDto] })
   byType!: TypeBreakdownDto[];
 
-  @ApiProperty({ description: 'Breakdown by transaction status', type: 'object' })
+  @ApiProperty({
+    description: 'Breakdown by transaction status',
+    type: 'object',
+    additionalProperties: true,
+  })
   byStatus!: Record<string, number>;
 
   @ApiProperty({ description: 'Top donors', type: [TopDonorDto] })
   topDonors!: TopDonorDto[];
 
-  @ApiProperty({ description: 'Recurring giving summary', type: 'object' })
+  @ApiProperty({
+    description: 'Recurring giving summary',
+    type: 'object',
+    additionalProperties: true,
+  })
   recurring!: {
     active: number;
     totalMonthlyAmount: number;
@@ -285,7 +297,7 @@ export class AttendanceAnalyticsResponseDto {
   @ApiProperty({ description: 'Visitor check-ins' })
   visitors!: number;
 
-  @ApiProperty({ description: 'Breakdown by source', type: 'object' })
+  @ApiProperty({ description: 'Breakdown by source', type: 'object', additionalProperties: true })
   bySource!: Record<string, number>;
 
   @ApiProperty({ description: 'Breakdown by branch', type: [BranchBreakdownDto] })
@@ -311,13 +323,13 @@ export class MemberAnalyticsResponseDto {
   @ApiProperty({ description: 'Total members' })
   total!: number;
 
-  @ApiProperty({ description: 'Members by status', type: 'object' })
+  @ApiProperty({ description: 'Members by status', type: 'object', additionalProperties: true })
   byStatus!: Record<string, number>;
 
-  @ApiProperty({ description: 'Members by gender', type: 'object' })
+  @ApiProperty({ description: 'Members by gender', type: 'object', additionalProperties: true })
   byGender!: Record<string, number>;
 
-  @ApiProperty({ description: 'Members by age group', type: 'object' })
+  @ApiProperty({ description: 'Members by age group', type: 'object', additionalProperties: true })
   byAgeGroup!: Record<string, number>;
 
   @ApiProperty({ description: 'Monthly member growth', type: [DatePointDto] })

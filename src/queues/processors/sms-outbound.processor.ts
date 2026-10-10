@@ -17,7 +17,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { TermiiService } from '../../communication/termii.service';
 
-@Processor('sms-outbound')
+@Processor('sms-outbound', { concurrency: 1 })
 export class SmsOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(SmsOutboundProcessor.name);
 

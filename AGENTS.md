@@ -14,7 +14,7 @@
 | Layer | Technology |
 |---|---|
 | Runtime | Node.js 20+ |
-| Framework | NestJS 10 (TypeScript) |
+| Framework | NestJS 11 / Express 5 (TypeScript) |
 | ORM | Prisma 7 (PostgreSQL) |
 | Auth | Supabase Auth (JWT ES256 via JWKS, MFA) |
 | Validation | class-validator + class-transformer |
@@ -225,6 +225,9 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 All notable changes to this project are documented below. Update this section with every change.
 
 ### [Unreleased]
+
+- **2026-10-10 — Audit security, performance and experience implementation.** Signed tenant hydration reuses JWT/profile verification; persisted approval applies to password and MFA sessions; recovery tokens are consumed and session revocation is local-authoritative. Sync enforces permission/tenant/branch/ownership scope, bounded pagination and operation fingerprints; financial/ticket/check-in writes require domain APIs. Restricted managed media moves to private storage with authenticated range delivery; upload signatures/pixel limits and tenant-safe deletion are enforced. Webhooks validate/pin public HTTPS destinations; public submissions are throttled and sensitive production rate limits fail closed. Appointment detail queries are batched; cache invalidation awaits version changes; sanitized query/timing metrics and telemetry added. Serverless processors move to a persistent `start:worker` process. Nest 11 compatibility and dependency/lock updates included. Add `media:restricted:read` through permission reseeding (`perms:v13`). Apply migration `20261010200000_audit_performance_security`; use dry-run-first storage/key maintenance tools and deploy backend/web together. Full rollout, offline contract and validation limits: `docs/AUDIT-ROLLOUT.md`. No live migration/seed/storage change was run. Login selector retained in web for testing.
+
 
 - **Giving receipt PDF redesign**: reusable print colors, branded headers and page footers, bundled Unicode fonts, amount panel, grouped donor and contribution details, wrapped field values, and overflow pagination. Nest copies the PDF font and logo assets into dist. Existing receipt eligibility, scope, and receipt numbering remain unchanged.
 

@@ -13,6 +13,7 @@ import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { sendWebhook } from './safe-webhook-request';
 import { createHmac } from 'crypto';
 
 interface WebhookDeliveryJob {
@@ -24,7 +25,7 @@ interface WebhookDeliveryJob {
   payload: Record<string, unknown>;
 }
 
-@Processor('webhook-delivery')
+@Processor('webhook-delivery', { concurrency: 2 })
 export class WebhookDeliveryProcessor extends WorkerHost {
   private readonly logger = new Logger(WebhookDeliveryProcessor.name);
 
@@ -43,31 +44,20 @@ export class WebhookDeliveryProcessor extends WorkerHost {
     const body = JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
     const signature = createHmac('sha256', secret).update(body).digest('hex');
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': `sha256=${signature}`,
-        'X-Webhook-Event': event,
-      },
-      body,
-      signal: AbortSignal.timeout(10000),
+    const response = await sendWebhook(url, body, {
+      'Content-Type': 'application/json',
+      'X-Webhook-Signature': `sha256=${signature}`,
+      'X-Webhook-Event': event,
     });
-
-    const responseBody = await response.text().catch(() => '');
-
-    if (!response.ok) {
-      throw new Error(
-        `Webhook delivery failed: HTTP ${response.status} - ${responseBody.slice(0, 500)}`,
-      );
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Webhook delivery failed: HTTP ${response.status}`);
     }
-
     await this.prisma.webhookDelivery.update({
       where: { id: deliveryId },
       data: {
         status: 'success',
         response_status: response.status,
-        response_body: responseBody.slice(0, 2000),
+        response_body: response.body,
       },
     });
   }

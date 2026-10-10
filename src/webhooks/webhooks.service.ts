@@ -1,3 +1,4 @@
+import { resolveWebhookUrl } from './safe-webhook-request';
 /**
  * @file webhooks.service.ts
  * @description Service for outbound webhook management and delivery.
@@ -40,6 +41,7 @@ export class WebhooksService {
     churchId: string,
     userId: string,
   ): Promise<WebhookSubscriptionResponseDto> {
+    await resolveWebhookUrl(dto.url);
     const secret = dto.secret || randomBytes(32).toString('hex');
 
     const subscription = await this.prisma.webhookSubscription.create({

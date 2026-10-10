@@ -166,6 +166,7 @@ export function generateAllPermissions(): { name: string; resource: string; acti
     resource: 'data_scope:church',
     action: 'read',
   });
+  permissions.push({ name: 'media:restricted:read', resource: 'media:restricted', action: 'read' });
   return permissions;
 }
 

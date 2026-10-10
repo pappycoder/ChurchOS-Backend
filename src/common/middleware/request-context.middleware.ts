@@ -3,8 +3,7 @@
  * @description Middleware that populates RequestContext from the authenticated request.
  *
  * Runs on every request at the Express layer (before NestJS guards).
- * Extracts the Bearer token, decodes it (without verification — the guard
- * handles that) to get the user's Supabase ID, then looks up the Profile
+ * Extracts the Bearer token, verifies it to get the user's Supabase ID, then looks up the Profile
  * from the database to get church_id/branch_id/role. Attaches both user
  * and profile to the request so downstream guards, controllers, and the
  * RequestContextService all have access to the tenant context.
@@ -20,7 +19,9 @@ import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
 import { PermissionsService } from '../../auth/services/permissions.service';
-import { decodeJwt } from 'jose';
+import { JwksService } from '../../auth/services/jwks.service';
+import { queryMetrics } from '../../prisma/query-metrics';
+import { errors } from 'jose';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
@@ -28,9 +29,16 @@ export class RequestContextMiddleware implements NestMiddleware {
     private readonly requestContext: RequestContextService,
     private readonly prisma: PrismaService,
     private readonly permissionsService: PermissionsService,
+    private readonly jwks: JwksService,
   ) {}
 
-  async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  async use(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return queryMetrics.run({ queries: 0, milliseconds: 0, startedAt: performance.now() }, () =>
+      this.hydrate(req, res, next),
+    );
+  }
+
+  private async hydrate(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const authReq = req as AuthenticatedRequest;
 
     // Extract Bearer token from Authorization header
@@ -46,18 +54,19 @@ export class RequestContextMiddleware implements NestMiddleware {
       return;
     }
 
-    // Decode (not verify) the JWT to get the user's Supabase ID early.
-    // The JwtAuthGuard will fully verify the token later.
+    // Verify identity before any tenant lookup; the guard reuses this result.
     let sub: string;
     try {
-      const payload = decodeJwt(token);
+      const { payload } = await this.jwks.verifyToken(token);
+      authReq.verifiedJwt = payload;
       sub = payload.sub ?? '';
       if (!sub) {
         next();
         return;
       }
-    } catch {
-      next();
+    } catch (error) {
+      if (error instanceof errors.JOSEError) next();
+      else next(error);
       return;
     }
 
@@ -88,6 +97,8 @@ export class RequestContextMiddleware implements NestMiddleware {
           role: true,
           status: true,
           is_admin_hq: true,
+          two_factor_enabled: true,
+          authenticator: { select: { revision: true } },
           church: { select: { archived_at: true } },
         },
       });
@@ -98,6 +109,8 @@ export class RequestContextMiddleware implements NestMiddleware {
         );
         authReq.profile = {
           id: profile.id,
+          two_factor_enabled: profile.two_factor_enabled,
+          authenticator: profile.authenticator,
           church_id: profile.church_id,
           branch_id: profile.branch_id ?? undefined,
           member_id: profile.member_id ?? undefined,

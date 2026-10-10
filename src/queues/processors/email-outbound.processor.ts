@@ -17,7 +17,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { ResendService } from '../../communication/resend.service';
 
-@Processor('email-outbound')
+@Processor('email-outbound', { concurrency: 1 })
 export class EmailOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailOutboundProcessor.name);
 

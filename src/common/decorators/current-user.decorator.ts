@@ -1,4 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { JWTPayload } from 'jose';
 import { Request } from 'express';
 import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
 
@@ -13,6 +14,7 @@ export type SupabaseUser = SupabaseJwtPayload;
  * The JwtAuthGuard attaches `user` and `profile` to the request.
  */
 export interface AuthenticatedRequest extends Request {
+  verifiedJwt?: JWTPayload;
   /** The authenticated Supabase user */
   user: SupabaseJwtPayload;
   /** The user's ChurchOS profile (role, church_id, branch_id) */
@@ -32,6 +34,8 @@ export interface AuthenticatedRequest extends Request {
     /** HQ access override: when true, the viewer sees data from ALL branches */
     is_admin_hq?: boolean;
     permissions?: string[];
+    two_factor_enabled?: boolean;
+    authenticator?: { revision: string } | null;
   };
 }
 

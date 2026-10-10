@@ -74,7 +74,14 @@ export class PastoralService {
     private readonly audit: AuditLoggingService,
   ) {
     // Read the raw encryption key from environment or use a dev fallback
-    const rawKey = process.env.PASTORAL_ENCRYPTION_KEY || 'dev-only-change-in-production-32b';
+    const configuredKey = process.env.PASTORAL_ENCRYPTION_KEY;
+    if (
+      process.env.NODE_ENV === 'production' &&
+      (!configuredKey || configuredKey === 'dev-only-change-in-production-32b')
+    ) {
+      throw new Error('PASTORAL_ENCRYPTION_KEY must be configured in production');
+    }
+    const rawKey = configuredKey || 'dev-only-change-in-production-32b';
     // Derive a 32-byte AES-256 key using scrypt with a fixed salt
     this.encryptionKey = crypto.scryptSync(rawKey, 'churchos-pastoral-salt', 32);
   }

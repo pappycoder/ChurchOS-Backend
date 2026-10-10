@@ -9,6 +9,8 @@
 
 import {
   Injectable,
+  ForbiddenException,
+  StreamableFile,
   Logger,
   BadRequestException,
   InternalServerErrorException,
@@ -24,6 +26,7 @@ import { ListLibraryDto } from './dto/list-library.dto';
 import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
 import { MediaFolderSummaryDto } from './dto/media-folder-summary.dto';
 import sharp from 'sharp';
+import { Readable } from 'node:stream';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 
@@ -78,6 +81,8 @@ export interface MulterFile {
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly bucket: string;
+  private privateBucketReady?: Promise<void>;
+  private readonly publicFolders = new Set(['churches', 'branches', 'profiles']);
 
   /**
    * Creates an instance of MediaService.
@@ -113,7 +118,17 @@ export class MediaService {
     branchId?: string,
   ): Promise<MediaResponseDto> {
     this.validateFile(file, true);
+    this.validateFolder(folder, viewer);
     const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && branchId && branchId !== scope.branchId)
+      throw new ForbiddenException('You can only upload to your branch');
+    const assetId = randomUUID();
+    const storageBucket = await this.uploadBucket(folder);
+    if (
+      branchId &&
+      !(await this.prisma.branch.findFirst({ where: { id: branchId, church_id: churchId } }))
+    )
+      throw new BadRequestException('Invalid branch');
 
     const optimized = await this.optimizeImage(file.buffer);
     const ext = 'webp';
@@ -121,7 +136,7 @@ export class MediaService {
     const path = `${folder}/${churchId}/${filename}`;
 
     const { error } = await this.supabase.client.storage
-      .from(this.bucket)
+      .from(storageBucket)
       .upload(path, optimized.buffer, {
         contentType: 'image/webp',
         upsert: false,
@@ -132,20 +147,26 @@ export class MediaService {
       throw new InternalServerErrorException('Failed to upload image');
     }
 
-    const { data: urlData } = this.supabase.client.storage.from(this.bucket).getPublicUrl(path);
+    const assetUrl = this.publicFolders.has(folder)
+      ? this.supabase.client.storage.from(storageBucket).getPublicUrl(path).data.publicUrl
+      : `${this.config.get<string>('WEB_URL', 'http://localhost:3000')}/api/backend/media/files/${assetId}`;
 
     const metadata = await sharp(optimized.buffer).metadata();
 
     const asset = await this.prisma.mediaAsset.create({
       data: {
+        id: assetId,
+        uploaded_by_user_id: userId ?? null,
+        storage_path: path,
+        storage_bucket: storageBucket,
         church_id: churchId,
-        branch_id: scope.churchOnly ? branchId ?? null : scope.branchId ?? null,
+        branch_id: scope.churchOnly ? (branchId ?? null) : (scope.branchId ?? null),
         filename,
-        url: urlData.publicUrl,
+        url: assetUrl,
         mime_type: 'image/webp',
         size_bytes: optimized.buffer.length,
         folder,
-        permissions: 'members',
+        permissions: this.publicFolders.has(folder) ? 'public' : 'members',
       },
     });
 
@@ -162,7 +183,7 @@ export class MediaService {
 
     return {
       assetId: asset.id,
-      url: urlData.publicUrl,
+      url: assetUrl,
       path,
       width: metadata.width,
       height: metadata.height,
@@ -189,15 +210,43 @@ export class MediaService {
     viewer?: ViewerScope | null,
     branchId?: string,
   ): Promise<MediaResponseDto> {
+    if (file && ALLOWED_IMAGE_TYPES.includes(file.mimetype))
+      return this.uploadImage(file, folder, churchId, userId, viewer, branchId);
     this.validateFile(file, false);
+    this.validateFolder(folder, viewer);
     const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && branchId && branchId !== scope.branchId)
+      throw new ForbiddenException('You can only upload to your branch');
+    const assetId = randomUUID();
+    const storageBucket = await this.uploadBucket(folder);
+    if (
+      branchId &&
+      !(await this.prisma.branch.findFirst({ where: { id: branchId, church_id: churchId } }))
+    )
+      throw new BadRequestException('Invalid branch');
 
-    const ext = file.originalname.split('.').pop() || 'bin';
+    const extensions: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'text/csv': 'csv',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-excel': 'xls',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/ogg': 'ogg',
+      'audio/mp4': 'm4a',
+      'audio/aac': 'aac',
+      'audio/flac': 'flac',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/ogg': 'ogg',
+      'video/quicktime': 'mov',
+    };
+    const ext = extensions[file.mimetype] ?? 'bin';
     const filename = `${randomUUID()}.${ext}`;
     const path = `${folder}/${churchId}/${filename}`;
 
     const { error } = await this.supabase.client.storage
-      .from(this.bucket)
+      .from(storageBucket)
       .upload(path, file.buffer, {
         contentType: file.mimetype,
         upsert: false,
@@ -208,18 +257,24 @@ export class MediaService {
       throw new InternalServerErrorException('Failed to upload file');
     }
 
-    const { data: urlData } = this.supabase.client.storage.from(this.bucket).getPublicUrl(path);
+    const assetUrl = this.publicFolders.has(folder)
+      ? this.supabase.client.storage.from(storageBucket).getPublicUrl(path).data.publicUrl
+      : `${this.config.get<string>('WEB_URL', 'http://localhost:3000')}/api/backend/media/files/${assetId}`;
 
     const asset = await this.prisma.mediaAsset.create({
       data: {
+        id: assetId,
+        uploaded_by_user_id: userId ?? null,
+        storage_path: path,
+        storage_bucket: storageBucket,
         church_id: churchId,
-        branch_id: scope.churchOnly ? branchId ?? null : scope.branchId ?? null,
+        branch_id: scope.churchOnly ? (branchId ?? null) : (scope.branchId ?? null),
         filename,
-        url: urlData.publicUrl,
+        url: assetUrl,
         mime_type: file.mimetype,
         size_bytes: file.buffer.length,
         folder,
-        permissions: 'members',
+        permissions: this.publicFolders.has(folder) ? 'public' : 'members',
       },
     });
 
@@ -236,7 +291,7 @@ export class MediaService {
 
     return {
       assetId: asset.id,
-      url: urlData.publicUrl,
+      url: assetUrl,
       path,
       size: file.buffer.length,
       contentType: file.mimetype,
@@ -248,12 +303,29 @@ export class MediaService {
    * @param path - Storage path of the file to delete
    * @returns Promise<void>
    */
-  async deleteFile(path: string): Promise<void> {
-    const { error } = await this.supabase.client.storage.from(this.bucket).remove([path]);
-
-    if (error) {
-      this.logger.warn(`Failed to delete file at ${path}: ${error.message}`);
-    }
+  async deleteFile(
+    path: string,
+    churchId?: string,
+    userId?: string,
+    viewer?: ViewerScope,
+  ): Promise<void> {
+    if (
+      !churchId ||
+      path.split('/')[1] !== churchId ||
+      path.split('/').some((part) => !part || part === '.' || part === '..')
+    )
+      throw new ForbiddenException('Invalid storage path');
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: {
+        church_id: churchId,
+        OR: [
+          { storage_path: path },
+          { url: this.supabase.client.storage.from(this.bucket).getPublicUrl(path).data.publicUrl },
+        ],
+      },
+    });
+    if (!asset) throw new NotFoundException('Media asset not found');
+    await this.deleteAsset(asset.id, churchId, userId, viewer);
   }
 
   /**
@@ -263,10 +335,14 @@ export class MediaService {
    * @returns Promise<void>
    */
   async deleteByUrl(url: string): Promise<void> {
-    const extractedPath = this.extractPathFromUrl(url);
-    if (extractedPath) {
-      await this.deleteFile(extractedPath);
-    }
+    const path = this.extractPathFromUrl(url);
+    if (!path) return;
+    const asset = await this.prisma.mediaAsset.findFirst({ where: { url, storage_path: path } });
+    if (!asset || !this.publicFolders.has(asset.folder)) return;
+    const { error } = await this.supabase.client.storage
+      .from(asset.storage_bucket ?? this.bucket)
+      .remove([path]);
+    if (!error) await this.prisma.mediaAsset.delete({ where: { id: asset.id } });
   }
 
   /**
@@ -285,8 +361,10 @@ export class MediaService {
       church_id: churchId,
     };
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
-    else if (scope.churchOnly && dto.branchId) where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
+    if (!scope.churchOnly)
+      where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && dto.branchId)
+      where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
 
     if (dto.folder) {
       where.folder = { contains: dto.folder, mode: 'insensitive' };
@@ -296,8 +374,12 @@ export class MediaService {
       where.mime_type = { contains: dto.mimeType, mode: 'insensitive' };
     }
 
-    if (dto.permissions) {
-      where.permissions = dto.permissions;
+    if (dto.permissions) where.permissions = dto.permissions;
+    if (!viewer?.permissions?.includes('media:restricted:read')) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { permissions: { not: 'leadership' } },
+      ];
     }
 
     if (dto.search) {
@@ -330,7 +412,11 @@ export class MediaService {
   /**
    * Gets a single media asset by ID.
    */
-  async getAsset(assetId: string, churchId: string, viewer?: ViewerScope | null): Promise<MediaAssetResponseDto> {
+  async getAsset(
+    assetId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<MediaAssetResponseDto> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
@@ -339,6 +425,11 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
+    if (
+      asset.permissions === 'leadership' &&
+      !viewer?.permissions?.includes('media:restricted:read')
+    )
+      throw new NotFoundException('Media asset not found');
     return this.mapAssetToDto(asset);
   }
 
@@ -348,10 +439,20 @@ export class MediaService {
    * library derives per-folder stats from this instead of walking the entire
    * asset list.
    */
-  async getFolders(churchId: string): Promise<MediaFolderSummaryDto[]> {
+  async getFolders(churchId: string, viewer?: ViewerScope): Promise<MediaFolderSummaryDto[]> {
     const result = await this.prisma.mediaAsset.groupBy({
       by: ['folder'],
-      where: { church_id: churchId },
+      where: {
+        church_id: churchId,
+        ...(viewer?.permissions?.includes('media:restricted:read')
+          ? {}
+          : { permissions: { not: 'leadership' } }),
+        ...(this.branchScope.resolve(viewer).churchOnly
+          ? {}
+          : {
+              OR: [{ branch_id: this.branchScope.resolve(viewer).branchId }, { branch_id: null }],
+            }),
+      },
       _count: { _all: true },
       _max: { created_at: true },
       orderBy: { folder: 'asc' },
@@ -367,7 +468,12 @@ export class MediaService {
   /**
    * Deletes a media asset from both the database and Supabase Storage.
    */
-  async deleteAsset(assetId: string, churchId: string, userId?: string, viewer?: ViewerScope | null): Promise<void> {
+  async deleteAsset(
+    assetId: string,
+    churchId: string,
+    userId?: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
     const asset = await this.prisma.mediaAsset.findFirst({
       where: { id: assetId, church_id: churchId },
     });
@@ -376,10 +482,27 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
-    // Delete from Supabase Storage (best-effort)
-    const path = this.extractPathFromUrl(asset.url);
+    if (
+      asset.permissions === 'leadership' &&
+      !viewer?.permissions?.includes('media:restricted:read')
+    )
+      throw new NotFoundException('Media asset not found');
+    if (
+      !asset.branch_id &&
+      this.branchScope.isBranchRestricted(viewer) &&
+      asset.uploaded_by_user_id !== userId
+    )
+      throw new ForbiddenException(
+        'Shared media can only be deleted by its owner or an HQ administrator',
+      );
+
+    // Remove bytes before the library record.
+    const path = asset.storage_path ?? this.extractPathFromUrl(asset.url);
     if (path) {
-      await this.deleteFile(path);
+      const { error } = await this.supabase.client.storage
+        .from(asset.storage_bucket ?? this.bucket)
+        .remove([path]);
+      if (error) throw new InternalServerErrorException('Unable to remove media bytes');
     }
 
     await this.prisma.mediaAsset.delete({ where: { id: assetId } });
@@ -416,6 +539,21 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
+    if (
+      asset.permissions === 'leadership' &&
+      !viewer?.permissions?.includes('media:restricted:read')
+    )
+      throw new NotFoundException('Media asset not found');
+    if (
+      !asset.branch_id &&
+      this.branchScope.isBranchRestricted(viewer) &&
+      asset.uploaded_by_user_id !== userId
+    )
+      throw new ForbiddenException(
+        'Shared media can only be changed by its owner or an HQ administrator',
+      );
+    if (permissions === 'leadership' && !viewer?.permissions?.includes('media:restricted:read'))
+      throw new ForbiddenException('Restricted media permission is required');
     const updated = await this.prisma.mediaAsset.update({
       where: { id: assetId },
       data: { permissions },
@@ -434,6 +572,103 @@ export class MediaService {
     }
 
     return this.mapAssetToDto(updated);
+  }
+
+  private validateFolder(folder: string, viewer?: ViewerScope | null) {
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(folder))
+      throw new BadRequestException('Use a simple folder name');
+    if (folder === 'churches' && viewer && !viewer.permissions?.includes('church_settings:update'))
+      throw new ForbiddenException('Branding permission is required');
+    if (folder === 'branches' && viewer && !viewer.permissions?.includes('branches:update'))
+      throw new ForbiddenException('Branch update permission is required');
+  }
+
+  private async uploadBucket(folder: string) {
+    if (this.publicFolders.has(folder)) return this.bucket;
+    const bucket = this.config.get<string>('SUPABASE_PRIVATE_STORAGE_BUCKET', 'media-private');
+    if (!this.privateBucketReady) {
+      this.privateBucketReady = (async () => {
+        const { data, error } = await this.supabase.client.storage.getBucket(bucket);
+        if (error) {
+          if (String(error.statusCode) !== '404')
+            throw new InternalServerErrorException('Unable to verify private storage');
+          const { error: createError } = await this.supabase.client.storage.createBucket(bucket, {
+            public: false,
+          });
+          if (createError) {
+            // A parallel instance may have just created it; verify rather than assume.
+            const result = await this.supabase.client.storage.getBucket(bucket);
+            if (result.error || result.data?.public !== false)
+              throw new InternalServerErrorException('Private storage is unavailable');
+          }
+        } else if (data?.public !== false)
+          throw new InternalServerErrorException(
+            'Restricted media requires a private storage bucket',
+          );
+      })().catch((error) => {
+        this.privateBucketReady = undefined;
+        throw error;
+      });
+    }
+    await this.privateBucketReady;
+    return bucket;
+  }
+
+  async getFile(
+    assetId: string,
+    churchId: string,
+    viewer: ViewerScope | undefined,
+    range?: string,
+    userId?: string,
+  ) {
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: { id: assetId, church_id: churchId },
+    });
+    if (
+      !asset ||
+      !viewer ||
+      (asset.branch_id && !this.branchScope.isVisible(viewer, asset.branch_id))
+    )
+      throw new NotFoundException('Media not found');
+    const permissions = viewer.permissions ?? [];
+    const allowed =
+      asset.uploaded_by_user_id === userId ||
+      permissions.includes('media:library:read') ||
+      (asset.folder === 'assets' && permissions.includes('assets:list:read')) ||
+      (asset.folder === 'form-attachments' && permissions.includes('forms:submissions:read')) ||
+      (asset.folder.startsWith('sermon') && permissions.includes('sermons:list:read'));
+    if (
+      !allowed ||
+      (asset.permissions === 'leadership' && !permissions.includes('media:restricted:read'))
+    )
+      throw new ForbiddenException('You cannot view this media');
+    if (!asset.storage_path || !asset.storage_bucket)
+      throw new NotFoundException('This file has not been migrated to managed storage');
+    const { data, error } = await this.supabase.client.storage
+      .from(asset.storage_bucket)
+      .createSignedUrl(asset.storage_path, 60);
+    if (error || !data?.signedUrl)
+      throw new InternalServerErrorException('Unable to retrieve media');
+    const headers: Record<string, string> = {};
+    if (range && /^bytes=\d+-\d*$/.test(range)) headers.Range = range;
+    const response = await fetch(data.signedUrl, {
+      headers,
+      redirect: 'error',
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok || !response.body) throw new NotFoundException('Media bytes are unavailable');
+    return {
+      status: response.status,
+      contentRange: response.headers.get('content-range'),
+      length: response.headers.get('content-length'),
+      file: new StreamableFile(
+        Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+        {
+          type: asset.mime_type,
+          disposition: `inline; filename="${asset.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}"`,
+        },
+      ),
+    };
   }
 
   // ─── MAPPERS ───────────────────────────────────────────────────
@@ -464,7 +699,7 @@ export class MediaService {
    * @returns Optimized image buffer
    */
   private async optimizeImage(buffer: Buffer): Promise<{ buffer: Buffer }> {
-    const result = await sharp(buffer)
+    const result = await sharp(buffer, { limitInputPixels: 25_000_000, sequentialRead: true })
       .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
@@ -479,6 +714,7 @@ export class MediaService {
    * @throws BadRequestException if file is missing, too large, or has invalid type
    */
   private validateFile(file: MulterFile, isImage: boolean): void {
+    if (!file?.buffer || !file.size) throw new BadRequestException('Choose a non-empty file');
     if (!file) {
       throw new BadRequestException('No file provided');
     }
@@ -492,6 +728,32 @@ export class MediaService {
       ? ALLOWED_IMAGE_TYPES
       : [...ALLOWED_IMAGE_TYPES, ...ALLOWED_DOC_TYPES];
 
+    const bytes = file.buffer;
+    const ascii = (start: number, length: number) =>
+      bytes.subarray(start, start + length).toString('ascii');
+    const starts = (hex: string) =>
+      bytes.subarray(0, hex.length / 2).equals(Buffer.from(hex, 'hex'));
+    const signatures: Record<string, () => boolean> = {
+      'application/pdf': () => ascii(0, 5) === '%PDF-',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': () => starts('504b0304'),
+      'application/vnd.ms-excel': () => starts('d0cf11e0a1b11ae1'),
+      'audio/mpeg': () =>
+        ascii(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0),
+      'audio/wav': () => ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WAVE',
+      'audio/ogg': () => ascii(0, 4) === 'OggS',
+      'video/ogg': () => ascii(0, 4) === 'OggS',
+      'audio/flac': () => ascii(0, 4) === 'fLaC',
+      'audio/aac': () => bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0,
+      'audio/mp4': () => ascii(4, 4) === 'ftyp',
+      'video/mp4': () => ascii(4, 4) === 'ftyp',
+      'video/quicktime': () => ['ftyp', 'moov', 'mdat', 'wide'].includes(ascii(4, 4)),
+      'video/webm': () => starts('1a45dfa3'),
+      'text/csv': () =>
+        !bytes.includes(0) &&
+        !/^\s*<(?:!doctype|html|script|svg)/i.test(bytes.subarray(0, 512).toString('utf8')),
+    };
+    if (signatures[file.mimetype] && !signatures[file.mimetype]())
+      throw new BadRequestException('File content does not match its declared type');
     if (!allowedTypes.includes(file.mimetype)) {
       throw new BadRequestException(
         `File type "${file.mimetype}" is not allowed. Accepted: ${allowedTypes.join(', ')}`,
@@ -507,9 +769,15 @@ export class MediaService {
   private extractPathFromUrl(url: string): string | null {
     try {
       const marker = `/storage/v1/object/public/${this.bucket}/`;
-      const idx = url.indexOf(marker);
-      if (idx === -1) return null;
-      return url.substring(idx + marker.length);
+      const parsed = new URL(url);
+      if (
+        parsed.origin !== new URL(this.config.getOrThrow<string>('SUPABASE_URL')).origin ||
+        !parsed.pathname.startsWith(marker)
+      )
+        return null;
+      const path = decodeURIComponent(parsed.pathname.slice(marker.length));
+      if (path.split('/').some((part) => !part || part === '.' || part === '..')) return null;
+      return path;
     } catch {
       return null;
     }

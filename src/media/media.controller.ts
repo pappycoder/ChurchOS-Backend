@@ -9,6 +9,8 @@
 import {
   Controller,
   Get,
+  Headers,
+  Header,
   Post,
   Delete,
   Patch,
@@ -21,7 +23,9 @@ import {
   HttpCode,
   HttpStatus,
   Request,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -71,9 +75,35 @@ export class MediaController {
    */
   constructor(private readonly mediaService: MediaService) {}
 
+  @Get('files/:assetId')
+  @Header('Cache-Control', 'private, no-store')
+  async file(
+    @Param('assetId') assetId: string,
+    @Request() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+    @Headers('range') range?: string,
+  ) {
+    const result = await this.mediaService.getFile(
+      assetId,
+      req.profile?.church_id ?? '',
+      req.profile,
+      range,
+      req.user.sub,
+    );
+    response.status(result.status);
+    response.setHeader('Accept-Ranges', 'bytes');
+    if (result.contentRange) response.setHeader('Content-Range', result.contentRange);
+    if (result.length) response.setHeader('Content-Length', result.length);
+    return result.file;
+  }
+
   @Post('upload/image')
   @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 5, fieldSize: 8192, parts: 8 },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -112,12 +142,23 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadImage(file, folder, churchId, user.sub, req.profile, dto.branchId);
+    return this.mediaService.uploadImage(
+      file,
+      folder,
+      churchId,
+      user.sub,
+      req.profile,
+      dto.branchId,
+    );
   }
 
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 5, fieldSize: 8192, parts: 8 },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -152,7 +193,14 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
-    return this.mediaService.uploadFile(file, folder, churchId, user.sub, req.profile, dto.branchId);
+    return this.mediaService.uploadFile(
+      file,
+      folder,
+      churchId,
+      user.sub,
+      req.profile,
+      dto.branchId,
+    );
   }
 
   /**
@@ -189,7 +237,7 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ data: MediaFolderSummaryDto[] }> {
     const churchId = req.profile?.church_id || '';
-    const folders = await this.mediaService.getFolders(churchId);
+    const folders = await this.mediaService.getFolders(churchId, req.profile);
     return { data: folders };
   }
 
@@ -223,7 +271,13 @@ export class MediaController {
     @Request() req: AuthenticatedRequest,
   ): Promise<MediaAssetResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.mediaService.updatePermissions(assetId, permissions, churchId, user.sub, req.profile);
+    return this.mediaService.updatePermissions(
+      assetId,
+      permissions,
+      churchId,
+      user.sub,
+      req.profile,
+    );
   }
 
   /**
@@ -245,7 +299,7 @@ export class MediaController {
     return { success: true };
   }
 
-  @Delete(':path(*)')
+  @Delete('*path')
   @UseGuards(RolesGuard)
   @RequirePermissions('media:library:delete')
   @HttpCode(HttpStatus.OK)
@@ -258,9 +312,17 @@ export class MediaController {
    * @param path - Storage path of the file to delete (URL-encoded)
    * @returns Object with success status
    */
-  async deleteFile(@Param('path') path: string): Promise<{ success: boolean }> {
-    const decodedPath = decodeURIComponent(path);
-    await this.mediaService.deleteFile(decodedPath);
+  async deleteFile(
+    @Param('path') path: string | string[],
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    const decodedPath = Array.isArray(path) ? path.join('/') : path;
+    await this.mediaService.deleteFile(
+      decodedPath,
+      req.profile?.church_id ?? '',
+      req.user?.sub,
+      req.profile,
+    );
     return { success: true };
   }
 }

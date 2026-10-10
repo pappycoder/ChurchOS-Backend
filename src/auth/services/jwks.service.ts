@@ -60,7 +60,11 @@ export class JwksService implements OnModuleInit {
    */
   async verifyToken(token: string): Promise<JwtVerificationResult> {
     try {
-      const result = await jwtVerify(token, this.remoteJWKS);
+      const result = await jwtVerify(token, this.remoteJWKS, {
+        issuer: `${this.config.get<string>('SUPABASE_URL')!.replace(/\/$/, '')}/auth/v1`,
+        audience: 'authenticated',
+        algorithms: ['ES256', 'RS256'],
+      });
 
       return {
         payload: result.payload,

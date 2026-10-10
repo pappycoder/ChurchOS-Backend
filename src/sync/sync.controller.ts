@@ -16,6 +16,7 @@ import {
   ApiGetEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { SyncService } from './sync.service';
+import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { BootstrapResult } from './sync.service';
 import { SyncPushDto } from './dto/sync-push.dto';
 
@@ -37,14 +38,14 @@ export class SyncController {
   async pushChanges(
     @Body() dto: SyncPushDto,
     @CurrentUser() user: SupabaseJwtPayload,
-    @Request() req: Record<string, unknown>,
+    @Request() req: AuthenticatedRequest,
   ): Promise<{
     accepted: number;
     rejected: number;
     conflicts: string[];
   }> {
     const profile = req['profile'] as { church_id: string };
-    return this.syncService.pushChanges(profile.church_id, user.sub, dto.changes);
+    return this.syncService.pushChanges(profile.church_id, user.sub, dto.changes, req.profile);
   }
 
   /**
@@ -55,9 +56,20 @@ export class SyncController {
     'Bootstrap offline data',
     'Returns a full snapshot of the church\u2019s core collections plus a revision cursor for incremental syncs.',
   )
-  async bootstrap(@Request() req: Record<string, unknown>): Promise<BootstrapResult> {
+  async bootstrap(
+    @Request() req: AuthenticatedRequest,
+    @Query('limit') limit?: string,
+    @Query('entity') entity?: string,
+    @Query('cursor') cursor?: string,
+  ): Promise<BootstrapResult> {
     const profile = req['profile'] as { church_id: string };
-    return this.syncService.bootstrap(profile.church_id);
+    return this.syncService.bootstrap(
+      profile.church_id,
+      req.profile,
+      limit ? Number(limit) : 100,
+      entity,
+      cursor,
+    );
   }
 
   /**
@@ -79,7 +91,7 @@ export class SyncController {
     @Query('limit') limit?: string,
     @Query('cursor') cursor?: string,
     @Headers('x-device-id') deviceId?: string,
-    @Request() req?: Record<string, unknown>,
+    @Request() req?: AuthenticatedRequest,
   ): Promise<{
     changes: {
       entity: string;
@@ -95,8 +107,9 @@ export class SyncController {
     return this.syncService.pullChanges(
       profile?.church_id || '',
       deviceId || 'web',
-      limit ? parseInt(limit, 10) : 100,
+      limit ? Number(limit) : 100,
       cursor,
+      req?.profile,
     );
   }
 
@@ -110,9 +123,9 @@ export class SyncController {
   )
   async markSynced(
     @Body() body: { entityIds: string[] },
-    @Request() req: Record<string, unknown>,
+    @Request() req: AuthenticatedRequest,
   ): Promise<{ marked: number }> {
     const profile = req['profile'] as { church_id: string };
-    return this.syncService.markSynced(profile.church_id, body.entityIds);
+    return this.syncService.markSynced(profile.church_id, body.entityIds, req.profile);
   }
 }

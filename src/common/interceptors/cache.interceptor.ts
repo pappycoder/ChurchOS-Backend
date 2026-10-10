@@ -28,6 +28,7 @@ import { Reflector } from '@nestjs/core';
 import { Observable, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { RedisService } from '../../redis/redis.service';
+import { createHash } from 'node:crypto';
 import { Request } from 'express';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
 
@@ -106,6 +107,7 @@ export class CacheInterceptor implements NestInterceptor {
 
     // ─── Try to serve from cache ─────────────────────────────────
     const cacheKey = await this.buildCacheKey(request);
+    if (!cacheKey) return next.handle();
 
     try {
       const cached = await this.redis.get<string>(cacheKey);
@@ -146,11 +148,20 @@ export class CacheInterceptor implements NestInterceptor {
    * means any write to the church (via CacheVersionInterceptor) changes the
    * key and forces a recompute — stale data can never be served.
    */
-  private async buildCacheKey(request: Request): Promise<string> {
-    const queryString = request.url.includes('?') ? request.url.split('?')[1] || '' : '';
-    const path = request.route?.path || request.url.split('?')[0];
+  private async buildCacheKey(request: Request): Promise<string | null> {
+    const url = new URL(request.originalUrl || request.url, 'http://internal');
+    url.searchParams.sort();
+    const queryString = url.searchParams.toString();
+    const path = url.pathname;
     const profile = (request as AuthenticatedRequest).profile;
-    const churchId = profile?.church_id || 'global';
+    if (!profile?.church_id) return null;
+    const churchId = profile.church_id;
+    const viewer = createHash('sha256')
+      .update(
+        JSON.stringify([profile.id, profile.member_id, [...(profile.permissions ?? [])].sort()]),
+      )
+      .digest('hex')
+      .slice(0, 24);
     // Effective branch scope: admin-HQ holders see the whole church ('hq');
     // everyone else is pinned to their own branch (or 'none' when unassigned).
     const scope = profile?.is_admin_hq ? 'hq' : profile?.branch_id || 'none';
@@ -159,11 +170,11 @@ export class CacheInterceptor implements NestInterceptor {
     try {
       version = String((await this.redis.get<number>(`cache:ver:${churchId}`)) ?? 0);
     } catch {
-      // Fall back to version 0 if the version read fails — the entry simply
-      // gets a short TTL and is recomputed on the next mutation.
+      // Never reuse a potentially stale version during a Redis outage.
+      return null;
     }
 
-    return `cache:v2:${request.method}:${churchId}:${scope}:${version}:${path}:${queryString}`;
+    return `cache:v3:${request.method}:${churchId}:${viewer}:${scope}:${version}:${path}:${queryString}`;
   }
 
   /**
@@ -174,7 +185,7 @@ export class CacheInterceptor implements NestInterceptor {
     for (const pattern of patterns) {
       const cachePattern = pattern.startsWith('cache:') ? pattern : `cache:${pattern}`;
       try {
-        await this.redis.del(cachePattern);
+        await this.redis.deleteMatching(cachePattern);
       } catch {
         // Wildcard deletion may not be supported locally — log and continue
         this.logger.debug(`Cache invalidation for ${cachePattern} (may need manual clear)`);

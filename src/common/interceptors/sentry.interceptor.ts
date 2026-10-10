@@ -55,12 +55,10 @@ export class SentryInterceptor implements NestInterceptor {
             });
           }
 
-          scope.setExtras({
-            headers: { ...request.headers, authorization: '[redacted]', cookie: '[redacted]' },
-            query: request.query,
-            body: /(?:auth|2fa)/.test(request.originalUrl ?? request.url)
-              ? '[redacted authentication payload]'
-              : request.body,
+          scope.setContext('request', {
+            method: request.method,
+            path: request.originalUrl.split('?')[0],
+            requestId: request.headers['x-request-id'],
           });
 
           Sentry.captureException(error);

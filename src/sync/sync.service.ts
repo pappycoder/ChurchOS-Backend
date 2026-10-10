@@ -21,10 +21,19 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { SyncChangeDto } from './dto/sync-push.dto';
+import { createHash } from 'node:crypto';
+import { plainToInstance } from 'class-transformer';
+import { validateOrReject, isUUID } from 'class-validator';
+import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
+import { CreateMemberDto } from '../members/dto/create-member.dto';
+import { UpdateMemberDto } from '../members/dto/update-member.dto';
+import { CreateVisitorDto } from '../visitors/dto/create-visitor.dto';
+import { UpdateVisitorDto } from '../visitors/dto/update-visitor.dto';
+import { CreateLifeEventDto } from '../pastoral/dto/create-life-event.dto';
 import { Prisma } from '@prisma/client';
 
 interface SyncResult {
@@ -50,6 +59,7 @@ export interface BootstrapResult {
   churchId: string;
   generatedAt: string;
   revision: string;
+  nextCursors?: Record<string, string | null>;
   collections: {
     members: Record<string, unknown>[];
     services: Record<string, unknown>[];
@@ -69,7 +79,22 @@ interface EntityFieldConfig {
   dates: string[];
 }
 
+type SyncViewer = NonNullable<AuthenticatedRequest['profile']>;
+const READ_PERMISSIONS: Record<string, string> = {
+  member: 'members:all:read',
+  service: 'attendance:services:read',
+  givingCategory: 'giving:categories:read',
+  visitor: 'visitors:list:read',
+  attendance: 'attendance:records:read',
+  transaction: 'giving:records:read',
+  lifeEvent: 'pastoral:life-events:read',
+  sermonBookmark: 'sermons:list:read',
+  eventRegistration: 'events:registrations:read',
+};
+
 const ENTITY_CONFIGS: Record<string, EntityFieldConfig> = {
+  service: { delegate: 'service', fields: {}, dates: [] },
+  givingCategory: { delegate: 'givingCategory', fields: {}, dates: [] },
   member: {
     delegate: 'member',
     fields: {
@@ -106,6 +131,7 @@ const ENTITY_CONFIGS: Record<string, EntityFieldConfig> = {
   visitor: {
     delegate: 'visitor',
     fields: {
+      branchId: 'branch_id',
       firstName: 'first_name',
       lastName: 'last_name',
       phone: 'phone',
@@ -178,6 +204,13 @@ const ENTITY_CONFIGS: Record<string, EntityFieldConfig> = {
 };
 
 interface DelegateLike {
+  findFirst(args: { where: Record<string, unknown> }): Promise<Record<string, unknown> | null>;
+  findMany(args: Record<string, unknown>): Promise<Record<string, unknown>[]>;
+  create(args: { data: Record<string, unknown> }): Promise<unknown>;
+  updateMany(args: {
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }): Promise<{ count: number }>;
   findUnique(args: { where: { id: string } }): Promise<Record<string, unknown> | null>;
   upsert(args: {
     where: { id: string };
@@ -207,8 +240,10 @@ export class SyncService {
     churchId: string,
     userId: string,
     changes: SyncChangeDto[],
+    viewer?: SyncViewer,
   ): Promise<SyncResult> {
-    if (!changes || changes.length === 0) {
+    this.requireViewer(churchId, viewer);
+    if (!changes || changes.length === 0 || changes.length > 100) {
       throw new BadRequestException('No changes provided');
     }
 
@@ -218,14 +253,25 @@ export class SyncService {
 
     for (const change of changes) {
       try {
-        // Check for idempotency — skip if already synced
+        this.assertWritePermission(change, viewer!);
+        const mutationId = createHash('sha256')
+          .update(
+            JSON.stringify([
+              userId,
+              change.mutationId ?? null,
+              change.entity,
+              change.entityId,
+              change.action,
+              change.clientTimestamp,
+              change.data,
+            ]),
+          )
+          .digest('hex');
+        // A mutation ID identifies an operation, rather than every update to a record.
         const existing = await this.prisma.syncQueue.findFirst({
           where: {
             church_id: churchId,
-            entity: change.entity,
-            entity_id: change.entityId,
-            action: change.action,
-            synced: true,
+            mutation_id: mutationId,
           },
         });
 
@@ -266,20 +312,29 @@ export class SyncService {
         // so device-originated changes are recorded exactly once here.
         await this.prisma.$transaction(async (tx) => {
           await tx.$executeRaw`SELECT set_config('app.sync_outbox.skip', 'true', true)`;
-          await this.applyChange(tx, change, churchId);
+          const applied = await this.applyChange(tx, change, churchId, viewer!);
           await tx.syncQueue.create({
             data: {
               church_id: churchId,
               entity: change.entity,
               entity_id: change.entityId,
               action: change.action,
-              data: (change.data || {}) as Prisma.InputJsonValue,
+              data: applied as Prisma.InputJsonValue,
+              mutation_id: mutationId,
             },
           });
         });
 
         accepted++;
       } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          String(err.meta?.target).includes('mutation_id')
+        ) {
+          accepted++;
+          continue;
+        }
         this.logger.error(
           `Failed to process sync change ${change.entity}/${change.entityId}: ${(err as Error).message}`,
         );
@@ -326,14 +381,34 @@ export class SyncService {
     deviceId: string,
     limit = 100,
     cursor?: string,
+    viewer?: SyncViewer,
   ): Promise<PullResult> {
+    this.requireViewer(churchId, viewer);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || deviceId.length > 100)
+      throw new BadRequestException('Invalid sync page size or device ID');
+    deviceId = `${viewer!.id}:${deviceId}`;
     const device = await this.prisma.syncDevice.upsert({
       where: { church_id_device_id: { church_id: churchId, device_id: deviceId } },
       create: { church_id: churchId, device_id: deviceId },
       update: { last_seen_at: new Date() },
     });
 
-    const cursorDate = cursor ? new Date(cursor) : (device.last_pull_cursor ?? new Date(0));
+    let cursorId: string | undefined;
+    let cursorDate = device.last_pull_cursor ?? new Date(0);
+    if (cursor) {
+      if (cursor.length > 300) throw new BadRequestException('Invalid cursor');
+      if (cursor.startsWith('v2:')) {
+        try {
+          const parsed = JSON.parse(Buffer.from(cursor.slice(3), 'base64url').toString());
+          cursorDate = new Date(parsed.date);
+          cursorId = parsed.id;
+        } catch {
+          throw new BadRequestException('Invalid cursor');
+        }
+        if (typeof cursorId !== 'string' || !isUUID(cursorId))
+          throw new BadRequestException('Invalid cursor');
+      } else cursorDate = new Date(cursor);
+    }
 
     if (Number.isNaN(cursorDate.getTime())) {
       throw new BadRequestException('Invalid cursor');
@@ -342,9 +417,16 @@ export class SyncService {
     const rows = await this.prisma.syncQueue.findMany({
       where: {
         church_id: churchId,
-        created_at: { gt: cursorDate },
+        ...(cursorId
+          ? {
+              OR: [
+                { created_at: { gt: cursorDate } },
+                { created_at: cursorDate, id: { gt: cursorId } },
+              ],
+            }
+          : { created_at: { gte: cursorDate } }),
       },
-      orderBy: { created_at: 'asc' },
+      orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
       take: limit + 1, // Fetch one extra to determine hasMore
     });
 
@@ -353,13 +435,14 @@ export class SyncService {
 
     const changes = [];
     for (const row of items) {
-      changes.push(await this.hydrateChange(row));
+      const hydrated = await this.hydrateChange(row, churchId, viewer!);
+      if (hydrated) changes.push(hydrated);
     }
 
     // Store the LOW watermark of this page as the fallback cursor. Re-pulling
     // from it after a client crash re-delivers the whole page (idempotent
     // apply) instead of skipping an unapplied change.
-    const fallbackCursor = items[0]?.created_at;
+    const fallbackCursor = items[0] ? new Date(items[0].created_at.getTime() - 1) : undefined;
     if (fallbackCursor) {
       await this.prisma.syncDevice.update({
         where: { id: device.id },
@@ -372,7 +455,9 @@ export class SyncService {
     return {
       changes,
       hasMore,
-      cursor: lastItem ? lastItem.created_at.toISOString() : cursorDate.toISOString(),
+      cursor: lastItem
+        ? `v2:${Buffer.from(JSON.stringify({ date: lastItem.created_at.toISOString(), id: lastItem.id })).toString('base64url')}`
+        : (cursor ?? cursorDate.toISOString()),
     };
   }
 
@@ -381,59 +466,78 @@ export class SyncService {
    * client bootstrap. The revision timestamp doubles as a pull cursor for
    * subsequent incremental syncs.
    */
-  async bootstrap(churchId: string): Promise<BootstrapResult> {
-    const [members, services, givingCategories, visitors, attendance, transactions] =
-      await Promise.all([
-        this.prisma.member.findMany({
-          where: { church_id: churchId, archived_at: null },
-        }),
-        this.prisma.service.findMany({
-          where: { church_id: churchId, archived_at: null },
-        }),
-        this.prisma.givingCategory.findMany({
-          where: { church_id: churchId, archived_at: null },
-        }),
-        this.prisma.visitor.findMany({
-          where: { church_id: churchId, deleted_at: null, archived_at: null },
-        }),
-        this.prisma.attendance.findMany({ where: { church_id: churchId } }),
-        this.prisma.transaction.findMany({ where: { church_id: churchId } }),
-      ]);
-
-    const revision = new Date();
-
-    return {
-      churchId,
-      generatedAt: revision.toISOString(),
-      revision: revision.toISOString(),
-      collections: {
-        members: members.map((m) => this.mapMember(m)),
-        services: services.map((s) => this.mapService(s)),
-        givingCategories: givingCategories.map((c) => this.mapGivingCategory(c)),
-        visitors: visitors.map((v) => this.mapVisitor(v)),
-        attendance: attendance.map((a) => this.mapAttendance(a)),
-        transactions: transactions.map((t) => this.mapTransaction(t)),
-      },
+  async bootstrap(
+    churchId: string,
+    viewer?: SyncViewer,
+    limit = 100,
+    entity?: string,
+    cursor?: string,
+  ): Promise<BootstrapResult> {
+    this.requireViewer(churchId, viewer);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || (cursor && !isUUID(cursor)))
+      throw new BadRequestException('Invalid bootstrap pagination');
+    const entities = {
+      member: 'members',
+      service: 'services',
+      givingCategory: 'givingCategories',
+      visitor: 'visitors',
+      attendance: 'attendance',
+      transaction: 'transactions',
+    } as const;
+    if (entity && !(entity in entities))
+      throw new BadRequestException('Unsupported bootstrap collection');
+    if (cursor && !entity)
+      throw new BadRequestException('Choose a collection when supplying a cursor');
+    const collections: BootstrapResult['collections'] = {
+      members: [],
+      services: [],
+      givingCategories: [],
+      visitors: [],
+      attendance: [],
+      transactions: [],
     };
+    const nextCursors: Record<string, string | null> = {};
+    // Capture the delta watermark BEFORE reading, so concurrent writes are replayed.
+    const revision = new Date().toISOString();
+    for (const [name, collection] of Object.entries(entities)) {
+      if ((entity && name !== entity) || !this.canRead(name, viewer!)) continue;
+      const config = ENTITY_CONFIGS[name];
+      const delegate = (this.prisma as unknown as Record<string, DelegateLike>)[config.delegate];
+      const rows = await delegate.findMany({
+        where: {
+          ...this.readScope(name, churchId, viewer!),
+          ...(cursor ? { id: { gt: cursor } } : {}),
+          ...(['member', 'service', 'givingCategory', 'visitor'].includes(name)
+            ? { archived_at: null }
+            : {}),
+          ...(name === 'visitor' ? { deleted_at: null } : {}),
+        },
+        orderBy: { id: 'asc' },
+        take: limit + 1,
+      });
+      const page = rows.slice(0, limit);
+      collections[collection as keyof BootstrapResult['collections']] = page.map(
+        this.hydrateMappers[name],
+      );
+      nextCursors[name] = rows.length > limit ? String(page[page.length - 1].id) : null;
+    }
+    return { churchId, generatedAt: revision, revision, collections, nextCursors };
   }
 
   /**
    * Mark sync queue items as processed.
    */
-  async markSynced(churchId: string, entityIds: string[]): Promise<{ marked: number }> {
-    const result = await this.prisma.syncQueue.updateMany({
-      where: {
-        church_id: churchId,
-        entity_id: { in: entityIds },
-        synced: false,
-      },
-      data: {
-        synced: true,
-        synced_at: new Date(),
-      },
-    });
-
-    return { marked: result.count };
+  async markSynced(
+    churchId: string,
+    entityIds: string[],
+    viewer?: SyncViewer,
+  ): Promise<{ marked: number }> {
+    this.requireViewer(churchId, viewer);
+    if (!Array.isArray(entityIds) || entityIds.length > 100 || entityIds.some((id) => !isUUID(id)))
+      throw new BadRequestException('Invalid sync IDs');
+    // Acknowledgements must not suppress another device's work or future edits.
+    // Retention is time-based; clients own their individual resume cursors.
+    return { marked: 0 };
   }
 
   /**
@@ -473,40 +577,151 @@ export class SyncService {
    * create/update are applied via upsert (idempotent, last-write-wins) and
    * delete is scoped by both id and church_id to preserve tenant isolation.
    */
+  private requireViewer(churchId: string, viewer?: SyncViewer): asserts viewer is SyncViewer {
+    if (!viewer || viewer.church_id !== churchId || !viewer.permissions)
+      throw new ForbiddenException('A verified sync scope is required');
+  }
+
+  private canRead(entity: string, viewer: SyncViewer) {
+    if (entity === 'sermonBookmark')
+      return !!viewer.member_id && viewer.permissions?.includes('sermons:list:read');
+    return !!READ_PERMISSIONS[entity] && !!viewer.permissions?.includes(READ_PERMISSIONS[entity]);
+  }
+
+  private readScope(entity: string, churchId: string, viewer: SyncViewer): Record<string, unknown> {
+    const where: Record<string, unknown> = { church_id: churchId };
+    if (entity === 'sermonBookmark')
+      where.member_id = viewer.member_id ?? '00000000-0000-0000-0000-000000000000';
+    if (!viewer.is_admin_hq) {
+      const branch = {
+        church_id: churchId,
+        branch_id: viewer.branch_id ?? '00000000-0000-0000-0000-000000000000',
+      };
+      if (entity === 'attendance') where.OR = [{ service: branch }, { event: branch }];
+      else if (entity === 'lifeEvent') where.member = branch;
+      else if (entity === 'sermonBookmark') where.sermon = branch;
+      else if (entity === 'eventRegistration') where.event = branch;
+      else where.branch_id = branch.branch_id;
+    }
+    return where;
+  }
+
+  private assertWritePermission(change: SyncChangeDto, viewer: SyncViewer) {
+    // Payments, ticket allocation and check-ins must pass their normal domain APIs.
+    const resources: Record<string, Record<string, string>> = {
+      member: {
+        create: 'members:new:create',
+        update: 'members:all:update',
+        delete: 'members:all:delete',
+      },
+      visitor: {
+        create: 'visitors:new:create',
+        update: 'visitors:list:update',
+        delete: 'visitors:list:delete',
+      },
+      lifeEvent: {
+        create: 'pastoral:life-events:create',
+        update: 'pastoral:life-events:update',
+        delete: 'pastoral:life-events:delete',
+      },
+      sermonBookmark: { create: 'sermons:list:read', delete: 'sermons:list:read' },
+    };
+    const permission = resources[change.entity]?.[change.action];
+    if (!permission || !viewer.permissions?.includes(permission))
+      throw new ForbiddenException('This sync operation is not permitted. Use the resource API.');
+  }
+
   private async applyChange(
     tx: Prisma.TransactionClient,
     change: SyncChangeDto,
     churchId: string,
-  ): Promise<void> {
+    viewer: SyncViewer,
+  ): Promise<Record<string, unknown>> {
     const config = ENTITY_CONFIGS[change.entity];
-
-    if (!config) {
-      throw new BadRequestException(`Unsupported sync entity: ${change.entity}`);
-    }
-
+    if (!config) throw new BadRequestException('Unsupported sync entity');
     const delegate = (tx as unknown as Record<string, DelegateLike>)[config.delegate];
-
+    const existing = await delegate.findUnique({ where: { id: change.entityId } });
+    const scope = { ...this.readScope(change.entity, churchId, viewer), id: change.entityId };
+    if (existing && !(await delegate.findFirst({ where: scope })))
+      throw new ForbiddenException('Record is outside your scope');
+    if (change.action !== 'create' && !existing)
+      throw new BadRequestException('Record does not exist');
     if (change.action === 'delete') {
-      await delegate.deleteMany({
-        where: { id: change.entityId, church_id: churchId },
+      if (['member', 'visitor'].includes(change.entity))
+        await delegate.updateMany({ where: scope, data: { archived_at: new Date() } });
+      else await delegate.deleteMany({ where: scope });
+      return existing!;
+    }
+    const data = { ...change.data };
+    const dtoClass =
+      change.entity === 'member'
+        ? change.action === 'create'
+          ? CreateMemberDto
+          : UpdateMemberDto
+        : change.entity === 'visitor'
+          ? change.action === 'create'
+            ? CreateVisitorDto
+            : UpdateVisitorDto
+          : CreateLifeEventDto;
+    if (change.entity !== 'sermonBookmark') {
+      // Branch assignment is verified separately; derived/server fields stay immutable.
+      const validated = { ...data };
+      if (change.entity === 'visitor') delete validated.branchId;
+      await validateOrReject(plainToInstance(dtoClass as new () => object, validated), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        skipMissingProperties: change.action === 'update',
       });
-      return;
     }
-
-    if (change.action !== 'create' && change.action !== 'update') {
-      throw new BadRequestException(`Unsupported sync action: ${change.action}`);
+    const mapped = this.mapData(config, data);
+    if (['member', 'visitor'].includes(change.entity)) {
+      const branchId = viewer.is_admin_hq
+        ? (data.branchId ?? existing?.branch_id ?? viewer.branch_id)
+        : viewer.branch_id;
+      if (!viewer.is_admin_hq && data.branchId && data.branchId !== viewer.branch_id)
+        throw new ForbiddenException('Branch is outside your scope');
+      if (
+        !branchId ||
+        !(await tx.branch.findFirst({ where: { id: String(branchId), church_id: churchId } }))
+      )
+        throw new BadRequestException('A valid church branch is required');
+      mapped.branch_id = branchId;
     }
-
-    const data = this.mapData(config, change.data);
-
-    // Ensure the tenant scope can never be overwritten by client payloads
-    const scopedData = { ...data, church_id: churchId };
-
-    await delegate.upsert({
-      where: { id: change.entityId },
-      create: { ...scopedData, id: change.entityId },
-      update: scopedData,
-    });
+    const relations: Record<string, string> = {
+      memberId: 'member',
+      assignedToId: 'profile',
+      convertedMemberId: 'member',
+      sermonId: 'sermon',
+    };
+    for (const [field, table] of Object.entries(relations)) {
+      if (!data[field]) continue;
+      if (typeof data[field] !== 'string' || !isUUID(data[field] as string))
+        throw new BadRequestException('Invalid related record');
+      const related = (tx as unknown as Record<string, DelegateLike>)[table];
+      const where: Record<string, unknown> = { id: data[field], church_id: churchId };
+      if (!viewer.is_admin_hq)
+        where.branch_id = viewer.branch_id ?? '00000000-0000-0000-0000-000000000000';
+      if (!(await related.findFirst({ where })))
+        throw new ForbiddenException('Related record is outside your scope');
+    }
+    if (change.entity === 'sermonBookmark') {
+      if (
+        !viewer.member_id ||
+        data.memberId !== viewer.member_id ||
+        Object.keys(data).some((key) => !['memberId', 'sermonId'].includes(key))
+      )
+        throw new ForbiddenException('Only your own bookmarks can be changed');
+    }
+    const scoped = { ...mapped, church_id: churchId };
+    if (existing) {
+      if (change.action === 'create')
+        throw new BadRequestException(
+          'Record already exists; send an update with a new mutation ID',
+        );
+      const result = await delegate.updateMany({ where: scope, data: scoped });
+      if (result.count !== 1) throw new ForbiddenException('Record scope changed');
+    } else await delegate.create({ data: { ...scoped, id: change.entityId } });
+    return { ...existing, ...scoped, id: change.entityId };
   }
 
   private mapData(
@@ -535,13 +750,20 @@ export class SyncService {
    * updates landed in the queue). delete rows and rows whose record has since
    * been removed become tombstones (data: null) so clients can drop them.
    */
-  private async hydrateChange(row: {
-    entity: string;
-    entity_id: string;
-    action: string;
-    data: Prisma.JsonValue;
-    created_at: Date;
-  }): Promise<PullResult['changes'][number]> {
+  private async hydrateChange(
+    row: {
+      entity: string;
+      entity_id: string;
+      action: string;
+      data: Prisma.JsonValue;
+      created_at: Date;
+    },
+    churchId: string,
+    viewer: SyncViewer,
+  ): Promise<PullResult['changes'][number] | null> {
+    if (!this.canRead(row.entity, viewer)) return null;
+    const config = ENTITY_CONFIGS[row.entity];
+    if (!config) return null;
     const base = {
       entity: row.entity,
       entityId: row.entity_id,
@@ -550,6 +772,46 @@ export class SyncService {
     };
 
     if (row.action === 'delete') {
+      const old = (
+        row.data && typeof row.data === 'object' && !Array.isArray(row.data) ? row.data : {}
+      ) as Record<string, unknown>;
+      if (row.entity === 'sermonBookmark' && (old.member_id ?? old.memberId) !== viewer.member_id)
+        return null;
+      if (!viewer.is_admin_hq) {
+        const branchId = old.branch_id ?? old.branchId;
+        if (!viewer.branch_id) return null;
+        if (row.entity === 'sermonBookmark' && (old.member_id ?? old.memberId) !== viewer.member_id)
+          return null;
+        if (branchId !== viewer.branch_id) {
+          const parents: Array<[string, unknown]> =
+            row.entity === 'attendance'
+              ? [
+                  ['service', old.service_id ?? old.serviceId],
+                  ['event', old.event_id ?? old.eventId],
+                ]
+              : row.entity === 'lifeEvent'
+                ? [['member', old.member_id ?? old.memberId]]
+                : row.entity === 'eventRegistration'
+                  ? [['event', old.event_id ?? old.eventId]]
+                  : row.entity === 'sermonBookmark'
+                    ? [['sermon', old.sermon_id ?? old.sermonId]]
+                    : [];
+          let visible = false;
+          for (const [table, parentId] of parents) {
+            if (typeof parentId !== 'string' || !isUUID(parentId)) continue;
+            const delegate = (this.prisma as unknown as Record<string, DelegateLike>)[table];
+            if (
+              await delegate.findFirst({
+                where: { id: parentId, church_id: churchId, branch_id: viewer.branch_id },
+              })
+            ) {
+              visible = true;
+              break;
+            }
+          }
+          if (!visible) return null;
+        }
+      }
       return { ...base, data: null };
     }
 
@@ -558,13 +820,12 @@ export class SyncService {
       return { ...base, data: (row.data as Record<string, unknown>) || null };
     }
 
-    const config = ENTITY_CONFIGS[row.entity];
     const delegate = (this.prisma as unknown as Record<string, DelegateLike>)[config.delegate];
 
-    const record = await delegate.findUnique({ where: { id: row.entity_id } });
-    if (!record) {
-      return { ...base, data: null };
-    }
+    const record = await delegate.findFirst({
+      where: { ...this.readScope(row.entity, churchId, viewer), id: row.entity_id },
+    });
+    if (!record) return null;
 
     // Archived records are delivered as tombstones so connected clients drop
     // them locally. The server-side archive/restore endpoints emit outbox rows

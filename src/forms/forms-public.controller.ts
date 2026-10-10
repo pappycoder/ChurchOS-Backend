@@ -11,12 +11,11 @@
 
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import { SkipRateLimit } from '../common/guards/rate-limit.guard';
+import { RateLimit } from '../common/guards/rate-limit.guard';
 import { FormsService } from './forms.service';
 import { CreateFormSubmissionDto, FormSubmissionResponseDto, PublicFormMetaDto } from './dto';
 
 @ApiTags('Forms')
-@SkipRateLimit()
 @Controller('forms/public')
 export class FormsPublicController {
   constructor(private readonly formsService: FormsService) {}
@@ -39,6 +38,7 @@ export class FormsPublicController {
    * Submits a form using a public token.
    */
   @Post(':publicToken/submit')
+  @RateLimit({ limit: 5, windowSeconds: 60 })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Submit a form publicly',

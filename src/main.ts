@@ -17,6 +17,7 @@
  */
 
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as Sentry from '@sentry/nestjs';
@@ -53,7 +54,18 @@ async function bootstrap(): Promise<void> {
       environment: env.NODE_ENV,
       integrations: [nodeProfilingIntegration()],
       tracesSampleRate: env.NODE_ENV === 'production' ? 0.2 : 1.0,
-      profilesSampleRate: env.NODE_ENV === 'production' ? 0.1 : 1.0,
+      profilesSampleRate: env.NODE_ENV === 'production' ? 0.05 : 1.0,
+      sendDefaultPii: false,
+      beforeSend(event) {
+        if (event.request) {
+          delete event.request.headers;
+          delete event.request.cookies;
+          delete event.request.data;
+          delete event.request.query_string;
+          if (event.request.url) event.request.url = event.request.url.split('?')[0];
+        }
+        return event;
+      },
     });
   }
 
@@ -62,12 +74,13 @@ async function bootstrap(): Promise<void> {
   // and creates the underlying HTTP adapter (Express by default).
   // Keep the exact HTTP payload for signed payment webhooks. Providers sign
   // the raw bytes, so re-serializing a parsed JSON body is not safe.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   // Set a global prefix for all routes.
   // Every controller route will be prefixed with `/api/v1`.
   // Example: @Get('members') on MembersController → GET /api/v1/members
   app.setGlobalPrefix('api/v1');
+  app.set('query parser', 'extended');
 
   // Enable security headers with Helmet.
   // Sets various HTTP headers to help protect the app from common web vulnerabilities.
@@ -122,52 +135,54 @@ async function bootstrap(): Promise<void> {
   // The DocumentBuilder creates a configuration object that defines the API
   // metadata: title, description, version, authentication scheme (Bearer JWT),
   // and endpoint tags for grouping related controllers.
-  const config = new DocumentBuilder()
-    .setTitle('ChurchOS API')
-    .setDescription(
-      'Church Management & Digital Ministry Platform API\n\n' +
-        '## Overview\n' +
-        'This API powers the ChurchOS platform — a comprehensive church management system ' +
-        'built for Nigerian churches. It handles member management, attendance tracking, ' +
-        'giving/donations, WhatsApp integration, event management, pastoral care, and more.\n\n' +
-        '## Authentication\n' +
-        'All protected endpoints require a valid Supabase Auth JWT token. ' +
-        'Obtain a token via the `/auth/login` endpoint or Supabase client.\n\n' +
-        '## Multi-Tenancy\n' +
-        'All data is scoped by `church_id`. Users can only access data for their church.',
-    )
-    .setVersion('1.0')
-    .setContact('ChurchOS Team', 'https://churchos.ng', 'support@churchos.ng')
-    .setLicense('GPL-3.0', 'https://www.gnu.org/licenses/gpl-3.0.html')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Enter your Supabase Auth JWT token',
-        in: 'header',
-      },
-      'supabase-auth',
-    )
-    .build();
+  if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
+    const config = new DocumentBuilder()
+      .setTitle('ChurchOS API')
+      .setDescription(
+        'Church Management & Digital Ministry Platform API\n\n' +
+          '## Overview\n' +
+          'This API powers the ChurchOS platform — a comprehensive church management system ' +
+          'built for Nigerian churches. It handles member management, attendance tracking, ' +
+          'giving/donations, WhatsApp integration, event management, pastoral care, and more.\n\n' +
+          '## Authentication\n' +
+          'All protected endpoints require a valid Supabase Auth JWT token. ' +
+          'Obtain a token via the `/auth/login` endpoint or Supabase client.\n\n' +
+          '## Multi-Tenancy\n' +
+          'All data is scoped by `church_id`. Users can only access data for their church.',
+      )
+      .setVersion('1.0')
+      .setContact('ChurchOS Team', 'https://churchos.ng', 'support@churchos.ng')
+      .setLicense('GPL-3.0', 'https://www.gnu.org/licenses/gpl-3.0.html')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Enter your Supabase Auth JWT token',
+          in: 'header',
+        },
+        'supabase-auth',
+      )
+      .build();
 
-  // Generate the Swagger document and serve it.
-  // SwaggerModule.createDocument() scans all controllers and their decorators
-  // (@ApiProperty, @ApiOperation, etc.) to build the OpenAPI 3.0 spec.
-  // SwaggerModule.setup() serves the Swagger UI at the specified path.
-  const document = SwaggerModule.createDocument(app, config, {
-    extraModels: [],
-    deepScanRoutes: true,
-  });
-  SwaggerModule.setup('api/v1/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      docExpansion: 'none',
-      filter: true,
-      showRequestDuration: true,
-    },
-    customSiteTitle: 'ChurchOS API Documentation',
-  });
+    // Generate the Swagger document and serve it.
+    // SwaggerModule.createDocument() scans all controllers and their decorators
+    // (@ApiProperty, @ApiOperation, etc.) to build the OpenAPI 3.0 spec.
+    // SwaggerModule.setup() serves the Swagger UI at the specified path.
+    const document = SwaggerModule.createDocument(app, config, {
+      extraModels: [],
+      deepScanRoutes: true,
+    });
+    SwaggerModule.setup('api/v1/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: false,
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+      },
+      customSiteTitle: 'ChurchOS API Documentation',
+    });
+  }
 
   // Start the HTTP server.
   // The PORT is read from validated environment variables.

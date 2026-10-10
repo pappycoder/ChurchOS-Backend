@@ -6,6 +6,7 @@
  * @since 1.0.0
  */
 
+import { workersEnabled } from '../queues/workers-enabled';
 import { Module, OnModuleDestroy, Logger } from '@nestjs/common';
 import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -17,7 +18,7 @@ import { WebhookDeliveryProcessor } from './webhook-delivery.processor';
 @Module({
   imports: [AuthModule, BullModule.registerQueue({ name: 'webhook-delivery' })],
   controllers: [WebhooksController],
-  providers: [WebhooksService, WebhookDeliveryProcessor],
+  providers: [WebhooksService, ...(workersEnabled() ? [WebhookDeliveryProcessor] : [])],
   exports: [WebhooksService],
 })
 export class WebhooksModule implements OnModuleDestroy {

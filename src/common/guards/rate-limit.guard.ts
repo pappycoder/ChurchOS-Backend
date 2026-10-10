@@ -15,6 +15,7 @@
 
 import {
   Injectable,
+  ServiceUnavailableException,
   CanActivate,
   ExecutionContext,
   HttpException,
@@ -26,7 +27,9 @@ import { Reflector } from '@nestjs/core';
 import { Ratelimit } from '@upstash/ratelimit';
 import { RedisService } from '../../redis/redis.service';
 import { Redis } from '@upstash/redis';
-import { Request } from 'express';
+import { AuthenticatedRequest } from '../decorators/current-user.decorator';
+import { timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 
 export const RATE_LIMIT_KEY = 'rate_limit';
 export const SKIP_RATE_LIMIT_KEY = 'skip_rate_limit';
@@ -180,8 +183,22 @@ export class RateLimitGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
-    const ip = request.ip || request.socket.remoteAddress || 'unknown';
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    let ip = request.ip || request.socket.remoteAddress || 'unknown';
+    const supplied = request.headers['x-churchos-proxy-secret'];
+    const secret = process.env.INTERNAL_PROXY_SECRET;
+    const forwarded = request.headers['x-churchos-client-ip'];
+    if (
+      secret &&
+      typeof supplied === 'string' &&
+      Buffer.byteLength(secret) === Buffer.byteLength(supplied) &&
+      timingSafeEqual(Buffer.from(secret), Buffer.from(supplied)) &&
+      typeof forwarded === 'string' &&
+      isIP(forwarded)
+    )
+      ip = forwarded;
+    const identity = request.user?.sub ? `user:${request.user.sub}` : `ip:${ip}`;
+    const routeKey = `${request.method}:${request.baseUrl}:${request.route?.path ?? request.path}`;
 
     // Check for custom rate limit on the handler
     const customConfig = this.reflector.getAllAndOverride<RateLimitConfig>(RATE_LIMIT_KEY, [
@@ -192,15 +209,33 @@ export class RateLimitGuard implements CanActivate {
 
     try {
       if (!this.redis.isUpstash) {
-        // Fall back to in-memory rate limiter for local dev (ioredis)
-        const key = `${ip}:${request.route?.path || request.url}`;
-        const result = this.inMemoryLimiter.check(key, config.limit, config.windowSeconds * 1000);
+        const key = `${identity}:${routeKey}`;
+        const now = Date.now();
+        let result;
+        try {
+          const bucket = Math.floor(now / (config.windowSeconds * 1000));
+          const count = await this.redis.incr(`rate:${key}:${bucket}`, config.windowSeconds + 1);
+          result = {
+            success: count <= config.limit,
+            limit: config.limit,
+            remaining: Math.max(0, config.limit - count),
+            reset: (bucket + 1) * config.windowSeconds,
+          };
+        } catch {
+          if (process.env.NODE_ENV === 'production' && config.limit <= RATE_LIMITS.auth.limit)
+            throw new ServiceUnavailableException('Please try again when the service is available');
+          result = this.inMemoryLimiter.check(key, config.limit, config.windowSeconds * 1000);
+        }
 
         request.res?.setHeader('X-RateLimit-Limit', result.limit);
         request.res?.setHeader('X-RateLimit-Remaining', result.remaining);
         request.res?.setHeader('X-RateLimit-Reset', result.reset);
 
         if (!result.success) {
+          request.res?.setHeader(
+            'Retry-After',
+            Math.max(1, result.reset - Math.floor(Date.now() / 1000)),
+          );
           throw new HttpException(
             'Too many requests. Please try again later.',
             HttpStatus.TOO_MANY_REQUESTS,
@@ -222,7 +257,7 @@ export class RateLimitGuard implements CanActivate {
         this.limiterCache.set(cacheKey, limiter);
       }
 
-      const key = `${ip}:${request.route?.path || request.url}`;
+      const key = `${identity}:${routeKey}`;
       const { success, limit, remaining, reset } = await limiter.limit(key);
 
       request.res?.setHeader('X-RateLimit-Limit', limit);
@@ -230,6 +265,7 @@ export class RateLimitGuard implements CanActivate {
       request.res?.setHeader('X-RateLimit-Reset', reset);
 
       if (!success) {
+        request.res?.setHeader('Retry-After', Math.max(1, Math.ceil((reset - Date.now()) / 1000)));
         throw new HttpException(
           'Too many requests. Please try again later.',
           HttpStatus.TOO_MANY_REQUESTS,
@@ -241,7 +277,19 @@ export class RateLimitGuard implements CanActivate {
       if (error instanceof HttpException) {
         throw error;
       }
-      this.logger.warn(`Rate limiting error: ${error}`);
+      this.logger.warn('Shared rate limiter unavailable');
+      if (process.env.NODE_ENV === 'production' && config.limit <= RATE_LIMITS.auth.limit)
+        throw new ServiceUnavailableException('Please try again when the service is available');
+      const result = this.inMemoryLimiter.check(
+        `${identity}:${routeKey}`,
+        config.limit,
+        config.windowSeconds * 1000,
+      );
+      if (!result.success)
+        throw new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       return true;
     }
   }

@@ -240,23 +240,44 @@ export class AuthenticatorService {
     });
   }
 
-  async assertSession(payload: JWTPayload) {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: payload.sub! },
-      select: { two_factor_enabled: true, authenticator: { select: { revision: true } } },
-    });
-    if (!profile?.two_factor_enabled && !profile?.authenticator) return;
-    if (!profile.authenticator || typeof payload.session_id !== 'string')
+  async assertSession(
+    payload: JWTPayload,
+    hydrated?: {
+      two_factor_enabled?: boolean;
+      authenticator?: { revision: string } | null;
+      status?: string;
+      church?: { archived_at: Date | null };
+    },
+  ) {
+    const profile =
+      hydrated ??
+      (await this.prisma.profile.findUnique({
+        where: { user_id: payload.sub! },
+        select: {
+          status: true,
+          church: { select: { archived_at: true } },
+          two_factor_enabled: true,
+          authenticator: { select: { revision: true } },
+        },
+      }));
+    if (!hydrated && profile && (profile.status !== 'active' || profile.church?.archived_at))
+      throw new UnauthorizedException('This session is no longer available');
+    if (
+      !profile ||
+      (profile.two_factor_enabled && !profile.authenticator) ||
+      typeof payload.session_id !== 'string'
+    )
       throw new UnauthorizedException('Authenticator verification required. Sign in again.');
     const approved = await this.prisma.verifiedMfaSession.findUnique({
       where: { user_id_session_id: { user_id: payload.sub!, session_id: payload.session_id } },
     });
     if (
       !approved ||
-      approved.revision !== profile.authenticator.revision ||
+      approved.revision !==
+        (profile.two_factor_enabled ? profile.authenticator?.revision : 'password-session') ||
       approved.expires_at.getTime() <= Date.now()
     )
-      throw new UnauthorizedException('Authenticator verification required. Sign in again.');
+      throw new UnauthorizedException('Session no longer approved. Sign in again.');
   }
 
   async disable(userId: string, code: string) {
