@@ -378,8 +378,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   cell_leader: [
     'members:own:read',
     'branches:read',
-    // Events — read (member parity)
-    'events:read',
+    // Personal event browsing and booking; no management menus.
+    'events:view',
+    'events:calendar:read',
+    'events:list:read',
+    'events:tickets:read',
     // Sermons — read (member parity)
     'sermons:read',
     // Media — read (member parity)

@@ -7,6 +7,23 @@ import { AuthenticatedRequest } from '../../../src/common/decorators/current-use
 import { randomUUID } from 'crypto';
 
 describe('Offline API contract', () => {
+  it('keeps cell leaders calendar and tickets without event management grants', () => {
+    expect(DEFAULT_PERMISSION_MATRIX.cell_leader).toEqual(
+      expect.arrayContaining([
+        'events:view',
+        'events:calendar:read',
+        'events:list:read',
+        'events:tickets:read',
+        'cell_groups:own:update',
+      ]),
+    );
+    for (const permission of [
+      'events:all:read',
+      'events:registrations:read',
+      'events:checkin:read',
+    ])
+      expect(DEFAULT_PERMISSION_MATRIX.cell_leader).not.toContain(permission);
+  });
   it('keeps member event browsing but excludes management and offline access', () => {
     expect(DEFAULT_PERMISSION_MATRIX.member).toEqual(
       expect.arrayContaining(['events:calendar:read', 'events:list:read', 'events:tickets:read']),

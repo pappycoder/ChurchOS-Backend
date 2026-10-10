@@ -7,6 +7,8 @@
 
 ## Project Overview
 
+- **2026-10-10 — Cell leader event menus.** Restricted cell leader event grants to personal browsing, calendar and tickets, removing All Events, registrations and check-in grants through the permission template. Bumped permission cache namespace to v15 and added a template regression.
+
 **ChurchOS Backend** is the REST API server for the ChurchOS platform — a Church Management & Digital Ministry system built for Nigerian churches. It handles all server-side business logic, database operations, authentication, payment processing, and third-party integrations.
 
 ### Tech Stack
