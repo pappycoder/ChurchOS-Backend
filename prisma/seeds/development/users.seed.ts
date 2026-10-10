@@ -13,6 +13,20 @@
 import { PrismaClient } from '@prisma/client';
 import { SupabaseClient } from '@supabase/supabase-js';
 
+/** Development profile/member links must agree on their assigned branch. */
+export async function alignDevelopmentMemberBranch(
+  prisma: PrismaClient,
+  churchId: string,
+  memberId: string,
+  branchId: string,
+): Promise<void> {
+  const result = await prisma.member.updateMany({
+    where: { id: memberId, church_id: churchId },
+    data: { branch_id: branchId },
+  });
+  if (result.count !== 1) throw new Error('Seeded member is missing or belongs to another church');
+}
+
 export const DEV_PASSWORD = 'ChurchOS@1234';
 
 export const EMAIL_DOMAIN = 'churchos.dev';
@@ -253,6 +267,15 @@ export async function seedUsers(
 
   const upsertProfile = async (def: UserDef, userId: string): Promise<string | null> => {
     const linkedMember = def.memberIndex !== undefined ? members[def.memberIndex] : undefined;
+    // Base sample members initially belong to HQ; reconcile links before
+    // creating/updating profiles for Lekki and other demo assignments.
+    if (linkedMember)
+      await alignDevelopmentMemberBranch(
+        prisma,
+        churchId,
+        linkedMember.id,
+        branchIdFor(def.branch),
+      );
     const profileData = {
       user_id: userId,
       church_id: churchId,
