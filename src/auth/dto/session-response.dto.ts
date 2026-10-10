@@ -8,14 +8,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class LoginResponseDto {
   @ApiPropertyOptional({
     description:
-      'JWT access token. Absent when two-factor authentication is required — call /auth/login/2fa with the emailed code to complete sign-in.',
+      'JWT access token. Absent when two-factor authentication is required — call /auth/login/2fa with the authenticator code and challengeToken to complete sign-in.',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   accessToken?: string;
 
   @ApiPropertyOptional({
     description:
-      'Set to true when the account requires email-OTP two-factor authentication and therefore has no accessToken yet.',
+      'Set to true when the account requires authenticator two-factor authentication and therefore has no accessToken yet.',
     example: true,
   })
   requiresTwoFactor?: boolean;
@@ -26,6 +26,18 @@ export class LoginResponseDto {
     example: 'j***@example.com',
   })
   twoFactorEmail?: string;
+
+  @ApiPropertyOptional()
+  challengeToken?: string;
+
+  @ApiPropertyOptional({ enum: ['authenticator', 'migration', 'supabase-migration'] })
+  twoFactorMethod?: 'authenticator' | 'migration' | 'supabase-migration';
+
+  @ApiPropertyOptional({ description: 'One-use recovery codes shown only at enrollment' })
+  recoveryCodes?: string[];
+
+  @ApiPropertyOptional()
+  authenticatorSetup?: { factorId: string; qrCode: string; secret: string; uri: string };
 
   @ApiPropertyOptional({
     description: 'Refresh token (if Supabase returns one)',

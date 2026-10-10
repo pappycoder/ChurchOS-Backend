@@ -10,6 +10,7 @@
 import { Module } from '@nestjs/common';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwksService } from './services/jwks.service';
+import { AuthenticatorService } from './services/authenticator.service';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PermissionsController } from './permissions.controller';
@@ -40,7 +41,7 @@ import { CommunicationModule } from '../communication/communication.module';
 @Module({
   imports: [SupabaseModule, PermissionsModule, CommunicationModule],
   controllers: [AuthController, PermissionsController],
-  providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService],
-  exports: [AuthService, JwtAuthGuard, JwksService, PermissionsModule],
+  providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService, AuthenticatorService],
+  exports: [AuthenticatorService, AuthService, JwtAuthGuard, JwksService, PermissionsModule],
 })
 export class AuthModule {}

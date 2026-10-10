@@ -67,6 +67,15 @@ const envSchema = z.object({
     .min(16, 'PASTORAL_ENCRYPTION_KEY must be at least 16 characters')
     .default('dev-only-change-in-production-32b'),
 
+  // Dedicated 32-byte hex key; no development fallback for authenticator secrets.
+  TWO_FACTOR_ENCRYPTION_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/, 'TWO_FACTOR_ENCRYPTION_KEY must be 64 hexadecimal characters')
+      .optional(),
+  ),
+
   // ─── Monitoring (Optional) ────────────────────────────────
   SENTRY_DSN: z.string().optional(),
 });

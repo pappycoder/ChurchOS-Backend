@@ -15,6 +15,7 @@ import {
   Put,
   Patch,
   Body,
+  Header,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -75,6 +76,7 @@ export class AuthController {
    *
    * Returns JWT tokens and user profile. This is a public endpoint.
    */
+  @Header('Cache-Control', 'no-store')
   @Post('login')
   @UseGuards(RateLimitGuard)
   @RateLimit(RATE_LIMITS.auth)
@@ -91,20 +93,21 @@ export class AuthController {
   }
 
   /**
-   * Complete an email-OTP two-factor sign-in.
+   * Complete authenticator sign-in or a legacy factor migration.
    *
    * Verifies the 6-digit code emailed during `login` and, on success, returns
    * the full session (access token, refresh token, profile) that was withheld
    * until this point. This is a public endpoint.
    */
+  @Header('Cache-Control', 'no-store')
   @Post('login/2fa')
   @UseGuards(RateLimitGuard)
   @RateLimit(RATE_LIMITS.auth)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Complete 2FA sign-in with emailed code',
+    summary: 'Complete authenticator sign-in',
     description:
-      'Verifies the 6-digit code emailed after a login that required two-factor authentication, then returns the full session.',
+      'Verifies the current authenticator code with the opaque login challenge. Legacy email factors migrate to authenticator enrollment before a session is issued.',
   })
   @ApiOkResponse({ description: '2FA sign-in successful', type: LoginResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired code' })

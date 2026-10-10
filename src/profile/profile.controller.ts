@@ -23,6 +23,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Request,
+  Header,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -54,6 +55,8 @@ import {
   ApiDeleteEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
+import { RateLimitGuard, RateLimit, RATE_LIMITS } from '../common/guards/rate-limit.guard';
+import { AuthService } from '../auth/auth.service';
 import { ProfileService } from './profile.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -74,7 +77,10 @@ import { MulterFile } from '../media/media.service';
 @UseGuards(JwtAuthGuard)
 @Controller('profiles')
 export class ProfileController {
-  constructor(private readonly profileService: ProfileService) {}
+  constructor(
+    private readonly profileService: ProfileService,
+    private readonly authService: AuthService,
+  ) {}
 
   /**
    * Get the current authenticated user's profile.
@@ -143,81 +149,69 @@ export class ProfileController {
     return this.profileService.uploadProfilePhoto(user.sub, file, churchId);
   }
 
-  /**
-   * Generate a TOTP secret for MFA setup.
-   */
-  @Post('me/2fa/enable-code')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Send a 2FA enable code',
-    description: 'Emails a 6-digit code to the profile address to start enabling email-OTP 2FA.',
-  })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
-  async sendEnableCode(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
-    return this.profileService.sendTwoFactorCode(user.sub, 'enable');
+  @Get('me/2fa/factors')
+  @ApiOperation({ summary: 'List own authenticator factors' })
+  async listFactors(@CurrentUser() user: SupabaseUser) {
+    return this.authService.listAuthenticators(user.sub);
   }
 
-  /**
-   * Enable 2FA after verifying the emailed code.
-   */
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.sensitive)
+  @Post('me/2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enroll an authenticator; confirm before it becomes active' })
+  async setupAuthenticator(@Request() req: AuthenticatedRequest) {
+    return this.authService.enrollAuthenticator(req.user.sub, req.user.email ?? 'Account');
+  }
+
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.sensitive)
   @Post('me/2fa/enable')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Enable 2FA',
-    description: 'Verifies the emailed code and enables email-OTP 2FA on the account.',
-  })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
+  @ApiOperation({ summary: 'Confirm authenticator enrollment' })
   async enableTwoFactor(
     @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
     @Body() dto: VerifyOtpDto,
-  ): Promise<ProfileResponseDto> {
-    return this.profileService.toggleTwoFactor(user.sub, 'enable', dto.code);
+  ) {
+    return this.authService.configureAuthenticator(
+      user.sub,
+      req.headers.authorization!.slice(7),
+      dto.factorId,
+      dto.code,
+    );
   }
 
-  /**
-   * Send a 2FA disable code.
-   */
-  @Post('me/2fa/disable-code')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Send a 2FA disable code',
-    description: 'Emails a 6-digit code to the profile address to confirm disabling email-OTP 2FA.',
-  })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
-  async sendDisableCode(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
-    return this.profileService.sendTwoFactorCode(user.sub, 'disable');
-  }
-
-  /**
-   * Disable 2FA after verifying the emailed code.
-   */
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.sensitive)
   @Post('me/2fa/disable')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Disable 2FA',
-    description: 'Verifies the emailed code and disables email-OTP 2FA on the account.',
-  })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
+  @ApiOperation({ summary: 'Remove an authenticator after verifying its current code' })
   async disableTwoFactor(
     @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
     @Body() dto: VerifyOtpDto,
-  ): Promise<ProfileResponseDto> {
-    return this.profileService.toggleTwoFactor(user.sub, 'disable', dto.code);
+  ) {
+    return this.authService.configureAuthenticator(
+      user.sub,
+      req.headers.authorization!.slice(7),
+      dto.factorId,
+      dto.code,
+      true,
+    );
   }
 
-  /**
-   * Resend a 2FA code, bypassing the cooldown.
-   */
-  @Post('me/2fa/resend')
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.sensitive)
+  @Post('me/2fa/recovery-codes')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Resend 2FA code',
-    description: 'Re-sends the emailed code for the current 2FA action (enable or disable).',
-  })
-  @ApiNotFoundResponse({ description: 'Profile not found' })
-  async resendTwoFactor(@CurrentUser() user: SupabaseUser): Promise<{ email: string }> {
-    const enabled = await this.profileService.getTwoFactorEnabled(user.sub);
-    return this.profileService.sendTwoFactorCode(user.sub, enabled ? 'disable' : 'enable', true);
+  @ApiOperation({ summary: 'Replace recovery codes after verifying a current code' })
+  async regenerateRecoveryCodes(@CurrentUser() user: SupabaseUser, @Body() dto: VerifyOtpDto) {
+    return this.authService.regenerateRecoveryCodes(user.sub, dto.code);
   }
 
   /**

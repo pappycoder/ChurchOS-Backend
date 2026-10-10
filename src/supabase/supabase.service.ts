@@ -10,7 +10,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -45,6 +45,37 @@ export class SupabaseService implements OnModuleInit {
     });
 
     this.logger.log('Supabase client initialized');
+  }
+
+  createAuthClient(): SupabaseClient {
+    return createClient(
+      this.config.getOrThrow<string>('SUPABASE_URL'),
+      this.config.getOrThrow<string>('SUPABASE_ANON_KEY'),
+      {
+        auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+      },
+    );
+  }
+
+  /** Stateless user-scoped Auth API calls; never mutate the shared admin session. */
+  async authRequest<T>(token: string, path: string, body?: unknown, method = 'POST'): Promise<T> {
+    const response = await fetch(
+      `${this.config.getOrThrow<string>('SUPABASE_URL')}/auth/v1/${path}`,
+      {
+        method,
+        headers: {
+          apikey: this.config.getOrThrow<string>('SUPABASE_ANON_KEY'),
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!response.ok)
+      throw new BadRequestException('Authenticator request failed. Check your code and try again.');
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
   }
 
   /**

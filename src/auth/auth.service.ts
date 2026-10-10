@@ -20,6 +20,9 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { AuthenticatorService } from './services/authenticator.service';
+import { JwksService } from './services/jwks.service';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { RedisService } from '../redis/redis.service';
@@ -53,6 +56,8 @@ export class AuthService {
     private readonly audit: AuditLoggingService,
     private readonly config: ConfigService,
     private readonly resend: ResendService,
+    private readonly authenticator: AuthenticatorService,
+    private readonly jwks: JwksService,
   ) {}
 
   /**
@@ -189,7 +194,7 @@ export class AuthService {
    * @throws UnauthorizedException on invalid credentials
    */
   async login(dto: LoginDto): Promise<LoginResponseDto> {
-    const { data, error } = await this.supabase.client.auth.signInWithPassword({
+    const { data, error } = await this.supabase.createAuthClient().auth.signInWithPassword({
       email: dto.email,
       password: dto.password,
     });
@@ -228,6 +233,7 @@ export class AuthService {
         last_name: true,
         email: true,
         two_factor_enabled: true,
+        authenticator: { select: { revision: true } },
         church: { select: { name: true } },
       },
     });
@@ -252,49 +258,68 @@ export class AuthService {
 
     const email = data.user.email || dto.email;
 
-    // Audit-log the login (even if profile is missing)
-    await this.audit.log({
-      userId,
-      churchId: profile?.church_id || '',
-      entity: 'auth',
-      action: 'LOGIN',
-      entityId: userId,
-      newValues: { email, two_factor_required: !!profile?.two_factor_enabled },
-    });
+    if (profile?.authenticator) {
+      const challengeToken = randomUUID();
+      try {
+        await this.redis.set(
+          `mfa:login:${challengeToken}`,
+          { session, kind: 'login', revision: profile.authenticator.revision },
+          300,
+        );
+      } catch {
+        throw new ServiceUnavailableException(
+          'Authenticator sign-in is temporarily unavailable. Try again.',
+        );
+      }
+      return { requiresTwoFactor: true, challengeToken, twoFactorMethod: 'authenticator', userId };
+    }
 
-    // If the account has email-OTP 2FA enabled, do NOT issue a session yet.
-    // Email a code and hold the (uncommitted) session in Redis so /auth/login/2fa
-    // can complete the sign-in only after the code is verified.
+    const factors =
+      data.user.factors?.filter((f) => f.factor_type === 'totp' && f.status === 'verified') ?? [];
+    if (factors.length) {
+      const challengeToken = randomUUID();
+      try {
+        await this.redis.set(
+          `mfa:login:${challengeToken}`,
+          JSON.stringify({ session, factorId: factors[0].id, kind: 'supabase-migration' }),
+          300,
+        );
+      } catch {
+        throw new ServiceUnavailableException(
+          'Authenticator sign-in is temporarily unavailable. Try again.',
+        );
+      }
+      return {
+        requiresTwoFactor: true,
+        challengeToken,
+        twoFactorMethod: 'supabase-migration',
+        userId,
+      };
+    }
+
+    // Legacy email-2FA accounts must verify their existing factor once before
+    // enrolling TOTP. No application session is released until TOTP is verified.
     if (profile?.two_factor_enabled) {
       const recipient = profile.email?.trim() || email;
 
-      // Stage the withheld session in Redis. A Redis outage is the ONLY case
-      // we fail open: we cannot stage/verify a code, so issue the session
-      // directly rather than locking the user out.
       try {
+        await this.redis.del(`2fa:login:pending:${userId}:attempts`);
         await this.redis.set(
           `2fa:login:pending:${userId}`,
           JSON.stringify({
             session: {
-              accessToken: data.session.access_token,
-              refreshToken: data.session.refresh_token,
-              expiresAt: data.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+              accessToken: session.accessToken,
+              refreshToken: session.refreshToken,
+              expiresAt: session.expiresAt,
             },
-            user: {
-              userId,
-              email,
-              profile: session.profile,
-            },
+            user: { userId, email, profile: session.profile },
           }),
           AuthService.TWO_FACTOR_TTL_SECONDS,
         );
-      } catch (err) {
-        this.logger.warn(
-          `2FA staging skipped (Redis unavailable), issuing session directly: ${
-            err instanceof Error ? err.message : err
-          }`,
+      } catch {
+        throw new ServiceUnavailableException(
+          'Two-factor sign-in is temporarily unavailable. Try again.',
         );
-        return session;
       }
 
       // Send the OTP email. This must NOT fail open: if the email cannot be
@@ -319,13 +344,102 @@ export class AuthService {
       return {
         requiresTwoFactor: true,
         twoFactorEmail: maskTwoFactorEmail(recipient),
+        twoFactorMethod: 'migration',
         userId,
       };
     }
 
+    await this.auditSuccessfulLogin(session, false);
     this.logger.log(`User logged in: ${email}`);
 
     return session;
+  }
+
+  async enrollAuthenticator(userId: string, email: string) {
+    return this.authenticator.setup(userId, email);
+  }
+
+  private async verifyLegacySupabaseAuthenticator(token: string, factorId: string, code: string) {
+    try {
+      const challenge = await this.supabase.authRequest<{ id: string }>(
+        token,
+        `factors/${factorId}/challenge`,
+        {},
+      );
+      const verified = await this.supabase.authRequest<{
+        access_token: string;
+        refresh_token: string;
+        expires_at?: number;
+        expires_in: number;
+      }>(token, `factors/${factorId}/verify`, { challenge_id: challenge.id, code });
+      return {
+        ...verified,
+        expires_at: verified.expires_at ?? Math.floor(Date.now() / 1000) + verified.expires_in,
+      };
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid or expired authenticator code. Try the current code from your app.',
+      );
+    }
+  }
+
+  async configureAuthenticator(
+    userId: string,
+    token: string,
+    factorId: string,
+    code: string,
+    disable = false,
+  ) {
+    let recoveryCodes: string[] | undefined;
+    if (disable) await this.authenticator.disable(userId, code);
+    else
+      recoveryCodes = (await this.authenticator.activate(userId, token, factorId, code))
+        .recoveryCodes;
+    const profile = await this.prisma.profile.findUniqueOrThrow({
+      where: { user_id: userId },
+      select: { church_id: true },
+    });
+    await this.audit.log({
+      userId,
+      churchId: profile.church_id,
+      entity: 'auth',
+      entityId: userId,
+      action: 'UPDATE',
+      newValues: { authenticator_action: disable ? 'removed' : 'enabled' },
+    });
+    return { recoveryCodes };
+  }
+
+  async listAuthenticators(userId: string) {
+    return this.authenticator.factors(userId);
+  }
+
+  async regenerateRecoveryCodes(userId: string, code: string) {
+    const result = await this.authenticator.regenerateRecoveryCodes(userId, code);
+    const profile = await this.prisma.profile.findUniqueOrThrow({
+      where: { user_id: userId },
+      select: { church_id: true },
+    });
+    await this.audit.log({
+      userId,
+      churchId: profile.church_id,
+      entity: 'auth',
+      entityId: userId,
+      action: 'UPDATE',
+      newValues: { authenticator_action: 'recovery_codes_replaced' },
+    });
+    return result;
+  }
+
+  private async auditSuccessfulLogin(session: LoginResponseDto, twoFactorVerified: boolean) {
+    await this.audit.log({
+      userId: session.userId,
+      churchId: session.profile?.churchId ?? '',
+      entity: 'auth',
+      action: 'LOGIN',
+      entityId: session.userId,
+      newValues: { email: session.email, two_factor_verified: twoFactorVerified },
+    });
   }
 
   private msg(err: unknown): string {
@@ -333,17 +447,93 @@ export class AuthService {
   }
 
   /**
-   * Completes an email-OTP two-factor sign-in.
+   * Completes backend TOTP/recovery verification, or migrates a legacy factor.
    *
-   * Verifies the emailed code against the pending login state stored during
-   * `login` and, on success, returns the full session (the Supabase tokens and
-   * profile) that was withheld until this point.
+   * Password sessions remain withheld until a backend factor is verified.
+   * Legacy verification returns enrollment, never an application session.
    *
    * @param dto - Account email and the 6-digit code
    * @returns The full login response (access token, refresh token, profile)
    * @throws UnauthorizedException if the code is wrong, expired, or not requested
    */
   async completeTwoFactorLogin(dto: Login2faDto): Promise<LoginResponseDto> {
+    if (dto.challengeToken) {
+      const key = `mfa:login:${dto.challengeToken}`;
+      const raw = await this.redis.get<string>(key);
+      if (!raw) throw new UnauthorizedException('Sign-in expired. Enter your password again.');
+      const record = (typeof raw === 'string' ? JSON.parse(raw) : raw) as {
+        session: LoginResponseDto;
+        factorId?: string;
+        revision?: string;
+        kind: 'login' | 'enroll' | 'supabase-migration';
+      };
+      const attempts = await this.redis.incr(`${key}:attempts`, 300);
+      if (attempts > 5) {
+        await this.redis.del(key);
+        throw new UnauthorizedException('Too many attempts. Sign in again.');
+      }
+      if (record.kind === 'supabase-migration') {
+        await this.authenticator.attempt(record.session.userId);
+        const verified = await this.verifyLegacySupabaseAuthenticator(
+          record.session.accessToken!,
+          record.factorId!,
+          dto.code,
+        );
+        if (!(await this.redis.consume(key)))
+          throw new UnauthorizedException('Challenge already used.');
+        const setup = await this.enrollAuthenticator(
+          record.session.userId,
+          record.session.email ?? 'Account',
+        );
+        const challengeToken = randomUUID();
+        await this.redis.set(
+          `mfa:login:${challengeToken}`,
+          {
+            session: {
+              ...record.session,
+              accessToken: verified.access_token,
+              refreshToken: verified.refresh_token,
+              expiresAt: verified.expires_at,
+            },
+            factorId: setup.factorId,
+            kind: 'enroll',
+          },
+          300,
+        );
+        return {
+          requiresTwoFactor: true,
+          challengeToken,
+          twoFactorMethod: 'authenticator',
+          authenticatorSetup: setup,
+          userId: record.session.userId,
+        };
+      }
+      let recoveryCodes: string[] | undefined;
+      if (record.kind === 'enroll') {
+        recoveryCodes = (
+          await this.authenticator.activate(
+            record.session.userId,
+            record.session.accessToken!,
+            record.factorId!,
+            dto.code,
+          )
+        ).recoveryCodes;
+      } else {
+        const revision = await this.authenticator.verify(record.session.userId, dto.code);
+        if (revision !== record.revision)
+          throw new UnauthorizedException('Authenticator changed. Sign in again.');
+        await this.authenticator.approve(
+          record.session.userId,
+          record.session.accessToken!,
+          revision,
+        );
+      }
+      if (!(await this.redis.consume(key)))
+        throw new UnauthorizedException('Challenge already used.');
+      await this.auditSuccessfulLogin(record.session, true);
+      return { ...record.session, recoveryCodes };
+    }
+    if (!dto.email) throw new UnauthorizedException('Missing sign-in challenge');
     const normalizedEmail = dto.email.trim().toLowerCase();
     const profile = await this.prisma.profile.findFirst({
       where: { email: normalizedEmail },
@@ -372,15 +562,17 @@ export class AuthService {
       user: { userId: string; email: string; profile: unknown };
       digest: string;
       attempts: number;
+      expiresAt: number;
     };
     let digest = '';
     let attempts = 0;
     try {
-      const parsed = JSON.parse(raw) as {
+      const parsed = (typeof raw === 'string' ? JSON.parse(raw) : raw) as {
         session: { accessToken: string; refreshToken?: string; expiresAt: number };
         user: { userId: string; email: string; profile: unknown };
         digest?: string;
         attempts?: number;
+        expiresAt: number;
       };
       record = {
         ...parsed,
@@ -388,55 +580,43 @@ export class AuthService {
         attempts: parsed.attempts ?? 0,
       };
       digest = parsed.digest ?? '';
+      if (!parsed.expiresAt || parsed.expiresAt < Date.now()) throw new Error('Expired');
     } catch {
       throw new UnauthorizedException('Invalid verification code');
     }
 
+    await this.authenticator.attempt(profile.user_id);
+    attempts = await this.redis.incr(`${key}:attempts`, 600);
+    if (attempts > AuthService.TWO_FACTOR_MAX_ATTEMPTS) {
+      await this.redis.del(key);
+      throw new UnauthorizedException('Too many attempts. Sign in again.');
+    }
     if (!digest || !verifyTwoFactorCode(dto.code.trim(), digest)) {
-      attempts += 1;
-      if (attempts >= AuthService.TWO_FACTOR_MAX_ATTEMPTS) {
-        try {
-          await this.redis.del(key);
-        } catch (err) {
-          this.logger.warn(
-            `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-          );
-        }
-        throw new UnauthorizedException('Too many incorrect attempts. Please sign in again.');
-      }
-      try {
-        await this.redis.set(
-          key,
-          JSON.stringify({ ...record, attempts }),
-          AuthService.TWO_FACTOR_TTL_SECONDS,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `2FA attempt counter write failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-        );
-      }
-      throw new UnauthorizedException(
-        `Invalid verification code. ${AuthService.TWO_FACTOR_MAX_ATTEMPTS - attempts} attempt(s) remaining.`,
-      );
+      throw new UnauthorizedException('Invalid verification code.');
     }
 
-    try {
-      await this.redis.del(key);
-    } catch (err) {
-      this.logger.warn(
-        `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-      );
-    }
+    if (!(await this.redis.consume(key)))
+      throw new UnauthorizedException('Sign-in challenge already used.');
 
     this.logger.log(`2FA sign-in completed: ${normalizedEmail}`);
 
+    const setup = await this.enrollAuthenticator(profile.user_id, record.user.email);
+    const challengeToken = randomUUID();
+    await this.redis.set(
+      `mfa:login:${challengeToken}`,
+      JSON.stringify({
+        session: { ...record.session, ...record.user },
+        factorId: setup.factorId,
+        kind: 'enroll',
+      }),
+      300,
+    );
     return {
-      accessToken: record.session.accessToken,
-      refreshToken: record.session.refreshToken,
-      expiresAt: record.session.expiresAt,
+      requiresTwoFactor: true,
+      twoFactorMethod: 'authenticator',
+      challengeToken,
+      authenticatorSetup: setup,
       userId: profile.user_id,
-      email: record.user.email,
-      profile: record.user.profile as LoginResponseDto['profile'],
     };
   }
 
@@ -467,7 +647,12 @@ export class AuthService {
         `2FA pending read skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
       );
     }
-    const base = existing ? (JSON.parse(existing) as { session?: unknown; user?: unknown }) : {};
+    const base = existing
+      ? ((typeof existing === 'string' ? JSON.parse(existing) : existing) as {
+          session?: unknown;
+          user?: unknown;
+        })
+      : {};
     await this.redis.set(
       key,
       JSON.stringify({
@@ -503,6 +688,7 @@ export class AuthService {
    * @param churchId - Church ID for audit logging
    */
   async logout(userId: string, token: string, churchId: string): Promise<void> {
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: userId } });
     // Calculate TTL from JWT expiry (default 3600s if we can't parse)
     const ttlSeconds = 3600;
 
@@ -617,7 +803,7 @@ export class AuthService {
     }
 
     // Verify current password
-    const { error: signInError } = await this.supabase.client.auth.signInWithPassword({
+    const { error: signInError } = await this.supabase.createAuthClient().auth.signInWithPassword({
       email: userData.user.email,
       password: currentPassword,
     });
@@ -647,6 +833,7 @@ export class AuthService {
       );
     }
 
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: userId } });
     // Audit-log
     await this.audit.log({
       userId,
@@ -672,7 +859,7 @@ export class AuthService {
     refreshToken: string;
     expiresAt: number;
   }> {
-    const { data, error } = await this.supabase.client.auth.refreshSession({
+    const { data, error } = await this.supabase.createAuthClient().auth.refreshSession({
       refresh_token: refreshToken,
     });
 
@@ -685,6 +872,8 @@ export class AuthService {
       throw new UnauthorizedException('Failed to refresh session');
     }
 
+    const { payload } = await this.jwks.verifyToken(data.session.access_token);
+    await this.authenticator.assertSession(payload);
     return {
       accessToken: data.session.access_token,
       refreshToken: data.session.refresh_token,

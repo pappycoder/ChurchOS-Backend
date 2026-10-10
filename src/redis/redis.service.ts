@@ -81,6 +81,12 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** Atomically consume a one-use authentication challenge. */
+  async consume(key: string): Promise<unknown | null> {
+    if (this._driver === 'upstash') return (this._client as UpstashRedis).getdel(key);
+    return (this._client as IORedis).getdel(key);
+  }
+
   async del(key: string): Promise<void> {
     if (this._driver === 'upstash') {
       await (this._client as UpstashRedis).del(key);

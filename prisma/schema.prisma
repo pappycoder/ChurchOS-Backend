@@ -223,7 +223,7 @@ model Profile {
   phone       String?
   avatar_url  String?
   mfa_enabled         Boolean   @default(false)
-  two_factor_enabled  Boolean   @default(false) // email-OTP 2FA (per-profile, self-service)
+  two_factor_enabled  Boolean   @default(false) // 2FA enabled; secrets and session assurance managed by backend
   is_admin_hq         Boolean   @default(false) // HQ access override: see data from ALL branches in the church within the user's permission scope; defaulted ON for church_admin
   created_at          DateTime  @default(now())
   updated_at  DateTime  @updatedAt
@@ -234,6 +234,8 @@ model Profile {
   member Member? @relation(fields: [member_id], references: [id])
 
   assigned_visitors Visitor[] @relation("AssignedTo")
+  authenticator ProfileAuthenticator?
+  mfa_sessions VerifiedMfaSession[]
 
   @@index([church_id])
   @@index([user_id])
@@ -1358,4 +1360,28 @@ model WebhookDelivery {
 
   @@index([subscription_id, status])
   @@map("webhook_deliveries")
+}
+
+// Self-service authenticator data is never included in profile responses.
+model ProfileAuthenticator {
+  user_id String @id
+  secret_ciphertext String
+  revision String
+  last_used_step BigInt @default(-1)
+  recovery_hashes String[] @default([])
+  created_at DateTime @default(now())
+  profile Profile @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  @@map("profile_authenticators")
+}
+
+// Supabase session_id is stable across refresh; approvals expire absolutely.
+model VerifiedMfaSession {
+  user_id String
+  session_id String
+  revision String
+  expires_at DateTime
+  profile Profile @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  @@id([user_id, session_id])
+  @@index([expires_at])
+  @@map("verified_mfa_sessions")
 }

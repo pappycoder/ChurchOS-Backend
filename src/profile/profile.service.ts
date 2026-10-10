@@ -17,8 +17,6 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
-  HttpException,
-  HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,15 +36,7 @@ import { UpdateRolesDto } from './dto/update-roles.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
-import {
-  verifyTwoFactorCode,
-  generateTwoFactorCode,
-  hashTwoFactorCode,
-  maskTwoFactorEmail,
-} from './two-factor.util';
 import { Prisma } from '@prisma/client';
-import { RedisService } from '../redis/redis.service';
-import { ResendService } from '../communication/resend.service';
 
 /**
  * Rank of each role for privilege-escalation checks. A user may only assign
@@ -73,11 +63,6 @@ const ROLE_RANK: Record<string, number> = {
 export class ProfileService {
   private readonly logger = new Logger(ProfileService.name);
 
-  // Email-OTP two-factor authentication configuration.
-  private readonly TWO_FACTOR_TTL_SECONDS = 600; // 10 minutes
-  private readonly TWO_FACTOR_COOLDOWN_MS = 30_000; // 30s between sends
-  private readonly TWO_FACTOR_MAX_ATTEMPTS = 5;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
@@ -85,9 +70,7 @@ export class ProfileService {
     private readonly audit: AuditLoggingService,
     private readonly mediaService: MediaService,
     private readonly supabase: SupabaseService,
-    private readonly redis: RedisService,
     private readonly permissionsService: PermissionsService,
-    private readonly resend: ResendService,
     private readonly branchScope: BranchScopeService,
   ) {}
 
@@ -972,246 +955,6 @@ export class ProfileService {
   }
 
   /**
-   * Returns whether email-OTP 2FA is currently enabled for the user.
-   *
-   * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @returns True when two-factor authentication is enabled
-   * @throws NotFoundException if no profile exists for this user
-   */
-  async getTwoFactorEnabled(userId: string): Promise<boolean> {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-      select: { two_factor_enabled: true },
-    });
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-    return profile.two_factor_enabled;
-  }
-
-  /**
-   * Sends a 6-digit email-OTP to the profile's email for a 2FA lifecycle action.
-   *
-   * Used when a user enables or disables email-OTP 2FA. The code is stored in
-   * Redis as a SHA-256 digest with a short TTL and an attempt/cooldown budget.
-   * Emails are delivered via Resend and logged to the Message table.
-   *
-   * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @param purpose - 'enable' or 'disable'
-   * @param force - Allow resending even during the cooldown window (resend endpoint)
-   * @returns The masked recipient email (never the code)
-   * @throws NotFoundException if no profile exists for this user
-   * @throws BadRequestException if 2FA state is incompatible with the purpose
-   * @throws TooManyRequestsException if the resend cooldown is still active
-   */
-  async sendTwoFactorCode(
-    userId: string,
-    purpose: 'enable' | 'disable',
-    force = false,
-  ): Promise<{ email: string }> {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-      include: { church: { select: { name: true } } },
-    });
-
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    if (purpose === 'enable' && profile.two_factor_enabled) {
-      throw new BadRequestException('Two-factor authentication is already enabled');
-    }
-    if (purpose === 'disable' && !profile.two_factor_enabled) {
-      throw new BadRequestException('Two-factor authentication is not enabled');
-    }
-
-    const recipient = profile.email?.trim();
-    if (!recipient) {
-      throw new BadRequestException(
-        'No email address on record. Contact your church admin to enable two-factor authentication.',
-      );
-    }
-
-    const key = this.getTwoFactorKey(userId, purpose);
-    const code = generateTwoFactorCode();
-    const digest = hashTwoFactorCode(code);
-
-    if (!force) {
-      try {
-        const existing = await this.redis.get<{ lastSentAt?: number }>(key);
-        const waitMs = (existing?.lastSentAt ?? 0) + this.TWO_FACTOR_COOLDOWN_MS - Date.now();
-        if (waitMs > 0) {
-          throw new HttpException(
-            `Please wait a moment before requesting another code (${Math.ceil(waitMs / 1000)}s).`,
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-      } catch (err) {
-        if (err instanceof HttpException) {
-          throw err;
-        }
-        this.logger.warn(
-          `2FA cooldown check skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-        );
-      }
-    }
-
-    try {
-      await this.redis.set(
-        key,
-        JSON.stringify({ digest, attempts: 0, lastSentAt: Date.now() }),
-        this.TWO_FACTOR_TTL_SECONDS,
-      );
-    } catch (err) {
-      throw new BadRequestException(
-        `Two-factor verification is temporarily unavailable: ${
-          err instanceof Error ? err.message : err
-        }`,
-      );
-    }
-
-    const churchName = profile.church?.name ?? 'ChurchOS';
-    const appUrl = this.config.get<string>('WEB_URL') ?? '';
-    const html = [
-      `<p>Hello ${profile.first_name},</p>`,
-      `<p>Your ${churchName} two-factor authentication code is:</p>`,
-      `<p style="font-size:28px;letter-spacing:4px;font-weight:bold;margin:16px 0;">${code}</p>`,
-      `<p>Enter this code to ${purpose === 'enable' ? 'enable' : 'disable'} two-factor authentication.</p>`,
-      `<p>It expires in ${Math.floor(this.TWO_FACTOR_TTL_SECONDS / 60)} minutes. If you didn't request this, you can safely ignore this email.</p>`,
-      `<p>— ${churchName}</p>`,
-      appUrl
-        ? `<p style="color:#6b7280;font-size:12px;"><a href="${appUrl}">${appUrl}</a></p>`
-        : '',
-    ].join('');
-
-    try {
-      await this.resend.sendEmail(
-        recipient,
-        purpose === 'enable'
-          ? 'Your ChurchOS two-factor authentication code'
-          : 'Confirm disabling two-factor authentication',
-        html,
-        profile.church_id,
-      );
-    } catch (err) {
-      throw new BadRequestException(
-        `Failed to send the verification code: ${(err as Error).message}`,
-      );
-    }
-
-    this.logger.log(`2FA ${purpose} code sent for user: ${userId}`);
-
-    return { email: maskTwoFactorEmail(recipient) };
-  }
-
-  /**
-   * Verifies a submitted code against the stored digest and, on success,
-   * toggles the profile's two_factor_enabled flag.
-   *
-   * @param userId - Supabase Auth user ID (from JWT sub claim)
-   * @param purpose - 'enable' or 'disable'
-   * @param code - The 6-digit code emailed to the user
-   * @returns The updated profile response
-   * @throws NotFoundException if no profile exists for this user
-   * @throws BadRequestException if 2FA state is incompatible, the code was not requested,
-   *         or the code is wrong/exhausted its attempts
-   */
-  async toggleTwoFactor(
-    userId: string,
-    purpose: 'enable' | 'disable',
-    code: string,
-  ): Promise<ProfileResponseDto> {
-    const profile = await this.prisma.profile.findUnique({
-      where: { user_id: userId },
-    });
-
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    if (purpose === 'enable' && profile.two_factor_enabled) {
-      throw new BadRequestException('Two-factor authentication is already enabled');
-    }
-    if (purpose === 'disable' && !profile.two_factor_enabled) {
-      throw new BadRequestException('Two-factor authentication is not enabled');
-    }
-
-    const key = this.getTwoFactorKey(userId, purpose);
-    let raw: string | null = null;
-    try {
-      raw = await this.redis.get<string>(key);
-    } catch (err) {
-      this.logger.warn(
-        `2FA verification lookup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-      );
-    }
-    if (!raw) {
-      throw new BadRequestException('No verification code found. Request a new code first.');
-    }
-
-    let record: { digest: string; attempts: number };
-    try {
-      record = JSON.parse(raw) as { digest: string; attempts: number };
-    } catch {
-      throw new BadRequestException('Invalid verification code. Request a new one.');
-    }
-
-    if (!verifyTwoFactorCode(code.trim(), record.digest)) {
-      const attempts = (record.attempts ?? 0) + 1;
-      if (attempts >= this.TWO_FACTOR_MAX_ATTEMPTS) {
-        try {
-          await this.redis.del(key);
-        } catch (err) {
-          this.logger.warn(
-            `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-          );
-        }
-        throw new BadRequestException('Too many incorrect attempts. Request a new code.');
-      }
-      try {
-        await this.redis.set(
-          key,
-          JSON.stringify({ ...record, attempts }),
-          this.TWO_FACTOR_TTL_SECONDS,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `2FA attempt counter write failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-        );
-      }
-      throw new BadRequestException(
-        `Invalid verification code. ${this.TWO_FACTOR_MAX_ATTEMPTS - attempts} attempt(s) remaining.`,
-      );
-    }
-
-    try {
-      await this.redis.del(key);
-    } catch (err) {
-      this.logger.warn(
-        `2FA pending cleanup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-      );
-    }
-
-    await this.prisma.profile.update({
-      where: { user_id: userId },
-      data: { two_factor_enabled: purpose === 'enable' },
-    });
-
-    await this.audit.log({
-      userId,
-      churchId: profile.church_id,
-      entity: 'profile',
-      action: 'UPDATE',
-      entityId: profile.id,
-      newValues: { two_factor_enabled: purpose === 'enable' },
-    });
-
-    this.logger.log(`2FA ${purpose}d for user: ${userId}`);
-
-    return this.getMyProfile(userId);
-  }
-
-  /**
    * Invite a new user via email.
    * Creates a Supabase Auth user via admin invite API, then creates the Profile.
    */
@@ -1341,6 +1084,7 @@ export class ProfileService {
       data: { status: 'inactive' },
     });
 
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: profile.user_id } });
     // Invalidate the user's active sessions so deactivation takes effect immediately
     const { error } = await supabase.auth.admin.signOut(profile.user_id);
     if (error) {
@@ -1430,6 +1174,7 @@ export class ProfileService {
       throw new NotFoundException('User not found');
     }
 
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: profile.user_id } });
     const supabase = this.supabase.client;
     const { error } = await supabase.auth.admin.signOut(profile.user_id);
 
@@ -1447,10 +1192,6 @@ export class ProfileService {
     });
 
     return { signedOut: true };
-  }
-
-  private getTwoFactorKey(userId: string, purpose: 'enable' | 'disable'): string {
-    return `2fa:${purpose}:${userId}`;
   }
 
   /**

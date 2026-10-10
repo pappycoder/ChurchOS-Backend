@@ -14,6 +14,7 @@ import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@ne
 import { Request } from 'express';
 import { JwksService } from '../services/jwks.service';
 import { SupabaseJwtPayload } from '../strategies/jwt.strategy';
+import { AuthenticatorService } from '../services/authenticator.service';
 import { RedisService } from '../../redis/redis.service';
 
 /**
@@ -40,6 +41,7 @@ export class JwtAuthGuard {
   constructor(
     private readonly jwksService: JwksService,
     private readonly redis: RedisService,
+    private readonly authenticator: AuthenticatorService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> {
@@ -73,6 +75,8 @@ export class JwtAuthGuard {
         if (isBlacklisted) {
           throw new UnauthorizedException('Token has been revoked');
         }
+
+        await this.authenticator.assertSession(payload);
 
         // Map JWT payload to SupabaseJwtPayload
         // Include both `sub` and `id` (mapped from sub) for compatibility
