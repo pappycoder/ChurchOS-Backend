@@ -122,6 +122,52 @@ describe('Backend authenticator security', () => {
     });
     await expect(service.assertSession(payload, profile)).resolves.toBeUndefined();
   });
+  it('approves password-only login and accepts its session on protected requests', async () => {
+    const profile = { two_factor_enabled: false, authenticator: null };
+    prisma.profile.findUnique.mockResolvedValue(profile);
+    await service.approve(userId, 'signed-token', 'password-session');
+    expect(prisma.verifiedMfaSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          user_id: userId,
+          session_id: 'session-1',
+          revision: 'password-session',
+        }),
+      }),
+    );
+    prisma.verifiedMfaSession.findUnique.mockResolvedValue(
+      prisma.verifiedMfaSession.upsert.mock.calls[0][0].create,
+    );
+    await expect(
+      service.assertSession({ sub: userId, session_id: 'session-1' }, profile),
+    ).resolves.toBeUndefined();
+  });
+  it.each([
+    null,
+    { two_factor_enabled: true, authenticator: null },
+    { two_factor_enabled: true, authenticator: { revision: 'current' } },
+    { two_factor_enabled: false, authenticator: { revision: 'current' } },
+  ])(
+    'rejects password approval when the current profile requires verification: %p',
+    async (profile) => {
+      prisma.profile.findUnique.mockResolvedValue(profile);
+      await expect(service.approve(userId, 'signed-token', 'password-session')).rejects.toThrow(
+        'Authenticator changed',
+      );
+      expect(prisma.verifiedMfaSession.upsert).not.toHaveBeenCalled();
+    },
+  );
+  it('approves only the current verified authenticator revision', async () => {
+    prisma.profileAuthenticator.findUnique.mockResolvedValue({ revision: 'current' });
+    await expect(service.approve(userId, 'signed-token', 'old')).rejects.toThrow(
+      'Authenticator changed',
+    );
+    expect(prisma.verifiedMfaSession.upsert).not.toHaveBeenCalled();
+    await service.approve(userId, 'signed-token', 'current');
+    expect(prisma.verifiedMfaSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ revision: 'current' }) }),
+    );
+  });
   it('requires approval even when MFA is disabled', async () => {
     prisma.verifiedMfaSession.findUnique.mockResolvedValue(null);
     await expect(

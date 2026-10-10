@@ -213,6 +213,8 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 
 ## Changelog
 
+- **2026-10-10 — Password login approval fix.** Session approval now distinguishes password-only accounts from authenticator revisions, rechecking the current profile before allowing `password-session`. Added regressions for successful password approval, enabled/migrating MFA accounts, missing profiles and changed authenticator revisions.
+
 - **2026-10-10 — Offline workspace release.** Added authenticated `/offline/snapshot` and `/offline/push` endpoints with permission/branch/account scope, bounded contact/form snapshots, durable payload-bound mutation receipts, advisory-lock replay serialization, atomic version checks and per-operation acknowledgements. Published form submissions reuse the normal field validator and enforce current schema, status, limits and uniqueness. Apply migration `20261010200000_offline_receipts`; no new permission seed needed. Added PostgreSQL offline integration and DTO/account contract tests plus authenticator regressions; repaired stale constructor/scope/permission/security fixtures throughout existing suites. E2E setup refuses deployed databases. See `docs/OFFLINE-WORKSPACE.md`.
 
 - **2026-10-10: Reset MFA state for development seed accounts.** Re-running the development seed removes backend authenticator factors and verified MFA sessions for seeded demo identities and clears their 2FA flags, keeping shared-password accounts usable after MFA testing.

@@ -222,9 +222,22 @@ export class AuthenticatorService {
 
   async approve(userId: string, token: string, revision: string) {
     const sessionId = await this.sessionId(userId, token);
-    const state = await this.prisma.profileAuthenticator.findUnique({ where: { user_id: userId } });
-    if (!state || state.revision !== revision)
-      throw new UnauthorizedException('Authenticator changed. Sign in again.');
+    if (revision === 'password-session') {
+      const profile = await this.prisma.profile.findUnique({
+        where: { user_id: userId },
+        select: { two_factor_enabled: true, authenticator: { select: { revision: true } } },
+      });
+      // Password approval is only valid while no authenticator is configured.
+      // Recheck after password verification so enrollment cannot bypass 2FA.
+      if (!profile || profile.two_factor_enabled || profile.authenticator)
+        throw new UnauthorizedException('Authenticator changed. Sign in again.');
+    } else {
+      const state = await this.prisma.profileAuthenticator.findUnique({
+        where: { user_id: userId },
+      });
+      if (!state || state.revision !== revision)
+        throw new UnauthorizedException('Authenticator changed. Sign in again.');
+    }
     await this.prisma.verifiedMfaSession.upsert({
       where: { user_id_session_id: { user_id: userId, session_id: sessionId } },
       create: {
