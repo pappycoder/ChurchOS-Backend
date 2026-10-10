@@ -1,8 +1,8 @@
 # Offline API rollout
 
-Deploy backend and web together after applying `20261010200000_offline_receipts`. The migration was exercised on an isolated local PostgreSQL database; it has not been applied to the application database. No permission seed changes are required.
+Deploy backend and web together after applying `20261010200000_offline_receipts`. The migration was exercised on an isolated local PostgreSQL database; it has not been applied to the application database. Run the permissions seed to apply `offline:read` to staff templates and remove member event management grants.
 
-The first browser release prepares one branch and supports member/visitor contact create/edit plus published form answer drafts/submissions. Existing `members:all:read`, `members:new:create`, `members:all:update`, `visitors:list:read`, `visitors:new:create`, `visitors:list:update` and `forms:list:read` permissions govern access. Admin HQ may choose any church branch; other profiles are pinned to their branch.
+The first browser release prepares one branch and supports member/visitor contact create/edit plus published form answer drafts/submissions. `offline:read` is required for all offline API access. Existing `members:all:read`, `members:new:create`, `members:all:update`, `visitors:list:read`, `visitors:new:create`, `visitors:list:update` and `forms:list:read` permissions govern access. Admin HQ may choose any church branch; other profiles are pinned to their branch.
 
 ## API contract
 

@@ -1299,3 +1299,5 @@ All notable changes to this project are documented below. Update this section wi
   - Updated `src/common/decorators/current-user.decorator.ts` — `SupabaseUser` is now a type alias for `SupabaseJwtPayload` (includes both `id` and `sub`).
   - Updated `src/auth/guards/roles.guard.ts`, `src/common/interceptors/sentry.interceptor.ts` — replaced Passport `Request` types with `AuthenticatedRequest`.
   - 37 tests passing, build clean, lint clean.
+
+- **2026-10-10:** Added `offline:read` as an explicit staff grant, omitted from member defaults and enforced on snapshot/push. Member event grants now cover calendar/listing/tickets without All Events or registrations management. Run the permissions seed to reconcile templates.

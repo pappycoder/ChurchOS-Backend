@@ -67,6 +67,7 @@ export const RESOURCES = [
   'attendance',
   'giving',
   'events',
+  'offline',
   'sermons',
   'media',
   'church',
@@ -280,6 +281,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     // Events — calendar, event listing, and registrations; no check-in access
     'events:calendar:read',
     'events:list:read',
+    'events:all:read',
     'events:registrations:read',
     'events:tickets:read',
     'events:ticket-records:read',
@@ -400,8 +402,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   member: [
     'members:own:read',
     'branches:read',
-    // Events — read
-    'events:read',
+    // Personal event browsing and booking; no management menus.
+    'events:view',
+    'events:calendar:read',
+    'events:list:read',
+    'events:tickets:read',
     // Sermons — read
     'sermons:read',
     // Media — read
@@ -419,7 +424,7 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEn
     role,
     // All roles need to resolve their own branch name for locked branch
     // filters. BranchesService limits non-HQ callers to their assigned branch.
-    expandPermissions([...perms, 'branches:read']),
+    expandPermissions([...perms, 'branches:read', ...(role === 'member' ? [] : ['offline:read'])]),
   ]),
 );
 

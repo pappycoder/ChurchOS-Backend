@@ -54,6 +54,8 @@ export class OfflineService {
   private scope(viewer: Viewer, branchId: string) {
     if (!viewer?.church_id || !viewer.permissions)
       throw new ForbiddenException('Verified offline scope required');
+    if (!viewer.permissions.includes('offline:read'))
+      throw new ForbiddenException('Offline workspace access is not permitted');
     if (!viewer.is_admin_hq && (!viewer.branch_id || branchId !== viewer.branch_id))
       throw new ForbiddenException('Offline access is limited to your branch');
     return { church_id: viewer.church_id, branch_id: branchId };

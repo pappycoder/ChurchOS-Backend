@@ -1,11 +1,23 @@
+import { DEFAULT_PERMISSION_MATRIX } from '../../../prisma/seeds/shared/permissions.seed';
 import { ValidationPipe } from '@nestjs/common';
-import { offlineHash } from '../../../src/sync/offline.service';
+import { OfflineService, offlineHash } from '../../../src/sync/offline.service';
 import { OfflinePushDto, OfflineSnapshotDto } from '../../../src/sync/dto/offline.dto';
 import { OfflineController } from '../../../src/sync/offline.controller';
 import { AuthenticatedRequest } from '../../../src/common/decorators/current-user.decorator';
 import { randomUUID } from 'crypto';
 
 describe('Offline API contract', () => {
+  it('keeps member event browsing but excludes management and offline access', () => {
+    expect(DEFAULT_PERMISSION_MATRIX.member).toEqual(
+      expect.arrayContaining(['events:calendar:read', 'events:list:read', 'events:tickets:read']),
+    );
+    for (const permission of ['offline:read', 'events:all:read', 'events:registrations:read'])
+      expect(DEFAULT_PERMISSION_MATRIX.member).not.toContain(permission);
+    expect(DEFAULT_PERMISSION_MATRIX.secretary).toContain('offline:read');
+    expect(DEFAULT_PERMISSION_MATRIX.secretary).toContain('events:all:read');
+    expect(DEFAULT_PERMISSION_MATRIX.church_admin).toContain('events:all:read');
+  });
+
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
   const body = () => ({
     profileId: randomUUID(),
@@ -23,6 +35,19 @@ describe('Offline API contract', () => {
   });
   const validate = (value: unknown) =>
     pipe.transform(value, { type: 'body', metatype: OfflinePushDto });
+  it('requires a dedicated offline permission even with entity permissions', async () => {
+    const service = new OfflineService({} as never, {} as never);
+    const viewer = {
+      church_id: randomUUID(),
+      branch_id: randomUUID(),
+      permissions: ['members:all:read', 'members:new:create'],
+    } as never;
+    await expect(service.snapshot(viewer, randomUUID())).rejects.toThrow(
+      'Offline workspace access',
+    );
+    const [ack] = await service.push(viewer, randomUUID(), body().mutations as never);
+    expect(ack.status).toBe('rejected');
+  });
   it('requires a bounded validated batch and explicit original account', async () => {
     expect(await validate(body())).toBeInstanceOf(OfflinePushDto);
     await expect(validate({ ...body(), profileId: undefined })).rejects.toThrow();

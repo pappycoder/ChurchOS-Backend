@@ -20,6 +20,7 @@ describe('Offline workspace with PostgreSQL', () => {
     role: 'secretary',
     is_admin_hq: false,
     permissions: [
+      'offline:read',
       'members:all:read',
       'members:new:create',
       'members:all:update',
@@ -90,7 +91,7 @@ describe('Offline workspace with PostgreSQL', () => {
     ).toHaveLength(1);
   });
   it('does not download entities without read permission', async () => {
-    const result = await service.snapshot({ ...viewer, permissions: [] }, branchId);
+    const result = await service.snapshot({ ...viewer, permissions: ['offline:read'] }, branchId);
     expect(result.records).toEqual({ member: [], visitor: [], form: [] });
   });
   it('atomically records the mutation effect and a durable acknowledgement', async () => {
