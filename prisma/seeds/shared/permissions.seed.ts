@@ -253,10 +253,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:update',
     'profiles:read',
     'church:read',
-    // Departments — create church-wide when the viewer has HQ scope; the API
-    // rejects creation for branch-scoped heads and keeps their edit scope own-only.
+    // Department heads view and edit departments, but cannot create them.
     'departments:read',
-    'departments:create',
     'departments:update',
     'departments:own:read',
     'departments:own:update',

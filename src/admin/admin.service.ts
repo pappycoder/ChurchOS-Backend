@@ -66,15 +66,20 @@ export class AdminService {
     viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
     dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
-    const scope = this.branchScope.resolveDepartmentScope(viewer);
-    if (!scope.churchOnly && 'headId' in scope) {
-      throw new ForbiddenException('Branch-scoped department heads cannot create departments');
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) {
+      if (!viewer?.branch_id) throw new ForbiddenException('A branch is required');
+      if (dto.branchId && dto.branchId !== viewer.branch_id)
+        throw new ForbiddenException('You can only manage records in your branch');
+      dto.branchId = viewer.branch_id;
     }
+    if (viewer && !dto.branchId)
+      throw new BadRequestException('Select a branch for the department');
 
     // Validate parent department exists within the same church if provided
     if (dto.parentId) {
       const parent = await this.prisma.department.findFirst({
-        where: { id: dto.parentId, church_id: churchId },
+        where: { id: dto.parentId, church_id: churchId, branch_id: dto.branchId },
       });
       if (!parent) {
         throw new NotFoundException(`Parent department ${dto.parentId} not found`);

@@ -1307,3 +1307,5 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-10-10:** Added `offline:read` as an explicit staff grant, omitted from member defaults and enforced on snapshot/push. Member event grants now cover calendar/listing/tickets without All Events or registrations management. Run the permissions seed to reconcile templates.
 
 - **2026-10-10:** Development seed now reconciles linked member branches with their demo login profiles, preventing HQ base members from being linked to Lekki accounts (including Kunle). Added branch-alignment and tenant-guard regressions. Ticket branch validation stays enforced.
+
+- **2026-10-11 — Department creation and self-ticket booking.** Department heads cannot create departments, including with HQ scope. Authorized branch creators are pinned to their branch; HQ creators must select a branch. Parent and leader assignments are validated against that branch. Permission cache namespace v17.

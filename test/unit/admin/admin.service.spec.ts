@@ -60,7 +60,8 @@ describe('AdminService', () => {
     auditLog = jest.fn();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestContextService,
+      providers: [
+        RequestContextService,
         AdminService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: auditLog } },
@@ -72,6 +73,59 @@ describe('AdminService', () => {
   });
 
   describe('createDepartment', () => {
+    it('pins a branch creator to their branch and validates the selected leader', async () => {
+      prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1' });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'branch-1' });
+      prisma.department.create.mockResolvedValue(mockDepartment);
+      await service.createDepartment(
+        { name: 'Choir', headMemberId: mockMemberId },
+        mockChurchId,
+        mockUserId,
+        { church_id: mockChurchId, role: 'secretary', branch_id: 'branch-1' },
+      );
+      expect(prisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ branch_id: 'branch-1', head_member_id: mockMemberId }),
+        }),
+      );
+    });
+
+    it('rejects creating in another branch', async () => {
+      await expect(
+        service.createDepartment(
+          { name: 'Choir', branchId: 'branch-2' },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'secretary', branch_id: 'branch-1' },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.department.create).not.toHaveBeenCalled();
+    });
+
+    it('requires HQ creators to select a branch', async () => {
+      await expect(
+        service.createDepartment({ name: 'Choir' }, mockChurchId, mockUserId, {
+          church_id: mockChurchId,
+          role: 'church_admin',
+          is_admin_hq: true,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a leader belonging to another branch', async () => {
+      prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1' });
+      prisma.member.findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'branch-2' });
+      await expect(
+        service.createDepartment(
+          { name: 'Choir', branchId: 'branch-1', headMemberId: mockMemberId },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'church_admin', is_admin_hq: true },
+        ),
+      ).rejects.toThrow('Head member must belong to the selected branch');
+      expect(prisma.department.create).not.toHaveBeenCalled();
+    });
+
     it('should create a department', async () => {
       prisma.department.create.mockResolvedValue(mockDepartment);
 
@@ -302,7 +356,7 @@ describe('AdminService', () => {
           branch_id: 'branch-hq',
           member_id: 'member-hq-head',
           role: 'department_head',
-            permissions: ['departments:own:read', 'departments:own:update'],
+          permissions: ['departments:own:read', 'departments:own:update'],
           is_admin_hq: true,
         },
       );
@@ -377,7 +431,7 @@ describe('AdminService', () => {
           branch_id: 'branch-hq',
           member_id: 'member-hq-head',
           role: 'department_head',
-            permissions: ['departments:own:read', 'departments:own:update'],
+          permissions: ['departments:own:read', 'departments:own:update'],
           is_admin_hq: true,
         }),
       ).rejects.toThrow(ForbiddenException);
@@ -407,7 +461,7 @@ describe('AdminService', () => {
           branch_id: 'branch-hq',
           member_id: 'member-hq-head',
           role: 'department_head',
-            permissions: ['departments:own:read', 'departments:own:update'],
+          permissions: ['departments:own:read', 'departments:own:update'],
           is_admin_hq: true,
         },
       );
@@ -448,7 +502,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-l',
           role: 'department_head',
-            permissions: ['departments:own:read', 'departments:own:update'],
+          permissions: ['departments:own:read', 'departments:own:update'],
         },
       );
 
@@ -543,7 +597,7 @@ describe('AdminService', () => {
           branch_id: 'branch-hq',
           member_id: 'member-hq-head',
           role: 'department_head',
-            permissions: ['departments:own:read', 'departments:own:update'],
+          permissions: ['departments:own:read', 'departments:own:update'],
           is_admin_hq: true,
         },
       );
@@ -681,7 +735,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         }),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -711,7 +765,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -772,7 +826,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         },
       );
@@ -806,7 +860,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -825,7 +879,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         }),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -843,7 +897,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.cellGroupMember.create).not.toHaveBeenCalled();
@@ -869,7 +923,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -891,7 +945,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         }),
       ).rejects.toThrow(ForbiddenException);
@@ -918,7 +972,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         },
       );
@@ -939,7 +993,7 @@ describe('AdminService', () => {
         branch_id: 'branch-1',
         member_id: 'member-leader-1',
         role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+        permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
       });
 
       expect(prisma.cellGroupMember.delete).toHaveBeenCalled();
@@ -957,7 +1011,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         }),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -970,7 +1024,7 @@ describe('AdminService', () => {
           church_id: mockChurchId,
           branch_id: 'branch-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         }),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -986,7 +1040,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         }),
       ).rejects.toThrow(ForbiddenException);
@@ -1006,7 +1060,7 @@ describe('AdminService', () => {
         branch_id: 'branch-1',
         member_id: 'member-leader-1',
         role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+        permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         is_admin_hq: true,
       });
 
@@ -1065,7 +1119,7 @@ describe('AdminService', () => {
           branch_id: 'branch-a',
           member_id: 'leader-member',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           roles: ['cell_leader'],
           is_admin_hq: false,
         },
@@ -1089,7 +1143,7 @@ describe('AdminService', () => {
           church_id: mockChurchId,
           branch_id: 'branch-a',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           roles: ['cell_leader'],
           is_admin_hq: false,
         },
@@ -1158,7 +1212,7 @@ describe('AdminService', () => {
           church_id: mockChurchId,
           branch_id: 'branch-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         },
       );
@@ -1335,7 +1389,7 @@ describe('AdminService', () => {
         branch_id: 'branch-1',
         member_id: 'member-leader-1',
         role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+        permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         roles: ['cell_leader'],
         is_admin_hq: false,
       });
@@ -1358,7 +1412,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           roles: ['cell_leader'],
           is_admin_hq: false,
         }),
@@ -1379,7 +1433,7 @@ describe('AdminService', () => {
           church_id: mockChurchId,
           branch_id: 'branch-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           roles: ['cell_leader'],
           is_admin_hq: false,
         }),
@@ -1587,7 +1641,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -1636,7 +1690,12 @@ describe('AdminService', () => {
           undefined,
           mockChurchId,
           mockUserId,
-          { church_id: mockChurchId, branch_id: 'branch-1', role: 'cell_leader', permissions: ['cell_groups:own:read', 'cell_groups:own:update'] },
+          {
+            church_id: mockChurchId,
+            branch_id: 'branch-1',
+            role: 'cell_leader',
+            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          },
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -1694,7 +1753,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         },
       );
@@ -1756,7 +1815,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -1825,7 +1884,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -1868,7 +1927,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -1920,7 +1979,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
         },
       );
 
@@ -1987,7 +2046,7 @@ describe('AdminService', () => {
           branch_id: 'branch-1',
           member_id: 'member-leader-1',
           role: 'cell_leader',
-            permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
+          permissions: ['cell_groups:own:read', 'cell_groups:own:update'],
           is_admin_hq: true,
         },
       );

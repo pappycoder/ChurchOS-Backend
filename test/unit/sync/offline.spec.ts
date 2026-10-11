@@ -13,6 +13,9 @@ describe('Offline API contract', () => {
     );
     expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('media:upload:create');
     expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('sermons:new:create');
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('departments:create');
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).toContain('events:tickets:read');
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('events:tickets:create');
   });
   it('keeps cell leaders calendar and tickets without event management grants', () => {
     expect(DEFAULT_PERMISSION_MATRIX.cell_leader).toEqual(
