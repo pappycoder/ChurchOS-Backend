@@ -1309,3 +1309,5 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-10-10:** Development seed now reconciles linked member branches with their demo login profiles, preventing HQ base members from being linked to Lekki accounts (including Kunle). Added branch-alignment and tenant-guard regressions. Ticket branch validation stays enforced.
 
 - **2026-10-11 — Department creation and self-ticket booking.** Department heads cannot create departments, including with HQ scope. Authorized branch creators are pinned to their branch; HQ creators must select a branch. Parent and leader assignments are validated against that branch. Permission cache namespace v17.
+
+- **2026-10-11 — Giving visibility.** Cash giving receives viewer scope, defaults branch recorders to their branch and validates branch/category/member/service/event assignments. HQ recording requires a selected branch; prevents successful but branchless gifts disappearing from branch queries.

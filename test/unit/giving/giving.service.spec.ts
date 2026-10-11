@@ -827,6 +827,51 @@ describe('GivingService', () => {
   // ─── CASH/BANK GIVING ────────────────────────────────────────────
 
   describe('recordCashGiving', () => {
+    it('saves the branch of the recording treasurer when the payload omits it', async () => {
+      model('branch').findFirst.mockResolvedValue({ id: mockBranchId });
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('transaction').count.mockResolvedValue(0);
+      model('transaction').create.mockResolvedValue({
+        ...mockTransaction,
+        branch_id: mockBranchId,
+      });
+      await service.recordCashGiving(
+        { categoryId: mockCategoryId, amount: 5000, type: 'cash' },
+        mockChurchId,
+        mockUserId,
+        { church_id: mockChurchId, role: 'treasurer', branch_id: mockBranchId },
+      );
+      expect(model('transaction').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ branch_id: mockBranchId, status: 'success' }),
+        }),
+      );
+    });
+
+    it('requires HQ recorders to choose a branch', async () => {
+      await expect(
+        service.recordCashGiving(
+          { categoryId: mockCategoryId, amount: 5000, type: 'cash' },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'treasurer', is_admin_hq: true },
+        ),
+      ).rejects.toThrow('Select a branch');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
+
+    it('rejects recording outside the treasurer branch', async () => {
+      await expect(
+        service.recordCashGiving(
+          { categoryId: mockCategoryId, amount: 5000, type: 'cash', branchId: 'other' },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'treasurer', branch_id: mockBranchId },
+        ),
+      ).rejects.toThrow('Giving must be recorded in your branch');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
+
     it('should record cash giving with manual gateway', async () => {
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
       model('transaction').count.mockResolvedValue(0);

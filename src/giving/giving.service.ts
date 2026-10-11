@@ -134,7 +134,7 @@ export class GivingService {
     const category = await this.prisma.givingCategory.create({
       data: {
         church_id: churchId,
-        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
+        branch_id: scope.churchOnly ? (dto.branchId ?? null) : (scope.branchId ?? null),
         name: dto.name,
         description: dto.description,
         display_order: dto.displayOrder ?? 0,
@@ -754,7 +754,22 @@ export class GivingService {
     dto: RecordCashDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<TransactionResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly) {
+      if (dto.branchId && dto.branchId !== scope.branchId)
+        throw new BadRequestException('Giving must be recorded in your branch');
+      dto.branchId = scope.branchId;
+    }
+    if (viewer && !dto.branchId) throw new BadRequestException('Select a branch for the giving');
+    if (dto.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!branch) throw new NotFoundException('Branch not found in this church');
+    }
     // Verify category exists
     const category = await this.prisma.givingCategory.findUnique({
       where: { id: dto.categoryId },
@@ -767,41 +782,49 @@ export class GivingService {
     if (!category.is_active) {
       throw new BadRequestException('This giving category is no longer active');
     }
+    if (category.branch_id && category.branch_id !== dto.branchId)
+      throw new BadRequestException('Giving category belongs to another branch');
 
     // Verify member belongs to this church if provided
     if (dto.memberId) {
       const member = await this.prisma.member.findFirst({
         where: { id: dto.memberId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
 
       if (!member) {
         throw new NotFoundException('Member not found in this church');
       }
+      if (dto.branchId && member.branch_id !== dto.branchId)
+        throw new BadRequestException('Member belongs to another branch');
     }
 
     // Verify the linked service belongs to this church if provided
     if (dto.serviceId) {
       const service = await this.prisma.service.findFirst({
         where: { id: dto.serviceId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
 
       if (!service) {
         throw new NotFoundException('Service not found in this church');
       }
+      if (dto.branchId && service.branch_id && service.branch_id !== dto.branchId)
+        throw new BadRequestException('Service belongs to another branch');
     }
 
     // Verify the linked event belongs to this church if provided
     if (dto.eventId) {
       const event = await this.prisma.event.findFirst({
         where: { id: dto.eventId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
 
       if (!event) {
         throw new NotFoundException('Event not found in this church');
       }
+      if (dto.branchId && event.branch_id && event.branch_id !== dto.branchId)
+        throw new BadRequestException('Event belongs to another branch');
     }
 
     // Generate receipt number
@@ -946,7 +969,8 @@ export class GivingService {
       throw error;
     };
 
-    const items = await this.prisma.transaction.findMany({
+    const items = await this.prisma.transaction
+      .findMany({
         where,
         orderBy,
         skip,
@@ -957,7 +981,8 @@ export class GivingService {
           service: { select: { name: true } },
           event: { select: { title: true } },
         },
-      }).catch(handleListError);
+      })
+      .catch(handleListError);
     const total = await this.prisma.transaction.count({ where }).catch(handleListError);
 
     return {

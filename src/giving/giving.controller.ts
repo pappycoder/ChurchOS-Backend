@@ -313,7 +313,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<TransactionResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.recordCashGiving(dto, churchId, user.sub);
+    return this.givingService.recordCashGiving(dto, churchId, user.sub, req.profile);
   }
 
   // ─── RECURRING GIVING ────────────────────────────────────────────
