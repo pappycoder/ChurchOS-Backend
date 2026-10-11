@@ -7,6 +7,13 @@ import { AuthenticatedRequest } from '../../../src/common/decorators/current-use
 import { randomUUID } from 'crypto';
 
 describe('Offline API contract', () => {
+  it('allows department heads to browse media and sermons without creating them', () => {
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).toEqual(
+      expect.arrayContaining(['media:read', 'sermons:read']),
+    );
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('media:upload:create');
+    expect(DEFAULT_PERMISSION_MATRIX.department_head).not.toContain('sermons:new:create');
+  });
   it('keeps cell leaders calendar and tickets without event management grants', () => {
     expect(DEFAULT_PERMISSION_MATRIX.cell_leader).toEqual(
       expect.arrayContaining([
