@@ -1097,6 +1097,7 @@ export class GivingService {
     dto: CreateRecurringGivingDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<RecurringGivingResponseDto> {
     const category = await this.prisma.givingCategory.findUnique({
       where: { id: dto.categoryId },
@@ -1134,12 +1135,19 @@ export class GivingService {
     // Verify the member belongs to this church
     const member = await this.prisma.member.findFirst({
       where: { id: targetMemberId, church_id: churchId },
-      select: { id: true },
+      select: { id: true, branch_id: true },
     });
 
     if (!member) {
       throw new NotFoundException('Member not found in this church');
     }
+
+    const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? dto.branchId : scope.branchId;
+    if (branchId && member.branch_id !== branchId)
+      throw new BadRequestException('Member belongs to another branch');
+    if (category.branch_id && category.branch_id !== member.branch_id)
+      throw new BadRequestException('Giving category belongs to another branch');
 
     // Check for existing active recurring giving for this member+category
     const existing = await this.prisma.recurringGiving.findFirst({
@@ -1247,7 +1255,25 @@ export class GivingService {
   /**
    * Gets a single recurring giving by ID.
    */
-  async getRecurringGivingById(id: string, churchId: string): Promise<RecurringGivingResponseDto> {
+  private async assertRecurringBranch(
+    memberId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
+    const scope = this.branchScope.resolve(viewer);
+    if (scope.churchOnly) return;
+    const member = await this.prisma.member.findFirst({
+      where: { id: memberId, church_id: churchId, branch_id: scope.branchId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Recurring giving not found');
+  }
+
+  async getRecurringGivingById(
+    id: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<RecurringGivingResponseDto> {
     const recurring = await this.prisma.recurringGiving.findUnique({
       where: { id },
     });
@@ -1255,6 +1281,7 @@ export class GivingService {
     if (!recurring || recurring.church_id !== churchId) {
       throw new NotFoundException('Recurring giving not found');
     }
+    await this.assertRecurringBranch(recurring.member_id, churchId, viewer);
 
     const category = await this.prisma.givingCategory.findUnique({
       where: { id: recurring.category_id },
@@ -1267,7 +1294,12 @@ export class GivingService {
   /**
    * Cancels a recurring giving schedule (soft-cancel).
    */
-  async cancelRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+  async cancelRecurringGiving(
+    id: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
     const recurring = await this.prisma.recurringGiving.findUnique({
       where: { id },
     });
@@ -1275,14 +1307,15 @@ export class GivingService {
     if (!recurring || recurring.church_id !== churchId) {
       throw new NotFoundException('Recurring giving not found');
     }
+    await this.assertRecurringBranch(recurring.member_id, churchId, viewer);
 
-    if (!recurring.is_active) {
+    if (!recurring.is_active && !recurring.paused_at) {
       throw new BadRequestException('Recurring giving is already cancelled');
     }
 
     await this.prisma.recurringGiving.update({
       where: { id },
-      data: { is_active: false },
+      data: { is_active: false, paused_at: null },
     });
 
     await this.audit.log({
@@ -1291,8 +1324,8 @@ export class GivingService {
       entity: 'recurring_giving',
       action: 'UPDATE',
       entityId: id,
-      oldValues: { isActive: true },
-      newValues: { isActive: false },
+      oldValues: { isActive: recurring.is_active, pausedAt: recurring.paused_at },
+      newValues: { isActive: false, pausedAt: null },
     });
 
     this.logger.log(`Recurring giving cancelled: ${id}`);
@@ -1307,7 +1340,12 @@ export class GivingService {
    * @throws NotFoundException  Schedule not found or doesn't belong to the church.
    * @throws BadRequestException Schedule is already paused or cancelled.
    */
-  async pauseRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+  async pauseRecurringGiving(
+    id: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
     const recurring = await this.prisma.recurringGiving.findUnique({
       where: { id },
     });
@@ -1315,6 +1353,7 @@ export class GivingService {
     if (!recurring || recurring.church_id !== churchId) {
       throw new NotFoundException('Recurring giving not found');
     }
+    await this.assertRecurringBranch(recurring.member_id, churchId, viewer);
 
     if (!recurring.is_active) {
       throw new BadRequestException('Recurring giving is already paused or cancelled');
@@ -1349,7 +1388,12 @@ export class GivingService {
    * @throws NotFoundException  Schedule not found or doesn't belong to the church.
    * @throws BadRequestException Schedule is not paused (active or fully cancelled).
    */
-  async resumeRecurringGiving(id: string, churchId: string, userId: string): Promise<void> {
+  async resumeRecurringGiving(
+    id: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
     const recurring = await this.prisma.recurringGiving.findUnique({
       where: { id },
     });
@@ -1357,6 +1401,7 @@ export class GivingService {
     if (!recurring || recurring.church_id !== churchId) {
       throw new NotFoundException('Recurring giving not found');
     }
+    await this.assertRecurringBranch(recurring.member_id, churchId, viewer);
 
     if (recurring.is_active) {
       throw new BadRequestException('Recurring giving is not paused');

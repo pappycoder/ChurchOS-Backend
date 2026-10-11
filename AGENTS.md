@@ -1317,3 +1317,5 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-10-11 — Giving category management.** Secretaries receive category update/delete grants and treasurers receive category delete; existing update gates cover archive/restore. Cache namespace v18. Existing branch scope and financial record preservation remain enforced.
 
 - **2026-10-11 — Usher role.** Added built-in usher template inheriting every treasurer grant plus attendance CRUD, attendance analytics and attendance report generation. Updated staff/profile role validation, ranking and inbox contacts; permission cache v19. Scope continues to use branch membership and is_admin_hq.
+
+- **2026-10-11 — Treasurer recurring giving.** Explicit recurring create/update permission guards; member/category branch validation for schedule creation and branch checks for detail/pause/resume/cancel. Treasurer template already includes recurring create/read/update and services read.

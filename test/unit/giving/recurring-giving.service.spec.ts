@@ -133,6 +133,66 @@ describe('GivingService - Recurring Giving', () => {
   });
 
   describe('createRecurringGiving', () => {
+    it('allows a treasurer to create a schedule for a member in their branch', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'lekki' });
+      model('recurringGiving').findFirst.mockResolvedValue(null);
+      model('recurringGiving').create.mockResolvedValue(mockRecurring);
+      await service.createRecurringGiving(
+        {
+          categoryId: mockCategoryId,
+          memberId: mockMemberId,
+          amount: 5000,
+          frequency: 'monthly',
+          email: 'test@example.com',
+        },
+        mockChurchId,
+        mockUserId,
+        { church_id: mockChurchId, role: 'treasurer', branch_id: 'lekki' },
+      );
+      expect(model('recurringGiving').create).toHaveBeenCalled();
+    });
+
+    it('rejects a member from another branch', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'hq' });
+      await expect(
+        service.createRecurringGiving(
+          {
+            categoryId: mockCategoryId,
+            memberId: mockMemberId,
+            amount: 5000,
+            frequency: 'monthly',
+            email: 'test@example.com',
+          },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'treasurer', branch_id: 'lekki' },
+        ),
+      ).rejects.toThrow('Member belongs to another branch');
+      expect(model('recurringGiving').create).not.toHaveBeenCalled();
+    });
+
+    it('checks the selected branch for an HQ treasurer', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('member').findFirst.mockResolvedValue({ id: mockMemberId, branch_id: 'hq' });
+      await expect(
+        service.createRecurringGiving(
+          {
+            branchId: 'lekki',
+            categoryId: mockCategoryId,
+            memberId: mockMemberId,
+            amount: 5000,
+            frequency: 'monthly',
+            email: 'test@example.com',
+          },
+          mockChurchId,
+          mockUserId,
+          { church_id: mockChurchId, role: 'treasurer', is_admin_hq: true },
+        ),
+      ).rejects.toThrow('Member belongs to another branch');
+    });
+
     it('should create a recurring giving schedule', async () => {
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
       model('member').findFirst.mockResolvedValue({ id: mockMemberId });
@@ -285,6 +345,24 @@ describe('GivingService - Recurring Giving', () => {
   });
 
   describe('getRecurringGivingById', () => {
+    it.each(['get', 'pause', 'resume', 'cancel'])(
+      'blocks cross-branch schedule %s access',
+      async (action) => {
+        model('recurringGiving').findUnique.mockResolvedValue(mockRecurring);
+        model('member').findFirst.mockResolvedValue(null);
+        const viewer = { church_id: mockChurchId, role: 'treasurer', branch_id: 'lekki' };
+        const call =
+          action === 'get'
+            ? service.getRecurringGivingById(mockRecurringId, mockChurchId, viewer)
+            : action === 'pause'
+              ? service.pauseRecurringGiving(mockRecurringId, mockChurchId, mockUserId, viewer)
+              : action === 'resume'
+                ? service.resumeRecurringGiving(mockRecurringId, mockChurchId, mockUserId, viewer)
+                : service.cancelRecurringGiving(mockRecurringId, mockChurchId, mockUserId, viewer);
+        await expect(call).rejects.toThrow('Recurring giving not found');
+        expect(model('recurringGiving').update).not.toHaveBeenCalled();
+      },
+    );
     it('should return recurring giving by ID', async () => {
       model('recurringGiving').findUnique.mockResolvedValue(mockRecurring);
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
@@ -316,6 +394,23 @@ describe('GivingService - Recurring Giving', () => {
   });
 
   describe('cancelRecurringGiving', () => {
+    it('can permanently cancel a paused schedule', async () => {
+      model('recurringGiving').findUnique.mockResolvedValue({
+        ...mockRecurring,
+        is_active: false,
+        paused_at: new Date(),
+      });
+      model('recurringGiving').update.mockResolvedValue({
+        ...mockRecurring,
+        is_active: false,
+        paused_at: null,
+      });
+      await service.cancelRecurringGiving(mockRecurringId, mockChurchId, mockUserId);
+      expect(model('recurringGiving').update).toHaveBeenCalledWith({
+        where: { id: mockRecurringId },
+        data: { is_active: false, paused_at: null },
+      });
+    });
     it('should cancel an active recurring giving', async () => {
       model('recurringGiving').findUnique.mockResolvedValue(mockRecurring);
       model('recurringGiving').update.mockResolvedValue({});
@@ -324,7 +419,7 @@ describe('GivingService - Recurring Giving', () => {
 
       expect(model('recurringGiving').update).toHaveBeenCalledWith({
         where: { id: mockRecurringId },
-        data: { is_active: false },
+        data: { is_active: false, paused_at: null },
       });
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'recurring_giving', action: 'UPDATE' }),

@@ -322,6 +322,7 @@ export class GivingController {
    * Create a recurring giving schedule.
    */
   @Post('recurring')
+  @RequirePermissions('giving:recurring:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint(
     'Create recurring giving',
@@ -333,7 +334,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<RecurringGivingResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.createRecurringGiving(dto, churchId, user.sub);
+    return this.givingService.createRecurringGiving(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -374,13 +375,14 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<RecurringGivingResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.givingService.getRecurringGivingById(id, churchId);
+    return this.givingService.getRecurringGivingById(id, churchId, req.profile);
   }
 
   /**
    * Cancel a recurring giving schedule.
    */
   @Patch('recurring/:id/cancel')
+  @RequirePermissions('giving:recurring:update')
   @ApiOperation({
     summary: 'Cancel recurring giving',
     description: 'Soft-cancels a recurring giving schedule. No further charges will be made.',
@@ -391,11 +393,12 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.givingService.cancelRecurringGiving(id, churchId, user.sub);
+    await this.givingService.cancelRecurringGiving(id, churchId, user.sub, req.profile);
     return { success: true };
   }
 
   @Patch('recurring/:id/pause')
+  @RequirePermissions('giving:recurring:update')
   @ApiOperation({
     summary: 'Pause recurring giving',
     description:
@@ -407,11 +410,12 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.givingService.pauseRecurringGiving(id, churchId, user.sub);
+    await this.givingService.pauseRecurringGiving(id, churchId, user.sub, req.profile);
     return { success: true };
   }
 
   @Patch('recurring/:id/resume')
+  @RequirePermissions('giving:recurring:update')
   @ApiOperation({
     summary: 'Resume recurring giving',
     description: 'Resumes a previously paused recurring giving schedule.',
@@ -422,7 +426,7 @@ export class GivingController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
     const churchId = req.profile?.church_id || '';
-    await this.givingService.resumeRecurringGiving(id, churchId, user.sub);
+    await this.givingService.resumeRecurringGiving(id, churchId, user.sub, req.profile);
     return { success: true };
   }
 

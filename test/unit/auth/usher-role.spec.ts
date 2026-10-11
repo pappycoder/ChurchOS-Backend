@@ -9,6 +9,17 @@ import { BranchScopeService } from '../../../src/common/services/branch-scope.se
 import { RequestContextService } from '../../../src/common/services/request-context.service';
 
 describe('Usher role', () => {
+  it('keeps recurring management and service selection available to treasurers', () => {
+    expect(DEFAULT_PERMISSION_MATRIX.treasurer).toEqual(
+      expect.arrayContaining([
+        'giving:recurring:create',
+        'giving:recurring:read',
+        'giving:recurring:update',
+        'attendance:services:read',
+      ]),
+    );
+    expect(DEFAULT_PERMISSION_MATRIX.treasurer).not.toContain('attendance:services:create');
+  });
   it('inherits every treasurer permission and adds attendance management and reports', () => {
     expect(DEFAULT_ROLES.some((role) => role.name === 'usher')).toBe(true);
     expect(DEFAULT_PERMISSION_MATRIX.usher).toEqual(

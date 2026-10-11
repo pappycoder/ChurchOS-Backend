@@ -8,6 +8,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateRecurringGivingDto {
+  @ApiPropertyOptional({ description: 'Selected branch for the member' })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
   @ApiProperty({
     description: 'Giving category ID (must have is_recurring enabled)',
     example: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
