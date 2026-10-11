@@ -38,6 +38,7 @@ export const MAIN_ROLES = [
   'department_head',
   'secretary',
   'treasurer',
+  'usher',
 ] as const;
 
 interface ContactRow {

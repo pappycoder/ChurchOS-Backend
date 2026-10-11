@@ -1315,3 +1315,5 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-10-11 — Giving category contract.** Category creation accepts and persists optional boolean isActive, defaulting to true. Added strict DTO validation and inactive-category persistence regressions.
 
 - **2026-10-11 — Giving category management.** Secretaries receive category update/delete grants and treasurers receive category delete; existing update gates cover archive/restore. Cache namespace v18. Existing branch scope and financial record preservation remain enforced.
+
+- **2026-10-11 — Usher role.** Added built-in usher template inheriting every treasurer grant plus attendance CRUD, attendance analytics and attendance report generation. Updated staff/profile role validation, ranking and inbox contacts; permission cache v19. Scope continues to use branch membership and is_admin_hq.

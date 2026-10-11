@@ -2,7 +2,7 @@
  * @file permissions.seed.ts
  * @description Default roles, permissions, and role-permission mappings seed data.
  *
- * Seeds 9 roles and the hierarchical surface-permission catalog:
+ * Seeds 10 roles and the hierarchical surface-permission catalog:
  *   - `resource:view`                 — top-level menu visibility
  *   - `resource:action`               — coarse CRUD (create/read/update/delete)
  *   - `resource:surface:action`       — per-surface CRUD (e.g. `events:calendar:read`,
@@ -52,6 +52,10 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
+  {
+    name: 'usher',
+    description: 'Treasurer access plus service and attendance management, records and reports',
+  },
   {
     name: 'cell_leader',
     description:
@@ -419,6 +423,17 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'church:read',
   ],
 };
+
+// Keep the financial baseline identical as treasurer permissions evolve.
+RAW_DEFAULT_PERMISSION_MATRIX.usher = [
+  ...RAW_DEFAULT_PERMISSION_MATRIX.treasurer,
+  'attendance:create',
+  'attendance:read',
+  'attendance:update',
+  'attendance:delete',
+  'reports:attendance:read',
+  'analytics:attendance:read',
+];
 
 // Every role's effective grants = coarse matrix + derived hierarchical grants.
 export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEntries(

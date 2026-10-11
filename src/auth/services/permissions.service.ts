@@ -34,7 +34,7 @@ import { RolePermission } from '@prisma/client';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v18:';
+const CACHE_PREFIX = 'perms:v19:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -45,6 +45,7 @@ export const RESERVED_ROLE_NAMES = [
   'department_head',
   'secretary',
   'treasurer',
+  'usher',
   'member',
 ] as const;
 

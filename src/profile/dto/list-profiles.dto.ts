@@ -46,6 +46,7 @@ export class ListProfilesDto {
       'branch_pastor',
       'secretary',
       'treasurer',
+      'usher',
       'cell_leader',
       'usher',
       'worship_leader',

@@ -36,7 +36,7 @@ export class InviteStaffDto {
 
   @ApiProperty({
     description: 'Staff role',
-    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'member'],
+    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher', 'member'],
     example: 'branch_pastor',
   })
   @IsString()

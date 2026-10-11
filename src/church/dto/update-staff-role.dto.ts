@@ -15,7 +15,7 @@ import { IsNotEmpty, IsString } from 'class-validator';
 export class UpdateStaffRoleDto {
   @ApiProperty({
     description: 'New role for the staff member',
-    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'member'],
+    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher', 'member'],
     example: 'church_admin',
   })
   @IsString()

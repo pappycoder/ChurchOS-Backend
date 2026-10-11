@@ -16,6 +16,7 @@ const VALID_ROLES = [
   'department_head',
   'secretary',
   'treasurer',
+  'usher',
   'cell_leader',
   'member',
 ] as const;
