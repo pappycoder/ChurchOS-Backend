@@ -8,6 +8,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateCategoryDto {
+  @ApiPropertyOptional({ description: 'Whether this category is active', default: true })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
   @ApiPropertyOptional({ description: 'Branch that owns this category' })
   @IsUUID()
   @IsOptional()

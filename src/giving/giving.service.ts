@@ -139,6 +139,7 @@ export class GivingService {
         description: dto.description,
         display_order: dto.displayOrder ?? 0,
         is_recurring: dto.isRecurring ?? false,
+        is_active: dto.isActive ?? true,
       },
     });
 

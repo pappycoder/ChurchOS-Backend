@@ -154,6 +154,20 @@ describe('GivingService', () => {
   // ─── CATEGORY CRUD ────────────────────────────────────────────────
 
   describe('createCategory', () => {
+    it('persists an explicitly inactive category', async () => {
+      model('givingCategory').findFirst.mockResolvedValue(null);
+      model('givingCategory').create.mockResolvedValue({ ...mockCategory, is_active: false });
+      const result = await service.createCategory(
+        { name: 'Special offering', isActive: false },
+        mockChurchId,
+        mockUserId,
+      );
+      expect(model('givingCategory').create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ is_active: false }),
+      });
+      expect(result.isActive).toBe(false);
+    });
+
     it('should create a new category', async () => {
       model('givingCategory').findFirst.mockResolvedValue(null);
       model('givingCategory').create.mockResolvedValue(mockCategory);
