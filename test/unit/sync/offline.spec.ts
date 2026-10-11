@@ -7,6 +7,14 @@ import { AuthenticatedRequest } from '../../../src/common/decorators/current-use
 import { randomUUID } from 'crypto';
 
 describe('Offline API contract', () => {
+  it.each(['secretary', 'treasurer'])(
+    'allows %s to archive and delete giving categories',
+    (role) => {
+      expect(DEFAULT_PERMISSION_MATRIX[role]).toEqual(
+        expect.arrayContaining(['giving:categories:update', 'giving:categories:delete']),
+      );
+    },
+  );
   it('allows department heads to browse media and sermons without creating them', () => {
     expect(DEFAULT_PERMISSION_MATRIX.department_head).toEqual(
       expect.arrayContaining(['media:read', 'sermons:read']),

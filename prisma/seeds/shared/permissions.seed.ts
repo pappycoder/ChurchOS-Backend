@@ -274,6 +274,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'giving:dashboard:read',
     'giving:categories:read',
     'giving:categories:create',
+    'giving:categories:update',
+    'giving:categories:delete',
     // Events — calendar, event listing, and registrations; no check-in access
     'events:calendar:read',
     'events:list:read',
@@ -343,6 +345,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'giving:create',
     'giving:read',
     'giving:update',
+    'giving:categories:delete',
     // Giving records use the service list for the service filter dropdown.
     'attendance:services:read',
     // Reports — financial only

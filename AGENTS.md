@@ -1313,3 +1313,5 @@ All notable changes to this project are documented below. Update this section wi
 - **2026-10-11 — Giving visibility.** Cash giving receives viewer scope, defaults branch recorders to their branch and validates branch/category/member/service/event assignments. HQ recording requires a selected branch; prevents successful but branchless gifts disappearing from branch queries.
 
 - **2026-10-11 — Giving category contract.** Category creation accepts and persists optional boolean isActive, defaulting to true. Added strict DTO validation and inactive-category persistence regressions.
+
+- **2026-10-11 — Giving category management.** Secretaries receive category update/delete grants and treasurers receive category delete; existing update gates cover archive/restore. Cache namespace v18. Existing branch scope and financial record preservation remain enforced.
