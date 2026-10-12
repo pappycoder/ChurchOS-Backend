@@ -130,7 +130,7 @@ export const SURFACES: Partial<Record<Resource, readonly string[]>> = {
   assets: ['list', 'categories', 'maintenance', 'loans'],
   forms: ['list', 'submissions'],
   departments: ['own'],
-  cell_groups: ['own'],
+  cell_groups: ['own', 'giving', 'details'],
   reports: ['financial', 'attendance', 'members'],
   analytics: ['dashboard', 'giving', 'attendance', 'members', 'events', 'communication'],
   appointments: ['branch'],
@@ -197,6 +197,7 @@ export function expandPermissions(base: string[]): string[] {
     const surfaces = SURFACES[resource] ?? [];
     for (const surface of surfaces) {
       if (surface === 'own' || surface === 'ticket-records') continue;
+      if (resource === 'cell_groups' && ['giving', 'details'].includes(surface)) continue;
       for (const action of CRUD_ACTIONS) {
         if (actions.has(action)) {
           expanded.add(`${resource}:${surface}:${action}`);
@@ -340,6 +341,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   treasurer: [
+    'cell_groups:read',
+    'cell_groups:giving:read',
     // Branch names are needed for HQ branch filters; branch-scoped viewers
     // only receive their own branch from the API.
     'branches:read',
@@ -379,6 +382,8 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
 
   cell_leader: [
+    'cell_groups:giving:read',
+    'cell_groups:giving:create',
     'members:own:read',
     'branches:read',
     // Personal event browsing and booking; no management menus.
@@ -427,6 +432,7 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
 // Keep the financial baseline identical as treasurer permissions evolve.
 RAW_DEFAULT_PERMISSION_MATRIX.usher = [
   ...RAW_DEFAULT_PERMISSION_MATRIX.treasurer,
+  'cell_groups:details:read',
   'attendance:create',
   'attendance:read',
   'attendance:update',
@@ -441,7 +447,14 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEn
     role,
     // All roles need to resolve their own branch name for locked branch
     // filters. BranchesService limits non-HQ callers to their assigned branch.
-    expandPermissions([...perms, 'branches:read', ...(role === 'member' ? [] : ['offline:read'])]),
+    expandPermissions([
+      ...perms,
+      'branches:read',
+      ...(role === 'member' ? [] : ['offline:read']),
+      ...(perms.includes('cell_groups:read') && !['treasurer', 'usher'].includes(role)
+        ? ['cell_groups:details:read']
+        : []),
+    ]),
   ]),
 );
 

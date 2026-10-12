@@ -7,6 +7,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TransactionResponseDto {
+  @ApiPropertyOptional({ description: 'Cell group that recorded the giving' })
+  cellGroupId?: string;
+  @ApiPropertyOptional({ description: 'Cell group name at the time of recording' })
+  cellGroupName?: string;
+  @ApiPropertyOptional({ description: 'Cell group meeting date' })
+  cellGroupMeetingDate?: string;
   @ApiProperty({ description: 'Transaction ID', example: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' })
   transactionId!: string;
 

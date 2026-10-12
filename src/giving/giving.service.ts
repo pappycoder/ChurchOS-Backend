@@ -16,6 +16,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   ServiceUnavailableException,
   Inject,
 } from '@nestjs/common';
@@ -751,12 +752,95 @@ export class GivingService {
    *
    * Uses the 'manual' gateway since no external payment API is involved.
    */
+  private async getGivingCellGroup(groupId: string, churchId: string, viewer?: ViewerScope | null) {
+    const scope = this.branchScope.resolveCellGroupScope(viewer);
+    const group = await this.prisma.cellGroup.findFirst({
+      where: {
+        id: groupId,
+        church_id: churchId,
+        ...(viewer && !viewer.is_admin_hq ? { branch_id: viewer.branch_id ?? '' } : {}),
+        ...(!scope.churchOnly && 'leaderId' in scope ? { leader_id: scope.leaderId ?? '' } : {}),
+        ...(!scope.churchOnly && scope.branchId ? { branch_id: scope.branchId } : {}),
+      },
+      select: { id: true, name: true, branch_id: true, archived_at: true },
+    });
+    if (!group) throw new NotFoundException('Cell group not found');
+    return group;
+  }
+
+  async getCellGroupGiving(
+    groupId: string,
+    churchId: string,
+    query: ListTransactionsDto,
+    viewer?: ViewerScope | null,
+  ) {
+    const group = await this.getGivingCellGroup(groupId, churchId, viewer);
+    const filters = { ...query, cellGroupId: group.id, branchId: group.branch_id ?? undefined };
+    const transactions = await this.listTransactions(churchId, filters, viewer);
+    const summary = await this.getTransactionsSummary(
+      churchId,
+      { cellGroupId: group.id, branchId: group.branch_id ?? undefined },
+      viewer,
+    );
+    const categories = await this.listCategories(
+      churchId,
+      true,
+      1,
+      100,
+      false,
+      group.branch_id ?? undefined,
+      viewer,
+    );
+    return { ...transactions, summary, categories: categories.data };
+  }
+
+  async recordCellGroupGiving(
+    groupId: string,
+    dto: RecordCashDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ) {
+    const group = await this.getGivingCellGroup(groupId, churchId, viewer);
+    if (group.archived_at)
+      throw new BadRequestException('Cannot record giving for an archived cell group');
+    // Cell group recording is a group total, without privileged member/service/event assignment.
+    if (dto.memberId || dto.serviceId || dto.eventId)
+      throw new BadRequestException('Record a group total without another entity assignment');
+    return this.recordCashGiving({ ...dto, cellGroupId: group.id }, churchId, userId, viewer);
+  }
+
   async recordCashGiving(
     dto: RecordCashDto,
     churchId: string,
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<TransactionResponseDto> {
+    let cellGroup:
+      { id: string; name: string; branch_id: string | null; archived_at: Date | null } | undefined;
+    if (dto.cellGroupId) {
+      if (!viewer?.permissions?.includes('cell_groups:giving:create'))
+        throw new ForbiddenException('Cell group giving recording is not permitted');
+      if (dto.memberId || dto.serviceId || dto.eventId)
+        throw new BadRequestException('Record a group total without another entity assignment');
+      cellGroup = await this.getGivingCellGroup(dto.cellGroupId, churchId, viewer);
+      if (cellGroup.archived_at)
+        throw new BadRequestException('Cannot record giving for an archived cell group');
+      const meetingDate = dto.cellGroupMeetingDate;
+      if (
+        !meetingDate ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(meetingDate) ||
+        Number.isNaN(Date.parse(meetingDate)) ||
+        new Date(meetingDate).toISOString().slice(0, 10) !== meetingDate
+      )
+        throw new BadRequestException('A valid meeting date is required for group giving');
+
+      if (!cellGroup.branch_id)
+        throw new BadRequestException('Assign a branch to the cell group first');
+      if (dto.branchId && dto.branchId !== cellGroup.branch_id)
+        throw new BadRequestException('Giving must use the cell group branch');
+      dto.branchId = cellGroup.branch_id;
+    }
     const scope = this.branchScope.resolve(viewer);
     if (!scope.churchOnly) {
       if (dto.branchId && dto.branchId !== scope.branchId)
@@ -832,29 +916,52 @@ export class GivingService {
     const receiptNumber = await this.generateReceiptNumber(category.name, churchId);
 
     // Create transaction
-    const transaction = await this.prisma.transaction.create({
-      data: {
-        church_id: churchId,
-        branch_id: dto.branchId,
-        member_id: dto.memberId,
-        category_id: dto.categoryId,
-        service_id: dto.serviceId,
-        event_id: dto.eventId,
-        amount: dto.amount,
-        currency: dto.currency || 'NGN',
-        type: dto.type,
-        status: 'success', // Cash/bank is immediately confirmed
-        payment_gateway: 'manual',
-        receipt_number: receiptNumber,
-        notes: dto.notes,
-      },
-      include: {
-        category: true,
-        member: { select: { first_name: true, last_name: true } },
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-      },
-    });
+    const transaction = await this.prisma.transaction
+      .create({
+        data: {
+          church_id: churchId,
+          branch_id: dto.branchId,
+          member_id: dto.memberId,
+          category_id: dto.categoryId,
+          service_id: dto.serviceId,
+          event_id: dto.eventId,
+          amount: dto.amount,
+          currency: dto.currency || 'NGN',
+          type: dto.type,
+          status: 'success', // Cash/bank is immediately confirmed
+          payment_gateway: 'manual',
+          receipt_number: receiptNumber,
+          ...(cellGroup
+            ? {
+                metadata: {
+                  cellGroupId: cellGroup.id,
+                  cellGroupName: cellGroup.name,
+                  cellGroupMeetingDate: dto.cellGroupMeetingDate!,
+                },
+              }
+            : {}),
+          notes: dto.notes,
+        },
+        include: {
+          category: true,
+          member: { select: { first_name: true, last_name: true } },
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+        },
+      })
+      .catch((error: unknown) => {
+        if (
+          cellGroup &&
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'P2002'
+        )
+          throw new ConflictException(
+            'Giving has already been recorded for this cell group meeting',
+          );
+        throw error;
+      });
 
     await this.audit.log({
       userId,
@@ -862,7 +969,12 @@ export class GivingService {
       entity: 'transaction',
       action: 'CREATE',
       entityId: transaction.id,
-      newValues: { amount: dto.amount, type: dto.type, categoryId: dto.categoryId },
+      newValues: {
+        amount: dto.amount,
+        type: dto.type,
+        categoryId: dto.categoryId,
+        cellGroupId: dto.cellGroupId,
+      },
     });
 
     this.logger.log(`Cash giving recorded: ${receiptNumber} for NGN ${dto.amount}`);
@@ -909,6 +1021,7 @@ export class GivingService {
     defaultStatus?: string,
   ): Prisma.TransactionWhereInput {
     const where: Prisma.TransactionWhereInput = { church_id: churchId };
+    if (query.cellGroupId) where.metadata = { path: ['cellGroupId'], equals: query.cellGroupId };
 
     // Branch-scope for non-HQ viewers (transactions carry an optional branch_id).
     const scope = this.branchScope.resolve(viewer);
@@ -1896,6 +2009,7 @@ export class GivingService {
     category_id: string | null;
     service_id?: string | null;
     event_id?: string | null;
+    metadata?: Prisma.JsonValue;
     amount: number;
     currency: string;
     type: string;
@@ -1915,6 +2029,27 @@ export class GivingService {
   }): TransactionResponseDto {
     return {
       transactionId: transaction.id,
+      cellGroupId:
+        transaction.metadata &&
+        typeof transaction.metadata === 'object' &&
+        !Array.isArray(transaction.metadata) &&
+        typeof transaction.metadata.cellGroupId === 'string'
+          ? transaction.metadata.cellGroupId
+          : undefined,
+      cellGroupName:
+        transaction.metadata &&
+        typeof transaction.metadata === 'object' &&
+        !Array.isArray(transaction.metadata) &&
+        typeof transaction.metadata.cellGroupName === 'string'
+          ? transaction.metadata.cellGroupName
+          : undefined,
+      cellGroupMeetingDate:
+        transaction.metadata &&
+        typeof transaction.metadata === 'object' &&
+        !Array.isArray(transaction.metadata) &&
+        typeof transaction.metadata.cellGroupMeetingDate === 'string'
+          ? transaction.metadata.cellGroupMeetingDate
+          : undefined,
       churchId: transaction.church_id,
       branchId: transaction.branch_id || undefined,
       memberId: transaction.member_id || undefined,

@@ -9,6 +9,10 @@ import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-val
 import { Type } from 'class-transformer';
 
 export class ListTransactionsDto {
+  @ApiPropertyOptional({ description: 'Filter by cell group' })
+  @IsUUID()
+  @IsOptional()
+  cellGroupId?: string;
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @Type(() => Number)
   @IsInt()

@@ -5,9 +5,28 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsDateString,
+  Matches,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class RecordCashDto {
+  @ApiPropertyOptional({ description: 'Cell group meeting date (YYYY-MM-DD)' })
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsOptional()
+  cellGroupMeetingDate?: string;
+  @ApiPropertyOptional({ description: 'Cell group this giving belongs to' })
+  @IsUUID()
+  @IsOptional()
+  cellGroupId?: string;
   @ApiProperty({
     description: 'Giving category ID',
     example: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',

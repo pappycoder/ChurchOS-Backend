@@ -101,12 +101,7 @@ export class AdminController {
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to list the scoped departments (admin-hq sees all;
     // department_head sees only the department(s) they head)
-    return this.adminService.listDepartments(
-      churchId,
-      archived === 'true',
-      req.profile,
-      branchId,
-    );
+    return this.adminService.listDepartments(churchId, archived === 'true', req.profile, branchId);
   }
 
   /**
@@ -509,7 +504,7 @@ export class AdminController {
    * Lists members of a cell group.
    */
   @Get('cell-groups/:groupId/members')
-  @RequirePermissions('cell_groups:read')
+  @RequirePermissions('cell_groups:details:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group members' })
   async listCellGroupMembers(@Param('groupId') groupId: string, @Req() req: AuthenticatedRequest) {
@@ -552,7 +547,7 @@ export class AdminController {
    * Lists attendance records for a cell group.
    */
   @Get('cell-groups/:groupId/attendance')
-  @RequirePermissions('cell_groups:read')
+  @RequirePermissions('cell_groups:details:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'List cell group attendance' })
   async listCellGroupAttendance(
@@ -568,7 +563,7 @@ export class AdminController {
    * Gets attendance summary for a cell group.
    */
   @Get('cell-groups/:groupId/attendance/summary')
-  @RequirePermissions('cell_groups:read')
+  @RequirePermissions('cell_groups:details:read')
   @ApiParam({ name: 'groupId', type: String })
   @ApiOperation({ summary: 'Get cell group attendance summary' })
   async getCellGroupAttendanceSummary(

@@ -50,7 +50,10 @@ describe('AdminController permission decorators', () => {
     expect(depUpdate).toBe(5);
     expect(depDelete).toBe(1);
     expect(cgCreate).toBe(3);
-    expect(cgRead).toBe(7);
+    expect(cgRead).toBe(4);
+    expect((source.match(/@RequirePermissions\('cell_groups:details:read'\)/g) || []).length).toBe(
+      3,
+    );
     expect(cgUpdate).toBe(4);
     expect(cgDelete).toBe(1);
   });
@@ -214,12 +217,12 @@ describe('AdminController permission decorators', () => {
     hasRequireRoles(block, "'church_admin', 'senior_pastor', 'branch_pastor'");
   });
 
-  it('requires cell_groups:read on GET /admin/cell-groups/:groupId/members with widened read roles', () => {
+  it('requires cell_groups:details:read on GET /admin/cell-groups/:groupId/members with widened read roles', () => {
     const block = blockBetween(
       "@Get('cell-groups/:groupId/members')",
       'async listCellGroupMembers(',
     );
-    expect(block).toContain("@RequirePermissions('cell_groups:read')");
+    expect(block).toContain("@RequirePermissions('cell_groups:details:read')");
     hasRequireRoles(
       block,
       "'church_admin', 'senior_pastor', 'branch_pastor', 'department_head', 'cell_leader'",
@@ -238,24 +241,24 @@ describe('AdminController permission decorators', () => {
     );
   });
 
-  it('requires cell_groups:read on GET /admin/cell-groups/:groupId/attendance with widened read roles', () => {
+  it('requires cell_groups:details:read on GET /admin/cell-groups/:groupId/attendance with widened read roles', () => {
     const block = blockBetween(
       "@Get('cell-groups/:groupId/attendance')\n",
       'async listCellGroupAttendance(',
     );
-    expect(block).toContain("@RequirePermissions('cell_groups:read')");
+    expect(block).toContain("@RequirePermissions('cell_groups:details:read')");
     hasRequireRoles(
       block,
       "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader'",
     );
   });
 
-  it('requires cell_groups:read on GET /admin/cell-groups/:groupId/attendance/summary with widened read roles', () => {
+  it('requires cell_groups:details:read on GET /admin/cell-groups/:groupId/attendance/summary with widened read roles', () => {
     const block = blockBetween(
       "@Get('cell-groups/:groupId/attendance/summary')",
       'async getCellGroupAttendanceSummary(',
     );
-    expect(block).toContain("@RequirePermissions('cell_groups:read')");
+    expect(block).toContain("@RequirePermissions('cell_groups:details:read')");
     hasRequireRoles(
       block,
       "'church_admin', 'senior_pastor', 'branch_pastor', 'secretary', 'department_head', 'cell_leader'",

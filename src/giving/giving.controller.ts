@@ -72,6 +72,39 @@ import { ListRecurringGivingDto } from './dto/list-recurring-giving.dto';
 export class GivingController {
   constructor(private readonly givingService: GivingService) {}
 
+  @Get('cell-groups/:groupId')
+  @RequirePermissions('cell_groups:giving:read')
+  async getCellGroupGiving(
+    @Param('groupId') groupId: string,
+    @Query() query: ListTransactionsDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.givingService.getCellGroupGiving(
+      groupId,
+      req.profile?.church_id || '',
+      query,
+      req.profile,
+    );
+  }
+
+  @Post('cell-groups/:groupId')
+  @RequirePermissions('cell_groups:giving:create')
+  @HttpCode(HttpStatus.CREATED)
+  async recordCellGroupGiving(
+    @Param('groupId') groupId: string,
+    @Body() dto: RecordCashDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.givingService.recordCellGroupGiving(
+      groupId,
+      dto,
+      req.profile?.church_id || '',
+      user.sub,
+      req.profile,
+    );
+  }
+
   // ─── CATEGORIES ───────────────────────────────────────────────────
 
   /**

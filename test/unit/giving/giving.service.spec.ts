@@ -841,6 +841,185 @@ describe('GivingService', () => {
   // ─── CASH/BANK GIVING ────────────────────────────────────────────
 
   describe('recordCashGiving', () => {
+    const groupId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const leader = {
+      church_id: mockChurchId,
+      role: 'cell_leader',
+      branch_id: mockBranchId,
+      member_id: mockMemberId,
+      permissions: ['cell_groups:own:read', 'cell_groups:giving:create'],
+    };
+    const group = {
+      id: groupId,
+      name: 'Lekki Fellowship',
+      branch_id: mockBranchId,
+      archived_at: null,
+    };
+
+    it('records one combined meeting total in the shared transaction ledger', async () => {
+      model('cellGroup').findFirst.mockResolvedValue(group);
+      model('branch').findFirst.mockResolvedValue({ id: mockBranchId });
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('transaction').count.mockResolvedValue(0);
+      model('transaction').create.mockResolvedValue({
+        ...mockTransaction,
+        metadata: {
+          cellGroupId: groupId,
+          cellGroupName: group.name,
+          cellGroupMeetingDate: '2026-10-11',
+        },
+      });
+      const result = await service.recordCellGroupGiving(
+        groupId,
+        {
+          categoryId: mockCategoryId,
+          amount: 10000,
+          type: 'cash',
+          cellGroupMeetingDate: '2026-10-11',
+        },
+        mockChurchId,
+        mockUserId,
+        leader,
+      );
+      expect(model('cellGroup').findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ leader_id: mockMemberId, branch_id: mockBranchId }),
+        }),
+      );
+      expect(model('transaction').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            branch_id: mockBranchId,
+            amount: 10000,
+            status: 'success',
+            metadata: {
+              cellGroupId: groupId,
+              cellGroupName: group.name,
+              cellGroupMeetingDate: '2026-10-11',
+            },
+          }),
+        }),
+      );
+      expect(result.cellGroupMeetingDate).toBe('2026-10-11');
+      expect(result.cellGroupName).toBe(group.name);
+    });
+
+    it('cannot record against another leader group', async () => {
+      model('cellGroup').findFirst.mockResolvedValue(null);
+      await expect(
+        service.recordCellGroupGiving(
+          groupId,
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            cellGroupMeetingDate: '2026-10-11',
+          },
+          mockChurchId,
+          mockUserId,
+          leader,
+        ),
+      ).rejects.toThrow('Cell group not found');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
+
+    it('requires a real meeting date', async () => {
+      model('cellGroup').findFirst.mockResolvedValue(group);
+      await expect(
+        service.recordCellGroupGiving(
+          groupId,
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            cellGroupMeetingDate: '2026-02-30',
+          },
+          mockChurchId,
+          mockUserId,
+          leader,
+        ),
+      ).rejects.toThrow('A valid meeting date');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
+
+    it('rejects individual member assignment for a meeting total', async () => {
+      model('cellGroup').findFirst.mockResolvedValue(group);
+      await expect(
+        service.recordCellGroupGiving(
+          groupId,
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            memberId: mockMemberId,
+            cellGroupMeetingDate: '2026-10-11',
+          },
+          mockChurchId,
+          mockUserId,
+          leader,
+        ),
+      ).rejects.toThrow('Record a group total');
+      await expect(
+        service.recordCashGiving(
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            cellGroupId: groupId,
+            memberId: mockMemberId,
+            cellGroupMeetingDate: '2026-10-11',
+          },
+          mockChurchId,
+          mockUserId,
+          leader,
+        ),
+      ).rejects.toThrow('Record a group total');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
+
+    it('converts a concurrent duplicate into a clear meeting conflict', async () => {
+      model('cellGroup').findFirst.mockResolvedValue(group);
+      model('branch').findFirst.mockResolvedValue({ id: mockBranchId });
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('transaction').count.mockResolvedValue(0);
+      model('transaction').create.mockRejectedValue({ code: 'P2002' });
+      await expect(
+        service.recordCellGroupGiving(
+          groupId,
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            cellGroupMeetingDate: '2026-10-11',
+          },
+          mockChurchId,
+          mockUserId,
+          leader,
+        ),
+      ).rejects.toThrow('Giving has already been recorded');
+    });
+
+    it('does not let a treasurer record group giving through the general endpoint', async () => {
+      await expect(
+        service.recordCashGiving(
+          {
+            categoryId: mockCategoryId,
+            amount: 10000,
+            type: 'cash',
+            cellGroupId: groupId,
+            cellGroupMeetingDate: '2026-10-11',
+          },
+          mockChurchId,
+          mockUserId,
+          {
+            ...leader,
+            role: 'treasurer',
+            permissions: ['giving:records:create', 'cell_groups:giving:read'],
+          },
+        ),
+      ).rejects.toThrow('Cell group giving recording is not permitted');
+      expect(model('transaction').create).not.toHaveBeenCalled();
+    });
     it('saves the branch of the recording treasurer when the payload omits it', async () => {
       model('branch').findFirst.mockResolvedValue({ id: mockBranchId });
       model('givingCategory').findUnique.mockResolvedValue(mockCategory);
