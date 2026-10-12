@@ -7,6 +7,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TransactionResponseDto {
+  @ApiProperty({ description: 'Giving source', enum: ['normal', 'cell_group'] })
+  givingType!: string;
+  @ApiPropertyOptional({ description: 'Giving record title' })
+  title?: string;
+  @ApiPropertyOptional({ description: 'Giving record description' })
+  description?: string;
   @ApiPropertyOptional({ description: 'Cell group that recorded the giving' })
   cellGroupId?: string;
   @ApiPropertyOptional({ description: 'Cell group name at the time of recording' })

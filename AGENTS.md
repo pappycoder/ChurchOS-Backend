@@ -7,6 +7,10 @@
 
 ## Project Overview
 
+- **2026-10-12 — Group giving presentation.** Transaction responses distinguish giving source (`givingType`) from payment method and derive group-specific title/description from stored group metadata. Meeting totals persist descriptive notes in the shared branch giving ledger.
+
+- **2026-10-12 — Usher test accounts.** Development user seed includes HQ usher and Lekki branch usher. `npm run prisma:seed-ushers` provisions only these accounts using existing treasurer branch assignments, without reseeding other demo data.
+
 - **2026-10-11 — Department head publishing restrictions.** Removed media creation/upload and sermon creation from the department head permission template while retaining read access. Permission cache namespace is v16; sidebar, route guards and sermon actions consume these grants.
 
 - **2026-10-10 — Cell leader event menus.** Restricted cell leader event grants to personal browsing, calendar and tickets, removing All Events, registrations and check-in grants through the permission template. Bumped permission cache namespace to v15 and added a template regression.

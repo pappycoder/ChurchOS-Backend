@@ -65,6 +65,7 @@ export async function seedUsers(
   hqBranchId: string,
   lekkiBranchId: string,
   members: { id: string; first_name: string; last_name: string; phone: string | null }[],
+  accountKeys?: readonly string[],
 ): Promise<UserSeedResult> {
   console.log('📦 Seeding auth users + profiles...');
 
@@ -112,6 +113,15 @@ export async function seedUsers(
       firstName: 'Toluope',
       lastName: 'Balogun',
       role: ['treasurer'],
+      branch: 'hq',
+      isAdminHq: true,
+    },
+    {
+      key: 'usher',
+      email: `usher.hq@${EMAIL_DOMAIN}`,
+      firstName: 'Esther',
+      lastName: 'Akinwale',
+      role: ['usher'],
       branch: 'hq',
       isAdminHq: true,
     },
@@ -180,6 +190,15 @@ export async function seedUsers(
       firstName: 'Abdulmalik',
       lastName: 'Yusuf',
       role: ['treasurer'],
+      branch: 'lekki',
+      isAdminHq: false,
+    },
+    {
+      key: 'branch_usher',
+      email: `branch.usher@${EMAIL_DOMAIN}`,
+      firstName: 'Daniel',
+      lastName: 'Ajayi',
+      role: ['usher'],
       branch: 'lekki',
       isAdminHq: false,
     },
@@ -340,6 +359,7 @@ export async function seedUsers(
 
   // ── Staff + member-role users ─────────────────────────────────────
   for (const def of USERS) {
+    if (accountKeys && !accountKeys.includes(def.key)) continue;
     const userId = await ensureAuthUser(def.email, def.firstName, def.lastName);
     if (!userId) continue;
     const profileId = await upsertProfile(def, userId);
@@ -351,6 +371,7 @@ export async function seedUsers(
 
   // ── Bulk member accounts ────────────────────────────────────────────
   for (const b of BULK_MEMBER_INDICES) {
+    if (accountKeys && !accountKeys.includes(`bulk_member_${b.idx}`)) continue;
     const m = members[b.idx];
     if (!m) continue;
     const def: UserDef = {

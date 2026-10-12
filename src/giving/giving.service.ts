@@ -940,7 +940,9 @@ export class GivingService {
                 },
               }
             : {}),
-          notes: dto.notes,
+          notes: cellGroup
+            ? `Combined giving from ${cellGroup.name} for the meeting on ${dto.cellGroupMeetingDate}.${dto.notes ? ` ${dto.notes}` : ''}`
+            : dto.notes,
         },
         include: {
           category: true,
@@ -2027,7 +2029,22 @@ export class GivingService {
     service?: { name: string } | null;
     event?: { title: string } | null;
   }): TransactionResponseDto {
+    const metadata =
+      transaction.metadata &&
+      typeof transaction.metadata === 'object' &&
+      !Array.isArray(transaction.metadata)
+        ? transaction.metadata
+        : {};
+    const groupName =
+      typeof metadata.cellGroupName === 'string' ? metadata.cellGroupName : undefined;
+    const meetingDate =
+      typeof metadata.cellGroupMeetingDate === 'string' ? metadata.cellGroupMeetingDate : undefined;
     return {
+      givingType: typeof metadata.cellGroupId === 'string' ? 'cell_group' : 'normal',
+      title: groupName ? `${groupName} — Meeting Giving` : undefined,
+      description: groupName
+        ? `Combined giving from ${groupName}${meetingDate ? ` for the meeting on ${meetingDate}` : ''}.`
+        : undefined,
       transactionId: transaction.id,
       cellGroupId:
         transaction.metadata &&

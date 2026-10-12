@@ -222,7 +222,7 @@ export async function runDevelopmentSeed(
   console.log('\n📌 Sign-in emails — HQ: superadmin@churchos.dev, admin@churchos.dev,');
 
   console.log(
-    '    senior.pastor@churchos.dev, treasurer.hq@churchos.dev, secretary.hq@churchos.dev,',
+    '    senior.pastor@churchos.dev, treasurer.hq@churchos.dev, usher.hq@churchos.dev, secretary.hq@churchos.dev,',
   );
 
   console.log('    dept.head.hq@churchos.dev, member.hq@churchos.dev, cell.leader.hq@churchos.dev');
@@ -230,7 +230,7 @@ export async function runDevelopmentSeed(
   console.log('  Lekki: branch.pastor@churchos.dev, branch.secretary@churchos.dev,');
 
   console.log(
-    '    branch.treasurer@churchos.dev, branch.depthead@churchos.dev, cell.leader@churchos.dev,',
+    '    branch.treasurer@churchos.dev, branch.usher@churchos.dev, branch.depthead@churchos.dev, cell.leader@churchos.dev,',
   );
 
   console.log('    member.lekki@churchos.dev (plus 5 bulk member accounts)');
