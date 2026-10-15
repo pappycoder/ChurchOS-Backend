@@ -18,6 +18,9 @@ export class TransactionSummaryResponseDto {
   @ApiProperty({ description: 'Total successful giving this calendar month', example: 150000 })
   monthTotal!: number;
 
+  @ApiProperty({ description: 'Number of successful gifts this calendar month', example: 24 })
+  monthCount!: number;
+
   @ApiProperty({ description: 'Total successful giving all time', example: 2000000 })
   allTimeTotal!: number;
 

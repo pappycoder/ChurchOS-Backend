@@ -118,6 +118,7 @@ export class MembersController {
     @Query('q') searchTerm: string,
     @Query('limit') limit: number,
     @Request() req: AuthenticatedRequest,
+    @Query('branchId') branchId?: string,
   ): Promise<{ data: MemberResponseDto[] }> {
     const churchId = req.profile?.church_id || '';
     const data = await this.membersService.searchMembers(
@@ -126,6 +127,7 @@ export class MembersController {
       limit || 20,
       req.profile?.permissions || [],
       req.profile,
+      branchId,
     );
     return { data };
   }

@@ -1,4 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
+import { PERMISSIONS_KEY } from '../../../src/auth/decorators/permissions.decorator';
+import { GivingDashboardQueryDto } from '../../../src/giving/dto/dashboard-query.dto';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 
 jest.mock('jose', () => ({
   createRemoteJWKSet: jest.fn(),
@@ -30,5 +32,39 @@ describe('GivingController webhooks', () => {
     await expect(controller.handleFlutterwaveWebhook('signature', {} as never)).rejects.toThrow(
       BadRequestException,
     );
+  });
+});
+
+describe('Giving dashboard read isolation', () => {
+  it('uses independent dashboard and transaction read grants', () => {
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, GivingController.prototype.getDashboard)).toEqual([
+      'giving:dashboard:read',
+    ]);
+    expect(
+      Reflect.getMetadata(PERMISSIONS_KEY, GivingController.prototype.getTransactionsSummary),
+    ).toEqual(['giving:records:read']);
+  });
+
+  it('preserves the viewer scope while returning only service aggregates', async () => {
+    const totals = { monthTotal: 10, monthCount: 1, allTimeTotal: 20, count: 2, trend: [] };
+    const service = { getTransactionsSummary: jest.fn().mockResolvedValue(totals) };
+    const controller = new GivingController(service as never);
+    const profile = { church_id: 'church', branch_id: 'branch-a', is_admin_hq: false };
+    await expect(controller.getDashboard({}, { profile } as never)).resolves.toEqual(totals);
+    expect(service.getTransactionsSummary).toHaveBeenCalledWith('church', {}, profile);
+  });
+
+  it('rejects donor selectors on the aggregate-only dashboard', async () => {
+    const pipe = new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    await expect(
+      pipe.transform(
+        { memberId: 'donor-id' },
+        { type: 'query', metatype: GivingDashboardQueryDto },
+      ),
+    ).rejects.toThrow(BadRequestException);
   });
 });

@@ -1308,7 +1308,7 @@ describe('GivingService', () => {
   describe('getTransactionsSummary', () => {
     const stubSummaryAggregates = (monthTotal: number, allTimeTotal: number, count: number) => {
       (model('transaction') as unknown as { aggregate: jest.Mock }).aggregate
-        .mockResolvedValueOnce({ _sum: { amount: monthTotal } })
+        .mockResolvedValueOnce({ _sum: { amount: monthTotal }, _count: { _all: 2 } })
         .mockResolvedValueOnce({ _sum: { amount: allTimeTotal }, _count: { _all: count } });
     };
 
@@ -1336,6 +1336,7 @@ describe('GivingService', () => {
       const result = await service.getTransactionsSummary(mockChurchId, {});
 
       expect(result.monthTotal).toBe(1500);
+      expect(result.monthCount).toBe(2);
       expect(result.allTimeTotal).toBe(5000);
       expect(result.count).toBe(42);
       expect(result.trend).toHaveLength(30);

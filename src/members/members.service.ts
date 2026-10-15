@@ -554,6 +554,7 @@ export class MembersService {
     limit = 20,
     viewerPermissions: string[] = [],
     viewer?: ViewerScope | null,
+    requestedBranchId?: string,
   ): Promise<MemberResponseDto[]> {
     const term = searchTerm.trim();
 
@@ -566,7 +567,13 @@ export class MembersService {
     const members = await this.prisma.member.findMany({
       where: {
         church_id: churchId,
-        ...(scope.churchOnly ? {} : scope.branchId ? { branch_id: scope.branchId } : {}),
+        ...(scope.churchOnly
+          ? requestedBranchId
+            ? { branch_id: requestedBranchId }
+            : {}
+          : scope.branchId
+            ? { branch_id: scope.branchId }
+            : {}),
         OR: [
           { first_name: { contains: term, mode: 'insensitive' } },
           { last_name: { contains: term, mode: 'insensitive' } },

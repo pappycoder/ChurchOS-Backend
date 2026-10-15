@@ -221,6 +221,9 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 
 ## Changelog
 
+- **2026-10-15 — Read-only workflow support.** Added branch-scoped aggregate `/giving/dashboard` protected by `giving:dashboard:read`, keeping transaction records behind their separate grant and rejecting donor selectors. Summary includes monthly gift count and runs independent queries concurrently. Member search accepts a requested branch for HQ pickers while pinning branch callers to their own branch. Added dashboard authorization/validation and picker regressions. See docs/READ-ONLY-UI-VERIFICATION-2026-10-15.md.
+
+
 - **2026-10-15 — Complete built-in role contract verification.** Added a 10-role × branch/HQ matrix with explicit allowed/denied action contracts, missing-branch and cross-tenant checks, ownership scopes and multi-role unions. Added reusable backend/frontend catalog-reference audit and read-only database-template drift audit. Reserved `cell_leader` against custom-role claims and ranked it above member for primary-role ordering. Corrected frontend catalog omissions without changing seeded role grants. Database audit could not connect/complete in this environment; live assignments/overrides remain unverified. See docs/ROLE-VERIFICATION-2026-10-15.md.
 
 

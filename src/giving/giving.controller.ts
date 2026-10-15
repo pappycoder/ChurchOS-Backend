@@ -45,6 +45,7 @@ import {
   ApiDeleteEndpoint,
 } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
+import { GivingDashboardQueryDto } from './dto/dashboard-query.dto';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { GivingService } from './giving.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -506,6 +507,26 @@ export class GivingController {
   /**
    * Return aggregated giving totals (month, all-time, count, 30-day trend).
    */
+  @UseGuards(JwtAuthGuard)
+  @Get('dashboard')
+  @RequirePermissions('giving:dashboard:read')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(60)
+  @ApiOkResponse({ type: TransactionSummaryResponseDto })
+  @ApiOperation({
+    summary: 'Read aggregate giving dashboard without individual transaction access',
+  })
+  async getDashboard(
+    @Query() query: GivingDashboardQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<TransactionSummaryResponseDto> {
+    return this.givingService.getTransactionsSummary(
+      req.profile?.church_id || '',
+      query,
+      req.profile,
+    );
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('transactions/summary')
   @RequirePermissions('giving:records:read')

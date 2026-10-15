@@ -554,6 +554,41 @@ describe('MembersService', () => {
   });
 
   describe('searchMembers', () => {
+    it('applies an HQ picker branch filter before limiting search results', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      await service.searchMembers(
+        mockChurchId,
+        'Chioma',
+        20,
+        [],
+        { church_id: mockChurchId, role: 'treasurer', is_admin_hq: true },
+        'branch-b',
+      );
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, branch_id: 'branch-b' }),
+          take: 20,
+        }),
+      );
+    });
+
+    it('ignores another requested branch for a branch-only picker', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      await service.searchMembers(
+        mockChurchId,
+        'Chioma',
+        20,
+        [],
+        { church_id: mockChurchId, role: 'treasurer', branch_id: 'branch-a', is_admin_hq: false },
+        'branch-b',
+      );
+      expect(model('member').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, branch_id: 'branch-a' }),
+        }),
+      );
+    });
+
     it('should return matching members', async () => {
       model('member').findMany.mockResolvedValue([mockMember]);
 
