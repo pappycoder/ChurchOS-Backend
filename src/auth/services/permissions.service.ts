@@ -43,6 +43,7 @@ export const RESERVED_ROLE_NAMES = [
   'church_admin',
   'branch_pastor',
   'department_head',
+  'cell_leader',
   'secretary',
   'treasurer',
   'usher',

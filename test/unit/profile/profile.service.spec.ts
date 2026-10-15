@@ -785,6 +785,22 @@ describe('ProfileService', () => {
       updated_at: new Date('2026-07-19T14:30:00.000Z'),
     };
 
+    it('orders cell_leader above member when both roles are assigned', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile });
+      jest.spyOn(service, 'getProfileById').mockResolvedValue({} as never);
+      await service.updateProfileRoles(
+        mockProfileId,
+        { roles: ['member', 'cell_leader'] },
+        mockChurchId,
+        mockAdminUserId,
+        'church_admin',
+      );
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: { role: ['cell_leader', 'member'] },
+      });
+    });
+
     it('should assign multiple roles ordered by rank descending', async () => {
       model(prisma, 'profile')
         .findUnique.mockResolvedValueOnce({ ...baseProfile })

@@ -52,6 +52,7 @@ const ROLE_RANK: Record<string, number> = {
   treasurer: 40,
   usher: 40,
   department_head: 40,
+  cell_leader: 20,
   member: 10,
 };
 

@@ -221,6 +221,9 @@ Copy `.env.example` to `.env`. All variables are validated at startup via Zod sc
 
 ## Changelog
 
+- **2026-10-15 — Complete built-in role contract verification.** Added a 10-role × branch/HQ matrix with explicit allowed/denied action contracts, missing-branch and cross-tenant checks, ownership scopes and multi-role unions. Added reusable backend/frontend catalog-reference audit and read-only database-template drift audit. Reserved `cell_leader` against custom-role claims and ranked it above member for primary-role ordering. Corrected frontend catalog omissions without changing seeded role grants. Database audit could not connect/complete in this environment; live assignments/overrides remain unverified. See docs/ROLE-VERIFICATION-2026-10-15.md.
+
+
 - **2026-10-15 — Authorization and scope audit.** Removed redundant legacy role guards from controllers and appointment booking role ceilings; global permissions plus JWT/session assurance govern API actions. Permission-protected routes reject missing identity. HQ scope now follows the explicit profile flag; HQ changes require reserved church-settings permission, block self changes and are audited. Hardened tenant context, unassigned branch reads/writes, reports, visitor detail/mutations and profile administration. Custom-field writes require church-settings permission; WhatsApp sending/history require grants and incoming webhooks require signed raw payloads. Archived accounts and removed staff are blocked. Deduplicated role permission resolution, skipped redundant admin-role lookups, bounded message pagination. Added security/route coverage regressions. See docs/AUTHORIZATION-AUDIT-2026-10-15.md.
 
 

@@ -62,6 +62,14 @@ describe('PermissionsService', () => {
   // ─── createRole ───────────────────────────────────────────
 
   describe('createRole', () => {
+    it('reserves cell_leader even when a global template is missing', async () => {
+      await expect(service.createRole(churchId, { label: 'Cell Leader' })).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.role.findMany).not.toHaveBeenCalled();
+      expect(prisma.role.create).not.toHaveBeenCalled();
+    });
+
     it('slugifies the label and creates a church-owned role with initial grants', async () => {
       prisma.role.findMany
         .mockResolvedValueOnce([]) // collision check
