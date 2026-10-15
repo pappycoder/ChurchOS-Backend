@@ -420,6 +420,8 @@ export class WhatsAppService {
     phone?: string,
     direction?: string,
   ): Promise<{ data: MessageResponseDto[]; total: number }> {
+    page = Number.isSafeInteger(page) && page > 0 ? page : 1;
+    limit = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 100) : 20;
     const skip = (page - 1) * limit;
 
     const where: Prisma.MessageWhereInput = {

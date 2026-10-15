@@ -886,6 +886,131 @@ describe('ProfileService', () => {
       updated_at: new Date('2026-07-19T14:30:00.000Z'),
     };
 
+    it('does not re-enable HQ on a no-op administrator role update', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...baseProfile,
+        role: ['church_admin'],
+        is_admin_hq: false,
+      });
+      jest.spyOn(service, 'getProfileById').mockResolvedValue({} as never);
+      await service.updateProfileRoles(
+        mockProfileId,
+        { roles: ['church_admin'] },
+        mockChurchId,
+        mockAdminUserId,
+        'church_admin',
+      );
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: { role: ['church_admin'] },
+      });
+    });
+
+    it('rejects invitations that grant more permissions than the caller', async () => {
+      permissionsService.getUserPermissions.mockResolvedValue(['church_settings:update']);
+      const context = new RequestContextService();
+      await expect(
+        context.run(
+          {
+            userId: mockAdminUserId,
+            churchId: mockChurchId,
+            role: 'custom_editor',
+            viewer: {
+              church_id: mockChurchId,
+              role: 'custom_editor',
+              branch_id: 'branch-1',
+              permissions: ['profiles:create'],
+            },
+          },
+          () =>
+            service.inviteUser(
+              {
+                email: 'invite@example.com',
+                firstName: 'Test',
+                lastName: 'User',
+                role: 'church_admin',
+              },
+              mockChurchId,
+              mockAdminUserId,
+            ),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+    });
+
+    it('validates invitation branch ownership before sending an invitation', async () => {
+      model(prisma, 'branch').findFirst.mockResolvedValue(null);
+      await expect(
+        service.inviteUser(
+          {
+            email: 'invite@example.com',
+            firstName: 'Test',
+            lastName: 'User',
+            role: 'member',
+            branchId: 'foreign-branch',
+          },
+          mockChurchId,
+          mockAdminUserId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+    });
+
+    it('rejects HQ grants from general profile editors before writing', async () => {
+      model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile });
+      await expect(
+        service.adminUpdateProfile(
+          mockProfileId,
+          { isAdminHq: true },
+          mockChurchId,
+          mockAdminUserId,
+          'secretary',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
+    });
+
+    it('allows authorized administrators to change HQ scope and records the flag', async () => {
+      permissionsService.getUserPermissions.mockResolvedValue(['church_settings:update']);
+      model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile, is_admin_hq: false });
+      await service.adminUpdateProfile(
+        mockProfileId,
+        { isAdminHq: true },
+        mockChurchId,
+        mockAdminUserId,
+        'church_admin',
+      );
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: { is_admin_hq: true },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oldValues: expect.objectContaining({ isAdminHq: false }),
+          newValues: expect.objectContaining({ isAdminHq: true }),
+        }),
+      );
+    });
+
+    it('blocks self elevation even with administrator permissions', async () => {
+      permissionsService.getUserPermissions.mockResolvedValue(['church_settings:update']);
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        ...baseProfile,
+        user_id: mockAdminUserId,
+        is_admin_hq: false,
+      });
+      await expect(
+        service.adminUpdateProfile(
+          mockProfileId,
+          { isAdminHq: true },
+          mockChurchId,
+          mockAdminUserId,
+          'church_admin',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(model(prisma, 'profile').update).not.toHaveBeenCalled();
+    });
+
     it('should update basic fields and audit-log the change', async () => {
       model(prisma, 'profile')
         .findUnique.mockResolvedValueOnce({ ...baseProfile })

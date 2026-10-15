@@ -96,6 +96,7 @@ export class RequestContextMiddleware implements NestMiddleware {
           member_id: true,
           role: true,
           status: true,
+          archived_at: true,
           is_admin_hq: true,
           two_factor_enabled: true,
           authenticator: { select: { revision: true } },
@@ -117,7 +118,8 @@ export class RequestContextMiddleware implements NestMiddleware {
           role: profile.role[0] ?? 'member',
           roles: profile.role,
           status: profile.status,
-          is_admin_hq: profile.is_admin_hq || permissions.includes('data_scope:church:read'),
+          profile_archived_at: profile.archived_at?.toISOString(),
+          is_admin_hq: profile.is_admin_hq,
           permissions,
           church_archived_at: profile.church?.archived_at?.toISOString(),
         };
@@ -127,7 +129,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     const profile = authReq.profile;
 
     // Reject requests from deactivated accounts before they reach any handler
-    if (profile && profile.status === 'inactive') {
+    if (profile && (profile.status !== 'active' || profile.profile_archived_at)) {
       next(new ForbiddenException('Account deactivated. Contact your church administrator.'));
       return;
     }

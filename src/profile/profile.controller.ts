@@ -41,7 +41,6 @@ import {
 } from '@nestjs/swagger';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -262,7 +261,6 @@ export class ProfileController {
    * Update a user's basic details (admin only).
    */
   @Patch(':profileId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
@@ -291,7 +289,6 @@ export class ProfileController {
    * Update a user's role (admin only).
    */
   @Patch(':profileId/role')
-  @UseGuards(RolesGuard)
   @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
@@ -320,7 +317,6 @@ export class ProfileController {
    * Replace a user's full set of roles (admin only).
    */
   @Patch(':profileId/roles')
-  @UseGuards(RolesGuard)
   @RequirePermissions('roles:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint(
@@ -349,7 +345,6 @@ export class ProfileController {
    * Soft-delete a profile (admin only).
    */
   @Delete(':profileId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
@@ -372,7 +367,6 @@ export class ProfileController {
    * Invite a new user via email.
    */
   @Post('invite')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:create')
   @ApiCreateEndpoint(
     'Invite a new user',
@@ -392,7 +386,6 @@ export class ProfileController {
    * Deactivate a user account.
    */
   @Post(':profileId/deactivate')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
@@ -414,7 +407,6 @@ export class ProfileController {
    * Reactivate a deactivated user account.
    */
   @Post(':profileId/activate')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
@@ -436,7 +428,6 @@ export class ProfileController {
    * Archive a user profile.
    */
   @Post(':profileId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
@@ -458,7 +449,6 @@ export class ProfileController {
    * Restore an archived user profile.
    */
   @Post(':profileId/restore-archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
@@ -480,7 +470,6 @@ export class ProfileController {
    * Reset a user's password.
    */
   @Post(':profileId/reset-password')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(
@@ -502,7 +491,6 @@ export class ProfileController {
    * Force sign-out a user.
    */
   @Post(':profileId/force-signout')
-  @UseGuards(RolesGuard)
   @RequirePermissions('profiles:update')
   @HttpCode(HttpStatus.OK)
   @ApiCreateEndpoint(

@@ -14,7 +14,13 @@
  * @since 1.0.0
  */
 
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { PermissionsService } from '../services/permissions.service';
@@ -54,11 +60,10 @@ export class PermissionsGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
-    // If JWT auth hasn't run yet (PermissionsGuard is global and runs before
-    // controller-level JwtAuthGuard), silently pass — JwtAuthGuard will reject
-    // unauthenticated requests. Once user is set, enforce permissions.
+    // Middleware verifies identity before this global guard. Never bypass an
+    // explicit permission requirement when no identity has been established.
     if (!user?.sub) {
-      return true;
+      throw new UnauthorizedException('Authentication required');
     }
 
     // Fetch the user's profile to get roles and church_id.

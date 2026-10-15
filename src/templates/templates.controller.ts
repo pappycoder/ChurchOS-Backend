@@ -26,7 +26,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
@@ -62,7 +61,6 @@ export class TemplatesController {
    * @returns Created template response
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a message template')
@@ -109,7 +107,6 @@ export class TemplatesController {
    * @returns Updated template response with published status
    */
   @Post(':templateId/publish')
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -162,7 +159,6 @@ export class TemplatesController {
    * @returns Updated template response
    */
   @Patch(':templateId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Update a template')
@@ -178,7 +174,6 @@ export class TemplatesController {
   }
 
   @Post(':templateId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -199,7 +194,6 @@ export class TemplatesController {
   }
 
   @Post(':templateId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -228,7 +222,6 @@ export class TemplatesController {
    * @returns Success confirmation
    */
   @Delete(':templateId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('templates:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete a template')

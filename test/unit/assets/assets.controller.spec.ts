@@ -120,7 +120,7 @@ describe('AssetsController permission decorators', () => {
   it('requires assets:list:create on POST /assets (keeps write-role ceiling)', () => {
     const block = blockBetween('@Post()', 'async createAsset(');
     expect(block).toContain("@RequirePermissions('assets:list:create')");
-    expect(block).toContain('@UseGuards(RolesGuard)');
+    expect(block).not.toContain('@UseGuards(RolesGuard)');
     expect(block).not.toContain('@RequireRoles(');
   });
 

@@ -25,7 +25,6 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   ApiCreateEndpoint,
@@ -67,7 +66,6 @@ export class FormsController {
    * Creates a new form.
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a form')
@@ -122,7 +120,6 @@ export class FormsController {
    * Updates a form.
    */
   @Patch(':formId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @ApiUpdateEndpoint('Update a form')
   @ApiParam({ name: 'formId', description: 'Form UUID' })
@@ -139,7 +136,6 @@ export class FormsController {
    * Closes a form.
    */
   @Delete(':formId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Close a form')
@@ -157,7 +153,6 @@ export class FormsController {
    * Archives a form.
    */
   @Post(':formId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive a form')
@@ -174,7 +169,6 @@ export class FormsController {
    * Restores an archived form.
    */
   @Post(':formId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore a form')
@@ -191,7 +185,6 @@ export class FormsController {
    * Regenerates the public submission link (invalidates any previously shared link).
    */
   @Post(':formId/regenerate-link')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Regenerate the public submission link')
@@ -208,7 +201,6 @@ export class FormsController {
    * Closes a form, stopping further submissions.
    */
   @Post(':formId/close')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Close a form')
@@ -225,7 +217,6 @@ export class FormsController {
    * Reopens a closed form back to draft.
    */
   @Post(':formId/reopen')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Reopen a closed form')
@@ -242,7 +233,6 @@ export class FormsController {
    * Clones a form into a new draft form.
    */
   @Post(':formId/clone')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:list:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Clone a form')
@@ -287,7 +277,12 @@ export class FormsController {
     data: FormSubmissionResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    const result = await this.formsService.listSubmissions(this.getChurchId(req), formId, query, req.profile);
+    const result = await this.formsService.listSubmissions(
+      this.getChurchId(req),
+      formId,
+      query,
+      req.profile,
+    );
 
     return {
       data: result.items,
@@ -320,7 +315,6 @@ export class FormsController {
    * Updates the approval status of a submission.
    */
   @Patch(':formId/submissions/:submissionId/status')
-  @UseGuards(RolesGuard)
   @RequirePermissions('forms:submissions:update')
   @ApiUpdateEndpoint('Update submission status')
   @ApiParam({ name: 'formId', description: 'Form UUID' })

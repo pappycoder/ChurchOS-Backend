@@ -7,7 +7,7 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
 
 /**
  * DTO for inviting new staff members.
@@ -41,6 +41,7 @@ export class InviteStaffDto {
   })
   @IsString()
   @IsNotEmpty()
+  @IsIn(['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher', 'member'])
   role!: string;
 
   @ApiPropertyOptional({

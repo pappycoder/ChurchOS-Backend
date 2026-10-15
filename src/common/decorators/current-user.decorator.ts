@@ -31,6 +31,7 @@ export interface AuthenticatedRequest extends Request {
     status?: string;
     /** Set when the profile's church is archived (ISO string) */
     church_archived_at?: string;
+    profile_archived_at?: string;
     /** HQ access override: when true, the viewer sees data from ALL branches */
     is_admin_hq?: boolean;
     permissions?: string[];

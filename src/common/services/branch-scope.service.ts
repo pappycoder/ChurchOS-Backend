@@ -62,7 +62,9 @@ export class BranchScopeService {
   resolve(viewer?: ViewerScope | null): ResolvedBranchScope {
     viewer ??= this.requestContext.getStore()?.viewer;
     if (!viewer) {
-      return { churchOnly: true };
+      return this.requestContext.getStore()
+        ? { churchOnly: false, branchId: '00000000-0000-0000-0000-000000000000' }
+        : { churchOnly: true };
     }
 
     if (viewer.is_admin_hq) {

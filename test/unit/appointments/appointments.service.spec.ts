@@ -118,9 +118,12 @@ function personProfileRow(): Record<string, unknown> {
 beforeEach(() => {
   mocks = createPrismaMock();
   prisma = mocks.prisma;
-  (prisma.visitor as unknown as Record<string, jest.Mock>).findMany.mockImplementation(async () => { const row = await (prisma.visitor as unknown as Record<string, jest.Mock>).findFirst(); return row ? [row] : []; });
+  (prisma.visitor as unknown as Record<string, jest.Mock>).findMany.mockImplementation(async () => {
+    const row = await (prisma.visitor as unknown as Record<string, jest.Mock>).findFirst();
+    return row ? [row] : [];
+  });
   audit = mocks.handl as { log: jest.Mock };
-  service = new AppointmentsService(prisma as never, new RequestContextService(), { getUserPermissions: jest.fn().mockResolvedValue(['appointments:read']) } as never, audit as never);
+  service = new AppointmentsService(prisma as never, new RequestContextService(), audit as never);
 });
 
 function model(name: string): Record<string, jest.Mock> {
@@ -264,16 +267,20 @@ describe('AppointmentsService', () => {
       expect(result.pastorId).toBe(PASTOR);
     });
 
-    it('rejects non-secretary/pastor/super-admin roles', async () => {
-      model('profile').findFirst.mockResolvedValueOnce(scopeRow({ role: ['member'] }));
-      await expect(
-        service.create(
-          { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', withId: PASTOR, whoId: WHO },
-          CHURCH,
-          SEC,
-          'u',
-        ),
-      ).rejects.toThrow('Only secretary and pastor roles');
+    it('allows a caller with a custom role through the permission-protected booking API', async () => {
+      model('profile').findFirst.mockResolvedValueOnce(scopeRow({ role: ['custom_booker'] }));
+      model('profile').findFirst.mockResolvedValueOnce(pastorRow());
+      model('profile').findFirst.mockResolvedValueOnce(personRow());
+      model('appointment').create.mockResolvedValueOnce(apptRow({ person_id: WHO }));
+      model('profile').findMany.mockResolvedValueOnce([personProfileRow(), pastorRow()]);
+      model('visitor').findFirst.mockResolvedValueOnce(null);
+      const result = await service.create(
+        { title: 'x', scheduledAt: '2026-09-05T10:00:00.000Z', withId: PASTOR, whoId: WHO },
+        CHURCH,
+        SEC,
+        'u',
+      );
+      expect(result.id).toBe(apptRow().id);
     });
 
     it('allows a super_admin to book', async () => {

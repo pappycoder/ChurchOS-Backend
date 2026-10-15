@@ -19,7 +19,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
@@ -33,7 +32,7 @@ import {
 
 @ApiTags('Reports')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
@@ -58,7 +57,9 @@ export class ReportsController {
       churchId,
       query.startDate,
       query.endDate,
-      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
+      req.profile?.is_admin_hq
+        ? query.branchId
+        : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
     );
   }
 
@@ -82,7 +83,9 @@ export class ReportsController {
       churchId,
       query.startDate,
       query.endDate,
-      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
+      req.profile?.is_admin_hq
+        ? query.branchId
+        : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
     );
   }
 
@@ -106,7 +109,9 @@ export class ReportsController {
       churchId,
       query.startDate,
       query.endDate,
-      req.profile?.is_admin_hq ? query.branchId : req.profile?.branch_id,
+      req.profile?.is_admin_hq
+        ? query.branchId
+        : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
     );
   }
 
@@ -134,7 +139,9 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
-          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
+          req.profile?.is_admin_hq
+            ? dto.branchId
+            : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
         );
         break;
       case 'attendance':
@@ -142,7 +149,9 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
-          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
+          req.profile?.is_admin_hq
+            ? dto.branchId
+            : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
         );
         break;
       case 'members':
@@ -150,7 +159,9 @@ export class ReportsController {
           churchId,
           dto.startDate,
           dto.endDate,
-          req.profile?.is_admin_hq ? dto.branchId : req.profile?.branch_id,
+          req.profile?.is_admin_hq
+            ? dto.branchId
+            : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
         );
         break;
       default:

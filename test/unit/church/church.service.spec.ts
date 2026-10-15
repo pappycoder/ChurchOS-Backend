@@ -50,7 +50,8 @@ describe('ChurchService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestContextService,
+      providers: [
+        RequestContextService,
         ChurchService,
         { provide: PrismaService, useValue: prisma },
         { provide: SupabaseService, useValue: { client: supabaseClient } },
@@ -366,7 +367,7 @@ describe('ChurchService', () => {
       expect(result.success).toBe(true);
       expect(prisma.profile.update).toHaveBeenCalledWith({
         where: { id: 'profile-1' },
-        data: { role: ['removed'] },
+        data: { role: ['removed'], status: 'inactive', is_admin_hq: false },
       });
     });
 

@@ -578,7 +578,12 @@ export class ProfileService {
       where: { id: profileId },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        existing.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Profile not found');
     }
 
@@ -642,7 +647,9 @@ export class ProfileService {
         role: orderedRoles,
         // is_admin_hq is left manual (never cleared); default it on only when
         // the new role set promotes the user to church_admin.
-        ...(orderedRoles.includes('church_admin') ? { is_admin_hq: true } : {}),
+        ...(orderedRoles.includes('church_admin') && !currentRoles.includes('church_admin')
+          ? { is_admin_hq: true }
+          : {}),
       },
     });
 
@@ -690,8 +697,27 @@ export class ProfileService {
       where: { id: profileId },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        existing.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Profile not found');
+    }
+
+    const ownBranch = this.requestContext.branchWhere(churchId).branch_id;
+    if (ownBranch && dto.branchId !== undefined && dto.branchId !== ownBranch)
+      throw new ForbiddenException('You can only assign users to your branch');
+    if (dto.isAdminHq !== undefined) {
+      const actor = this.requestContext.getStore()?.viewer;
+      const actorPermissions =
+        actor?.permissions ??
+        (await this.permissionsService.getUserPermissions(churchId, adminRole));
+      if (!actorPermissions.includes('church_settings:update'))
+        throw new ForbiddenException('Only church administrators can change HQ access');
+      if (existing.user_id === adminUserId && dto.isAdminHq !== existing.is_admin_hq)
+        throw new ForbiddenException('Cannot change your own HQ access');
     }
 
     const currentRoles = existing.role ?? [];
@@ -754,6 +780,7 @@ export class ProfileService {
         phone: existing.phone,
         branchId: existing.branch_id,
         status: existing.status,
+        isAdminHq: existing.is_admin_hq,
       },
       newValues: {
         firstName: dto.firstName ?? existing.first_name,
@@ -762,6 +789,7 @@ export class ProfileService {
         phone: dto.phone ?? existing.phone,
         branchId: dto.branchId !== undefined ? dto.branchId || null : existing.branch_id,
         status: dto.status ?? existing.status,
+        isAdminHq: dto.isAdminHq ?? existing.is_admin_hq,
       },
     });
 
@@ -784,7 +812,12 @@ export class ProfileService {
       where: { id: profileId },
     });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        existing.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Profile not found');
     }
 
@@ -827,7 +860,7 @@ export class ProfileService {
     adminUserId: string,
   ): Promise<ProfileResponseDto> {
     const profile = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!profile) {
@@ -876,7 +909,7 @@ export class ProfileService {
     userId: string,
   ): Promise<ProfileResponseDto> {
     const existing = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -923,7 +956,7 @@ export class ProfileService {
     userId: string,
   ): Promise<ProfileResponseDto> {
     const existing = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!existing) {
@@ -970,6 +1003,25 @@ export class ProfileService {
     if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
       throw new BadRequestException('First name and last name are required');
     }
+
+    const actor = this.requestContext.getStore()?.viewer;
+    if (actor) {
+      const requestedPermissions = await this.permissionsService.getUserPermissions(
+        churchId,
+        dto.role,
+      );
+      if (requestedPermissions.some((permission) => !actor.permissions?.includes(permission)))
+        throw new ForbiddenException('Cannot invite a user with permissions you do not hold');
+    }
+    const branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
+    if (
+      branchId &&
+      !(await this.prisma.branch.findFirst({
+        where: { id: branchId, church_id: churchId },
+        select: { id: true },
+      }))
+    )
+      throw new BadRequestException('Branch not found in this church');
 
     const supabase = this.supabase.client;
 
@@ -1019,7 +1071,7 @@ export class ProfileService {
         data: {
           user_id: data.user.id,
           church_id: churchId,
-          branch_id: dto.branchId || null,
+          branch_id: branchId || null,
           role: [dto.role],
           is_admin_hq: dto.role === 'church_admin',
           first_name: dto.firstName,
@@ -1065,7 +1117,7 @@ export class ProfileService {
     userId: string,
   ): Promise<{ deactivated: boolean }> {
     const profile = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!profile) {
@@ -1110,7 +1162,7 @@ export class ProfileService {
     userId: string,
   ): Promise<{ resetSent: boolean }> {
     const profile = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!profile) {
@@ -1162,7 +1214,7 @@ export class ProfileService {
     userId: string,
   ): Promise<{ signedOut: boolean }> {
     const profile = await this.prisma.profile.findFirst({
-      where: { id: profileId, church_id: churchId },
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
     if (!profile) {
@@ -1256,12 +1308,7 @@ export class ProfileService {
       avatarUrl: profile.avatar_url || undefined,
       mfaEnabled: profile.mfa_enabled,
       twoFactorEnabled: profile.two_factor_enabled,
-      isAdminHq:
-        profile.is_admin_hq ||
-        !!extras?.permissions?.includes('data_scope:church:read') ||
-        !!extras?.effectivePermissions?.some(
-          (permission) => permission.name === 'data_scope:church:read',
-        ),
+      isAdminHq: profile.is_admin_hq,
       status: profile.status,
       createdAt: profile.created_at.toISOString(),
       updatedAt: profile.updated_at.toISOString(),

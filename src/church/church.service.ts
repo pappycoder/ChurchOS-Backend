@@ -14,6 +14,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -398,6 +399,16 @@ export class ChurchService {
     const normalizedRole = dto.role?.trim();
     const normalizedPhone = dto.phone?.trim() || null;
 
+    const branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
+    if (
+      branchId &&
+      !(await this.prisma.branch.findUnique({
+        where: { id: branchId, church_id: churchId },
+        select: { id: true },
+      }))
+    )
+      throw new BadRequestException('Branch not found in this church');
+
     if (!normalizedEmail) {
       throw new InternalServerErrorException('Email is required');
     }
@@ -428,7 +439,7 @@ export class ChurchService {
       data: {
         user_id: inviteData.user.id,
         church_id: churchId,
-        branch_id: dto.branchId || null,
+        branch_id: branchId || null,
         role: [normalizedRole],
         is_admin_hq: normalizedRole === 'church_admin',
         first_name: normalizedFirstName,
@@ -554,9 +565,18 @@ export class ChurchService {
       },
     });
 
-    if (!profile || profile.church_id !== churchId) {
+    if (
+      !profile ||
+      profile.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        profile.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Staff member not found');
     }
+
+    if (profile.role.includes('super_admin'))
+      throw new ForbiddenException('Super administrator accounts must use the profile roles API');
+    if (profile.user_id === userId) throw new ForbiddenException('Cannot change your own roles');
 
     const oldRole = profile.role;
 
@@ -567,7 +587,9 @@ export class ChurchService {
       where: { id: profileId },
       data: {
         role: [dto.role],
-        ...(dto.role === 'church_admin' ? { is_admin_hq: true } : {}),
+        ...(dto.role === 'church_admin' && !oldRole.includes('church_admin')
+          ? { is_admin_hq: true }
+          : {}),
       },
       include: {
         branch: { select: { name: true } },
@@ -625,13 +647,18 @@ export class ChurchService {
       where: { id: profileId },
     });
 
-    if (!profile || profile.church_id !== churchId) {
+    if (
+      !profile ||
+      profile.church_id !== churchId ||
+      (this.requestContext.branchWhere(churchId).branch_id &&
+        profile.branch_id !== this.requestContext.branchWhere(churchId).branch_id)
+    ) {
       throw new NotFoundException('Staff member not found');
     }
 
     await this.prisma.profile.update({
       where: { id: profileId },
-      data: { role: ['removed'] },
+      data: { role: ['removed'], status: 'inactive', is_admin_hq: false },
     });
 
     await this.audit.log({

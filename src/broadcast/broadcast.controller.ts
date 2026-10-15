@@ -25,7 +25,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   AuthenticatedRequest,
@@ -54,7 +53,6 @@ export class BroadcastController {
    * Creates a new broadcast campaign.
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('broadcasts:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint(
@@ -110,7 +108,6 @@ export class BroadcastController {
    * Cancels a scheduled or draft broadcast.
    */
   @Patch(':broadcastId/cancel')
-  @UseGuards(RolesGuard)
   @RequirePermissions('broadcasts:update')
   @ApiUpdateEndpoint('Cancel a broadcast')
   @ApiParam({ name: 'broadcastId', description: 'Broadcast UUID' })

@@ -28,7 +28,6 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import {
@@ -81,7 +80,6 @@ export class AssetsController {
    * Creates a new asset category.
    */
   @Post('categories')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:categories:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create an asset category')
@@ -110,7 +108,6 @@ export class AssetsController {
    * Updates an asset category.
    */
   @Patch('categories/:categoryId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:categories:update')
   @ApiUpdateEndpoint('Update an asset category')
   @ApiParam({ name: 'categoryId', description: 'Asset category UUID' })
@@ -127,7 +124,6 @@ export class AssetsController {
    * Deletes an asset category.
    */
   @Delete('categories/:categoryId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:categories:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete an asset category')
@@ -145,7 +141,6 @@ export class AssetsController {
    * Archives an asset category.
    */
   @Post('categories/:categoryId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:categories:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive an asset category')
@@ -162,7 +157,6 @@ export class AssetsController {
    * Restores an archived asset category.
    */
   @Post('categories/:categoryId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:categories:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore an archived asset category')
@@ -179,7 +173,6 @@ export class AssetsController {
    * Registers a new asset.
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Register a new asset')
@@ -260,7 +253,6 @@ export class AssetsController {
    * Updates an asset.
    */
   @Patch(':assetId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:update')
   @ApiUpdateEndpoint('Update an asset')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -277,7 +269,6 @@ export class AssetsController {
    * Soft-deletes an asset.
    */
   @Delete(':assetId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:delete')
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint('Delete an asset')
@@ -295,7 +286,6 @@ export class AssetsController {
    * Archives an asset.
    */
   @Post(':assetId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Archive an asset')
@@ -312,7 +302,6 @@ export class AssetsController {
    * Restores an archived asset.
    */
   @Post(':assetId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.OK)
   @ApiUpdateEndpoint('Restore an archived asset')
@@ -329,7 +318,6 @@ export class AssetsController {
    * Generates or refreshes an asset QR code.
    */
   @Post(':assetId/qr')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:create')
   @ApiCreateEndpoint('Generate asset QR code')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -387,7 +375,6 @@ export class AssetsController {
    * Creates a maintenance record for an asset.
    */
   @Post(':assetId/maintenance')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:maintenance:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create asset maintenance record')
@@ -419,7 +406,6 @@ export class AssetsController {
    * Updates a maintenance record.
    */
   @Patch(':assetId/maintenance/:maintenanceId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:maintenance:update')
   @ApiUpdateEndpoint('Update asset maintenance record')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })
@@ -444,7 +430,6 @@ export class AssetsController {
    * Creates a depreciation entry for the current year.
    */
   @Post(':assetId/depreciation')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:list:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Record asset depreciation')
@@ -489,7 +474,6 @@ export class AssetsController {
    * Creates a loan record for an asset.
    */
   @Post(':assetId/loans')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:loans:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Loan an asset')
@@ -521,7 +505,6 @@ export class AssetsController {
    * Records the return of a loaned asset.
    */
   @Patch(':assetId/loans/:loanId/return')
-  @UseGuards(RolesGuard)
   @RequirePermissions('assets:loans:update')
   @ApiUpdateEndpoint('Return a loaned asset')
   @ApiParam({ name: 'assetId', description: 'Asset UUID' })

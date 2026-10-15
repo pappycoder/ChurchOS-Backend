@@ -1,3 +1,4 @@
+import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { VisitorsService } from '../../../src/visitors/visitors.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -84,12 +85,67 @@ describe('VisitorsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VisitorsService,
+        RequestContextService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: AuditLoggingService, useValue: auditMock },
       ],
     }).compile();
 
     service = module.get<VisitorsService>(VisitorsService);
+  });
+
+  describe('branch isolation', () => {
+    const context = new RequestContextService();
+    const viewer = {
+      church_id: churchId,
+      branch_id: 'branch-1',
+      role: 'secretary',
+      is_admin_hq: false,
+    };
+    const run = (callback: () => Promise<unknown>) =>
+      context.run({ userId, churchId, role: 'secretary', viewer }, callback);
+
+    it('denies detail and mutation access to visitors in another branch', async () => {
+      prismaMock.visitor.findUnique.mockResolvedValue({ ...mockVisitor, branch_id: 'branch-2' });
+      for (const action of [
+        () => service.findOne(mockVisitor.id, churchId),
+        () => service.update(mockVisitor.id, { firstName: 'Changed' }, churchId, userId),
+        () => service.remove(mockVisitor.id, churchId, userId),
+        () => service.archive(mockVisitor.id, churchId, userId),
+        () => service.restore(mockVisitor.id, churchId, userId),
+        () =>
+          service.convertToMember(
+            mockVisitor.id,
+            { firstName: 'Amina', lastName: 'Okafor' },
+            churchId,
+            userId,
+          ),
+      ])
+        await expect(run(action)).rejects.toThrow(NotFoundException);
+      expect(prismaMock.visitor.update).not.toHaveBeenCalled();
+      expect(prismaMock.visitor.delete).not.toHaveBeenCalled();
+      expect(prismaMock.member.create).not.toHaveBeenCalled();
+    });
+
+    it('fails closed for lists and writes when no branch is assigned', async () => {
+      const unassigned = { ...viewer, branch_id: undefined };
+      await service.findAll(churchId, {}, unassigned);
+      expect(prismaMock.visitor.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            AND: [{ branch_id: '00000000-0000-0000-0000-000000000000' }],
+          }),
+        }),
+      );
+      await expect(
+        service.create({ firstName: 'Amina' }, churchId, userId, unassigned),
+      ).rejects.toThrow('A branch assignment is required');
+      expect(prismaMock.visitor.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps untagged shared visitors readable for assigned branch staff', async () => {
+      await expect(run(() => service.findOne(mockVisitor.id, churchId))).resolves.toBeDefined();
+    });
   });
 
   it('should be defined', () => {

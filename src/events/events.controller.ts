@@ -26,7 +26,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -72,7 +71,6 @@ export class EventsController {
    * @returns Created event response
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:create')
   @ApiCreateEndpoint('Create a new event', 'Creates a new church event.')
   async createEvent(
@@ -91,7 +89,6 @@ export class EventsController {
    * @returns Paginated list of events
    */
   @Get()
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:list:read')
   @ApiPaginatedResponse(EventResponseDto)
   @ApiOperation({
@@ -138,15 +135,19 @@ export class EventsController {
       ['events:ticket-records:read', 'events:tickets:create'].includes(permission),
     );
 
-    return this.eventsService.listAllTickets(churchId, {
-      eventId,
-      status,
-      search,
-      branchId,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
-      ...(isStaff ? {} : { memberId: req?.profile?.member_id ?? '' }),
-    }, req?.profile);
+    return this.eventsService.listAllTickets(
+      churchId,
+      {
+        eventId,
+        status,
+        search,
+        branchId,
+        page: page ? parseInt(page, 10) : 1,
+        limit: limit ? Math.min(parseInt(limit, 10), 200) : 50,
+        ...(isStaff ? {} : { memberId: req?.profile?.member_id ?? '' }),
+      },
+      req?.profile,
+    );
   }
 
   /**
@@ -177,7 +178,6 @@ export class EventsController {
    * @returns Updated event response
    */
   @Patch(':eventId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:update')
   @ApiUpdateEndpoint('Update event details')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -199,7 +199,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Post(':eventId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:update')
   @ApiOperation({ summary: 'Archive an event' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -220,7 +219,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Post(':eventId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:update')
   @ApiOperation({ summary: 'Restore an archived event' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -241,7 +239,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Delete(':eventId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:delete')
   @ApiDeleteEndpoint('Delete an event')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -266,7 +263,6 @@ export class EventsController {
    * @returns Created tier ID
    */
   @Post(':eventId/tiers')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a ticket tier', 'Creates a pricing tier for a paid event.')
@@ -315,7 +311,6 @@ export class EventsController {
    * @returns Updated tier
    */
   @Patch(':eventId/tiers/:tierId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:update')
   @ApiUpdateEndpoint('Update a ticket tier')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -347,7 +342,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Post(':eventId/tiers/:tierId/archive')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:update')
   @ApiOperation({ summary: 'Archive a ticket tier' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -371,7 +365,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Post(':eventId/tiers/:tierId/restore')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:update')
   @ApiOperation({ summary: 'Restore an archived ticket tier' })
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -395,7 +388,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Delete(':eventId/tiers/:tierId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:delete')
   @ApiDeleteEndpoint('Delete a ticket tier')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -453,7 +445,6 @@ export class EventsController {
    * @returns Array of registration responses
    */
   @Get(':eventId/registrations')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:registrations:read')
   @ApiListEndpoint('List event registrations', 'Lists all registrations for an event.')
   @ApiParam({ name: 'eventId', description: 'Event UUID' })
@@ -475,7 +466,6 @@ export class EventsController {
    * @param req - HTTP request with profile context
    */
   @Delete(':eventId/register/:memberId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:registrations:update')
   @ApiOperation({
     summary: 'Cancel registration',
@@ -505,7 +495,6 @@ export class EventsController {
    * @returns Created ticket details
    */
   @Post(':eventId/tickets')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:tickets:read')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -540,11 +529,11 @@ export class EventsController {
       churchId,
       user.sub,
       {
-            memberId: req.profile?.member_id,
-            branchId: req.profile?.branch_id,
-            isAdminHq: req.profile?.is_admin_hq,
-            enforceSelf: !isStaff,
-          },
+        memberId: req.profile?.member_id,
+        branchId: req.profile?.branch_id,
+        isAdminHq: req.profile?.is_admin_hq,
+        enforceSelf: !isStaff,
+      },
     );
   }
 
@@ -557,7 +546,6 @@ export class EventsController {
    * @returns Validation result with attendee details
    */
   @Post(':eventId/tickets/validate')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:checkin:create')
   @ApiOperation({
     summary: 'Validate ticket',
@@ -576,7 +564,6 @@ export class EventsController {
   // ─── EVENT CHECK-IN ────────────────────────────────────────────
 
   @Post(':eventId/check-in')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:checkin:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -595,7 +582,6 @@ export class EventsController {
   }
 
   @Post(':eventId/check-in/walk-in')
-  @UseGuards(RolesGuard)
   @RequirePermissions('events:checkin:create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({

@@ -24,6 +24,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiBody } from '@nestjs/swagger';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -63,14 +64,14 @@ export class WhatsAppController {
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
   ): string {
-    const verifyToken = process.env.TERMII_WEBHOOK_VERIFY_TOKEN || 'churchos-verify-token';
+    const verifyToken = process.env.TERMII_WEBHOOK_VERIFY_TOKEN;
 
-    if (mode === 'subscribe' && token === verifyToken) {
+    if (verifyToken && mode === 'subscribe' && token === verifyToken) {
       this.logger.log('Webhook verified successfully');
       return challenge;
     }
 
-    this.logger.warn(`Webhook verification failed: mode=${mode}, token=${token}`);
+    this.logger.warn('Webhook verification failed');
     return 'Verification failed';
   }
 
@@ -97,7 +98,10 @@ export class WhatsAppController {
     @Request() req: AuthenticatedRequest & { rawBody?: Buffer },
   ): Promise<{ success: boolean; processed: number }> {
     const webhookSecret = process.env['TERMII_WEBHOOK_SECRET'];
-    if (webhookSecret && req.rawBody) {
+    if (!webhookSecret || !req.rawBody) {
+      throw new UnauthorizedException('Webhook verification is unavailable');
+    }
+    {
       const signature =
         (req.headers['x-termii-signature'] as string | undefined) ??
         (req.headers['x-hub-signature-256'] as string | undefined);
@@ -146,6 +150,7 @@ export class WhatsAppController {
    * Send a WhatsApp message (authenticated).
    */
   @Post('send')
+  @RequirePermissions('whatsapp:create')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('supabase-auth')
   @HttpCode(HttpStatus.CREATED)
@@ -165,6 +170,7 @@ export class WhatsAppController {
    * Send a WhatsApp template message (authenticated).
    */
   @Post('send-template')
+  @RequirePermissions('whatsapp:create')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('supabase-auth')
   @HttpCode(HttpStatus.CREATED)
@@ -191,6 +197,7 @@ export class WhatsAppController {
    * List WhatsApp messages with pagination and filters.
    */
   @Get('messages')
+  @RequirePermissions('whatsapp:read')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('supabase-auth')
   @ApiPaginatedResponse(MessageResponseDto)

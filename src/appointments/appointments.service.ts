@@ -1,5 +1,4 @@
 import { RequestContextService } from '../common/services/request-context.service';
-import { PermissionsService } from '../auth/services/permissions.service';
 /**
  * @file appointments.service.ts
  * @description Service for the appointment/booking registry (With/Who model).
@@ -9,9 +8,9 @@ import { PermissionsService } from '../auth/services/permissions.service';
  * existing visitor). The booker (secretary or pastor) is implicit — there is no
  * stored organizer column.
  *
- * Eligibility to book & manage: secretary, any pastor role, or super_admin.
+ * Booking and management require appointments:create/update on the API.
  *  - A BRANCH (non-HQ) booker picks With/Who participants in the SAME branch.
- *  - An HQ booker (is_admin_hq OR seated at the HQ branch) picks church-wide.
+ *  - An HQ booker (is_admin_hq) picks church-wide.
  * A profile can read/manage appointments where they are the `person_id` OR
  * `pastor_id` (church-scoped). Status lifecycle: pending | confirmed | completed
  * | cancelled. Archived rows are hidden unless ?archived=true; restore returns
@@ -46,9 +45,6 @@ export interface AppointmentScope {
   profileId: string;
   isHq: boolean;
   branchId: string | null;
-  isPastor: boolean;
-  isSecretary: boolean;
-  isSuperAdmin: boolean;
 }
 
 interface ProfileLike {
@@ -93,7 +89,6 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
-    private readonly permissionsService: PermissionsService,
     private readonly audit: AuditLoggingService,
   ) {}
 
@@ -107,9 +102,6 @@ export class AppointmentsService {
     userId: string,
   ): Promise<AppointmentDto> {
     const viewer = await this.resolveScope(churchId, profileId);
-    if (!viewer.isSecretary && !viewer.isPastor && !viewer.isSuperAdmin) {
-      throw new BadRequestException('Only secretary and pastor roles can create appointments');
-    }
 
     const isVisitorWho = dto.whoKind === 'visitor';
     if (isVisitorWho && !dto.visitorId) {
@@ -278,9 +270,6 @@ export class AppointmentsService {
   ): Promise<AppointmentDto> {
     const row = await this.findPartyAppointment(appointmentId, churchId, profileId);
     const viewer = await this.resolveScope(churchId, profileId);
-    if (!viewer.isSecretary && !viewer.isPastor && !viewer.isSuperAdmin) {
-      throw new BadRequestException('Only secretary and pastor roles can manage appointments');
-    }
 
     let pastorId = row.pastor_id;
     let personId = row.person_id;
@@ -541,21 +530,13 @@ export class AppointmentsService {
       },
     });
 
-    const roles = (profile?.role as string[] | undefined) ?? [];
-    const isPastor = roles.some((r) => (PASTOR_ROLES as readonly string[]).includes(r));
-    const isSecretary = roles.includes('secretary');
-    const isSuperAdmin = roles.includes('super_admin');
-    const permissions = await this.permissionsService.getUserPermissions(churchId, roles);
-    const isHq = profile?.is_admin_hq === true || permissions.includes('data_scope:church:read');
+    const isHq = profile?.is_admin_hq === true;
 
     return {
       churchId,
       profileId,
       isHq,
       branchId: profile?.branch_id ?? null,
-      isPastor,
-      isSecretary,
-      isSuperAdmin,
     };
   }
 

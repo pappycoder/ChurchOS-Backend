@@ -22,7 +22,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -50,7 +49,7 @@ import { BranchResponseDto } from './dto/branch-response.dto';
  */
 @ApiTags('Branches')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('branches')
 export class BranchesController {
   /**

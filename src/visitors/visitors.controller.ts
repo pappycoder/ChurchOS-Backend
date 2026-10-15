@@ -23,7 +23,6 @@ import { VisitorResponseDto } from './dto/visitor-response.dto';
 import { VisitorSummaryResponseDto } from './dto/visitor-summary-response.dto';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -45,7 +44,6 @@ export class VisitorsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('visitors:new:create')
-  @UseGuards(RolesGuard)
   @ApiCreateEndpoint('Register a new visitor', 'Registers a new visitor for follow-up.')
   async create(
     @Body() dto: CreateVisitorDto,
@@ -107,7 +105,6 @@ export class VisitorsController {
 
   @Patch(':visitorId')
   @RequirePermissions('visitors:list:update')
-  @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Update a visitor', 'Updates a visitor with partial data.')
   async update(
     @Param('visitorId') visitorId: string,
@@ -122,7 +119,6 @@ export class VisitorsController {
   @Post(':visitorId/convert')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('visitors:followup:update')
-  @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Convert visitor to member',
     description:
@@ -141,7 +137,6 @@ export class VisitorsController {
   @Post(':visitorId/archive')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('visitors:list:update')
-  @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Archive a visitor',
     description: 'Sets archived_at — hides the visitor from active lists until restored.',
@@ -158,7 +153,6 @@ export class VisitorsController {
   @Post(':visitorId/restore')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('visitors:list:update')
-  @UseGuards(RolesGuard)
   @ApiOperation({
     summary: 'Restore an archived visitor',
     description: 'Clears archived_at — brings the visitor back into active lists.',
@@ -175,7 +169,6 @@ export class VisitorsController {
   @Delete(':visitorId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequirePermissions('visitors:list:delete')
-  @UseGuards(RolesGuard)
   @ApiDeleteEndpoint('Delete a visitor', 'Permanently deletes a visitor record.')
   async remove(
     @Param('visitorId') visitorId: string,

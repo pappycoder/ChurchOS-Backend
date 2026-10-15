@@ -22,7 +22,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -52,7 +51,7 @@ import { UpdateStaffRoleDto } from './dto/update-staff-role.dto';
  */
 @ApiTags('Church')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('church')
 export class ChurchController {
   /**
@@ -260,7 +259,7 @@ export class ChurchController {
   }
 
   @Patch('staff/:profileId/role')
-  @RequirePermissions('profiles:update')
+  @RequirePermissions('roles:update', 'church_settings:update')
   @ApiUpdateEndpoint('Update staff role', 'Changes the role of a staff member within the church.')
   /**
    * Updates a staff member's role.

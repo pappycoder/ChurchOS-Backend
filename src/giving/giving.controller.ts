@@ -34,7 +34,6 @@ import { RawBodyRequest } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader, ApiOkResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SkipRateLimit } from '../common/guards/rate-limit.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
@@ -67,11 +66,11 @@ import { ListRecurringGivingDto } from './dto/list-recurring-giving.dto';
  */
 @ApiTags('Giving')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard)
 @Controller('giving')
 export class GivingController {
   constructor(private readonly givingService: GivingService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get('cell-groups/:groupId')
   @RequirePermissions('cell_groups:giving:read')
   async getCellGroupGiving(
@@ -87,6 +86,7 @@ export class GivingController {
     );
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('cell-groups/:groupId')
   @RequirePermissions('cell_groups:giving:create')
   @HttpCode(HttpStatus.CREATED)
@@ -110,8 +110,8 @@ export class GivingController {
   /**
    * Create a new giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('categories')
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:categories:create')
   @ApiCreateEndpoint('Create a giving category', 'Creates a new giving category for the church.')
   async createCategory(
@@ -126,6 +126,7 @@ export class GivingController {
   /**
    * List all giving categories.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('categories')
   @RequirePermissions('giving:categories:read')
   @ApiPaginatedResponse(CategoryResponseDto)
@@ -160,6 +161,7 @@ export class GivingController {
   /**
    * Get a single giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('categories/:categoryId')
   @RequirePermissions('giving:categories:read')
   @ApiGetEndpoint('Get a giving category', 'Retrieves a single giving category by ID.')
@@ -174,8 +176,8 @@ export class GivingController {
   /**
    * Update a giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Patch('categories/:categoryId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Update a giving category', 'Updates a giving category with partial data.')
   async updateCategory(
@@ -191,8 +193,8 @@ export class GivingController {
   /**
    * Soft-delete a giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Delete('categories/:categoryId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:categories:delete')
   @ApiDeleteEndpoint('Delete a giving category', 'Deactivates a giving category.')
   async deleteCategory(
@@ -208,9 +210,9 @@ export class GivingController {
   /**
    * Archive a giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('categories/:categoryId/archive')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Archive a giving category', 'Archives a giving category.')
   async archiveCategory(
@@ -225,9 +227,9 @@ export class GivingController {
   /**
    * Restore an archived giving category.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('categories/:categoryId/restore')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:categories:update')
   @ApiUpdateEndpoint('Restore a giving category', 'Restores an archived giving category.')
   async restoreCategory(
@@ -244,6 +246,7 @@ export class GivingController {
   /**
    * Initialize a Paystack payment.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('initialize')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint(
@@ -262,6 +265,7 @@ export class GivingController {
   /**
    * Verify a payment by reference.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('verify/:reference')
   @ApiGetEndpoint(
     'Verify a payment',
@@ -332,9 +336,9 @@ export class GivingController {
   /**
    * Record cash or bank transfer giving.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('cash')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(RolesGuard)
   @RequirePermissions('giving:records:create')
   @ApiCreateEndpoint(
     'Record cash/bank giving',
@@ -354,6 +358,7 @@ export class GivingController {
   /**
    * Create a recurring giving schedule.
    */
+  @UseGuards(JwtAuthGuard)
   @Post('recurring')
   @RequirePermissions('giving:recurring:create')
   @HttpCode(HttpStatus.CREATED)
@@ -373,6 +378,7 @@ export class GivingController {
   /**
    * List recurring giving schedules.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('recurring')
   @RequirePermissions('giving:recurring:read')
   @ApiPaginatedResponse(RecurringGivingResponseDto)
@@ -400,6 +406,7 @@ export class GivingController {
   /**
    * Get a single recurring giving by ID.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('recurring/:id')
   @RequirePermissions('giving:recurring:read')
   @ApiGetEndpoint('Get recurring giving', 'Retrieves a single recurring giving schedule by ID.')
@@ -414,6 +421,7 @@ export class GivingController {
   /**
    * Cancel a recurring giving schedule.
    */
+  @UseGuards(JwtAuthGuard)
   @Patch('recurring/:id/cancel')
   @RequirePermissions('giving:recurring:update')
   @ApiOperation({
@@ -430,6 +438,7 @@ export class GivingController {
     return { success: true };
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch('recurring/:id/pause')
   @RequirePermissions('giving:recurring:update')
   @ApiOperation({
@@ -447,6 +456,7 @@ export class GivingController {
     return { success: true };
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch('recurring/:id/resume')
   @RequirePermissions('giving:recurring:update')
   @ApiOperation({
@@ -468,6 +478,7 @@ export class GivingController {
   /**
    * List transactions with pagination and filters.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('transactions')
   @RequirePermissions('giving:records:read')
   @ApiPaginatedResponse(TransactionResponseDto)
@@ -495,6 +506,7 @@ export class GivingController {
   /**
    * Return aggregated giving totals (month, all-time, count, 30-day trend).
    */
+  @UseGuards(JwtAuthGuard)
   @Get('transactions/summary')
   @RequirePermissions('giving:records:read')
   @UseInterceptors(CacheInterceptor)
@@ -516,6 +528,7 @@ export class GivingController {
   /**
    * Get a single transaction by ID.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('transactions/:transactionId')
   @RequirePermissions('giving:records:read')
   @ApiGetEndpoint('Get transaction details', 'Retrieves a single giving transaction by ID.')
@@ -530,6 +543,7 @@ export class GivingController {
   /**
    * Download a PDF receipt for a transaction.
    */
+  @UseGuards(JwtAuthGuard)
   @Get('transactions/:transactionId/receipt')
   @RequirePermissions('giving:records:read')
   @ApiOperation({
@@ -556,6 +570,7 @@ export class GivingController {
     res.send(buffer);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('transactions/:transactionId/send-receipt')
   @RequirePermissions('giving:records:read')
   @ApiOperation({

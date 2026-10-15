@@ -34,7 +34,6 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 import { MemberResponseDto } from './dto/member-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -49,7 +48,7 @@ import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorat
 
 @ApiTags('Members')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('members')
 export class MembersController {
   constructor(private readonly membersService: MembersService) {}

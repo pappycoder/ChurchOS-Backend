@@ -72,14 +72,16 @@ export class JwtAuthGuard {
         }
 
         // Check if token has been blacklisted (logged out)
-        // Fail-open: if Redis is unreachable the blacklist lookup errors and we
-        // treat the token as valid rather than rejecting every request.
+        // Revocation is security state: an outage must not revive logged-out tokens.
         let isBlacklisted: unknown = null;
         try {
           isBlacklisted = await this.redis.get(`auth:blacklist:${token}`);
         } catch (err) {
           this.logger.warn(
-            `Blacklist lookup skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+            `Blacklist lookup failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
+          );
+          throw new ServiceUnavailableException(
+            'Unable to verify session revocation. Please try again.',
           );
         }
         if (isBlacklisted) {

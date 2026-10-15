@@ -1,9 +1,11 @@
+import { RequestContextService } from '../common/services/request-context.service';
 import {
   Injectable,
   Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
@@ -23,6 +25,7 @@ export class VisitorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLoggingService,
+    private readonly requestContext: RequestContextService,
   ) {}
 
   async create(
@@ -87,6 +90,8 @@ export class VisitorsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
+    viewer ??= this.requestContext.getStore()?.viewer;
+    this.requestContext.branchWhere(churchId);
     const conditions: Prisma.VisitorWhereInput[] = [];
 
     if (query.followUpStatus) {
@@ -112,10 +117,12 @@ export class VisitorsService {
     // Branch-scoped viewers (non-HQ) see visitors from their own branch only,
     // PLUS untagged legacy visitors (branch_id IS NULL) so previously recorded
     // rows don't vanish from branch lists.
-    if (viewer && !viewer.is_admin_hq && viewer.branch_id) {
-      conditions.push({
-        OR: [{ branch_id: viewer.branch_id }, { branch_id: null }],
-      });
+    if (viewer && !viewer.is_admin_hq) {
+      conditions.push(
+        viewer.branch_id
+          ? { OR: [{ branch_id: viewer.branch_id }, { branch_id: null }] }
+          : { branch_id: '00000000-0000-0000-0000-000000000000' },
+      );
     }
 
     const where: Prisma.VisitorWhereInput = {
@@ -170,12 +177,16 @@ export class VisitorsService {
     churchId: string,
     viewer?: ViewerScope | null,
   ): Promise<VisitorSummaryResponseDto> {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    this.requestContext.branchWhere(churchId);
     const conditions: Prisma.VisitorWhereInput[] = [];
 
-    if (viewer && !viewer.is_admin_hq && viewer.branch_id) {
-      conditions.push({
-        OR: [{ branch_id: viewer.branch_id }, { branch_id: null }],
-      });
+    if (viewer && !viewer.is_admin_hq) {
+      conditions.push(
+        viewer.branch_id
+          ? { OR: [{ branch_id: viewer.branch_id }, { branch_id: null }] }
+          : { branch_id: '00000000-0000-0000-0000-000000000000' },
+      );
     }
 
     const baseWhere: Prisma.VisitorWhereInput = {
@@ -218,7 +229,11 @@ export class VisitorsService {
       },
     });
 
-    if (!visitor || visitor.church_id !== churchId) {
+    if (
+      !visitor ||
+      visitor.church_id !== churchId ||
+      !this.isVisible(churchId, visitor.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -233,7 +248,11 @@ export class VisitorsService {
   ): Promise<VisitorResponseDto> {
     const existing = await this.prisma.visitor.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.isVisible(churchId, existing.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -289,7 +308,11 @@ export class VisitorsService {
   async remove(id: string, churchId: string, userId: string): Promise<void> {
     const existing = await this.prisma.visitor.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.isVisible(churchId, existing.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -325,7 +348,11 @@ export class VisitorsService {
   async archive(id: string, churchId: string, userId: string): Promise<VisitorResponseDto> {
     const existing = await this.prisma.visitor.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.isVisible(churchId, existing.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -370,7 +397,11 @@ export class VisitorsService {
   async restore(id: string, churchId: string, userId: string): Promise<VisitorResponseDto> {
     const existing = await this.prisma.visitor.findUnique({ where: { id } });
 
-    if (!existing || existing.church_id !== churchId) {
+    if (
+      !existing ||
+      existing.church_id !== churchId ||
+      !this.isVisible(churchId, existing.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -410,7 +441,11 @@ export class VisitorsService {
   ): Promise<{ visitor: VisitorResponseDto; memberId: string }> {
     const visitor = await this.prisma.visitor.findUnique({ where: { id } });
 
-    if (!visitor || visitor.church_id !== churchId) {
+    if (
+      !visitor ||
+      visitor.church_id !== churchId ||
+      !this.isVisible(churchId, visitor.branch_id)
+    ) {
       throw new NotFoundException('Visitor not found');
     }
 
@@ -431,7 +466,7 @@ export class VisitorsService {
     const member = await this.prisma.member.create({
       data: {
         church_id: churchId,
-        branch_id: dto.branchId,
+        branch_id: this.requestContext.branchIdForWrite(churchId, dto.branchId),
         first_name: dto.firstName,
         last_name: dto.lastName,
         gender: visitor.gender,
@@ -477,16 +512,26 @@ export class VisitorsService {
     };
   }
 
+  private isVisible(churchId: string, branchId?: string | null): boolean {
+    const ownBranch = this.requestContext.branchWhere(churchId).branch_id;
+    if (!ownBranch) return true;
+    if (ownBranch === '00000000-0000-0000-0000-000000000000') return false;
+    return branchId == null || branchId === ownBranch;
+  }
+
   private async resolveVisitorBranch(
     dtoBranchId: string | undefined,
     churchId: string,
     viewer?: ViewerScope | null,
   ): Promise<string | null> {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    this.requestContext.branchWhere(churchId);
     let branchId: string | null;
     let explicit = false;
     if (viewer && !viewer.is_admin_hq) {
       // Branch-restricted creators are pinned to their own branch.
-      branchId = viewer.branch_id ?? null;
+      if (!viewer.branch_id) throw new ForbiddenException('A branch assignment is required');
+      branchId = viewer.branch_id;
     } else {
       // HQ / unspecified creators may set an explicit branch or leave it null.
       branchId = dtoBranchId ?? null;

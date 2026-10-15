@@ -64,8 +64,13 @@ export class RequestContextService {
 
   /** Direct branch-owned records; missing branches fail closed. */
   branchWhere(churchId: string): { branch_id?: string } {
-    const viewer = this.getStore()?.viewer;
-    if (!viewer || viewer.church_id !== churchId || viewer.is_admin_hq) return {};
+    const context = this.getStore();
+    // Background jobs have no HTTP context and supply their own tenant scope.
+    if (!context) return {};
+    const viewer = context.viewer;
+    if (!viewer || context.churchId !== churchId || viewer.church_id !== churchId)
+      throw new ForbiddenException('Invalid tenant context');
+    if (viewer.is_admin_hq) return {};
     return { branch_id: viewer.branch_id ?? '00000000-0000-0000-0000-000000000000' };
   }
 
@@ -77,6 +82,8 @@ export class RequestContextService {
   branchIdForWrite(churchId: string, requested?: string | null): string | undefined {
     const ownBranch = this.branchWhere(churchId).branch_id;
     if (!ownBranch) return requested ?? undefined;
+    if (ownBranch === '00000000-0000-0000-0000-000000000000')
+      throw new ForbiddenException('A branch assignment is required');
     if (requested != null && requested !== ownBranch)
       throw new ForbiddenException('You can only manage records in your branch');
     return ownBranch;

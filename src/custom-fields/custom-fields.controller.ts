@@ -18,6 +18,7 @@ import { CreateCustomFieldDto } from './dto/create-custom-field.dto';
 import { UpdateCustomFieldDto } from './dto/update-custom-field.dto';
 import { ListCustomFieldsDto } from './dto/list-custom-fields.dto';
 import { CustomFieldResponseDto } from './dto/custom-field-response.dto';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -30,6 +31,7 @@ export class CustomFieldsController {
   constructor(private readonly customFieldsService: CustomFieldsService) {}
 
   @Post()
+  @RequirePermissions('church_settings:update')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a custom field definition' })
   async create(
@@ -62,6 +64,7 @@ export class CustomFieldsController {
   }
 
   @Patch(':fieldId')
+  @RequirePermissions('church_settings:update')
   @ApiOperation({ summary: 'Update a custom field definition' })
   async update(
     @Param('fieldId') fieldId: string,
@@ -74,6 +77,7 @@ export class CustomFieldsController {
   }
 
   @Delete(':fieldId')
+  @RequirePermissions('church_settings:update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a custom field definition' })
   async remove(
@@ -86,6 +90,7 @@ export class CustomFieldsController {
   }
 
   @Post(':fieldId/archive')
+  @RequirePermissions('church_settings:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Archive a custom field definition' })
   async archive(
@@ -98,6 +103,7 @@ export class CustomFieldsController {
   }
 
   @Post(':fieldId/restore')
+  @RequirePermissions('church_settings:update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Restore an archived custom field definition' })
   async restore(

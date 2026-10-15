@@ -144,10 +144,15 @@ export class PermissionsService {
    * @returns Array of permission name strings
    */
   async getUserPermissions(churchId: string, roleNames: string | string[]): Promise<string[]> {
-    const roles = Array.isArray(roleNames) ? roleNames : [roleNames];
+    const roles = [...new Set(Array.isArray(roleNames) ? roleNames : [roleNames])];
     if (roles.length === 0) {
       return [];
     }
+
+    // Administrator grants already cover the catalog; avoid resolving every
+    // additional role and making redundant Redis/database calls.
+    if (roles.some((role) => role === 'church_admin' || role === 'super_admin'))
+      return this.getAllPermissionNames();
 
     const resolved = await Promise.all(
       roles.map((roleName) => this.getPermissionsForRole(churchId, roleName)),

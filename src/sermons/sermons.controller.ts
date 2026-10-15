@@ -24,7 +24,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -55,7 +54,6 @@ export class SermonsController {
    * Create a new sermon record.
    */
   @Post()
-  @UseGuards(RolesGuard)
   @RequirePermissions('sermons:new:create')
   @ApiCreateEndpoint('Create a sermon', 'Creates a new sermon record for the church.')
   async createSermon(
@@ -152,7 +150,6 @@ export class SermonsController {
    * Update a sermon.
    */
   @Patch(':sermonId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('sermons:update')
   @ApiUpdateEndpoint('Update sermon details')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
@@ -170,7 +167,6 @@ export class SermonsController {
    * Delete a sermon.
    */
   @Delete(':sermonId')
-  @UseGuards(RolesGuard)
   @RequirePermissions('sermons:delete')
   @ApiDeleteEndpoint('Delete a sermon')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
@@ -188,7 +184,6 @@ export class SermonsController {
    */
   @Post(':sermonId/archive')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RolesGuard)
   @RequirePermissions('sermons:update')
   @ApiUpdateEndpoint('Archive a sermon')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })
@@ -206,7 +201,6 @@ export class SermonsController {
    */
   @Post(':sermonId/restore')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RolesGuard)
   @RequirePermissions('sermons:update')
   @ApiUpdateEndpoint('Restore an archived sermon')
   @ApiParam({ name: 'sermonId', description: 'Sermon UUID' })

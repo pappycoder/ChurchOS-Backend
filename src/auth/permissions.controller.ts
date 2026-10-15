@@ -24,7 +24,6 @@ import {
 import { RequirePermissions } from './decorators/permissions.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { RolesGuard } from './guards/roles.guard';
 import { PermissionsService } from './services/permissions.service';
 import { CurrentUser, CurrentUserProfile } from '../common/decorators/current-user.decorator';
 import {
@@ -36,7 +35,7 @@ import {
 
 @ApiTags('Permissions')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('church/roles')
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}

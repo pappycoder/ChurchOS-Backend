@@ -28,7 +28,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import {
   CurrentUser,
@@ -52,7 +51,7 @@ import { EngagementScoreResponseDto } from './dto/engagement-score-response.dto'
 
 @ApiTags('Pastoral')
 @ApiBearerAuth('supabase-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('pastoral')
 export class PastoralController {
   constructor(
@@ -106,7 +105,12 @@ export class PastoralController {
   ) {
     // Pass effective permissions for confidentiality filtering
     const churchId = req.profile?.church_id || '';
-    return this.pastoralService.listNotes(query, churchId, req.profile?.permissions ?? [], user.sub);
+    return this.pastoralService.listNotes(
+      query,
+      churchId,
+      req.profile?.permissions ?? [],
+      user.sub,
+    );
   }
 
   /**
@@ -128,7 +132,12 @@ export class PastoralController {
   ): Promise<PastoralNoteResponseDto> {
     // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
-    return this.pastoralService.getNoteById(noteId, churchId, req.profile?.permissions ?? [], user.sub);
+    return this.pastoralService.getNoteById(
+      noteId,
+      churchId,
+      req.profile?.permissions ?? [],
+      user.sub,
+    );
   }
 
   /**
@@ -152,7 +161,13 @@ export class PastoralController {
   ): Promise<PastoralNoteResponseDto> {
     // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
-    return this.pastoralService.updateNote(noteId, dto, churchId, user.sub, req.profile?.permissions ?? []);
+    return this.pastoralService.updateNote(
+      noteId,
+      dto,
+      churchId,
+      user.sub,
+      req.profile?.permissions ?? [],
+    );
   }
 
   /**
@@ -174,7 +189,12 @@ export class PastoralController {
   ): Promise<void> {
     // Extract church ID and user role from the authenticated profile
     const churchId = req.profile?.church_id || '';
-    return this.pastoralService.deleteNote(noteId, churchId, user.sub, req.profile?.permissions ?? []);
+    return this.pastoralService.deleteNote(
+      noteId,
+      churchId,
+      user.sub,
+      req.profile?.permissions ?? [],
+    );
   }
 
   /**

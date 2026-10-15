@@ -39,7 +39,6 @@ import {
   AttendanceTrendDto,
 } from './dto/attendance-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
@@ -63,7 +62,6 @@ export class AttendanceController {
 
   @Post('services')
   @RequirePermissions('attendance:services:create')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Create a service', 'Creates a new church service schedule.')
   async createService(
@@ -106,7 +104,6 @@ export class AttendanceController {
 
   @Patch('services/:serviceId')
   @RequirePermissions('attendance:services:update')
-  @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Update a service', 'Updates a service with partial data.')
   async updateService(
     @Param('serviceId') serviceId: string,
@@ -120,7 +117,6 @@ export class AttendanceController {
 
   @Delete('services/:serviceId')
   @RequirePermissions('attendance:services:delete')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
     'Delete a service',
@@ -141,7 +137,6 @@ export class AttendanceController {
   @Post('services/:serviceId/archive')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('attendance:services:update')
-  @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Archive a service', 'Archives a service.')
   async archiveService(
     @Param('serviceId') serviceId: string,
@@ -158,7 +153,6 @@ export class AttendanceController {
   @Post('services/:serviceId/restore')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('attendance:services:update')
-  @UseGuards(RolesGuard)
   @ApiUpdateEndpoint('Restore a service', 'Restores an archived service.')
   async restoreService(
     @Param('serviceId') serviceId: string,
@@ -195,7 +189,6 @@ export class AttendanceController {
 
   @Post('attendance')
   @RequirePermissions('attendance:checkin:create')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiCreateEndpoint('Record attendance', 'Records a single check-in for a service.')
   async recordAttendance(
@@ -209,7 +202,6 @@ export class AttendanceController {
 
   @Post('attendance/bulk')
   @RequirePermissions('attendance:checkin:create')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Record bulk attendance',
@@ -230,7 +222,6 @@ export class AttendanceController {
 
   @Post('attendance/visitor')
   @RequirePermissions('attendance:checkin:create')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Record visitor attendance',
@@ -247,7 +238,6 @@ export class AttendanceController {
 
   @Delete('attendance/:attendanceId')
   @RequirePermissions('attendance:records:delete')
-  @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   @ApiDeleteEndpoint(
     'Delete an attendance record',
@@ -283,7 +273,13 @@ export class AttendanceController {
     @Request() req: AuthenticatedRequest,
   ): Promise<AttendanceSummaryDto> {
     const churchId = req.profile?.church_id || '';
-    return this.attendanceService.getAttendanceSummary(churchId, startDate, endDate, branchId, req.profile);
+    return this.attendanceService.getAttendanceSummary(
+      churchId,
+      startDate,
+      endDate,
+      branchId,
+      req.profile,
+    );
   }
 
   @Get('attendance/trends')
