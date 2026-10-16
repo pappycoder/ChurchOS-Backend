@@ -11,15 +11,16 @@
  * sendSms() also persists the outbound SMS to the Prisma Message model
  * (channel: 'sms'). WhatsApp messages are persisted by WhatsAppService.
  *
- * Requires TERMII_API_KEY, TERMII_WHATSAPP_DEVICE_ID (WhatsApp device),
+ * Resolves encrypted church credentials or platform environment defaults:
+ * TERMII_API_KEY, TERMII_WHATSAPP_DEVICE_ID (WhatsApp device),
  * and optionally TERMII_FROM (SMS sender ID) env vars.
  *
  * @module communication/termii.service
  * @since 1.0.0
  */
 
+import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -43,9 +44,9 @@ export class TermiiService {
   };
 
   constructor(
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly moduleRef: ModuleRef,
+    private readonly credentials: MessagingCredentialsService,
   ) {}
 
   /**
@@ -81,8 +82,7 @@ export class TermiiService {
     churchId: string,
     parentMessageId?: string,
   ): Promise<string> {
-    const apiKey = this.config.get<string>('TERMII_API_KEY');
-    const from = this.config.get<string>('TERMII_FROM', 'ChurchOS');
+    const { apiKey, from, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {
       await this.notifyFailure(churchId, 'SMS not delivered', 'Termii API not configured.');
@@ -90,8 +90,10 @@ export class TermiiService {
     }
 
     try {
-      const response = await fetch('https://api.termii.com/api/sms/send', {
+      const response = await fetch(`${this.credentials.termiiBaseUrl(baseUrl)}/api/sms/send`, {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -106,14 +108,19 @@ export class TermiiService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`Termii API error: ${response.status} ${error}`);
+        this.logger.error(`Termii API error: ${response.status}`);
         await this.notifyFailure(churchId, 'SMS not delivered', `HTTP ${response.status}.`);
         throw new InternalServerErrorException('Failed to send SMS');
       }
 
-      const result = (await response.json()) as { request_id?: string; message?: string };
+      const result = (await response.json()) as {
+        request_id?: string;
+        message_id?: string;
+        message?: string;
+      };
 
+      if (!result.request_id && !result.message_id)
+        throw new InternalServerErrorException('Termii did not confirm message acceptance');
       const msg = await this.prisma.message.create({
         data: {
           church_id: churchId,
@@ -124,7 +131,9 @@ export class TermiiService {
           parent_message_id: parentMessageId ?? null,
           content: message,
           status: 'sent',
-          metadata: { termii_request_id: result.request_id } as Prisma.InputJsonValue,
+          metadata: {
+            termii_request_id: result.request_id ?? result.message_id,
+          } as Prisma.InputJsonValue,
         },
       });
 
@@ -132,8 +141,8 @@ export class TermiiService {
       return msg.id;
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`SMS send error: ${(err as Error).message}`);
-      await this.notifyFailure(churchId, 'SMS not delivered', (err as Error).message);
+      this.logger.error(`SMS send error: provider request failed`);
+      await this.notifyFailure(churchId, 'SMS not delivered', 'Provider request failed.');
       throw new InternalServerErrorException('Failed to send SMS');
     }
   }
@@ -150,9 +159,12 @@ export class TermiiService {
    * @returns Request ID assigned by Termii, if any
    * @throws InternalServerErrorException if Termii / WhatsApp is not configured or send fails
    */
-  async sendWhatsAppMessage(to: string, message: string): Promise<TermiiSendResult> {
-    const apiKey = this.config.get<string>('TERMII_API_KEY');
-    const deviceId = this.config.get<string>('TERMII_WHATSAPP_DEVICE_ID');
+  async sendWhatsAppMessage(
+    to: string,
+    message: string,
+    churchId: string,
+  ): Promise<TermiiSendResult> {
+    const { apiKey, deviceId, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {
       throw new InternalServerErrorException('Termii API not configured');
@@ -162,8 +174,10 @@ export class TermiiService {
     }
 
     try {
-      const response = await fetch('https://api.termii.com/api/sms/send', {
+      const response = await fetch(`${this.credentials.termiiBaseUrl(baseUrl)}/api/sms/send`, {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -178,17 +192,22 @@ export class TermiiService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`Termii WhatsApp API error: ${response.status} ${error}`);
+        this.logger.error(`Termii WhatsApp API error: ${response.status}`);
         throw new InternalServerErrorException('Failed to send WhatsApp message');
       }
 
-      const result = (await response.json()) as { request_id?: string; message?: string };
+      const result = (await response.json()) as {
+        request_id?: string;
+        message_id?: string;
+        message?: string;
+      };
+      if (!result.request_id && !result.message_id)
+        throw new InternalServerErrorException('Termii did not confirm message acceptance');
       this.logger.log(`WhatsApp sent to ${to} (${result.request_id ?? 'unknown'})`);
-      return { requestId: result.request_id };
+      return { requestId: result.request_id ?? result.message_id };
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`WhatsApp send error: ${(err as Error).message}`);
+      this.logger.error(`WhatsApp send error: provider request failed`);
       throw new InternalServerErrorException('Failed to send WhatsApp message');
     }
   }
@@ -210,10 +229,10 @@ export class TermiiService {
   async sendWhatsAppTemplate(
     to: string,
     templateId: string,
-    variables?: Record<string, string>,
+    variables: Record<string, string> | undefined,
+    churchId: string,
   ): Promise<TermiiSendResult> {
-    const apiKey = this.config.get<string>('TERMII_API_KEY');
-    const deviceId = this.config.get<string>('TERMII_WHATSAPP_DEVICE_ID');
+    const { apiKey, deviceId, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {
       throw new InternalServerErrorException('Termii API not configured');
@@ -223,8 +242,10 @@ export class TermiiService {
     }
 
     try {
-      const response = await fetch('https://api.termii.com/api/send/template', {
+      const response = await fetch(`${this.credentials.termiiBaseUrl(baseUrl)}/api/send/template`, {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -238,17 +259,22 @@ export class TermiiService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`Termii WhatsApp template API error: ${response.status} ${error}`);
+        this.logger.error(`Termii WhatsApp template API error: ${response.status}`);
         throw new InternalServerErrorException('Failed to send WhatsApp template message');
       }
 
-      const result = (await response.json()) as { request_id?: string; message?: string };
+      const result = (await response.json()) as {
+        request_id?: string;
+        message_id?: string;
+        message?: string;
+      };
+      if (!result.request_id && !result.message_id)
+        throw new InternalServerErrorException('Termii did not confirm message acceptance');
       this.logger.log(`WhatsApp template sent to ${to} (${result.request_id ?? 'unknown'})`);
-      return { requestId: result.request_id };
+      return { requestId: result.request_id ?? result.message_id };
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`WhatsApp template send error: ${(err as Error).message}`);
+      this.logger.error(`WhatsApp template send error: provider request failed`);
       throw new InternalServerErrorException('Failed to send WhatsApp template message');
     }
   }

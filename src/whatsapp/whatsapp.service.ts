@@ -127,10 +127,11 @@ export class WhatsAppService {
    */
   async processWebhook(
     body: WebhookBodyDto | Record<string, unknown>,
+    webhookChurchId: string,
   ): Promise<{ processed: number }> {
     // Termii flat payloads carry a `type`/`sender`/`message` top-level shape.
     if (body && !('messages' in body) && this.isTermiiPayload(body as Record<string, unknown>)) {
-      return this.processTermiiWebhook(body as unknown as TermiiWebhookPayload);
+      return this.processTermiiWebhook(body as unknown as TermiiWebhookPayload, webhookChurchId);
     }
 
     const metaBody = body as WebhookBodyDto;
@@ -138,7 +139,7 @@ export class WhatsAppService {
     if (!metaBody.messages || metaBody.messages.length === 0) {
       // Status update — handle delivery/read receipts
       if (metaBody.statuses && metaBody.statuses.length > 0) {
-        await this.handleStatusUpdates(metaBody.statuses);
+        await this.handleStatusUpdates(metaBody.statuses, webhookChurchId);
         return { processed: metaBody.statuses.length };
       }
       return { processed: 0 };
@@ -156,6 +157,7 @@ export class WhatsAppService {
           msg.timestamp,
           msg.text?.body,
           phoneNumberId,
+          webhookChurchId,
         );
         if (normalized) {
           await this.routeMessage(normalized);
@@ -184,11 +186,18 @@ export class WhatsAppService {
    * Processes a Termii flat inbound webhook: an inbound text message or a
    * delivery/status event.
    */
-  private async processTermiiWebhook(body: TermiiWebhookPayload): Promise<{ processed: number }> {
+  private async processTermiiWebhook(
+    body: TermiiWebhookPayload,
+    webhookChurchId: string,
+  ): Promise<{ processed: number }> {
     // Status / delivery reports carry a status but no inbound text.
     if (body.type && body.type !== 'inbound' && body.status) {
       if (body.id || body.message_id) {
-        await this.handleTermiiStatusUpdate(body.message_id ?? body.id!, body.status);
+        await this.handleTermiiStatusUpdate(
+          body.message_id ?? body.id!,
+          body.status,
+          webhookChurchId,
+        );
       }
       return { processed: 1 };
     }
@@ -202,13 +211,13 @@ export class WhatsAppService {
       return { processed: 0 };
     }
 
-    // Termii inbound payloads don't carry a phone_number_id; resolve church
-    // from the member profile or fall back to a configured default.
+    // The verified callback destination selects the tenant; phone lookups never do.
     const normalized = await this.normalizeTermiiMessage(
       phone,
       messageId,
       body.received_at,
       content.trim(),
+      webhookChurchId,
     );
 
     if (normalized) {
@@ -221,14 +230,14 @@ export class WhatsAppService {
 
   /**
    * Normalizes a Termii inbound message into the internal message shape used
-   * by the command router. Resolves the member by phone, then falls back to
-   * the configured TERMII_DEFAULT_CHURCH_ID for unknown visitors.
+   * by the command router. Resolves the member by phone within the verified church.
    */
   private async normalizeTermiiMessage(
     phone: string,
     messageId: string,
-    timestamp?: string,
-    body?: string,
+    timestamp: string | undefined,
+    body: string | undefined,
+    webhookChurchId: string,
   ): Promise<NormalizedMessage | null> {
     if (!body || body.trim().length === 0) {
       this.logger.debug(`Skipping non-text message from ${phone}`);
@@ -236,25 +245,13 @@ export class WhatsAppService {
     }
 
     const profile = await this.prisma.profile.findFirst({
-      where: { phone },
+      where: { phone, church_id: webhookChurchId },
       select: { church_id: true, member_id: true },
     });
 
-    let churchId = profile?.church_id || '';
+    const churchId = webhookChurchId;
     const memberId = profile?.member_id || null;
-
-    // No profile match — attribute to a default church so visitors can still
-    // interact, but do not fabricate a member record.
-    if (!churchId) {
-      churchId = this.config.get<string>('TERMII_DEFAULT_CHURCH_ID', '');
-      this.logger.warn(
-        `Unknown Termii sender ${phone}; using default church ${churchId || '(none)'}`,
-      );
-    }
-
-    if (!churchId) {
-      return null;
-    }
+    if (!churchId) return null;
 
     // Log inbound message
     await this.prisma.message.create({
@@ -283,10 +280,15 @@ export class WhatsAppService {
   /**
    * Updates the delivery status of a message previously sent via Termii.
    */
-  private async handleTermiiStatusUpdate(messageId: string, status: string): Promise<void> {
+  private async handleTermiiStatusUpdate(
+    messageId: string,
+    status: string,
+    churchId: string,
+  ): Promise<void> {
     try {
       await this.prisma.message.updateMany({
         where: {
+          church_id: churchId,
           metadata: { path: ['termii_request_id'], equals: messageId },
         },
         data: { status },
@@ -306,19 +308,8 @@ export class WhatsAppService {
     churchId: string,
     memberId?: string,
   ): Promise<MessageResponseDto> {
-    const apiKey = this.config.get<string>('TERMII_API_KEY');
-
-    if (!apiKey) {
-      await this.notifyFailure(
-        churchId,
-        'WhatsApp message not delivered',
-        'Termii WhatsApp not configured.',
-      );
-      throw new InternalServerErrorException('Termii WhatsApp not configured');
-    }
-
     try {
-      const result = await this.termiiService.sendWhatsAppMessage(to, content);
+      const result = await this.termiiService.sendWhatsAppMessage(to, content, churchId);
 
       // Log outbound message
       const message = await this.prisma.message.create({
@@ -368,19 +359,13 @@ export class WhatsAppService {
     churchId: string,
     memberId?: string,
   ): Promise<MessageResponseDto> {
-    const apiKey = this.config.get<string>('TERMII_API_KEY');
-
-    if (!apiKey) {
-      await this.notifyFailure(
-        churchId,
-        'WhatsApp template not delivered',
-        'Termii WhatsApp not configured.',
-      );
-      throw new InternalServerErrorException('Termii WhatsApp not configured');
-    }
-
     try {
-      const result = await this.termiiService.sendWhatsAppTemplate(to, templateName, variables);
+      const result = await this.termiiService.sendWhatsAppTemplate(
+        to,
+        templateName,
+        variables,
+        churchId,
+      );
 
       const message = await this.prisma.message.create({
         data: {
@@ -467,8 +452,9 @@ export class WhatsAppService {
     phone: string,
     messageId: string,
     timestamp: string,
-    body?: string,
-    phoneNumberId?: string,
+    body: string | undefined,
+    _phoneNumberId: string | undefined,
+    webhookChurchId: string,
   ): Promise<NormalizedMessage | null> {
     if (!body || body.trim().length === 0) {
       this.logger.debug(`Skipping non-text message from ${phone}`);
@@ -477,20 +463,14 @@ export class WhatsAppService {
 
     // Look up member by phone number
     const profile = await this.prisma.profile.findFirst({
-      where: { phone },
+      where: { phone, church_id: webhookChurchId },
       select: { church_id: true, member_id: true },
     });
 
-    let churchId = profile?.church_id || '';
+    const churchId = webhookChurchId;
     const memberId = profile?.member_id || null;
-
-    // If no profile match, resolve church from phone_number_id and create Visitor
-    if (!profile && phoneNumberId) {
-      churchId = await this.resolveChurchFromPhoneNumberId(phoneNumberId);
-      if (churchId) {
-        await this.ensureVisitorRecord(phone, churchId);
-      }
-    }
+    if (!churchId) return null;
+    if (!profile) await this.ensureVisitorRecord(phone, churchId);
 
     // Log inbound message
     await this.prisma.message.create({
@@ -884,11 +864,13 @@ export class WhatsAppService {
 
   private async handleStatusUpdates(
     statuses: { id: string; status: string; timestamp?: string }[],
+    churchId: string,
   ): Promise<void> {
     for (const status of statuses) {
       try {
         await this.prisma.message.updateMany({
           where: {
+            church_id: churchId,
             metadata: { path: ['wa_message_id'], equals: status.id },
           },
           data: { status: status.status },
@@ -900,18 +882,6 @@ export class WhatsAppService {
   }
 
   // ─── MAPPERS ───────────────────────────────────────────────────
-
-  private async resolveChurchFromPhoneNumberId(phoneNumberId: string): Promise<string> {
-    const configs = await this.prisma.churchConfig.findMany({
-      where: {
-        key: 'whatsapp_phone_number_id',
-      },
-      select: { church_id: true, value: true },
-    });
-
-    const match = configs.find((c) => String(c.value) === phoneNumberId);
-    return match?.church_id || '';
-  }
 
   private async ensureVisitorRecord(phone: string, churchId: string): Promise<void> {
     const existing = await this.prisma.visitor.findFirst({

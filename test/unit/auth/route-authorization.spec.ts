@@ -70,7 +70,12 @@ const exceptions: Record<string, string[]> = {
   ],
   'sync/offline.controller.ts': ['snapshot', 'push'],
   'sync/sync.controller.ts': ['pushChanges', 'bootstrap', 'pullChanges', 'markSynced'],
-  'whatsapp/whatsapp.controller.ts': ['verifyWebhook', 'processWebhook'],
+  'whatsapp/whatsapp.controller.ts': [
+    'verifyWebhook',
+    'processWebhook',
+    'verifyChurchWebhook',
+    'processChurchWebhook',
+  ],
 };
 const publicRoutes = new Set([
   'auth/auth.controller.ts:register',
@@ -88,6 +93,9 @@ const publicRoutes = new Set([
   'giving/giving.controller.ts:handleFlutterwaveWebhook',
   'whatsapp/whatsapp.controller.ts:verifyWebhook',
   'whatsapp/whatsapp.controller.ts:processWebhook',
+  // Church-specific callbacks authenticate with provider signatures/subscription tokens.
+  'whatsapp/whatsapp.controller.ts:verifyChurchWebhook',
+  'whatsapp/whatsapp.controller.ts:processChurchWebhook',
 ]);
 
 function files(directory: string): string[] {

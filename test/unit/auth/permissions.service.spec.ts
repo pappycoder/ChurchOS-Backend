@@ -218,7 +218,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v20:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v21:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -296,6 +296,30 @@ describe('PermissionsService', () => {
   // ─── Resolution & caching ─────────────────────────────────
 
   describe('getUserPermissions', () => {
+    it.each([
+      'senior_pastor',
+      'branch_pastor',
+      'secretary',
+      'treasurer',
+      'usher',
+      'department_head',
+      'cell_leader',
+      'member',
+      'custom_admin',
+    ])(
+      'strips integration administration from %s even if custom overrides grant it',
+      async (role) => {
+        jest
+          .spyOn(service, 'getPermissionsForRole')
+          .mockResolvedValue([
+            'members:read',
+            'messaging_integrations:read',
+            'messaging_integrations:update',
+          ]);
+        expect(await service.getUserPermissions(churchId, [role])).toEqual(['members:read']);
+      },
+    );
+
     it('unions permissions across template and owned roles', async () => {
       prisma.role.findMany.mockImplementation(
         (args: { where: { name: string | { in: string[] } } }) => {
@@ -342,7 +366,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v20:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v21:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {

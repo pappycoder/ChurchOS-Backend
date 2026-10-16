@@ -19,6 +19,7 @@
  * @since 1.0.0
  */
 
+import { MessagingIntegrationsModule } from './messaging-integrations/messaging-integrations.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
@@ -77,6 +78,7 @@ import { PermissionsModule } from './auth/permissions.module';
  */
 @Module({
   imports: [
+    MessagingIntegrationsModule,
     // Configure ConfigModule for environment variable management.
     // - isGlobal: true → Makes ConfigService injectable in any module without
     //   re-importing ConfigModule in each feature module.

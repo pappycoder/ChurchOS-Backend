@@ -161,6 +161,7 @@ model Church {
   audit_logs               AuditLog[]
   attendances              Attendance[]
   church_configs           ChurchConfig[]
+  messaging_integrations   MessagingIntegration[]
   sermons                  Sermon[]
   media_assets             MediaAsset[]
   broadcasts               Broadcast[]
@@ -1407,4 +1408,16 @@ model VerifiedMfaSession {
   @@id([user_id, session_id])
   @@index([expires_at])
   @@map("verified_mfa_sessions")
+}
+
+// Server-only encrypted credentials. No browser-facing RLS policies.
+model MessagingIntegration {
+  church_id String
+  provider String
+  mode String
+  ciphertext String?
+  updated_at DateTime @updatedAt
+  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  @@id([church_id, provider])
+  @@map("messaging_integrations")
 }

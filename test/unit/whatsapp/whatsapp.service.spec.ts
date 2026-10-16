@@ -106,16 +106,19 @@ describe('WhatsAppService', () => {
       // Mock HELP command reply
       prisma.message.create.mockResolvedValueOnce(mockMessage);
 
-      const result = await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'HELP' },
-          },
-        ],
-      });
+      const result = await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'HELP' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       expect(result.processed).toBe(1);
       // Should log inbound + outbound (HELP reply)
@@ -125,16 +128,19 @@ describe('WhatsAppService', () => {
     it('should handle status updates', async () => {
       prisma.message.updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.processWebhook({
-        statuses: [{ id: 'wa-msg-001', status: 'delivered', timestamp: '1700000001' }],
-      });
+      const result = await service.processWebhook(
+        {
+          statuses: [{ id: 'wa-msg-001', status: 'delivered', timestamp: '1700000001' }],
+        },
+        mockChurchId,
+      );
 
       expect(result.processed).toBe(1);
       expect(prisma.message.updateMany).toHaveBeenCalled();
     });
 
     it('should return 0 for empty webhooks', async () => {
-      const result = await service.processWebhook({});
+      const result = await service.processWebhook({}, mockChurchId);
       expect(result.processed).toBe(0);
     });
   });
@@ -144,16 +150,19 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(null);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'HELP' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'HELP' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       // Outbound message should contain command list
       const calls = prisma.message.create.mock.calls;
@@ -178,16 +187,19 @@ describe('WhatsAppService', () => {
       });
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'CHECKIN' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'CHECKIN' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       expect(prisma.attendance.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -212,16 +224,19 @@ describe('WhatsAppService', () => {
       });
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'CHECKIN' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'CHECKIN' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       // Should not create a new attendance
       expect(prisma.attendance.create).not.toHaveBeenCalled();
@@ -231,16 +246,19 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(null);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: '+2349999999999',
-            timestamp: '1700000000',
-            text: { body: 'CHECKIN' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: '+2349999999999',
+              timestamp: '1700000000',
+              text: { body: 'CHECKIN' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       const calls = prisma.message.create.mock.calls;
       const outbound = calls.find((c) => c[0].data.direction === 'outbound');
@@ -253,16 +271,19 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(mockProfile);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'GIVE' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'GIVE' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       const calls = prisma.message.create.mock.calls;
       const outbound = calls.find((c) => c[0].data.direction === 'outbound');
@@ -276,16 +297,19 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(mockProfile);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'PRAYER Please pray for my family' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'PRAYER Please pray for my family' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -299,16 +323,19 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(mockProfile);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'PRAYER' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'PRAYER' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       const calls = prisma.message.create.mock.calls;
       const outbound = calls.find((c) => c[0].data.direction === 'outbound');
@@ -329,16 +356,19 @@ describe('WhatsAppService', () => {
       ]);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'EVENTS' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'EVENTS' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       const calls = prisma.message.create.mock.calls;
       const outbound = calls.find((c) => c[0].data.direction === 'outbound');
@@ -357,16 +387,19 @@ describe('WhatsAppService', () => {
       });
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      await service.processWebhook({
-        messages: [
-          {
-            id: mockMessageId,
-            from: mockPhone,
-            timestamp: '1700000000',
-            text: { body: 'STATUS' },
-          },
-        ],
-      });
+      await service.processWebhook(
+        {
+          messages: [
+            {
+              id: mockMessageId,
+              from: mockPhone,
+              timestamp: '1700000000',
+              text: { body: 'STATUS' },
+            },
+          ],
+        },
+        mockChurchId,
+      );
 
       const calls = prisma.message.create.mock.calls;
       const outbound = calls.find((c) => c[0].data.direction === 'outbound');
@@ -433,20 +466,19 @@ describe('WhatsAppService', () => {
         mockPhone,
         'welcome_message',
         { name: 'Ade', church: 'Grace Community Church' },
+        mockChurchId,
       );
       expect(result.messageId).toBe(mockMessage.id);
     });
 
     it('should throw if Termii WhatsApp is not configured', async () => {
-      config.get.mockImplementation((key: string) => {
-        if (key === 'TERMII_API_KEY') return undefined;
-        if (key === 'TERMII_WHATSAPP_DEVICE_ID') return 'device-123456';
-        return undefined;
-      });
+      termiiService.sendWhatsAppTemplate.mockRejectedValueOnce(
+        new Error('Provider is unconfigured'),
+      );
 
       await expect(
         service.sendTemplateMessage(mockPhone, 'welcome_message', 'en', {}, mockChurchId),
-      ).rejects.toThrow('Termii WhatsApp not configured');
+      ).rejects.toThrow('Failed to send WhatsApp template message');
     });
   });
 
@@ -456,7 +488,11 @@ describe('WhatsAppService', () => {
 
       const result = await service.sendMessage(mockPhone, 'Hello!', mockChurchId, mockMemberId);
 
-      expect(termiiService.sendWhatsAppMessage).toHaveBeenCalledWith(mockPhone, 'Hello!');
+      expect(termiiService.sendWhatsAppMessage).toHaveBeenCalledWith(
+        mockPhone,
+        'Hello!',
+        mockChurchId,
+      );
       expect(result.messageId).toBe(mockMessage.id);
       expect(prisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -476,17 +512,20 @@ describe('WhatsAppService', () => {
       prisma.profile.findFirst.mockResolvedValue(mockProfile);
       prisma.message.create.mockResolvedValue(mockMessage);
 
-      const result = await service.processWebhook({
-        type: 'inbound',
-        id: '8248611476370959318',
-        message_id: '3905204342778053556',
-        receiver: '2348066666666',
-        sender: '2348012345678',
-        message: 'HELP',
-        received_at: '2026-07-20T10:00:00.000Z',
-        status: 'Received',
-        channel: 'whatsapp',
-      });
+      const result = await service.processWebhook(
+        {
+          type: 'inbound',
+          id: '8248611476370959318',
+          message_id: '3905204342778053556',
+          receiver: '2348066666666',
+          sender: '2348012345678',
+          message: 'HELP',
+          received_at: '2026-07-20T10:00:00.000Z',
+          status: 'Received',
+          channel: 'whatsapp',
+        },
+        mockChurchId,
+      );
 
       expect(result.processed).toBe(1);
       // inbound log + outbound HELP reply

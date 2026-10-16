@@ -46,6 +46,17 @@ const envSchema = z
     FLUTTERWAVE_SECRET_KEY: z.string().optional(),
 
     // ─── Messaging (Termii — single platform for WhatsApp + SMS) ───
+    MESSAGING_ENCRYPTION_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .string()
+        .regex(/^[a-fA-F0-9]{64}$/)
+        .optional(),
+    ),
+    TERMII_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+    TERMII_BASE_URL: z
+      .enum(['https://api.termii.com', 'https://api.ng.termii.com'])
+      .default('https://api.termii.com'),
     TERMII_API_KEY: z.string().optional(),
     TERMII_FROM: z.string().default('ChurchOS'),
     TERMII_WHATSAPP_DEVICE_ID: z.string().optional(),

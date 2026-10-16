@@ -12,6 +12,8 @@
 
 import {
   Controller,
+  Param,
+  ParseUUIDPipe,
   Get,
   Post,
   Body,
@@ -34,6 +36,7 @@ import { WhatsAppService } from './whatsapp.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SendTemplateMessageDto } from './dto/send-template-message.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
+import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
@@ -44,7 +47,10 @@ import { createHmac, timingSafeEqual } from 'crypto';
 export class WhatsAppController {
   private readonly logger = new Logger(WhatsAppController.name);
 
-  constructor(private readonly whatsappService: WhatsAppService) {}
+  constructor(
+    private readonly whatsappService: WhatsAppService,
+    private readonly credentials: MessagingCredentialsService,
+  ) {}
 
   /**
    * Webhook verification endpoint (GET).
@@ -105,15 +111,57 @@ export class WhatsAppController {
       const signature =
         (req.headers['x-termii-signature'] as string | undefined) ??
         (req.headers['x-hub-signature-256'] as string | undefined);
-      this.verifyWebhookSignature(req.rawBody, signature, webhookSecret);
+      this.verifyWebhookSignature(
+        req.rawBody,
+        signature,
+        webhookSecret,
+        req.headers['x-termii-signature'] ? 'sha512' : 'sha256',
+      );
     }
 
-    const result = await this.whatsappService.processWebhook(body);
+    const churchId = await this.credentials.platformWebhookChurch();
+    const result = await this.whatsappService.processWebhook(body, churchId);
+    return { success: true, processed: result.processed };
+  }
+
+  @Get('webhook/:churchId')
+  async verifyChurchWebhook(
+    @Param('churchId', ParseUUIDPipe) churchId: string,
+    @Query('hub.mode') mode: string,
+    @Query('hub.verify_token') token: string,
+    @Query('hub.challenge') challenge: string,
+  ): Promise<string> {
+    const credentials = await this.credentials.webhookCredentials(churchId);
+    if (!credentials.verifyToken || !token || mode !== 'subscribe')
+      throw new UnauthorizedException('Invalid verification token');
+    const expected = Buffer.from(credentials.verifyToken);
+    const received = Buffer.from(token);
+    if (expected.length !== received.length || !timingSafeEqual(expected, received))
+      throw new UnauthorizedException('Invalid verification token');
+    return challenge;
+  }
+
+  @Post('webhook/:churchId')
+  @HttpCode(HttpStatus.OK)
+  async processChurchWebhook(
+    @Param('churchId', ParseUUIDPipe) churchId: string,
+    @Body() body: Record<string, unknown>,
+    @Request() req: AuthenticatedRequest & { rawBody?: Buffer },
+  ) {
+    const credentials = await this.credentials.webhookCredentials(churchId);
+    if (!credentials.webhookSecret || !req.rawBody)
+      throw new UnauthorizedException('Webhook verification is unavailable');
+    this.verifyWebhookSignature(
+      req.rawBody,
+      req.headers['x-termii-signature'] as string | undefined,
+      credentials.webhookSecret,
+    );
+    const result = await this.whatsappService.processWebhook(body, churchId);
     return { success: true, processed: result.processed };
   }
 
   /**
-   * Verifies the HMAC-SHA256 signature of an incoming webhook payload.
+   * Verifies the Termii HMAC-SHA512 signature (SHA256 for legacy Meta headers) of an incoming webhook payload.
    * Uses timing-safe comparison to prevent timing attacks.
    *
    * @throws UnauthorizedException if signature is missing or invalid
@@ -122,20 +170,24 @@ export class WhatsAppController {
     rawBody: Buffer,
     signature: string | undefined,
     secret: string,
+    algorithm: 'sha256' | 'sha512' = 'sha512',
   ): void {
     if (!signature) {
       this.logger.warn('WhatsApp webhook: missing signature header');
       throw new UnauthorizedException('Missing webhook signature');
     }
 
-    const expectedPrefix = 'sha256=';
-    if (!signature.startsWith(expectedPrefix)) {
+    const expectedPrefix = `${algorithm}=`;
+    const receivedHash = signature.startsWith(expectedPrefix)
+      ? signature.slice(expectedPrefix.length)
+      : signature;
+    const expectedLength = algorithm === 'sha512' ? 128 : 64;
+    if (receivedHash.length !== expectedLength || !/^[a-fA-F0-9]+$/.test(receivedHash)) {
       this.logger.warn('WhatsApp webhook: invalid signature format');
       throw new UnauthorizedException('Invalid webhook signature format');
     }
 
-    const expectedHash = createHmac('sha256', secret).update(rawBody).digest('hex');
-    const receivedHash = signature.slice(expectedPrefix.length);
+    const expectedHash = createHmac(algorithm, secret).update(rawBody).digest('hex');
 
     const a = Buffer.from(expectedHash, 'hex');
     const b = Buffer.from(receivedHash, 'hex');

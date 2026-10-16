@@ -93,6 +93,7 @@ export const RESOURCES = [
   'broadcasts',
   'analytics',
   'church_settings',
+  'messaging_integrations',
   'visitors',
   'users',
   'webhooks',
@@ -221,7 +222,12 @@ const pastorPermissions = generateAllPermissions()
   .map((permission) => permission.name)
   .filter((name) => {
     const [resource, action] = name.split(':');
-    if (resource === 'church_settings' || resource === 'data_scope') return false;
+    if (
+      resource === 'church_settings' ||
+      resource === 'messaging_integrations' ||
+      resource === 'data_scope'
+    )
+      return false;
     if (name === 'branches:create') return false;
     if (['church', 'roles', 'users', 'profiles', 'webhooks', 'diagnostics'].includes(resource)) {
       return action === 'read' || action === 'view';

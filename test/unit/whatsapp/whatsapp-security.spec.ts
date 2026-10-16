@@ -8,7 +8,10 @@ import { PERMISSIONS_KEY } from '../../../src/auth/decorators/permissions.decora
 describe('Messaging and field definition authorization', () => {
   const reflector = new Reflector();
   const service = { processWebhook: jest.fn().mockResolvedValue({ processed: 1 }) };
-  const controller = new WhatsAppController(service as never);
+  const controller = new WhatsAppController(
+    service as never,
+    { platformWebhookChurch: jest.fn().mockResolvedValue('church-a') } as never,
+  );
   const originalSecret = process.env.TERMII_WEBHOOK_SECRET;
   afterEach(() => {
     jest.clearAllMocks();
@@ -58,7 +61,7 @@ describe('Messaging and field definition authorization', () => {
   it('accepts only a signature matching the exact raw payload', async () => {
     process.env.TERMII_WEBHOOK_SECRET = 'test-secret';
     const rawBody = Buffer.from('{"ok":true}');
-    const signature = `sha256=${createHmac('sha256', 'test-secret').update(rawBody).digest('hex')}`;
+    const signature = `sha512=${createHmac('sha512', 'test-secret').update(rawBody).digest('hex')}`;
     await expect(
       controller.processWebhook({ ok: true }, {
         headers: { 'x-termii-signature': signature },

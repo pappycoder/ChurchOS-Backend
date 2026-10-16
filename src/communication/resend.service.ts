@@ -3,18 +3,19 @@
  * @description Email delivery service using the Resend API.
  *
  * Provides a sendEmail() method that sends HTML emails via Resend and
- * logs every outbound message to the Prisma Message model with
+ * logs church-owned outbound messages to the Prisma Message model with
  * channel: 'email'. This ensures all communications are tracked
  * in the unified message history.
  *
- * Requires RESEND_API_KEY environment variable.
+ * Resolves church credentials or platform RESEND_API_KEY. Platform authentication
+ * emails have no tenant Message row.
  *
  * @module communication/resend.service
  * @since 1.0.0
  */
 
+import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -39,9 +40,9 @@ export class ResendService {
   };
 
   constructor(
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly moduleRef: ModuleRef,
+    private readonly credentials: MessagingCredentialsService,
   ) {}
 
   /**
@@ -83,8 +84,7 @@ export class ResendService {
     churchId: string,
     attachment?: EmailAttachment,
   ): Promise<string> {
-    const apiKey = this.config.get<string>('RESEND_API_KEY');
-    const fromAddress = this.config.get<string>('RESEND_FROM', 'noreply@churchos.app');
+    const { apiKey, from: fromAddress } = await this.credentials.resolve(churchId, 'resend');
 
     if (!apiKey) {
       await this.notifyFailure(churchId, 'Email not delivered', 'Resend API not configured.');
@@ -110,6 +110,8 @@ export class ResendService {
 
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
@@ -118,13 +120,17 @@ export class ResendService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        this.logger.error(`Resend API error: ${response.status} ${error}`);
+        this.logger.error(`Resend API error: ${response.status}`);
         await this.notifyFailure(churchId, 'Email not delivered', `HTTP ${response.status}.`);
         throw new InternalServerErrorException('Failed to send email');
       }
 
       const result = (await response.json()) as { id: string };
+
+      if (!result.id)
+        throw new InternalServerErrorException('Resend did not confirm message acceptance');
+      // Platform sign-in/recovery emails have no tenant and cannot create a church-owned row.
+      if (!churchId) return result.id;
 
       const message = await this.prisma.message.create({
         data: {
@@ -142,8 +148,8 @@ export class ResendService {
       return message.id;
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`Email send error: ${(err as Error).message}`);
-      await this.notifyFailure(churchId, 'Email not delivered', (err as Error).message);
+      this.logger.error(`Email send error: provider request failed`);
+      await this.notifyFailure(churchId, 'Email not delivered', 'Provider request failed.');
       throw new InternalServerErrorException('Failed to send email');
     }
   }

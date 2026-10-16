@@ -1,5 +1,8 @@
 # AGENTS.md — ChurchOS Backend
 
+- **2026-10-16 — Church-owned messaging credentials.** Added permission-gated Settings → Messaging with platform/custom/disabled Resend/Termii accounts. Backend AES-256-GCM credentials are tenant/provider-bound and write-only; browser roles cannot access the new table. Dedicated reserved messaging integration permissions, no silent account fallback, church-scoped WhatsApp callbacks, documented Termii SHA512 verification, provider-origin allowlisting, request timeouts and safe error handling. Apply migration `20261016170000_messaging_credentials`, seed reference permissions, set `MESSAGING_ENCRYPTION_KEY` on API/workers and deploy both projects. Tests use isolated PostgreSQL and provider/browser fixtures; real delivery remains a deployment acceptance step. See docs/MESSAGING-INTEGRATIONS.md.
+
+
 > This file documents the ChurchOS Backend project for AI coding agents and developers.
 > It describes the project's purpose, architecture, conventions, and must be updated with every change.
 
