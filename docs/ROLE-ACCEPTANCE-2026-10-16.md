@@ -1,5 +1,8 @@
 # Role acceptance — 16 October 2026
 
+**Latest follow-up:** Web `docs/GO-LIVE-VERIFICATION-2026-10-16.md` now confirms 51/51 matching migrations, the invalid trigger physically absent and the production login helper removed. Seeded privileged authentication still works, and health/worker readiness remains unverified; these remain go-live requirements.
+
+
 ## Confirmed defects and fixes
 
 - Form lifecycle helpers checked church ownership but did not consistently check branch ownership. Central form lookups now reject another branch, covering update, delete, clone, archive, restore, link regeneration, close/reopen and authenticated submission. Submission detail/review also constrain the parent form to the actor's branch or an intentionally shared form. Existing shared forms remain shared.
@@ -21,7 +24,7 @@ All **33 integration tests** pass against a new disposable PostgreSQL database w
 - Backend production build and changed-file ESLint passed.
 - Frontend unit suite: **312 tests / 10 suites passed**; production build passed.
 
-## Deployment status
+## Initial audit deployment status (superseded by follow-up)
 
 These fixes are local and tested. No deployment, live database migration, role edit or permission reseed was performed. A read-only schema inspection of the configured cloud database found the invalid trigger enabled and confirmed the column is absent. This proves that database still needs the migration; it does not establish which environment a particular backend deployment uses.
 
