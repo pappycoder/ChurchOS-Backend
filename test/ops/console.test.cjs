@@ -37,159 +37,126 @@ function consoleRun(args, input = '', env = {}) {
     timeout: 15000,
   });
 }
-test('help, action inventory and EOF exit work from another directory', () => {
+
+test('help, exact action inventory and EOF work from another directory', () => {
   assert.equal(consoleRun(['--help']).status, 0);
-  const list = consoleRun(['--list']);
-  assert.equal(list.status, 0);
-  for (const action of actions) assert.ok(list.stdout.includes(action.id));
+  const result = consoleRun(['--list']);
+  assert.equal(result.status, 0);
+  assert.deepEqual(
+    result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => line.split('\t')[0]),
+    web
+      ? ['dev', 'build', 'test']
+      : ['dev', 'build', 'test', 'migration-deploy', 'admin-super', 'admin-church'],
+  );
   assert.equal(consoleRun([]).status, 0);
 });
-test('every action produces a no-execution dry-run plan', () => {
-  for (const action of actions) {
-    const result = consoleRun(['--dry-run', '--action', action.id]);
-    assert.equal(result.status, 0, `${action.id}: ${result.stderr}`);
-    assert.match(result.stdout, /DRY RUN/);
+test('every retained action has a safe dry-run and direct menu entry', () => {
+  for (const [index, action] of actions.entries()) {
+    const single = consoleRun(['--dry-run', '--action', action.id]);
+    assert.equal(single.status, 0, single.stderr);
+    assert.match(single.stdout, /DRY RUN/);
+    const menu = consoleRun(['--dry-run'], `${index + 1}\n\nq\n`);
+    assert.equal(menu.status, 0, menu.stderr);
+    assert.ok(menu.stdout.includes(`DRY RUN: ${action.label}`));
+    assert.equal(menu.stdout.includes('[5] Tools'), false);
+    assert.match(menu.stdout, /Bye!/);
   }
 });
-test('invalid arguments and unknown actions fail closed', () => {
-  for (const args of [
-    ['--action'],
-    ['--manager', 'bad'],
-    ['--arbitrary'],
-    ['--action', 'sh -c whoami'],
-  ])
+test('removed commands and invalid arguments are rejected', () => {
+  for (const action of [
+    'start',
+    'install',
+    'doctor',
+    'permissions-seed',
+    'db-clear',
+    'db-reset',
+    'db-restore',
+    'worker',
+    'open-backend',
+    'cache-clean',
+    ...(web ? ['migration-deploy', 'admin-super', 'admin-church'] : []),
+  ]) {
+    assert.notEqual(consoleRun(['--action', action]).status, 0, action);
+  }
+  for (const args of [['--action'], ['--manager', 'bad'], ['--arbitrary']])
     assert.notEqual(consoleRun(args).status, 0);
 });
-test('dotenv is data, selected file wins, diagnostics do not expose credentials', () => {
+test('dotenv is parsed as data and the selected file takes precedence', () => {
   const file = path.join(directory, 'untrusted.env');
   const marker = path.join(directory, 'must-not-exist');
-  fs.writeFileSync(
-    file,
-    `DATABASE_URL=${local.DATABASE_URL}\nMARKER=$(touch ${marker})\nINTERNAL_PROXY_SECRET=very-secret-value\n`,
-  );
+  fs.writeFileSync(file, `DATABASE_URL=${local.DATABASE_URL}\nMARKER=$(touch ${marker})\n`);
   const ctx = core.loadEnvironment(root, file, { DATABASE_URL: 'postgresql://remote/production' });
   assert.equal(ctx.env.DATABASE_URL, local.DATABASE_URL);
   assert.equal(ctx.env.MARKER, `$(touch ${marker})`);
   assert.equal(fs.existsSync(marker), false);
-  const result = spawnSync(
-    'node',
-    [path.join(root, 'scripts/ops/cli.cjs'), file, 'npm', 'run', 'doctor'],
-    { encoding: 'utf8', env: cleanEnvironment() },
-  );
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout.includes('very-secret-value'), false);
-  assert.equal(result.stdout.includes('p%40ss'), false);
 });
-test('environment initialization refuses overwrite and creates mode 0600', () => {
-  const file = path.join(directory, 'new.env');
-  core.initEnvironment({ root, file }, '.env.example');
-  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-  const content = fs.readFileSync(file, 'utf8');
-  assert.throws(() => core.initEnvironment({ root, file }, '.env.example'), /not overwritten/);
-  assert.equal(fs.readFileSync(file, 'utf8'), content);
-});
-test('database identity excludes credentials and confirmation is target specific', () => {
-  const target = core.databaseTarget(local);
-  assert.equal(target.label.includes('p%40ss'), false);
-  assert.throws(() => core.assertConfirmation('db-clear', local, 'yes'), /Nothing was changed/);
-  core.assertConfirmation('db-clear', local, core.confirmation('db-clear', local));
-  assert.throws(() =>
-    core.assertConfirmation(
-      'db-clear',
-      { DATABASE_URL: 'postgresql://host/other' },
-      core.confirmation('db-clear', local),
-    ),
-  );
-  assert.throws(() =>
-    core.requireLocalDatabase({ DATABASE_URL: 'postgresql://remote/churchos_test' }),
-  );
-  assert.throws(() =>
-    core.requireLocalDatabase({ DATABASE_URL: 'postgresql://localhost/production' }),
-  );
-  assert.throws(() => core.databaseTarget({ DATABASE_URL: local.DATABASE_URL + '?schema=auth' }));
-});
-test('install failure is returned and interactive menu stays available', () => {
-  const bin = path.join(directory, 'bin');
-  fs.mkdirSync(bin, { recursive: true });
+test('build/test/dev dispatch correctly; failures return to the menu', () => {
+  const bin = path.join(directory, 'command-bin');
+  const log = path.join(directory, 'commands');
+  fs.mkdirSync(bin);
   fs.writeFileSync(
     path.join(bin, 'npm'),
-    '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$OPS_COMMAND_LOG"\nexit 27\n',
+    '#!/usr/bin/env bash\nprintf "%s|%s\\n" "$*" "$NODE_ENV" >> "$OPS_COMMAND_LOG"\nexit "${OPS_COMMAND_EXIT:-0}"\n',
     { mode: 0o700 },
   );
-  const log = path.join(directory, 'commands');
   const env = { PATH: bin + path.delimiter + process.env.PATH, OPS_COMMAND_LOG: log };
-  const single = consoleRun(['--action', 'install'], '', env);
-  assert.equal(single.status, 27);
-  assert.match(fs.readFileSync(log, 'utf8'), /^ci\n--include=dev/);
-  const interactive = consoleRun([], `5\n${web ? 1 : 3}\n3\n\nb\nb\nq\n`, env);
-  assert.equal(interactive.status, 0);
-  assert.match(interactive.stdout + interactive.stderr, /menu remains available/);
-});
-test('mutations cancel on EOF/mismatched confirmation before executing', () => {
-  const action = web ? 'cache-clean' : 'permissions-cache';
-  assert.equal(consoleRun(['--action', action], 'wrong\n').status, 130);
-  assert.equal(consoleRun(['--action', action], '').status, 130);
-});
-test('health handles API prefixes, full health URLs, unhealthy data and timeouts', async () => {
-  const server = require('node:http').createServer((req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api/v1/health') res.end(JSON.stringify({ status: 'healthy' }));
-    else if (req.url === '/bad/api/v1/health') res.end(JSON.stringify({ status: 'degraded' }));
-    else if (req.url === '/wait/api/v1/health') return;
-    else {
-      res.statusCode = 404;
-      res.end('{}');
-    }
-  });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  try {
-    await core.checkHealth(base + '/api/v1/');
-    await core.checkHealth(base + '/api/v1/health');
-    await assert.rejects(core.checkHealth(base + '/bad'), /not confirmed healthy/);
-    await assert.rejects(core.checkHealth(base + '/wait', false, 50), /exceeded/);
-  } finally {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-  }
+  assert.equal(consoleRun(['--action', 'build'], '', env).status, 0);
+  assert.equal(consoleRun(['--action', 'test'], '', env).status, 0);
+  assert.equal(consoleRun(['--action', 'dev'], web ? '3007\n' : '', env).status, 0);
+  assert.equal(
+    fs.readFileSync(log, 'utf8'),
+    web
+      ? 'run build|production\nrun test|test\nrun dev -- --hostname 127.0.0.1 --port 3007|development\n'
+      : 'run build|production\nrun test -- --runInBand|test\nrun start:dev|development\n',
+  );
+  assert.equal(
+    consoleRun(['--action', 'build'], '', { ...env, OPS_COMMAND_EXIT: '27' }).status,
+    27,
+  );
+  const menu = consoleRun([], '2\n\nq\n', { ...env, OPS_COMMAND_EXIT: '27' });
+  assert.equal(menu.status, 0);
+  assert.match(menu.stdout + menu.stderr, /Command exited 27/);
+  assert.match(menu.stdout, /Bye!/);
 });
 if (!web)
-  test('remote schema reset/demo seeds are rejected even during planning', () => {
-    const file = path.join(directory, 'remote.env');
-    fs.writeFileSync(
-      file,
-      'DATABASE_URL=postgresql://remote.example/churchos_test\nSUPABASE_URL=https://auth.example',
-    );
-    for (const action of ['db-reset', 'seed-demo', 'migration-dev']) {
-      const result = spawnSync(
-        'bash',
-        [path.join(root, 'scripts/console.sh'), '--env', file, '--dry-run', '--action', action],
-        { env: cleanEnvironment(), encoding: 'utf8' },
-      );
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /local database/);
-    }
+  test('migrations and account creation cancel before touching services', () => {
+    for (const action of ['migration-deploy', 'admin-super', 'admin-church'])
+      assert.equal(consoleRun(['--action', action], '').status, 130);
+    assert.equal(consoleRun(['--action', 'migration-deploy'], 'wrong\n').status, 130);
   });
 if (web)
-  test('cache cleanup removes only the local build path, without following symlinks', () => {
-    const clone = path.join(directory, 'frontend-copy');
-    fs.mkdirSync(path.join(clone, 'scripts/ops'), { recursive: true });
-    fs.writeFileSync(path.join(clone, 'package.json'), JSON.stringify({ name: 'churchos-web' }));
-    fs.copyFileSync(path.join(root, 'scripts/console.sh'), path.join(clone, 'scripts/console.sh'));
-    for (const file of ['core.cjs', 'cli.cjs', 'actions.cjs'])
-      fs.copyFileSync(path.join(root, 'scripts/ops', file), path.join(clone, 'scripts/ops', file));
-    const outside = path.join(directory, 'outside-cache');
-    fs.mkdirSync(outside);
-    fs.writeFileSync(path.join(outside, 'keep'), 'preserve');
-    fs.symlinkSync(outside, path.join(clone, '.next'), 'dir');
-    const result = spawnSync(
-      'bash',
-      [path.join(clone, 'scripts/console.sh'), '--action', 'cache-clean'],
-      { input: 'CLEAN .next\n', env: cleanEnvironment(), encoding: 'utf8' },
-    );
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(fs.existsSync(path.join(clone, '.next')), false);
-    assert.equal(fs.readFileSync(path.join(outside, 'keep'), 'utf8'), 'preserve');
+  test('development port rejects invalid input', () => {
+    for (const port of ['0', '65536', '3000;touch marker'])
+      assert.notEqual(consoleRun(['--action', 'dev'], port + '\n').status, 0);
+  });
+if (!web)
+  test('migration deployment backs up first and stops if backup fails', () => {
+    const program = `
+    const core = require(process.argv[1] + '/scripts/ops/core.cjs');
+    const backend = require(process.argv[1] + '/scripts/ops/backend.cjs');
+    const envFile = process.argv[2]; const manager = process.argv[3];
+    process.argv = [process.execPath, 'fixture', envFile, 'npm', 'run', 'migration-deploy'];
+    const ctx = core.loadEnvironment(process.cwd(), envFile);
+    core.readFields = () => [core.confirmation('migration-deploy', ctx.env)];
+    backend.backupDatabase = async () => { console.log('BACKUP'); if (manager === 'fail') throw new Error('fixture backup failed'); };
+    core.child = (_command, args) => console.log('PRISMA ' + args.join(' '));
+    require('./scripts/ops/cli.cjs').main().catch(error => { console.error(error.message); process.exitCode = 1; });
+  `;
+    for (const mode of ['pass', 'fail']) {
+      const result = spawnSync(process.execPath, ['-e', program, root, environment, mode], {
+        cwd: root,
+        encoding: 'utf8',
+        env: cleanEnvironment(),
+      });
+      assert.equal(result.status, mode === 'pass' ? 0 : 1, result.stderr);
+      assert.match(result.stdout, /BACKUP/);
+      assert.equal(result.stdout.includes('PRISMA migrate deploy'), mode === 'pass');
+      if (mode === 'pass')
+        assert.ok(result.stdout.indexOf('BACKUP') < result.stdout.indexOf('PRISMA'));
+    }
   });
 test('foreground Ctrl-C propagates and exits the single action', { timeout: 8000 }, async () => {
   const bin = path.join(directory, 'signal-bin');
@@ -407,84 +374,3 @@ if (!web) {
     );
   });
 }
-
-test('simple menu exposes everyday commands directly and supports quit/back', () => {
-  const choices = ['dev', 'start', 'build', 'test'];
-  for (const [index, action] of choices.entries()) {
-    const result = consoleRun(['--dry-run'], `${index + 1}\n\nq\n`);
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /DRY RUN/);
-    assert.ok(
-      result.stdout.includes(`DRY RUN: ${actions.find((item) => item.id === action).label}`),
-      `Menu option ${index + 1} must run ${action}`,
-    );
-  }
-  const toolGroups = web
-    ? ['setup', 'quality', 'maintenance']
-    : ['access', 'database', 'setup', 'quality', 'maintenance'];
-  for (const [groupIndex, group] of toolGroups.entries()) {
-    const groupActions = actions.filter((item) => item.group === group);
-    for (const [actionIndex, action] of groupActions.entries()) {
-      const more = consoleRun(
-        ['--dry-run'],
-        `5\n${groupIndex + 1}\n${actionIndex + 1}\n\nb\nb\nq\n`,
-      );
-      assert.equal(more.status, 0, more.stderr);
-      assert.ok(more.stdout.includes(`DRY RUN: ${action.label}`), `Tools must reach ${action.id}`);
-      assert.match(more.stdout, /Bye!/);
-    }
-  }
-  const invalid = consoleRun([], '999\nq\n');
-  assert.equal(invalid.status, 0);
-  assert.match(invalid.stdout, /Choose a listed number/);
-});
-test('production menu offers a build and never starts after a failed or declined build', () => {
-  const clone = path.join(directory, 'production-menu');
-  fs.mkdirSync(path.join(clone, 'scripts/ops'), { recursive: true });
-  fs.copyFileSync(path.join(root, 'package.json'), path.join(clone, 'package.json'));
-  fs.copyFileSync(path.join(root, 'scripts/console.sh'), path.join(clone, 'scripts/console.sh'));
-  for (const file of ['cli.cjs', 'core.cjs', 'actions.cjs', ...(web ? [] : ['backend.cjs'])])
-    fs.copyFileSync(path.join(root, 'scripts/ops', file), path.join(clone, 'scripts/ops', file));
-  const bin = path.join(clone, 'bin');
-  const log = path.join(clone, 'commands');
-  fs.mkdirSync(bin);
-  fs.writeFileSync(
-    path.join(bin, 'npm'),
-    '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$OPS_COMMAND_LOG"\nif [[ "$*" == "run build" ]]; then exit "${OPS_BUILD_EXIT:-0}"; fi\n',
-    { mode: 0o700 },
-  );
-  function run(input, buildExit = '0') {
-    fs.writeFileSync(log, '');
-    const result = spawnSync('bash', [path.join(clone, 'scripts/console.sh')], {
-      input,
-      encoding: 'utf8',
-      timeout: 15000,
-      env: cleanEnvironment({
-        PATH: bin + path.delimiter + process.env.PATH,
-        OPS_COMMAND_LOG: log,
-        OPS_BUILD_EXIT: buildExit,
-      }),
-    });
-    assert.equal(result.status, 0, result.stderr);
-    return { output: result.stdout + result.stderr, commands: fs.readFileSync(log, 'utf8') };
-  }
-  assert.equal(run('2\nn\n\nq\n').commands, '');
-  const failed = run('2\ny\n\nq\n', '27');
-  assert.equal(failed.commands, 'run build\n');
-  assert.match(failed.output, /Command exited 27/);
-  const successful = run(web ? '2\n\n3000\n\nq\n' : '2\n\n\nq\n');
-  assert.match(successful.output, /Build now/);
-  assert.match(
-    successful.commands,
-    web
-      ? /^run build\nrun start -- --hostname 127.0.0.1 --port 3000\n$/
-      : /^run build\nrun start:prod\n$/,
-  );
-  const marker = path.join(clone, web ? '.next/BUILD_ID' : 'dist/main.js');
-  fs.mkdirSync(path.dirname(marker), { recursive: true });
-  fs.writeFileSync(marker, 'fixture');
-  const existing = run(web ? '2\n3000\n\nq\n' : '2\n\nq\n');
-  assert.equal(existing.output.includes('Build now'), false);
-  assert.equal(existing.commands.includes('run build'), false);
-  assert.match(existing.commands, /run start/);
-});

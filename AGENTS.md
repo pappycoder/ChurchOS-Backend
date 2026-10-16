@@ -1,5 +1,7 @@
 # AGENTS.md — ChurchOS Backend
 
+- **2026-10-16 — Console reduced to requested actions only.** Backend exposes only dev build/watch, production build, tests, migration deployment, super-user creation and church-admin creation; frontend exposes the first three. Removed Tools menus, production-start helpers and all extra CLI action IDs. Simplified the command dispatcher and docs; retained dotenv parsing, hidden admin passwords, tenant-bound confirmations and verified backups before migrations.
+
 - **2026-10-16 — Five-action consoles and Vercel-owned deployment.** Both consoles now show only dev, production, build, tests and Tools. Other operations are grouped inside Tools with existing safeguards. Removed the obsolete commented backend deploy job and documented Vercel deployment ownership in both CI workflows; validation jobs and disposable test-database migrations remain.
 
 - **2026-10-16 — Simpler Bash console.** Replaced nested everyday menus with direct numbered build/run, test and administration options, colored terminal results and an Enter-to-continue flow. More commands retains the full operations inventory. Interactive production start offers a build when missing and stops on build failure; scripted action behavior and database/auth safeguards are unchanged. Console regressions cover menu routing, navigation, cancellation and build/start ordering.

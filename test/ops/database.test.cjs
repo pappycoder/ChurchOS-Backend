@@ -26,6 +26,11 @@ test(
   async (t) => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'churchos-db-console-'));
     const startedAt = new Date();
+    const migrationCount = fs
+      .readdirSync(path.join(root, 'prisma/migrations'))
+      .filter((name) =>
+        fs.existsSync(path.join(root, 'prisma/migrations', name, 'migration.sql')),
+      ).length;
     const users = new Map();
     let createdCount = 0,
       removedCount = 0;
@@ -322,34 +327,31 @@ process.exit(result.status??1);
         );
         assert.equal(await db.profile.count(), 3);
       });
-      await t.test('confirmed Bash clear preserves migration journal and auth schema', async () => {
-        const result = await run(
-          'bash',
-          ['scripts/console.sh', '--env', environment, '--action', 'db-clear'],
-          core.confirmation('db-clear', env) + '\n',
-        );
-        assert.equal(result.code, 0, result.stderr);
-        assert.equal(await db.profile.count(), 0);
-        assert.equal(await db.role.count(), 0);
-        const history = await db.$queryRawUnsafe(
-          'SELECT count(*)::int AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL',
-        );
-        assert.equal(history[0].count, 51);
-        assert.equal(
-          (await db.$queryRawUnsafe('SELECT count(*)::int AS count FROM auth.console_sentinel'))[0]
-            .count,
-          1,
-        );
-      });
       await t.test(
-        'confirmed Bash restore recovers profiles, branch scope and roles atomically',
+        'internal clear utility preserves migration journal and auth schema',
         async () => {
-          const result = await run(
-            'bash',
-            ['scripts/console.sh', '--env', environment, '--action', 'db-restore'],
-            snapshot + '\n' + core.confirmation('db-restore', env) + '\n',
+          await backend.destructive(context, db, 'db-clear', [core.confirmation('db-clear', env)]);
+          assert.equal(await db.profile.count(), 0);
+          assert.equal(await db.role.count(), 0);
+          const history = await db.$queryRawUnsafe(
+            'SELECT count(*)::int AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL',
           );
-          assert.equal(result.code, 0, result.stderr);
+          assert.equal(history[0].count, migrationCount);
+          assert.equal(
+            (
+              await db.$queryRawUnsafe('SELECT count(*)::int AS count FROM auth.console_sentinel')
+            )[0].count,
+            1,
+          );
+        },
+      );
+      await t.test(
+        'internal restore utility recovers profiles, branch scope and roles atomically',
+        async () => {
+          await backend.destructive(context, db, 'db-restore', [
+            core.confirmation('db-restore', env),
+            snapshot,
+          ]);
           assert.equal(await db.profile.count(), 3);
           assert.equal(await db.role.count(), 10);
           assert.equal(
@@ -400,12 +402,7 @@ process.exit(result.status??1);
       await t.test(
         'confirmed local reset reapplies all migrations without touching auth schema or seeding demos',
         async () => {
-          const result = await run(
-            'bash',
-            ['scripts/console.sh', '--env', environment, '--action', 'db-reset'],
-            core.confirmation('db-reset', env) + '\n',
-          );
-          assert.equal(result.code, 0, result.stderr);
+          await backend.destructive(context, db, 'db-reset', [core.confirmation('db-reset', env)]);
           await db.$disconnect();
           db = backend.openDatabase(env);
           assert.equal(await db.profile.count(), 0);
@@ -416,7 +413,7 @@ process.exit(result.status??1);
                 'SELECT count(*)::int AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL',
               )
             )[0].count,
-            51,
+            migrationCount,
           );
           assert.equal(
             (

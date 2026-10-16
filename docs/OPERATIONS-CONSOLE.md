@@ -1,99 +1,44 @@
-# Backend operations console
+# Backend console
 
-Run `npm run console` or `bash scripts/console.sh` from this repository. The script also works by absolute path from another directory. Menus stay open after command failures, EOF exits cleanly, and Ctrl-C stops the foreground command. API and worker processes run in the foreground; production supervision remains the hosting service's responsibility.
+Run `npm run console` or `bash scripts/console.sh`. The script also works by absolute path from another directory.
 
-## Start safely
+| Option | Action |
+|---|---|
+| 1 | Dev build: run the development server in watch mode |
+| 2 | Production build: compile the application |
+| 3 | Run unit tests |
+| 4 | Deploy database migrations, after a verified backup |
+| 5 | Create a super user (`super_admin`) |
+| 6 | Create a church admin (`church_admin`) |
+
+Press Enter after a command to return to the menu; `q` quits. Failures return to the menu. There are no Tools submenus or extra action shortcuts. Production build only compiles; it does not start a production server or deploy the app. Vercel handles application deployment.
+
+Use Node.js 20.19+ or 22.12+, Bash 3.2+ and installed project dependencies. npm is the default; `--manager pnpm` is supported.
 
 ```sh
 bash scripts/console.sh --help
 bash scripts/console.sh --list
-bash scripts/console.sh --env .env.production --dry-run --action migration-deploy
-bash scripts/console.sh --env .env.production
+bash scripts/console.sh --dry-run --action build
 ```
 
-Use Node.js 20.19+ or 22.12+, Bash 3.2+, and npm. Select pnpm with `--manager pnpm` when using the existing pnpm lockfile. Installation uses `npm ci --include=dev` or `pnpm install --frozen-lockfile`; it never creates or rewrites a lockfile implicitly. Dependencies and a generated Prisma client are needed for database/account actions.
+The default environment is `.env`. Select another with `--env FILE`, relative to your invocation directory. Selected dotenv values override inherited values; files are parsed as data, never sourced or evaluated. Dry runs do not execute commands, contact services or write data. Passwords and credentials are not included in printed commands.
 
-The default environment is `.env`. `--env FILE` selects another dotenv file, relative to the invocation directory. **Selected file values override inherited environment values.** The console parses the file without sourcing it or evaluating shell substitutions. The selected path and redacted database host/name are shown for review. `env-init` copies `.env.example` with mode 0600 and refuses to overwrite an existing file. Edit the file before connecting to services. Doctor reports missing configuration and overly broad environment-file permissions without printing secrets.
-
-`--dry-run` prints a plan only: no package commands, network requests, account creation, backups or mutations occur. It still checks local-only restrictions. `--action ID` runs one action with the same prompts and safeguards as the menu. There is no `--yes` or force-confirmation shortcut.
-
-## Simple menu
-
-The simplified console passed 20 console regression tests, Bash syntax checks and a terminal-input smoke check. Menu and build/start tests use temporary files and stubbed commands; this verification does not change live accounts or databases.
-
-Start with `npm run console`. Both projects show only five main actions:
-
-1. Run dev
-2. Run production
-3. Build
-4. Run tests
-5. Tools
-
-Press Enter after a command to return, `q` to quit, or `b` to go back inside Tools. Colors are enabled only in a terminal and respect `NO_COLOR`.
-
-Tools groups administrator/permission actions, database/backups, setup, quality/worker commands and maintenance. Admin creation, permissions, migrations, clear/reset and backups remain available here with the same confirmations and safeguards.
-
-Choosing **Run production** offers `Build now? [Y/n]` if the compiled build is missing. Enter accepts; declining cancels startup, and a failed build never starts the server. Existing builds start directly. This convenience applies to interactive menus; `--action start` continues to start an existing build without building automatically.
-
-Use `--list` for exact action IDs. Build/production start/worker run with `NODE_ENV=production`; dev runs with `NODE_ENV=development`; tests use `NODE_ENV=test`. Combined verification stops on the first failing command. Regular lint checks do not modify source; lint-fix is separate. Integration tests require a local database whose name contains `test`; schema reset and migration development also accept local names containing `dev` or `local`. Full demo seeding requires both an isolated local database and local Supabase, preventing public shared-password cloud accounts from being minted accidentally. Start Docker services before DB-dependent actions; stopping them preserves volumes.
-
-## Administrators
+## Migrations and administrators
 
 ```sh
+bash scripts/console.sh --env .env.production --action migration-deploy
 npm run create:super-admin
 npm run create:church-admin
-# Select a different environment:
-npm run create:church-admin -- --env .env.production
 ```
 
-`seed-super-admin` now uses the same protected flow; the old TypeScript filename is a compatibility bridge.
+Migrations show the database target and require the displayed confirmation. A verified public-schema backup is mandatory before `prisma migrate deploy`; backup failure stops the migration. Configure matching PostgreSQL tools (`pg_dump`/`pg_restore`) and stop application writers as appropriate. The backup contains application records and needs private storage.
 
-Choose a new Supabase login or explicitly link an orphan authentication UUID that has no application profile. Enter email, hidden password twice for a new login, names and optional phone. Passwords require at least 12 characters with upper/lowercase, number and symbol, and travel through stdin rather than command arguments, environment variables or files. Remote Supabase admin calls require HTTPS. A real `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are mandatory; fake DB-only login identities are never created.
+Admin creation needs `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, installed dependencies, generated Prisma client and existing reference roles/permissions. Choose a new login or explicitly link an orphan auth UUID with no application profile. Enter the password twice (hidden), names, optional phone, and an existing church UUID or new church name. Passwords require 12+ characters including upper/lowercase, number and symbol. Review the church/database/auth target and confirm.
 
-Choose an existing active church by UUID or name a new church. The console uses/creates an HQ branch within that church and creates a profile with exactly the selected role and `is_admin_hq=true`. HQ broadens branch scope within that church; it does not bypass church isolation or create additional action grants. Reference roles/permissions must already exist. Configure authenticator security in the application after provisioning.
+The account receives exactly the selected role with a branch-linked HQ profile. Existing profiled users are never silently promoted or reassigned. A failed profile transaction compensates only newly created auth identities. Provider/network failures can require manual reconciliation. Configure authenticator security in the application after provisioning.
 
-Review the account, role, church, auth project and database, then type the displayed confirmation token. The token binds database identity and auth project. Existing profiled users are never silently promoted, adopted, assigned to a different church, or given a new password. Existing orphan linking requires matching email and UUID. Church, branch, profile and secret-free audit record are transactional; if that transaction fails, only a newly created auth identity is compensated. Existing auth identities are retained. An auth-provider failure during compensation is reported for manual orphan review. Supabase and PostgreSQL are separate systems, so provider/network failures can still require reconciliation.
-
-## Permissions
-
-`permissions-seed` reconciles the global reference roles and permission mappings without inserting demo church data. It then deletes only `perms:*` Redis keys through bounded SCAN batches, never FLUSHALL. Both Redis TCP and Upstash REST configurations are supported. If the database seed succeeds but Redis invalidation fails, the action returns failure and explicitly reports the partial result; run `permissions-cache` successfully before validating new grants. Restarting an API process alone does not clear persisted Redis keys. Church overrides are not reset by this action.
-
-`demo-retire` is separate and explicitly confirmed. It deactivates profiles linked to `@churchos.dev` auth users, removes their backend session approvals and bans those auth accounts. It does not delete church/business records or non-demo identities. Partial provider failures are reported, and the action is safe to retry. It is not a claim that every external Supabase token is physically deleted; backend profile/approval checks and the auth ban enforce application denial.
-
-## Database backups, clear, reset and restore
-
-Install **matching-major PostgreSQL `pg_dump` and `pg_restore` tools**. Use `OPS_PG_BIN_DIR=/path/to/postgresql/16/bin` in the selected dotenv file if the matching tools are not first on PATH. The console checks server/client majors and refuses incompatible tooling rather than generating a backup that might not restore to that server.
-
-Backups live in ignored `.ops/backups/`, with a private directory, mode-0600 custom-format `.dump` files and hash/target/version metadata sidecars. They cover **public schema only**, including migration history and application definitions/data. They are not full Supabase backups: authentication identities, storage bytes and deployment secrets require separate backup procedures. Backups are not encrypted; protect their storage and preserve encryption keys separately.
-
-| Action | Effect |
-|---|---|
-| `db-inventory` | Read-only counts for current Prisma application tables |
-| `db-backup` | Produces a custom-format public-schema backup and verifies its archive listing/hash |
-| `db-clear` | Takes a backup, then truncates all Prisma application tables together in a transaction, including reference roles/permissions |
-| `db-reset` | Local dev/test only; takes a backup, recreates public schema and reapplies migrations; reference/demo seeding remains explicit |
-| `db-restore` | Verifies a trusted console dump plus matching metadata/hash, previews its original target, backs up the destination, then restores public schema atomically |
-
-**Stop API/worker writers before clear/reset/restore, key rotation or storage maintenance.** Confirm the displayed host/database and operation-specific token; a mismatched token or EOF cancels before mutation. Confirmation is checked again in the helper against the effective target. A failed mandatory backup prevents the destructive step. Migration deployment/development, storage apply/prune and pastoral key rotation also back up public schema first.
-
-Clear derives its table list from Prisma metadata and uses TRUNCATE RESTRICT, with an external-reference preflight; no CASCADE deletion is used. It preserves `_prisma_migrations`, Supabase Auth and storage tables. Reset additionally checks for cross-schema dependencies so it can refuse unsafe cascades into protected schemas. Restore uses PostgreSQL's single-transaction/exit-on-error behavior and no cascade. Schema reset is refused for remote or production-named databases; use reviewed migrations for production. Development locality is a guardrail, not proof against an operator-created tunnel to production.
-
-After clearing, seed reference permissions again and create/link administrators explicitly. Authentication accounts remain even when profiles have been cleared; use explicit orphan UUID linking when appropriate. Before resuming writers after clear/reset/restore, invalidate permission caches explicitly. Restore may restore older migration history: check migration status before applying newer code. Retain old pastoral keys until encrypted notes are verified after rotation. Storage pruning additionally requires an independent storage backup; a public-schema DB backup does not contain file bytes. Maintenance preview commands are dry-run by default in their underlying scripts.
+`--action` accepts only `dev`, `build`, `test`, `migration-deploy`, `admin-super` and `admin-church`. The old `seed-super-admin` command delegates to this flow.
 
 ## Verification
 
-```sh
-npm run ops:test
-# Only a disposable local database containing "test" in its name:
-OPS_TEST_DATABASE_URL=postgresql://user:password@127.0.0.1:5432/churchos_ops_test npm run ops:test:integration
-```
-
-The unit/console suite tests every action's dry-run, invalid arguments, EOF and cancellation, command failure propagation, Ctrl-C, dotenv injection resistance, private env-file creation, hidden password handling, account compensation and permission-cache boundaries. Health uses a local HTTP fixture for success/degraded/timeout behavior.
-
-Integration tests use real PostgreSQL, migrations, pg_dump/pg_restore, Bash prompts and transactional application writes, plus a **local Supabase Admin HTTP fixture**. They cover both admin roles, explicit orphan linking, auth compensation, external FK/view protections, backup failure, corruption rejection, clear, restore, reset and selective demo retirement. `OPS_TEST_PG_CONTAINER` optionally uses matching tools from a specifically supplied disposable Docker container. Tests never provision live Supabase users or clear a deployed database. Real provider/hosting credentials and worker delivery still require deployment smoke testing.
-
-Validation for this change: 18 backend console/unit tests and 13 real PostgreSQL workflow cases passed; the frontend console adds 11 passing console/unit cases. Both production builds, changed-file lint, Bash syntax checks, the legacy admin compatibility bridge and a POSIX pseudo-terminal smoke test passed. The frontend was also started through its console and its hydrated production login was verified in Chromium. The disposable database and local authentication fixture were removed after verification. No real church records or live authentication accounts were changed.
-
-For the optional POSIX controlling-terminal smoke test, run `python3 test/ops/terminal.test.py`. It uses only temporary files and a child process; no service credentials are needed.
-
-CI runs validation only; application deployment is handled by Vercel. The backend E2E job still applies migrations to its disposable test database. Production migrations remain an explicit backend-console operation.
+Run `npm run ops:test` for command routing, menu/CLI allowlists, dry runs, failure handling, safe environment parsing and Ctrl-C regressions. Commands are stubbed and no live accounts or databases are changed. Backend tests also cover admin provisioning safeguards and backup-before-migration ordering. `python3 test/ops/terminal.test.py` checks terminal input handling.
