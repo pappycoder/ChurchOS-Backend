@@ -124,39 +124,104 @@ ops_dispatch() {
   status=$?
   return "$status"
 }
+# Keep the terminal UI small; the helpers parse dotenv safely and protect DB/auth work.
+RESET='' BOLD='' CYAN='' GREEN='' YELLOW='' RED='' DIM=''
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  RESET=$'\033[0m'; BOLD=$'\033[1m'; CYAN=$'\033[36m'
+  GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RED=$'\033[31m'; DIM=$'\033[2m'
+fi
+ops_title() { printf '\n%b== %s%b\n\n' "$BOLD$CYAN" "$1" "$RESET"; }
+ops_pause() { ops_read 'Press Enter to continue… ' || return 130; }
 ops_result() {
   local status=$1
-  case "$status" in 0) printf '\nAction completed.\n' ;; 130) printf '\nAction cancelled.\n' ;; *) printf '\nAction failed (exit %s). The menu remains available.\n' "$status" >&2 ;; esac
+  case "$status" in
+    0) printf '\n%bFinished OK.%b\n' "$GREEN" "$RESET" ;;
+    130) printf '\n%bAction cancelled.%b\n' "$YELLOW" "$RESET" ;;
+    *) printf '\n%bCommand exited %s. The menu remains available.%b\n' "$RED" "$status" "$RESET" >&2 ;;
+  esac
 }
-ops_submenu() {
-  local group=$1 title=$2 id label choice status index
+ops_production() {
+  if ((!OPS_DRY_RUN)) && [[ ! -f "$OPS_ROOT/dist/main.js" ]]; then
+    printf '\nNo production build found.\n'
+    ops_read 'Build now? [Y/n]: ' || return 130
+    case "$OPS_ANSWER" in
+      ''|y|Y|yes|YES) ops_dispatch build || return $? ;;
+      n|N|no|NO) printf 'Production start cancelled.\n'; return 130 ;;
+      *) printf 'Choose y or n.\n' >&2; return 2 ;;
+    esac
+  fi
+  ops_dispatch start
+}
+ops_more() {
+  local group=$1 heading=$2
+  local listing id label choice index status
   local ids=() labels=()
-  while IFS=$'\t' read -r id label; do ids+=("$id"); labels+=("$label"); done < <(ops_helper menu "$group")
+  listing=$(ops_helper menu "$group") || return $?
+  while IFS=$'\t' read -r id label; do ids+=("$id"); labels+=("$label"); done <<< "$listing"
   while true; do
-    printf '\n%s\nEnvironment: %s | Manager: %s\n' "$title" "$OPS_ENV_FILE" "$OPS_MANAGER"
-    for ((index=0; index<${#ids[@]}; index++)); do printf ' %2d) %s\n' "$((index+1))" "${labels[$index]}"; done
-    printf '  0) Back\n'
-    ops_read 'Choice: ' || return 0; choice=$OPS_ANSWER
-    [[ "$choice" != 0 ]] || return 0
-    if [[ ! "$choice" =~ ^[1-9][0-9]*$ || ${#choice} -gt 3 ]] || ((choice>${#ids[@]})); then printf 'Choose a listed number.\n'; continue; fi
-    ops_dispatch "${ids[$((choice-1))]}"; status=$?; ops_result "$status"
+    ops_title "$heading"
+    for ((index=0; index<${#ids[@]}; index++)); do printf ' [%2d] %s\n' "$((index+1))" "${labels[$index]}"; done
+    printf '  [b] Back\n\n'
+    ops_read '> ' || return 0; choice=$OPS_ANSWER
+    case "$choice" in b|B|0|q|Q) return 0 ;; esac
+    if [[ ! "$choice" =~ ^[1-9][0-9]*$ || ${#choice} -gt 3 ]] || ((choice>${#ids[@]})); then
+      printf 'Choose a listed number.\n'; continue
+    fi
+    if [[ "${ids[$((choice-1))]}" == start ]]; then ops_production; else ops_dispatch "${ids[$((choice-1))]}"; fi
+    status=$?; ops_result "$status"
+    ops_pause || return 0
+  done
+}
+ops_tools() {
+  while true; do
+    ops_title 'Tools'
+    cat <<'MENU'
+  [1] Administrators & permissions
+  [2] Database & backups
+  [3] Setup
+  [4] Quality checks & worker
+  [5] Maintenance
+  [b] Back
+MENU
+    ops_read '> ' || return 0
+    case "$OPS_ANSWER" in
+      1) ops_more access 'Administrators & permissions' ;;
+      2) ops_more database 'Database & backups' ;;
+      3) ops_more setup 'Setup' ;;
+      4) ops_more quality 'Quality checks & worker' ;;
+      5) ops_more maintenance 'Maintenance' ;;
+      b|B|q|Q|0) return 0 ;;
+      *) printf 'Choose a listed number.\n' ;;
+    esac
   done
 }
 trap 'printf "\nInterrupted; returning to console when the foreground action exits.\n" >&2' INT
 if ((OPS_LIST)); then ops_helper list; exit $?; fi
-if [[ -n "$OPS_SINGLE_ACTION" ]]; then ops_dispatch "$OPS_SINGLE_ACTION"; OPS_STATUS=$?; ops_result "$OPS_STATUS"; exit "$OPS_STATUS"; fi
+if [[ -n "$OPS_SINGLE_ACTION" ]]; then
+  # Scripted actions retain their existing explicit behavior (no automatic build).
+  ops_dispatch "$OPS_SINGLE_ACTION"; OPS_STATUS=$?; ops_result "$OPS_STATUS"; exit "$OPS_STATUS"
+fi
 while true; do
-  printf '\nChurchOS %s console\nEnvironment: %s | Manager: %s\n 1) Setup and diagnostics\n 2) Development and quality\n' "$OPS_KIND" "$OPS_ENV_FILE" "$OPS_MANAGER"
-  if [[ "$OPS_KIND" == backend ]]; then printf ' 3) Database and backups\n 4) Permissions and administrators\n 5) Workers and maintenance\n'; else printf ' 3) Maintenance and backend administration\n'; fi
-  printf ' 0) Exit\n'
-  ops_read 'Choice: ' || exit 0
+  ops_title 'ChurchOS Backend'
+  printf '%bEnv: %s | %s%b\n\n' "$DIM" "$OPS_ENV_FILE" "$OPS_MANAGER" "$RESET"
+  cat <<'MENU'
+  [1] Run dev
+  [2] Run production
+  [3] Build
+  [4] Run tests
+  [5] Tools
+  [q] Quit
+MENU
+  ops_read '> ' || exit 0
   case "$OPS_ANSWER" in
-    0) exit 0 ;;
-    1) ops_submenu setup 'Setup and diagnostics' ;;
-    2) ops_submenu quality 'Development and quality' ;;
-    3) if [[ "$OPS_KIND" == backend ]]; then ops_submenu database 'Database and backups'; else ops_submenu maintenance 'Maintenance'; fi ;;
-    4) if [[ "$OPS_KIND" == backend ]]; then ops_submenu access 'Permissions and administrators'; else printf 'Choose a listed number.\n'; fi ;;
-    5) if [[ "$OPS_KIND" == backend ]]; then ops_submenu maintenance 'Workers and maintenance'; else printf 'Choose a listed number.\n'; fi ;;
-    *) printf 'Choose a listed number.\n' ;;
+    1) ops_dispatch dev ;;
+    2) ops_production ;;
+    3) ops_dispatch build ;;
+    4) ops_dispatch test ;;
+    5) ops_tools; continue ;;
+    q|Q|0) printf 'Bye!\n'; exit 0 ;;
+    *) printf 'Choose a listed number.\n'; continue ;;
   esac
+  OPS_STATUS=$?; ops_result "$OPS_STATUS"
+  ops_pause || exit 0
 done

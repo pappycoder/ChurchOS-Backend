@@ -121,7 +121,7 @@ test('install failure is returned and interactive menu stays available', () => {
   const single = consoleRun(['--action', 'install'], '', env);
   assert.equal(single.status, 27);
   assert.match(fs.readFileSync(log, 'utf8'), /^ci\n--include=dev/);
-  const interactive = consoleRun([], '1\n3\n0\n0\n', env);
+  const interactive = consoleRun([], `5\n${web ? 1 : 3}\n3\n\nb\nb\nq\n`, env);
   assert.equal(interactive.status, 0);
   assert.match(interactive.stdout + interactive.stderr, /menu remains available/);
 });
@@ -407,3 +407,84 @@ if (!web) {
     );
   });
 }
+
+test('simple menu exposes everyday commands directly and supports quit/back', () => {
+  const choices = ['dev', 'start', 'build', 'test'];
+  for (const [index, action] of choices.entries()) {
+    const result = consoleRun(['--dry-run'], `${index + 1}\n\nq\n`);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /DRY RUN/);
+    assert.ok(
+      result.stdout.includes(`DRY RUN: ${actions.find((item) => item.id === action).label}`),
+      `Menu option ${index + 1} must run ${action}`,
+    );
+  }
+  const toolGroups = web
+    ? ['setup', 'quality', 'maintenance']
+    : ['access', 'database', 'setup', 'quality', 'maintenance'];
+  for (const [groupIndex, group] of toolGroups.entries()) {
+    const groupActions = actions.filter((item) => item.group === group);
+    for (const [actionIndex, action] of groupActions.entries()) {
+      const more = consoleRun(
+        ['--dry-run'],
+        `5\n${groupIndex + 1}\n${actionIndex + 1}\n\nb\nb\nq\n`,
+      );
+      assert.equal(more.status, 0, more.stderr);
+      assert.ok(more.stdout.includes(`DRY RUN: ${action.label}`), `Tools must reach ${action.id}`);
+      assert.match(more.stdout, /Bye!/);
+    }
+  }
+  const invalid = consoleRun([], '999\nq\n');
+  assert.equal(invalid.status, 0);
+  assert.match(invalid.stdout, /Choose a listed number/);
+});
+test('production menu offers a build and never starts after a failed or declined build', () => {
+  const clone = path.join(directory, 'production-menu');
+  fs.mkdirSync(path.join(clone, 'scripts/ops'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'package.json'), path.join(clone, 'package.json'));
+  fs.copyFileSync(path.join(root, 'scripts/console.sh'), path.join(clone, 'scripts/console.sh'));
+  for (const file of ['cli.cjs', 'core.cjs', 'actions.cjs', ...(web ? [] : ['backend.cjs'])])
+    fs.copyFileSync(path.join(root, 'scripts/ops', file), path.join(clone, 'scripts/ops', file));
+  const bin = path.join(clone, 'bin');
+  const log = path.join(clone, 'commands');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(
+    path.join(bin, 'npm'),
+    '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$OPS_COMMAND_LOG"\nif [[ "$*" == "run build" ]]; then exit "${OPS_BUILD_EXIT:-0}"; fi\n',
+    { mode: 0o700 },
+  );
+  function run(input, buildExit = '0') {
+    fs.writeFileSync(log, '');
+    const result = spawnSync('bash', [path.join(clone, 'scripts/console.sh')], {
+      input,
+      encoding: 'utf8',
+      timeout: 15000,
+      env: cleanEnvironment({
+        PATH: bin + path.delimiter + process.env.PATH,
+        OPS_COMMAND_LOG: log,
+        OPS_BUILD_EXIT: buildExit,
+      }),
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return { output: result.stdout + result.stderr, commands: fs.readFileSync(log, 'utf8') };
+  }
+  assert.equal(run('2\nn\n\nq\n').commands, '');
+  const failed = run('2\ny\n\nq\n', '27');
+  assert.equal(failed.commands, 'run build\n');
+  assert.match(failed.output, /Command exited 27/);
+  const successful = run(web ? '2\n\n3000\n\nq\n' : '2\n\n\nq\n');
+  assert.match(successful.output, /Build now/);
+  assert.match(
+    successful.commands,
+    web
+      ? /^run build\nrun start -- --hostname 127.0.0.1 --port 3000\n$/
+      : /^run build\nrun start:prod\n$/,
+  );
+  const marker = path.join(clone, web ? '.next/BUILD_ID' : 'dist/main.js');
+  fs.mkdirSync(path.dirname(marker), { recursive: true });
+  fs.writeFileSync(marker, 'fixture');
+  const existing = run(web ? '2\n3000\n\nq\n' : '2\n\nq\n');
+  assert.equal(existing.output.includes('Build now'), false);
+  assert.equal(existing.commands.includes('run build'), false);
+  assert.match(existing.commands, /run start/);
+});

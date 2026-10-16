@@ -17,15 +17,23 @@ The default environment is `.env`. `--env FILE` selects another dotenv file, rel
 
 `--dry-run` prints a plan only: no package commands, network requests, account creation, backups or mutations occur. It still checks local-only restrictions. `--action ID` runs one action with the same prompts and safeguards as the menu. There is no `--yes` or force-confirmation shortcut.
 
-## Menus
+## Simple menu
 
-| Menu | Operations |
-|---|---|
-| Setup | Environment template, diagnostics, locked install, Prisma generation, local Docker services |
-| Development and quality | Dev API, production API build/start, persistent worker, lint/check/fix, type checks, unit/integration tests, console tests, dependency audit, combined verification |
-| Database and backups | Migration status/deploy/development, Studio, row inventory, public-schema backup/restore, application clear, local schema reset |
-| Permissions and admins | Source/catalog audit, database template audit, reference permission seed, permission-cache invalidation, church list, super-admin/church-admin provisioning, demo-account retirement |
-| Maintenance | Bounded API health, private-storage preview/apply/prune, encryption-key rotation preview/apply, email backfill |
+The simplified console passed 20 console regression tests, Bash syntax checks and a terminal-input smoke check. Menu and build/start tests use temporary files and stubbed commands; this verification does not change live accounts or databases.
+
+Start with `npm run console`. Both projects show only five main actions:
+
+1. Run dev
+2. Run production
+3. Build
+4. Run tests
+5. Tools
+
+Press Enter after a command to return, `q` to quit, or `b` to go back inside Tools. Colors are enabled only in a terminal and respect `NO_COLOR`.
+
+Tools groups administrator/permission actions, database/backups, setup, quality/worker commands and maintenance. Admin creation, permissions, migrations, clear/reset and backups remain available here with the same confirmations and safeguards.
+
+Choosing **Run production** offers `Build now? [Y/n]` if the compiled build is missing. Enter accepts; declining cancels startup, and a failed build never starts the server. Existing builds start directly. This convenience applies to interactive menus; `--action start` continues to start an existing build without building automatically.
 
 Use `--list` for exact action IDs. Build/production start/worker run with `NODE_ENV=production`; dev runs with `NODE_ENV=development`; tests use `NODE_ENV=test`. Combined verification stops on the first failing command. Regular lint checks do not modify source; lint-fix is separate. Integration tests require a local database whose name contains `test`; schema reset and migration development also accept local names containing `dev` or `local`. Full demo seeding requires both an isolated local database and local Supabase, preventing public shared-password cloud accounts from being minted accidentally. Start Docker services before DB-dependent actions; stopping them preserves volumes.
 
@@ -87,3 +95,5 @@ Integration tests use real PostgreSQL, migrations, pg_dump/pg_restore, Bash prom
 Validation for this change: 18 backend console/unit tests and 13 real PostgreSQL workflow cases passed; the frontend console adds 11 passing console/unit cases. Both production builds, changed-file lint, Bash syntax checks, the legacy admin compatibility bridge and a POSIX pseudo-terminal smoke test passed. The frontend was also started through its console and its hydrated production login was verified in Chromium. The disposable database and local authentication fixture were removed after verification. No real church records or live authentication accounts were changed.
 
 For the optional POSIX controlling-terminal smoke test, run `python3 test/ops/terminal.test.py`. It uses only temporary files and a child process; no service credentials are needed.
+
+CI runs validation only; application deployment is handled by Vercel. The backend E2E job still applies migrations to its disposable test database. Production migrations remain an explicit backend-console operation.
