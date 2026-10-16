@@ -52,6 +52,7 @@ import {
 } from '../common/decorators/api-standard-responses.decorator';
 import { ApiPaginatedResponse } from '../common/decorators/api-paginated.decorator';
 import { MediaService, MulterFile } from './media.service';
+import { assertMediaUploadPermission } from './media-upload-policy';
 import { UploadMediaDto } from './dto/upload-media.dto';
 import { MediaResponseDto } from './dto/media-response.dto';
 import { ListLibraryDto } from './dto/list-library.dto';
@@ -141,6 +142,7 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
+    assertMediaUploadPermission(folder, req.profile?.permissions ?? []);
     return this.mediaService.uploadImage(
       file,
       folder,
@@ -192,6 +194,7 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
+    assertMediaUploadPermission(folder, req.profile?.permissions ?? []);
     return this.mediaService.uploadFile(
       file,
       folder,

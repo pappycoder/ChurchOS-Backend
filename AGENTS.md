@@ -7,6 +7,8 @@
 
 ## Project Overview
 
+- **2026-10-16 — Upload authorization during UI audit.** Raw upload handlers now enforce explicit grants per upload purpose. Generic media requires media:upload:create; branding requires its settings/branch grant; asset/sermon editing and authorized form responses can upload into their dedicated folders without library publishing rights. Self-service profile-photo endpoint remains separate. Added policy regressions and web/backend policy parity checks.
+
 - **2026-10-12 — Group giving presentation.** Transaction responses distinguish giving source (`givingType`) from payment method and derive group-specific title/description from stored group metadata. Meeting totals persist descriptive notes in the shared branch giving ledger.
 
 - **2026-10-12 — Usher test accounts.** Development user seed includes HQ usher and Lekki branch usher. `npm run prisma:seed-ushers` provisions only these accounts using existing treasurer branch assignments, without reseeding other demo data.

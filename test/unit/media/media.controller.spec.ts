@@ -5,9 +5,10 @@
  * @RequirePermissions. The media library (browse/folders/single) requires
  * media:library:read, folders -> media:folders:read; permission changes and
  * deletion require media:library:update / media:library:delete on top of the
- * existing church_admin role ceiling. The raw upload endpoints stay auth-only
- * on purpose (profile photos, church logos, and sermon media are uploaded by
- * consumers who do not necessarily hold media:create).
+ * existing JWT requirement. Raw upload endpoints enforce purpose-specific
+ * permissions inside the handler so church branding and branch management
+ * do not require unrelated media library access. Self-service profile photos
+ * use the separate profile-photo endpoint.
  *
  * Asserted against the source text to avoid pulling the controller's
  * transitive ESM-only dependencies into the Jest runtime.
@@ -68,10 +69,13 @@ describe('MediaController permission decorators', () => {
     expect(block).not.toContain('@RequireRoles(');
   });
 
-  it('keeps upload endpoints auth-only (no media:create lock on raw uploads)', () => {
+  it('checks purpose-specific permissions in both upload handlers', () => {
     const uploadImageBlock = blockBetween("@Post('upload/image')", 'async uploadImage(');
     const uploadFileBlock = blockBetween("@Post('upload')", 'async uploadFile(');
-    expect(uploadImageBlock).not.toContain('@RequirePermissions(');
-    expect(uploadFileBlock).not.toContain('@RequirePermissions(');
+    expect(uploadImageBlock).not.toContain("@RequirePermissions('media:create')");
+    expect(uploadFileBlock).not.toContain("@RequirePermissions('media:create')");
+    expect(
+      source.match(/assertMediaUploadPermission\(folder, req.profile\?\.permissions \?\? \[\]\)/g),
+    ).toHaveLength(2);
   });
 });
