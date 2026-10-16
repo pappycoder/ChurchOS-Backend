@@ -25,7 +25,7 @@ All **33 integration tests** pass against a new disposable PostgreSQL database w
 
 These fixes are local and tested. No deployment, live database migration, role edit or permission reseed was performed. A read-only schema inspection of the configured cloud database found the invalid trigger enabled and confirmed the column is absent. This proves that database still needs the migration; it does not establish which environment a particular backend deployment uses.
 
-Apply `20261016090000_fix_form_submission_update_trigger` through the normal database release process and deploy backend/web fixes. No permission seed is needed. Repeat form review and branch-boundary smoke tests in the release environment. The deployed site cannot yet receive an unconditional all-clear.
+Apply `20261016090000_fix_form_submission_update_trigger` through the normal database release process and deploy backend/web fixes. No permission seed is needed. Repeat form review and branch-boundary smoke tests in the release environment. The deployed site cannot yet receive an unconditional all-clear. The user confirmed real church data is present while seeded demo accounts remain active for testing. The web helper is now development-only locally; the seeded authentication accounts still need retirement as part of the user’s planned cleanup.
 
 The frontend live acceptance report is `../ChurchOS-Web/docs/ROLE-ACCEPTANCE-2026-10-16.md`. Static inventory and earlier browser regressions cover more UI surfaces than the six modules with real persisted mutation tests. This is neither a claim of exhaustive business-logic verification nor a load/performance benchmark.
 
