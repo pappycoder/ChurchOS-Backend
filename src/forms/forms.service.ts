@@ -71,14 +71,27 @@ export class FormsService {
    * @param userId - ID of the user creating the form
    * @returns Created form response
    */
-  async createForm(churchId: string, dto: CreateFormDto, userId: string, viewer?: ViewerScope | null): Promise<FormResponseDto> {
+  async createForm(
+    churchId: string,
+    dto: CreateFormDto,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<FormResponseDto> {
     this.validateFieldDefinitions(dto.fields);
     const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? (dto.branchId ?? null) : (scope.branchId ?? null);
+    if (branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, church_id: churchId },
+        select: { id: true },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
+    }
 
     const form = await this.prisma.form.create({
       data: {
         church_id: churchId,
-        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
+        branch_id: branchId,
         title: dto.title,
         description: dto.description,
         fields: dto.fields as unknown as Prisma.InputJsonValue,
@@ -124,8 +137,10 @@ export class FormsService {
       archived_at: query.archived === true ? { not: null } : null,
     };
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
-    else if (scope.churchOnly && query.branchId) where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
+    if (!scope.churchOnly)
+      where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && query.branchId)
+      where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
 
     if (query.status) where.status = query.status;
     if (query.isTemplate !== undefined) where.is_template = query.isTemplate;
@@ -162,9 +177,14 @@ export class FormsService {
    * @param formId - Form ID
    * @returns Form response
    */
-  async getForm(churchId: string, formId: string, viewer?: ViewerScope | null): Promise<FormResponseDto> {
+  async getForm(
+    churchId: string,
+    formId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<FormResponseDto> {
     const form = await this.findFormOrFail(churchId, formId);
-    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id)) throw new NotFoundException('Form not found');
+    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id))
+      throw new NotFoundException('Form not found');
     return this.mapForm(form);
   }
 
@@ -269,6 +289,7 @@ export class FormsService {
    */
   async cloneForm(churchId: string, formId: string, userId: string): Promise<FormResponseDto> {
     const source = await this.findFormOrFail(churchId, formId);
+    const scope = this.branchScope.resolve();
 
     if (source.archived_at) {
       throw new NotFoundException('Form is archived');
@@ -277,6 +298,7 @@ export class FormsService {
     const form = await this.prisma.form.create({
       data: {
         church_id: churchId,
+        branch_id: scope.churchOnly ? source.branch_id : scope.branchId,
         title: `${source.title} (Copy)`,
         description: source.description,
         fields: source.fields as Prisma.InputJsonValue,
@@ -673,7 +695,8 @@ export class FormsService {
     viewer?: ViewerScope | null,
   ): Promise<PaginatedResult<FormSubmissionResponseDto>> {
     const form = await this.findFormOrFail(churchId, formId);
-    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id)) throw new NotFoundException('Form not found');
+    if (form.branch_id && !this.branchScope.isVisible(viewer, form.branch_id))
+      throw new NotFoundException('Form not found');
 
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit = query.limit && query.limit > 0 ? query.limit : 20;
@@ -789,7 +812,7 @@ export class FormsService {
       include: { _count: { select: { submissions: true } } },
     });
 
-    if (!form) {
+    if (!form || (form.branch_id && !this.branchScope.isVisible(undefined, form.branch_id))) {
       throw new NotFoundException('Form not found');
     }
 
@@ -804,8 +827,20 @@ export class FormsService {
     formId: string,
     submissionId: string,
   ): Promise<FormSubmission> {
+    const scope = this.branchScope.resolve();
     const submission = await this.prisma.formSubmission.findFirst({
-      where: { id: submissionId, church_id: churchId, form_id: formId },
+      where: {
+        id: submissionId,
+        church_id: churchId,
+        form_id: formId,
+        ...(!scope.churchOnly
+          ? {
+              form: {
+                OR: [{ branch_id: scope.branchId }, { branch_id: null }],
+              },
+            }
+          : {}),
+      },
     });
 
     if (!submission) {

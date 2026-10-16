@@ -7,6 +7,8 @@
 
 ## Project Overview
 
+- **2026-10-16 — Role workflow acceptance and form isolation.** Added all-ten-role/HQ guard and scope cases plus PostgreSQL HTTP workflow regressions for members, visitors, forms, assets, families and services, including read-only actors and persisted mutation denials. Form lifecycle/submission lookups now enforce parent branch visibility; branch-created copies retain branch ownership; HQ form creation validates that its branch belongs to the church. Migration `20261016090000_fix_form_submission_update_trigger` removes a legacy trigger referencing a nonexistent column that prevented authorized submission approval. Verified only in a disposable local database; apply the migration and deploy backend/web before declaring the deployed fixes complete. Evidence: docs/ROLE-ACCEPTANCE-2026-10-16.md.
+
 - **2026-10-16 — Upload authorization during UI audit.** Raw upload handlers now enforce explicit grants per upload purpose. Generic media requires media:upload:create; branding requires its settings/branch grant; asset/sermon editing and authorized form responses can upload into their dedicated folders without library publishing rights. Self-service profile-photo endpoint remains separate. Added policy regressions and web/backend policy parity checks.
 
 - **2026-10-12 — Group giving presentation.** Transaction responses distinguish giving source (`givingType`) from payment method and derive group-specific title/description from stored group metadata. Meeting totals persist descriptive notes in the shared branch giving ledger.
