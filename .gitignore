@@ -32,3 +32,6 @@ lerna-debug.log*
 .tmp
 .vercel
 .env*
+
+# Private operations-console database backups
+.ops/

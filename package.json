@@ -27,14 +27,19 @@
     "prisma:seed-ushers": "ts-node --project tsconfig.seed.json prisma/seed-ushers.ts",
     "delete-data": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts",
     "delete-data:dry": "ts-node -P tsconfig.scripts.json scripts/delete-data.ts --dry-run",
-    "seed-super-admin": "ts-node -P tsconfig.scripts.json scripts/seed-super-admin.ts",
+    "seed-super-admin": "bash scripts/console.sh --action admin-super",
     "backfill-profile-emails": "ts-node -P tsconfig.scripts.json scripts/backfill-profile-emails.ts",
     "update-project-board": "bash scripts/update-project-board.sh",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "start:worker": "node dist/worker",
     "storage:migrate-private": "ts-node -P tsconfig.scripts.json scripts/migrate-private-media.ts",
-    "pastoral:rotate-key": "ts-node -P tsconfig.scripts.json scripts/rotate-pastoral-key.ts"
+    "pastoral:rotate-key": "ts-node -P tsconfig.scripts.json scripts/rotate-pastoral-key.ts",
+    "console": "bash scripts/console.sh",
+    "ops:test": "node --test test/ops/console.test.cjs",
+    "ops:test:integration": "node --test test/ops/database.test.cjs",
+    "create:super-admin": "bash scripts/console.sh --action admin-super",
+    "create:church-admin": "bash scripts/console.sh --action admin-church"
   },
   "prisma": {
     "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"

@@ -50,6 +50,16 @@ module.exports = {
   // Files to exclude from linting.
   ignorePatterns: ['.eslintrc.js', '.config/prisma.config.*'],
 
+  // Operations helpers are standalone Node scripts, outside the TS project.
+  overrides: [{
+    files: ['scripts/ops/**/*.cjs', 'test/ops/**/*.cjs'],
+    parserOptions: { project: null, ecmaVersion: 2022 },
+    rules: {
+      '@typescript-eslint/no-var-requires': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  }],
+
   // Custom rule overrides.
   // These rules extend or relax the recommended rules for this project.
   rules: {
