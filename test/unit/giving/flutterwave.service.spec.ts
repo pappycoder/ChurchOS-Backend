@@ -21,13 +21,17 @@ describe('FlutterwaveService', () => {
   const mockSecretKey = 'FLWSECK-test-secret-key-1234567890';
 
   beforeEach(() => {
-    config = { get: jest.fn().mockReturnValue(mockSecretKey) };
+    config = {
+      get: jest.fn((key: string) => (key === 'FLUTTERWAVE_SECRET_KEY' ? mockSecretKey : '')),
+    };
     service = new FlutterwaveService(config as unknown as ConfigService);
   });
 
   describe('isConfigured', () => {
     it('should return true when FLUTTERWAVE_SECRET_KEY is set', () => {
-      config.get.mockReturnValue(mockSecretKey);
+      config.get.mockImplementation((key: string) =>
+        key === 'FLUTTERWAVE_SECRET_KEY' ? mockSecretKey : '',
+      );
 
       const svc = new FlutterwaveService(config as unknown as ConfigService);
 
@@ -45,7 +49,9 @@ describe('FlutterwaveService', () => {
 
   describe('initializeTransaction', () => {
     beforeEach(() => {
-      config.get.mockReturnValue(mockSecretKey);
+      config.get.mockImplementation((key: string) =>
+        key === 'FLUTTERWAVE_SECRET_KEY' ? mockSecretKey : '',
+      );
     });
 
     it('should initialize a payment and return authorization URL', async () => {
@@ -106,7 +112,9 @@ describe('FlutterwaveService', () => {
 
   describe('verifyTransaction', () => {
     beforeEach(() => {
-      config.get.mockReturnValue(mockSecretKey);
+      config.get.mockImplementation((key: string) =>
+        key === 'FLUTTERWAVE_SECRET_KEY' ? mockSecretKey : '',
+      );
     });
 
     it('should verify a successful transaction', async () => {
@@ -154,7 +162,9 @@ describe('FlutterwaveService', () => {
 
   describe('validateWebhookSignature', () => {
     beforeEach(() => {
-      config.get.mockReturnValue(mockSecretKey);
+      config.get.mockImplementation((key: string) =>
+        key === 'FLUTTERWAVE_SECRET_KEY' ? mockSecretKey : '',
+      );
     });
 
     it('should validate a correct signature', () => {

@@ -71,14 +71,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message,
         details,
         timestamp: new Date().toISOString(),
-        path: request.url,
+        path: request.url.split('?')[0],
         method: request.method,
       },
     };
 
     // Log the error with context
     this.logger.error(
-      `${request.method} ${request.url} ${status}`,
+      `${request.method} ${request.url.split('?')[0]} ${status}`,
       exception instanceof Error ? exception.stack : String(exception),
     );
 

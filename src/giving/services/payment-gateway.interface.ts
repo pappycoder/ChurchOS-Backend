@@ -25,6 +25,8 @@ export interface PaymentInitializeResult {
  * Result of verifying a payment with a gateway.
  */
 export interface PaymentVerifyResult {
+  currency?: string;
+  reference?: string;
   /** Amount in Naira */
   amount: number;
   /** Payment status as reported by the gateway */

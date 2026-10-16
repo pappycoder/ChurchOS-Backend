@@ -89,9 +89,13 @@ export class FlutterwaveService implements PaymentGatewayProvider {
   private async request<T>(url: string, init: RequestInit): Promise<T> {
     let response: Response;
     try {
-      response = await fetch(url, init);
-    } catch (err) {
-      this.logger.error(`Flutterwave network error: ${(err as Error).message}`);
+      response = await fetch(url, {
+        ...init,
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      this.logger.error(`Flutterwave network error: provider request failed`);
       throw new ServiceUnavailableException(
         'Flutterwave gateway is temporarily unavailable. Please try again.',
       );
@@ -99,8 +103,8 @@ export class FlutterwaveService implements PaymentGatewayProvider {
 
     try {
       return (await response.json()) as T;
-    } catch (err) {
-      this.logger.error(`Flutterwave invalid response: ${(err as Error).message}`);
+    } catch {
+      this.logger.error(`Flutterwave invalid response: provider request failed`);
       throw new ServiceUnavailableException(
         'Flutterwave gateway returned an invalid response. Please try again.',
       );
@@ -131,7 +135,9 @@ export class FlutterwaveService implements PaymentGatewayProvider {
       tx_ref: reference,
       amount,
       currency: 'NGN',
-      redirect_url: metadata?.redirect_url || '',
+      redirect_url:
+        metadata?.redirect_url ||
+        `${this.config.get<string>('WEB_URL', 'http://localhost:3000').replace(/\/$/, '')}/payment/complete`,
       customer: { email },
       meta: metadata,
     };
@@ -146,8 +152,8 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     });
 
     if (result.status !== 'success') {
-      this.logger.error(`Flutterwave initialize failed: ${result.message}`);
-      throw new BadRequestException(`Payment initialization failed: ${result.message}`);
+      this.logger.error(`Flutterwave initialize failed: check provider configuration`);
+      throw new BadRequestException(`Payment initialization failed: check provider configuration`);
     }
 
     return {
@@ -184,13 +190,15 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     );
 
     if (result.status !== 'success') {
-      this.logger.error(`Flutterwave verify failed: ${result.message}`);
-      throw new BadRequestException(`Payment verification failed: ${result.message}`);
+      this.logger.error(`Flutterwave verify failed: check provider configuration`);
+      throw new BadRequestException(`Payment verification failed: check provider configuration`);
     }
 
     const status = this.mapFlutterwaveStatus(result.data.status);
 
     return {
+      currency: result.data.currency,
+      reference: result.data.tx_ref,
       amount: result.data.amount,
       status,
       paidAt: result.data.created_at,
@@ -215,7 +223,18 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     }
 
     try {
-      const expected = createHmac('sha512', this.secretKey).update(payload).digest('hex');
+      const webhookSecret = this.config.get<string>('FLUTTERWAVE_WEBHOOK_SECRET');
+      const expected =
+        webhookSecret || createHmac('sha512', this.secretKey).update(payload).digest('hex');
+      const modern = webhookSecret
+        ? createHmac('sha256', webhookSecret).update(payload).digest('base64')
+        : '';
+      if (
+        modern &&
+        modern.length === signature.length &&
+        timingSafeEqual(Buffer.from(modern), Buffer.from(signature))
+      )
+        return true;
 
       return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
     } catch {
@@ -240,6 +259,11 @@ export class FlutterwaveService implements PaymentGatewayProvider {
 
       const data = event.data as Record<string, unknown>;
 
+      if (
+        typeof (data.reference ?? data.tx_ref ?? '') !== 'string' ||
+        String(data.reference ?? data.tx_ref ?? '').length > 200
+      )
+        throw new BadRequestException('Invalid payment reference');
       return {
         event: event.event as string,
         reference: (data.tx_ref as string) || '',

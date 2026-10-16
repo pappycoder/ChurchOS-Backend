@@ -1,3 +1,4 @@
+import { PaymentAccountsService } from './services/payment-accounts.service';
 /**
  * @file giving.service.ts
  * @description Business logic for giving categories, transactions, and receipts.
@@ -12,6 +13,7 @@
 
 import {
   Injectable,
+  Optional,
   Logger,
   NotFoundException,
   ConflictException,
@@ -68,6 +70,7 @@ export class GivingService {
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
     private readonly integrationAlert: IntegrationAlertService,
+    @Optional() private readonly paymentAccounts?: PaymentAccountsService,
   ) {}
 
   /**
@@ -97,6 +100,8 @@ export class GivingService {
    * Falls back to DEFAULT_GATEWAY if not configured.
    */
   private async getDefaultGateway(churchId: string): Promise<string> {
+    const configured = await this.paymentAccounts?.defaultGateway(churchId);
+    if (configured) return configured;
     const church = await this.prisma.church.findUnique({
       where: { id: churchId },
       select: { config: true },
@@ -110,6 +115,19 @@ export class GivingService {
     }
 
     return DEFAULT_GATEWAY;
+  }
+
+  async paymentOptions(churchId: string) {
+    try {
+      const payment = await this.paymentAccounts?.current(churchId, 'paystack');
+      return {
+        recurringAvailable: payment
+          ? payment.provider.isConfigured()
+          : !!this.gatewayRegistry.get('paystack')?.isConfigured(),
+      };
+    } catch {
+      return { recurringAvailable: false };
+    }
   }
 
   // ─── CATEGORY CRUD ────────────────────────────────────────────────
@@ -414,7 +432,8 @@ export class GivingService {
   }> {
     // Resolve which gateway to use
     const gatewayName = dto.gateway || (await this.getDefaultGateway(churchId));
-    const provider = this.resolveGateway(gatewayName);
+    const paymentAccount = await this.paymentAccounts?.current(churchId, gatewayName);
+    const provider = paymentAccount?.provider ?? this.resolveGateway(gatewayName);
 
     // Verify category exists
     const category = await this.prisma.givingCategory.findUnique({
@@ -458,6 +477,7 @@ export class GivingService {
         payment_reference: reference,
         payment_gateway: gatewayName as 'paystack' | 'flutterwave',
         notes: dto.notes,
+        ...(paymentAccount ? { integration_account_id: paymentAccount.accountId } : {}),
         metadata: { payerEmail: dto.email },
       },
     });
@@ -559,7 +579,13 @@ export class GivingService {
     }
 
     // Resolve gateway from the transaction's stored gateway
-    const provider = this.gatewayRegistry.get(transaction.payment_gateway);
+    const provider = this.paymentAccounts
+      ? await this.paymentAccounts.historical(
+          churchId,
+          transaction.payment_gateway,
+          transaction.integration_account_id,
+        )
+      : this.gatewayRegistry.get(transaction.payment_gateway);
     if (!provider || !provider.isConfigured()) {
       this.logger.warn(
         `Gateway ${transaction.payment_gateway} not available for verification of ${reference}`,
@@ -571,6 +597,15 @@ export class GivingService {
       const verification = await provider.verifyTransaction(reference);
 
       if (verification.status === 'success') {
+        if (
+          this.paymentAccounts &&
+          (verification.amount !== transaction.amount ||
+            verification.currency !== transaction.currency ||
+            (verification.reference && verification.reference !== reference))
+        )
+          throw new BadRequestException(
+            'Payment does not match the expected amount, currency or reference',
+          );
         const paymentMethod = provider.mapChannelToPaymentMethod(verification.channel);
         const receiptNumber = await this.generateReceiptNumber(
           transaction.category?.name ?? '',
@@ -635,38 +670,43 @@ export class GivingService {
     signature: string,
     gatewayName: string,
   ): Promise<{ processed: boolean; event?: string }> {
-    const provider = this.gatewayRegistry.get(gatewayName);
-    if (!provider) {
-      throw new BadRequestException(`Unknown gateway: ${gatewayName}`);
-    }
-
-    // Validate signature
-    if (!provider.validateWebhookSignature(payload, signature)) {
-      this.logger.warn(`Invalid webhook signature from ${gatewayName}`);
+    const parser = this.gatewayRegistry.get(gatewayName);
+    if (!parser) throw new BadRequestException('Unknown payment gateway');
+    if (!this.paymentAccounts && !parser.validateWebhookSignature(payload, signature))
       throw new BadRequestException('Invalid webhook signature');
-    }
-
-    const event = provider.parseWebhookEvent(payload);
-
-    // Only process charge events
-    if (!event.event.startsWith('charge.') && !event.event.startsWith('chargecompleted')) {
-      return { processed: false, event: event.event };
-    }
-
-    const status = provider.mapEventToStatus(event.event);
-    if (!status) {
-      return { processed: false, event: event.event };
-    }
-
-    // Find the transaction by payment reference
+    const event = parser.parseWebhookEvent(payload);
     const transaction = await this.prisma.transaction.findFirst({
       where: { payment_reference: event.reference },
       include: { category: true },
     });
-
-    if (!transaction) {
-      this.logger.warn(`Webhook: transaction not found for reference ${event.reference}`);
+    const provider =
+      transaction && this.paymentAccounts
+        ? await this.paymentAccounts.historical(
+            transaction.church_id,
+            gatewayName,
+            transaction.integration_account_id,
+          )
+        : parser;
+    if (!provider.validateWebhookSignature(payload, signature))
+      throw new BadRequestException('Invalid webhook signature');
+    if (!transaction) return { processed: false, event: event.event };
+    if (transaction.payment_gateway !== gatewayName)
+      throw new BadRequestException('Gateway does not match payment');
+    if (!event.event.startsWith('charge.') && !event.event.startsWith('chargecompleted'))
       return { processed: false, event: event.event };
+    const status = provider.mapEventToStatus(event.event);
+    if (!status) return { processed: false, event: event.event };
+    if (status === 'success' && this.paymentAccounts) {
+      const verified = await provider.verifyTransaction(event.reference);
+      if (
+        verified.status !== 'success' ||
+        verified.amount !== transaction.amount ||
+        verified.currency !== transaction.currency ||
+        (verified.reference && verified.reference !== event.reference)
+      )
+        throw new BadRequestException(
+          'Payment amount, currency, reference or status does not match',
+        );
     }
 
     // Idempotent — skip if already in terminal state
@@ -739,6 +779,7 @@ export class GivingService {
         transaction.member_id,
         transaction.category_id,
         event.authorizationCode,
+        transaction.integration_account_id,
       );
     }
 
@@ -1218,6 +1259,7 @@ export class GivingService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<RecurringGivingResponseDto> {
+    if (this.paymentAccounts) await this.paymentAccounts.current(churchId, 'paystack');
     const category = await this.prisma.givingCategory.findUnique({
       where: { id: dto.categoryId },
     });
@@ -1582,7 +1624,23 @@ export class GivingService {
     }
 
     // Resolve gateway (default to paystack for recurring)
-    const provider = this.gatewayRegistry.get('paystack');
+    let currentPayment: Awaited<ReturnType<PaymentAccountsService['current']>> | undefined;
+    try {
+      currentPayment = await this.paymentAccounts?.current(churchId, 'paystack');
+    } catch {
+      this.logger.warn('Recurring charge skipped: Paystack is not enabled for this church');
+      return false;
+    }
+    if (
+      currentPayment &&
+      (currentPayment.accountId ?? null) !== (recurring.integration_account_id ?? null)
+    ) {
+      this.logger.warn(
+        'Recurring authorization needs renewed consent for the selected merchant account',
+      );
+      return false;
+    }
+    const provider = currentPayment?.provider ?? this.gatewayRegistry.get('paystack');
     if (!provider || !provider.isConfigured() || !provider.chargeAuthorization) {
       this.logger.error('Paystack gateway not available for recurring charge');
       return false;
@@ -1613,6 +1671,7 @@ export class GivingService {
           type: 'digital',
           status: result.success ? 'success' : 'failed',
           payment_reference: result.reference,
+          ...(currentPayment ? { integration_account_id: currentPayment.accountId } : {}),
           payment_gateway: 'paystack',
           payment_method: 'card',
           receipt_number: receiptNumber,
@@ -1915,6 +1974,7 @@ export class GivingService {
     memberId: string,
     categoryId: string | null,
     authorizationCode: string,
+    accountId?: string | null,
   ): Promise<void> {
     if (!categoryId) return;
 
@@ -1931,7 +1991,10 @@ export class GivingService {
       if (existing) {
         await this.prisma.recurringGiving.update({
           where: { id: existing.id },
-          data: { authorization_code: authorizationCode },
+          data: {
+            authorization_code: authorizationCode,
+            ...(accountId !== undefined ? { integration_account_id: accountId } : {}),
+          },
         });
         this.logger.log(`Authorization code captured for recurring giving ${existing.id}`);
       }

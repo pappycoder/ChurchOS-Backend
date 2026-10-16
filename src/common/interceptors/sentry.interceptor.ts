@@ -46,7 +46,7 @@ export class SentryInterceptor implements NestInterceptor {
       catchError((error) => {
         Sentry.withScope((scope) => {
           scope.setTag('method', request.method);
-          scope.setTag('url', request.url);
+          scope.setTag('url', request.url.split('?')[0]);
           scope.setTag('status_code', context.switchToHttp().getResponse<Response>().statusCode);
 
           if (request.user) {

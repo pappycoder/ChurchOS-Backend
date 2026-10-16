@@ -162,6 +162,8 @@ model Church {
   attendances              Attendance[]
   church_configs           ChurchConfig[]
   messaging_integrations   MessagingIntegration[]
+  integration_accounts IntegrationAccount[]
+  integration_channels IntegrationChannel[]
   sermons                  Sermon[]
   media_assets             MediaAsset[]
   broadcasts               Broadcast[]
@@ -403,6 +405,8 @@ model GivingCategory {
 
 model Transaction {
   id                String            @id @default(uuid())
+  integration_account_id String?
+  integration_account IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
   church_id         String
   branch_id         String?
   member_id         String?
@@ -439,6 +443,8 @@ model Transaction {
 
 model RecurringGiving {
   id                   String    @id @default(uuid())
+  integration_account_id String?
+  integration_account IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
   church_id            String
   member_id            String
   category_id          String
@@ -1420,4 +1426,36 @@ model MessagingIntegration {
   church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
   @@id([church_id, provider])
   @@map("messaging_integrations")
+}
+
+// Immutable credential versions; historical payments retain the originating account.
+model IntegrationAccount {
+  id String @id @default(uuid())
+  church_id String
+  provider String
+  label String
+  ciphertext String
+  verification_status String @default("unchecked")
+  verified_at DateTime?
+  archived_at DateTime?
+  created_at DateTime @default(now())
+  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  channels IntegrationChannel[]
+  transactions Transaction[]
+  recurring RecurringGiving[]
+  @@index([church_id, provider])
+  @@map("integration_accounts")
+}
+model IntegrationChannel {
+  church_id String
+  channel String
+  mode String
+  provider String?
+  account_id String?
+  settings Json @default("{}")
+  updated_at DateTime @updatedAt
+  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  account IntegrationAccount? @relation(fields: [account_id], references: [id], onDelete: Restrict)
+  @@id([church_id, channel])
+  @@map("integration_channels")
 }

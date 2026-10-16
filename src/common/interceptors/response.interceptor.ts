@@ -1,3 +1,4 @@
+import { RAW_RESPONSE } from '../decorators/raw-response.decorator';
 /**
  * @file response.interceptor.ts
  * @description NestJS interceptor that wraps all responses in a standard format.
@@ -68,6 +69,7 @@ interface PaginatedData<T> {
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    if (Reflect.getMetadata(RAW_RESPONSE, context.getHandler())) return next.handle();
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
     if (request.headers.authorization) response.setHeader('Cache-Control', 'private, no-store');

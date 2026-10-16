@@ -72,6 +72,13 @@ export class GivingController {
   constructor(private readonly givingService: GivingService) {}
 
   @UseGuards(JwtAuthGuard)
+  @Get('payment-options')
+  @RequirePermissions('giving:recurring:read')
+  async paymentOptions(@Request() req: AuthenticatedRequest) {
+    return this.givingService.paymentOptions(req.profile!.church_id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('cell-groups/:groupId')
   @RequirePermissions('cell_groups:giving:read')
   async getCellGroupGiving(
@@ -321,7 +328,11 @@ export class GivingController {
     @Req() request: RawBodyRequest<ExpressRequest>,
   ) {
     const rawBody = this.getRawBody(request);
-    return this.givingService.handleWebhook(rawBody, signature || '', 'flutterwave');
+    return this.givingService.handleWebhook(
+      rawBody,
+      String(request.headers['flutterwave-signature'] ?? signature ?? ''),
+      'flutterwave',
+    );
   }
 
   /** Returns the exact provider-signed payload captured by Nest's Express adapter. */

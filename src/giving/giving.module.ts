@@ -9,6 +9,8 @@
  * @since 1.0.0
  */
 
+import { IntegrationAccountsModule } from '../integrations/integration-accounts.module';
+import { PaymentAccountsService } from './services/payment-accounts.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { GivingController } from './giving.controller';
@@ -26,10 +28,11 @@ import {
  * transaction recording, and PDF receipt generation.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, IntegrationAccountsModule],
   controllers: [GivingController],
   providers: [
     GivingService,
+    PaymentAccountsService,
     PaystackService,
     FlutterwaveService,
     ReceiptService,
@@ -47,6 +50,6 @@ import {
       inject: [PaystackService, FlutterwaveService],
     },
   ],
-  exports: [GivingService, PaystackService, PAYMENT_GATEWAY_REGISTRY],
+  exports: [GivingService, PaystackService, PAYMENT_GATEWAY_REGISTRY, PaymentAccountsService],
 })
 export class GivingModule {}

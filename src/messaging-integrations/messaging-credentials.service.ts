@@ -194,6 +194,11 @@ export class MessagingCredentialsService {
     const churchId = this.config.get<string>('TERMII_DEFAULT_CHURCH_ID');
     if (!churchId)
       throw new ServiceUnavailableException('Platform webhook church is not configured');
+    const binding = await this.prisma.integrationChannel?.findUnique({
+      where: { church_id_channel: { church_id: churchId, channel: 'whatsapp' } },
+    });
+    if (binding && binding.mode !== 'platform')
+      throw new ServiceUnavailableException('Use the configured provider callback');
     const row = await this.prisma.messagingIntegration.findUnique({
       where: { church_id_provider: { church_id: churchId, provider: 'termii' } },
     });
@@ -203,6 +208,11 @@ export class MessagingCredentialsService {
   }
 
   async webhookCredentials(churchId: string): Promise<MessagingCredentials> {
+    const binding = await this.prisma.integrationChannel?.findUnique({
+      where: { church_id_channel: { church_id: churchId, channel: 'whatsapp' } },
+    });
+    if (binding && binding.mode !== 'platform')
+      throw new ServiceUnavailableException('Use the configured provider callback');
     const row = await this.prisma.messagingIntegration.findUnique({
       where: { church_id_provider: { church_id: churchId, provider: 'termii' } },
     });

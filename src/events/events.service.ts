@@ -1,3 +1,4 @@
+import { PaymentAccountsService } from '../giving/services/payment-accounts.service';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file events.service.ts
@@ -19,6 +20,7 @@ import { RequestContextService } from '../common/services/request-context.servic
 
 import {
   Injectable,
+  Optional,
   Logger,
   NotFoundException,
   ConflictException,
@@ -61,6 +63,7 @@ export class EventsService {
     private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
+    @Optional() private readonly paymentAccounts?: PaymentAccountsService,
   ) {}
 
   // ─── EVENT CRUD ────────────────────────────────────────────────
@@ -1071,6 +1074,8 @@ export class EventsService {
       },
     });
 
+    const gatewayName = (await this.paymentAccounts?.defaultGateway(churchId)) ?? 'paystack';
+    const paymentAccount = await this.paymentAccounts?.current(churchId, gatewayName);
     const transaction = await this.prisma.transaction.create({
       data: {
         church_id: churchId,
@@ -1080,7 +1085,8 @@ export class EventsService {
         type: 'digital',
         status: 'pending',
         payment_reference: reference,
-        payment_gateway: 'paystack',
+        payment_gateway: gatewayName as 'paystack' | 'flutterwave',
+        ...(paymentAccount ? { integration_account_id: paymentAccount.accountId } : {}),
         notes: `Event ticket: ${event.title}${tier ? ` (${tier.name})` : ''} x${quantity}`,
         metadata: {
           event_id: eventId,
@@ -1097,8 +1103,7 @@ export class EventsService {
     });
 
     // Initialize payment with gateway
-    const gatewayName = 'paystack';
-    const provider = this.gatewayRegistry.get(gatewayName);
+    const provider = paymentAccount?.provider ?? this.gatewayRegistry.get(gatewayName);
     if (!provider || !provider.isConfigured()) {
       throw new BadRequestException('Payment gateway not configured');
     }
@@ -1161,6 +1166,26 @@ export class EventsService {
    * @throws BadRequestException if registration is not in pending state
    */
   async confirmTicketPayment(reference: string): Promise<RegistrationResponseDto> {
+    if (this.paymentAccounts) {
+      const payment = await this.prisma.transaction.findFirst({
+        where: { payment_reference: reference },
+      });
+      if (!payment) throw new NotFoundException('Payment not found');
+      const provider = await this.paymentAccounts.historical(
+        payment.church_id,
+        payment.payment_gateway,
+        payment.integration_account_id,
+      );
+      const verified = await provider.verifyTransaction(reference);
+      if (
+        verified.status !== 'success' ||
+        verified.amount !== payment.amount ||
+        verified.currency !== payment.currency ||
+        (verified.reference && verified.reference !== reference)
+      )
+        throw new BadRequestException('Ticket payment does not match');
+    }
+
     const registration = await this.prisma.eventRegistration.findFirst({
       where: { payment_reference: reference },
       include: { event: true },

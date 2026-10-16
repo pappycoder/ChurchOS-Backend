@@ -289,7 +289,10 @@ export class WhatsAppService {
       await this.prisma.message.updateMany({
         where: {
           church_id: churchId,
-          metadata: { path: ['termii_request_id'], equals: messageId },
+          OR: [
+            { metadata: { path: ['termii_request_id'], equals: messageId } },
+            { metadata: { path: ['provider_id'], equals: messageId } },
+          ],
         },
         data: { status },
       });
@@ -321,7 +324,16 @@ export class WhatsAppService {
           channel: 'whatsapp',
           content,
           status: 'sent',
-          metadata: { termii_request_id: result.requestId } as Prisma.InputJsonValue,
+          metadata: {
+            termii_request_id: result.requestId,
+            ...(result.provider
+              ? {
+                  provider: result.provider,
+                  provider_id: result.requestId,
+                  integration_account_id: result.accountId,
+                }
+              : {}),
+          } as Prisma.InputJsonValue,
         },
       });
 
@@ -378,6 +390,13 @@ export class WhatsAppService {
           status: 'sent',
           metadata: {
             termii_request_id: result.requestId,
+            ...(result.provider
+              ? {
+                  provider: result.provider,
+                  provider_id: result.requestId,
+                  integration_account_id: result.accountId,
+                }
+              : {}),
             template_name: templateName,
             variables,
           } as Prisma.InputJsonValue,
@@ -871,7 +890,11 @@ export class WhatsAppService {
         await this.prisma.message.updateMany({
           where: {
             church_id: churchId,
-            metadata: { path: ['wa_message_id'], equals: status.id },
+            OR: [
+              { metadata: { path: ['wa_message_id'], equals: status.id } },
+              { metadata: { path: ['provider_id'], equals: status.id } },
+              { metadata: { path: ['termii_request_id'], equals: status.id } },
+            ],
           },
           data: { status: status.status },
         });

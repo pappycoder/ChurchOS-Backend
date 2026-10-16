@@ -1,3 +1,4 @@
+import { RawResponse } from '../common/decorators/raw-response.decorator';
 /**
  * @file whatsapp.controller.ts
  * @description HTTP endpoints for WhatsApp integration via Termii.
@@ -57,6 +58,7 @@ export class WhatsAppController {
    * Termii sends a GET request to verify the webhook URL.
    */
   @Get('webhook')
+  @RawResponse()
   @SkipRateLimit()
   @ApiOperation({
     summary: 'Verify WhatsApp webhook',
@@ -125,6 +127,7 @@ export class WhatsAppController {
   }
 
   @Get('webhook/:churchId')
+  @RawResponse()
   async verifyChurchWebhook(
     @Param('churchId', ParseUUIDPipe) churchId: string,
     @Query('hub.mode') mode: string,

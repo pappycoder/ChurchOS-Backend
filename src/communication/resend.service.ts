@@ -14,8 +14,9 @@
  * @since 1.0.0
  */
 
+import { IntegrationAccountsService } from '../integrations/integration-accounts.service';
 import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -43,6 +44,7 @@ export class ResendService {
     private readonly prisma: PrismaService,
     private readonly moduleRef: ModuleRef,
     private readonly credentials: MessagingCredentialsService,
+    @Optional() private readonly accounts?: IntegrationAccountsService,
   ) {}
 
   /**
@@ -84,6 +86,34 @@ export class ResendService {
     churchId: string,
     attachment?: EmailAttachment,
   ): Promise<string> {
+    const integration = await this.accounts?.resolve(churchId, 'email');
+    if (integration) {
+      const id = await this.accounts!.deliver(integration, 'email', {
+        ...integration.settings,
+        from: integration.settings.from,
+        to,
+        subject,
+        text: subject,
+        html,
+        attachment,
+      });
+      const message = await this.prisma.message.create({
+        data: {
+          church_id: churchId,
+          phone: to,
+          direction: 'outbound',
+          channel: 'email',
+          content: subject,
+          status: 'sent',
+          metadata: {
+            provider: integration.provider,
+            provider_id: id,
+            integration_account_id: integration.accountId,
+          },
+        },
+      });
+      return message.id;
+    }
     const { apiKey, from: fromAddress } = await this.credentials.resolve(churchId, 'resend');
 
     if (!apiKey) {

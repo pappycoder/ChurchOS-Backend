@@ -102,9 +102,13 @@ export class PaystackService implements PaymentGatewayProvider {
   private async request<T>(url: string, init: RequestInit): Promise<T> {
     let response: Response;
     try {
-      response = await fetch(url, init);
-    } catch (err) {
-      this.logger.error(`Paystack network error: ${(err as Error).message}`);
+      response = await fetch(url, {
+        ...init,
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      this.logger.error(`Paystack network error: provider request failed`);
       throw new ServiceUnavailableException(
         'Paystack gateway is temporarily unavailable. Please try again.',
       );
@@ -112,8 +116,8 @@ export class PaystackService implements PaymentGatewayProvider {
 
     try {
       return (await response.json()) as T;
-    } catch (err) {
-      this.logger.error(`Paystack invalid response: ${(err as Error).message}`);
+    } catch {
+      this.logger.error(`Paystack invalid response: provider request failed`);
       throw new ServiceUnavailableException(
         'Paystack gateway returned an invalid response. Please try again.',
       );
@@ -167,8 +171,8 @@ export class PaystackService implements PaymentGatewayProvider {
     );
 
     if (!result.status) {
-      this.logger.error(`Paystack initialize failed: ${result.message}`);
-      throw new BadRequestException(`Payment initialization failed: ${result.message}`);
+      this.logger.error(`Paystack initialize failed: check provider configuration`);
+      throw new BadRequestException(`Payment initialization failed: check provider configuration`);
     }
 
     return {
@@ -201,11 +205,13 @@ export class PaystackService implements PaymentGatewayProvider {
     );
 
     if (!result.status) {
-      this.logger.error(`Paystack verify failed: ${result.message}`);
-      throw new BadRequestException(`Payment verification failed: ${result.message}`);
+      this.logger.error(`Paystack verify failed: check provider configuration`);
+      throw new BadRequestException(`Payment verification failed: check provider configuration`);
     }
 
     return {
+      currency: result.data.currency,
+      reference: result.data.reference,
       amount: result.data.amount / 100, // Convert Kobo to Naira
       status: result.data.status as PaymentVerifyResult['status'],
       paidAt: result.data.paid_at,
@@ -257,6 +263,11 @@ export class PaystackService implements PaymentGatewayProvider {
       const data = parsed.data as Record<string, unknown>;
       const authorization = data.authorization as Record<string, unknown> | undefined;
 
+      if (
+        typeof (data.reference ?? data.tx_ref ?? '') !== 'string' ||
+        String(data.reference ?? data.tx_ref ?? '').length > 200
+      )
+        throw new BadRequestException('Invalid payment reference');
       return {
         event: parsed.event as string,
         reference: (data.reference as string) || '',
@@ -367,8 +378,8 @@ export class PaystackService implements PaymentGatewayProvider {
     });
 
     if (!result.status) {
-      this.logger.error(`Paystack charge authorization failed: ${result.message}`);
-      throw new BadRequestException(`Recurring charge failed: ${result.message}`);
+      this.logger.error(`Paystack charge authorization failed: check provider configuration`);
+      throw new BadRequestException(`Recurring charge failed: check provider configuration`);
     }
 
     return {

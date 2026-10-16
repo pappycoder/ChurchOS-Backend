@@ -19,8 +19,9 @@
  * @since 1.0.0
  */
 
+import { IntegrationAccountsService } from '../integrations/integration-accounts.service';
 import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -28,6 +29,8 @@ import { INTEGRATION_ALERT_SERVICE_TOKEN } from '../notifications/notification-t
 
 interface TermiiSendResult {
   requestId?: string;
+  provider?: string;
+  accountId?: string;
 }
 
 @Injectable()
@@ -47,6 +50,7 @@ export class TermiiService {
     private readonly prisma: PrismaService,
     private readonly moduleRef: ModuleRef,
     private readonly credentials: MessagingCredentialsService,
+    @Optional() private readonly accounts?: IntegrationAccountsService,
   ) {}
 
   /**
@@ -82,6 +86,32 @@ export class TermiiService {
     churchId: string,
     parentMessageId?: string,
   ): Promise<string> {
+    const integration = await this.accounts?.resolve(churchId, 'sms');
+    if (integration) {
+      const id = await this.accounts!.deliver(integration, 'sms', {
+        ...integration.settings,
+        from: integration.settings.from,
+        to,
+        text: message,
+      });
+      const row = await this.prisma.message.create({
+        data: {
+          church_id: churchId,
+          phone: to,
+          direction: 'outbound',
+          channel: 'sms',
+          content: message,
+          status: 'sent',
+          parent_message_id: parentMessageId ?? null,
+          metadata: {
+            provider: integration.provider,
+            provider_id: id,
+            integration_account_id: integration.accountId,
+          },
+        },
+      });
+      return row.id;
+    }
     const { apiKey, from, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {
@@ -164,6 +194,15 @@ export class TermiiService {
     message: string,
     churchId: string,
   ): Promise<TermiiSendResult> {
+    const integration = await this.accounts?.resolve(churchId, 'whatsapp');
+    if (integration) {
+      const id = await this.accounts!.deliver(integration, 'whatsapp', {
+        from: integration.settings.from ?? '',
+        to,
+        text: message,
+      });
+      return { requestId: id, provider: integration.provider, accountId: integration.accountId };
+    }
     const { apiKey, deviceId, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {
@@ -232,6 +271,17 @@ export class TermiiService {
     variables: Record<string, string> | undefined,
     churchId: string,
   ): Promise<TermiiSendResult> {
+    const integration = await this.accounts?.resolve(churchId, 'whatsapp');
+    if (integration) {
+      const id = await this.accounts!.deliver(integration, 'whatsapp', {
+        from: integration.settings.from ?? '',
+        to,
+        text: '',
+        templateId,
+        variables,
+      });
+      return { requestId: id, provider: integration.provider, accountId: integration.accountId };
+    }
     const { apiKey, deviceId, baseUrl } = await this.credentials.resolve(churchId, 'termii');
 
     if (!apiKey) {

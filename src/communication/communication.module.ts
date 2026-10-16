@@ -10,14 +10,15 @@
  * @since 1.0.0
  */
 
+import { IntegrationAccountsModule } from '../integrations/integration-accounts.module';
 import { MessagingCredentialsModule } from '../messaging-integrations/messaging-credentials.module';
 import { Module } from '@nestjs/common';
 import { ResendService } from './resend.service';
 import { TermiiService } from './termii.service';
 
 @Module({
-  imports: [MessagingCredentialsModule],
+  imports: [MessagingCredentialsModule, IntegrationAccountsModule],
   providers: [ResendService, TermiiService],
-  exports: [ResendService, TermiiService, MessagingCredentialsModule],
+  exports: [ResendService, TermiiService, MessagingCredentialsModule, IntegrationAccountsModule],
 })
 export class CommunicationModule {}

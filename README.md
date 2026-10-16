@@ -257,3 +257,5 @@ The project is configured for deployment on Railway / Render / Fly.io via the in
 ## Interactive operations console
 
 Run `npm run console` for the interactive terminal app, or `bash scripts/console.sh --help` for environment selection, dry runs and individual action IDs. See [the operations guide](docs/OPERATIONS-CONSOLE.md) for supported actions, safety controls and tests.
+
+Provider accounts, separate email/WhatsApp/SMS/live-call/payment configuration, deployment and test evidence: [Provider integrations](docs/PROVIDER-INTEGRATIONS.md).

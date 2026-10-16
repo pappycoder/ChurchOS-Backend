@@ -1,3 +1,5 @@
+> Superseded for new setup by [Provider integrations](PROVIDER-INTEGRATIONS.md). The legacy API and encrypted records remain supported.
+
 # Church-owned messaging accounts
 
 Church admins and super admins can configure messaging under **Settings → Messaging**. Integration administration uses the dedicated reserved `messaging_integrations:read` and `messaging_integrations:update` grants. Other roles, custom role overrides and Admin HQ alone cannot acquire these grants. Sending permissions remain independent: staff can use the church's sending account without seeing credentials.

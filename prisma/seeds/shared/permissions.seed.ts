@@ -94,6 +94,8 @@ export const RESOURCES = [
   'analytics',
   'church_settings',
   'messaging_integrations',
+  'integrations',
+  'calls',
   'visitors',
   'users',
   'webhooks',
@@ -225,6 +227,7 @@ const pastorPermissions = generateAllPermissions()
     if (
       resource === 'church_settings' ||
       resource === 'messaging_integrations' ||
+      resource === 'integrations' ||
       resource === 'data_scope'
     )
       return false;

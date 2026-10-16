@@ -70,6 +70,8 @@ const exceptions: Record<string, string[]> = {
   ],
   'sync/offline.controller.ts': ['snapshot', 'push'],
   'sync/sync.controller.ts': ['pushChanges', 'bootstrap', 'pullChanges', 'markSynced'],
+  'integrations/integration-callbacks.controller.ts': ['verify', 'receive'],
+  'integrations/payment-callbacks.controller.ts': ['receive'],
   'whatsapp/whatsapp.controller.ts': [
     'verifyWebhook',
     'processWebhook',
@@ -78,6 +80,9 @@ const exceptions: Record<string, string[]> = {
   ],
 };
 const publicRoutes = new Set([
+  'integrations/integration-callbacks.controller.ts:verify',
+  'integrations/integration-callbacks.controller.ts:receive',
+  'integrations/payment-callbacks.controller.ts:receive',
   'auth/auth.controller.ts:register',
   'auth/auth.controller.ts:login',
   'auth/auth.controller.ts:completeTwoFactorLogin',
