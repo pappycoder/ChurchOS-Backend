@@ -36,7 +36,7 @@ describe('AdminController permission decorators', () => {
     expect(collapse(block)).not.toContain('@RequireRoles(');
   };
 
-  it('covers all 23 department/cell-group routes with a granular permission', () => {
+  it('covers department/cell-group and meeting-attendance routes with a granular permission', () => {
     const depCreate = source.match(/@RequirePermissions\('departments:create'\)/g)?.length ?? 0;
     const depRead = source.match(/@RequirePermissions\('departments:read'\)/g)?.length ?? 0;
     const depUpdate = source.match(/@RequirePermissions\('departments:update'\)/g)?.length ?? 0;
@@ -46,8 +46,8 @@ describe('AdminController permission decorators', () => {
     const cgUpdate = source.match(/@RequirePermissions\('cell_groups:update'\)/g)?.length ?? 0;
     const cgDelete = source.match(/@RequirePermissions\('cell_groups:delete'\)/g)?.length ?? 0;
     expect(depCreate).toBe(1);
-    expect(depRead).toBe(2);
-    expect(depUpdate).toBe(5);
+    expect(depRead).toBe(3);
+    expect(depUpdate).toBe(6);
     expect(depDelete).toBe(1);
     expect(cgCreate).toBe(3);
     expect(cgRead).toBe(4);

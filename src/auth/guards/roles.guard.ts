@@ -60,10 +60,11 @@ export class RolesGuard implements CanActivate {
       ? {
           role: request.profile.roles ?? [request.profile.role],
           church_id: request.profile.church_id,
+          is_admin_hq: request.profile.is_admin_hq,
         }
       : await this.prisma.profile.findUnique({
           where: { user_id: user.sub },
-          select: { role: true, church_id: true },
+          select: { role: true, church_id: true, is_admin_hq: true },
         });
 
     if (!profile) {
@@ -76,7 +77,11 @@ export class RolesGuard implements CanActivate {
     // This is cached in Redis by PermissionsService (15-min TTL)
     const userPermissions =
       request.profile?.permissions ??
-      (await this.permissionsService.getUserPermissions(profile.church_id, roleNames));
+      (await this.permissionsService.getUserPermissions(
+        profile.church_id,
+        roleNames,
+        profile.is_admin_hq,
+      ));
 
     if (request.profile) {
       request.profile.permissions = userPermissions;

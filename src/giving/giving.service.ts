@@ -803,7 +803,7 @@ export class GivingService {
         ...(!scope.churchOnly && 'leaderId' in scope ? { leader_id: scope.leaderId ?? '' } : {}),
         ...(!scope.churchOnly && scope.branchId ? { branch_id: scope.branchId } : {}),
       },
-      select: { id: true, name: true, branch_id: true, archived_at: true },
+      select: { id: true, name: true, branch_id: true, archived_at: true, leader_id: true },
     });
     if (!group) throw new NotFoundException('Cell group not found');
     return group;
@@ -835,6 +835,18 @@ export class GivingService {
     return { ...transactions, summary, categories: categories.data };
   }
 
+  private assertGroupGivingOwnership(
+    group: { leader_id: string | null },
+    viewer?: ViewerScope | null,
+  ) {
+    const ownOnly =
+      (viewer?.permissions?.includes('cell_groups:own:read') ||
+        viewer?.permissions?.includes('cell_groups:own:update')) &&
+      !viewer.permissions.includes('cell_groups:delete');
+    if (ownOnly && (!viewer?.member_id || group.leader_id !== viewer.member_id))
+      throw new ForbiddenException('You can only record giving for the cell groups you lead');
+  }
+
   async recordCellGroupGiving(
     groupId: string,
     dto: RecordCashDto,
@@ -843,6 +855,7 @@ export class GivingService {
     viewer?: ViewerScope | null,
   ) {
     const group = await this.getGivingCellGroup(groupId, churchId, viewer);
+    this.assertGroupGivingOwnership(group, viewer);
     if (group.archived_at)
       throw new BadRequestException('Cannot record giving for an archived cell group');
     // Cell group recording is a group total, without privileged member/service/event assignment.
@@ -858,13 +871,21 @@ export class GivingService {
     viewer?: ViewerScope | null,
   ): Promise<TransactionResponseDto> {
     let cellGroup:
-      { id: string; name: string; branch_id: string | null; archived_at: Date | null } | undefined;
+      | {
+          id: string;
+          name: string;
+          branch_id: string | null;
+          archived_at: Date | null;
+          leader_id: string | null;
+        }
+      | undefined;
     if (dto.cellGroupId) {
       if (!viewer?.permissions?.includes('cell_groups:giving:create'))
         throw new ForbiddenException('Cell group giving recording is not permitted');
       if (dto.memberId || dto.serviceId || dto.eventId)
         throw new BadRequestException('Record a group total without another entity assignment');
       cellGroup = await this.getGivingCellGroup(dto.cellGroupId, churchId, viewer);
+      this.assertGroupGivingOwnership(cellGroup, viewer);
       if (cellGroup.archived_at)
         throw new BadRequestException('Cannot record giving for an archived cell group');
       const meetingDate = dto.cellGroupMeetingDate;

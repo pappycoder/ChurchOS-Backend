@@ -107,6 +107,7 @@ export class RequestContextMiddleware implements NestMiddleware {
         const permissions = await this.permissionsService.getUserPermissions(
           profile.church_id,
           profile.role,
+          profile.is_admin_hq,
         );
         authReq.profile = {
           id: profile.id,

@@ -141,6 +141,23 @@ describe('Cell group meeting giving with PostgreSQL', () => {
     expect(result.summary.allTimeTotal).toBe(10000);
   });
 
+  it('HQ leaders can read other groups but cannot record giving there', async () => {
+    const hq = { ...leader, is_admin_hq: true };
+    expect((await service.getCellGroupGiving(otherGroup, churchId, {}, hq)).total).toBe(0);
+    await expect(
+      service.recordCellGroupGiving(otherGroup, input('2026-10-14'), churchId, randomUUID(), hq),
+    ).rejects.toThrow('You can only record giving');
+    await expect(
+      service.recordCashGiving(
+        { ...input('2026-10-14'), cellGroupId: otherGroup },
+        churchId,
+        randomUUID(),
+        hq,
+      ),
+    ).rejects.toThrow('You can only record giving');
+    expect(await prisma.transaction.count({ where: { church_id: churchId } })).toBe(2);
+  });
+
   it('keeps branch readers scoped and HQ readers overall, without recording access', async () => {
     const treasurer = { ...leader, role: 'treasurer', permissions: ['cell_groups:giving:read'] };
     await expect(service.getCellGroupGiving(otherGroup, churchId, {}, treasurer)).rejects.toThrow(

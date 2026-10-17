@@ -72,10 +72,11 @@ export class PermissionsGuard implements CanActivate {
       ? {
           role: request.profile.roles ?? [request.profile.role],
           church_id: request.profile.church_id,
+          is_admin_hq: request.profile.is_admin_hq,
         }
       : await this.prisma.profile.findUnique({
           where: { user_id: user.sub },
-          select: { role: true, church_id: true },
+          select: { role: true, church_id: true, is_admin_hq: true },
         });
 
     if (!profile) {
@@ -87,7 +88,11 @@ export class PermissionsGuard implements CanActivate {
     // Get effective permissions across all of the user's roles in their church
     const userPermissions =
       request.profile?.permissions ??
-      (await this.permissionsService.getUserPermissions(profile.church_id, roleNames));
+      (await this.permissionsService.getUserPermissions(
+        profile.church_id,
+        roleNames,
+        profile.is_admin_hq,
+      ));
 
     // Populate permissions on the request for downstream use
     if (request.profile) {

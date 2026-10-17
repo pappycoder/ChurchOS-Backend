@@ -625,6 +625,7 @@ describe('AdminService', () => {
     });
 
     it('should persist the branch id', async () => {
+      prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1' });
       prisma.cellGroup.create.mockResolvedValue({
         ...mockCellGroup,
         branch_id: 'branch-1',

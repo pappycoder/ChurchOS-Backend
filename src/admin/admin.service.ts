@@ -26,6 +26,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
+import { RecordDepartmentAttendanceDto } from './dto/department-attendance.dto';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
 import { ListCellGroupsDto } from './dto/list-cell-groups.dto';
@@ -65,6 +66,13 @@ export class AdminService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<DepartmentResponseDto> {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    if (
+      viewer?.permissions?.includes('departments:own:update') &&
+      !viewer.permissions.includes('departments:delete') &&
+      !viewer.is_admin_hq
+    )
+      throw new ForbiddenException('HQ scope is required to create departments');
     dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
     const scope = this.branchScope.resolve(viewer);
     if (!scope.churchOnly) {
@@ -142,10 +150,12 @@ export class AdminService {
   ): Promise<DepartmentResponseDto[]> {
     // Department heads see only departments they lead. Other branch-scoped
     // viewers see their branch departments; HQ viewers see all departments.
+    viewer ??= this.requestContext.getStore()?.viewer;
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     const isHeadScope = !scope.churchOnly && 'headId' in scope;
-    const branchDepartmentScope = scope.branchId
-      ? { OR: [{ branch_id: scope.branchId }, { branch_id: null }] }
+    const branchId = scope.branchId ?? viewer?.branch_id;
+    const branchDepartmentScope = branchId
+      ? { OR: [{ branch_id: branchId }, { branch_id: null }] }
       : { branch_id: '' };
 
     // Query all departments for the church with their members
@@ -153,7 +163,7 @@ export class AdminService {
       where: {
         church_id: churchId,
         archived_at: archived ? { not: null } : null,
-        ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
+        ...(isHeadScope ? { head_member_id: scope.headId || '', ...branchDepartmentScope } : {}),
         ...(!scope.churchOnly && !isHeadScope ? branchDepartmentScope : {}),
         ...(scope.churchOnly && requestedBranchId
           ? { OR: [{ branch_id: requestedBranchId }, { branch_id: null }] }
@@ -197,10 +207,12 @@ export class AdminService {
   ): Promise<DepartmentResponseDto> {
     // A branch-restricted department_head may only fetch the department(s)
     // they head; other departments resolve to a silent 404 for them.
+    viewer ??= this.requestContext.getStore()?.viewer;
     const scope = this.branchScope.resolveDepartmentScope(viewer);
     const isHeadScope = !scope.churchOnly && 'headId' in scope;
-    const branchDepartmentScope = scope.branchId
-      ? { OR: [{ branch_id: scope.branchId }, { branch_id: null }] }
+    const branchId = scope.branchId ?? viewer?.branch_id;
+    const branchDepartmentScope = branchId
+      ? { OR: [{ branch_id: branchId }, { branch_id: null }] }
       : { branch_id: '' };
 
     // Fetch the department by ID scoped to the church
@@ -208,7 +220,7 @@ export class AdminService {
       where: {
         id: departmentId,
         church_id: churchId,
-        ...(isHeadScope ? { head_member_id: scope.headId || '' } : {}),
+        ...(isHeadScope ? { head_member_id: scope.headId || '', ...branchDepartmentScope } : {}),
         ...(!scope.churchOnly && !isHeadScope ? branchDepartmentScope : {}),
       },
       include: {
@@ -694,8 +706,19 @@ export class AdminService {
     dto: CreateCellGroupDto,
     churchId: string,
     userId: string,
+    viewer?: ViewerScope | null,
   ): Promise<CellGroupResponseDto> {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    if (
+      viewer?.permissions?.includes('cell_groups:own:update') &&
+      !viewer.permissions.includes('cell_groups:delete') &&
+      !viewer.is_admin_hq
+    )
+      throw new ForbiddenException('HQ scope is required to create cell groups');
     dto.branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
+    if (dto.branchId)
+      await this.validateDepartmentAssignments(churchId, dto.branchId, dto.leaderId);
+    else if (viewer) throw new BadRequestException('Select a branch for the cell group');
     // Create the cell group record in the database
     const group = await this.prisma.cellGroup.create({
       data: {
@@ -1462,6 +1485,101 @@ export class AdminService {
     }));
   }
 
+  async listDepartmentAttendance(
+    departmentId: string,
+    churchId: string,
+    meetingDate?: string,
+    viewer?: ViewerScope | null,
+  ) {
+    await this.getDepartmentById(departmentId, churchId, viewer);
+    const records = await this.prisma.departmentAttendance.findMany({
+      where: {
+        department_id: departmentId,
+        ...(meetingDate ? { meeting_date: new Date(meetingDate) } : {}),
+      },
+      include: { member: { select: { first_name: true, last_name: true } } },
+      orderBy: [{ meeting_date: 'desc' }, { created_at: 'desc' }],
+    });
+    return records.map((record) => ({
+      id: record.id,
+      memberId: record.member_id ?? undefined,
+      firstName: record.member?.first_name ?? '',
+      lastName: record.member?.last_name ?? '',
+      visitorName: record.visitor_name ?? undefined,
+      meetingDate: record.meeting_date.toISOString().slice(0, 10),
+      status: record.status,
+      notes: record.notes,
+    }));
+  }
+
+  async recordDepartmentAttendance(
+    departmentId: string,
+    dto: RecordDepartmentAttendanceDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ) {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    // Resolve parent visibility before accepting any attendance writes.
+    const department = await this.getDepartmentById(departmentId, churchId, viewer);
+    if (department.archivedAt)
+      throw new BadRequestException('Cannot record attendance for an archived department');
+    this.assertDepartmentHeadOwnership(viewer, { head_member_id: department.headMemberId ?? null });
+    if ((!dto.memberId && !dto.visitorName?.trim()) || (dto.memberId && dto.visitorName?.trim()))
+      throw new BadRequestException('Select a member or enter a visitor name');
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(dto.meetingDate) ||
+      Number.isNaN(Date.parse(dto.meetingDate)) ||
+      new Date(dto.meetingDate).toISOString().slice(0, 10) !== dto.meetingDate
+    )
+      throw new BadRequestException('A valid meeting date is required');
+    if (!['present', 'late', 'absent', 'excused'].includes(dto.status))
+      throw new BadRequestException('Invalid attendance status');
+    if (dto.memberId) {
+      const membership = await this.prisma.departmentMember.findFirst({
+        where: {
+          department_id: departmentId,
+          member_id: dto.memberId,
+          member: {
+            church_id: churchId,
+            ...(department.branchId ? { branch_id: department.branchId } : {}),
+          },
+        },
+      });
+      if (!membership) throw new NotFoundException('Department member not found');
+    }
+    const data = {
+      department_id: departmentId,
+      member_id: dto.memberId ?? null,
+      visitor_name: dto.memberId ? null : dto.visitorName!.trim(),
+      meeting_date: new Date(dto.meetingDate),
+      status: dto.status,
+      notes: dto.notes?.trim() || null,
+    };
+    const record = dto.memberId
+      ? await this.prisma.departmentAttendance.upsert({
+          where: {
+            department_id_member_id_meeting_date: {
+              department_id: departmentId,
+              member_id: dto.memberId,
+              meeting_date: data.meeting_date,
+            },
+          },
+          create: data,
+          update: { status: data.status, notes: data.notes },
+        })
+      : await this.prisma.departmentAttendance.create({ data });
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'CREATE',
+      entity: 'department_attendance',
+      entityId: record.id,
+      newValues: { departmentId, meetingDate: dto.meetingDate, status: dto.status },
+    });
+    return { id: record.id };
+  }
+
   // ─── Cell Group Attendance ─────────────────────────────────
 
   /**
@@ -1675,6 +1793,7 @@ export class AdminService {
     groupId: string,
     churchId: string,
     meetingDate?: string,
+    viewer?: ViewerScope | null,
   ): Promise<
     Array<{
       id: string;
@@ -1688,18 +1807,7 @@ export class AdminService {
       meetingDate: string;
     }>
   > {
-    const group = await this.prisma.cellGroup.findFirst({
-      where: {
-        id: groupId,
-        church_id: churchId,
-        ...this.requestContext.branchOrSharedWhere(churchId),
-      },
-    });
-
-    if (!group) {
-      throw new NotFoundException(`Cell group ${groupId} not found`);
-    }
-
+    await this.getCellGroupById(groupId, churchId, viewer);
     const where: Prisma.CellGroupAttendanceWhereInput = {
       cell_group_id: groupId,
     };
@@ -1747,6 +1855,7 @@ export class AdminService {
     averageAttendance: number;
     memberCount: number;
   }> {
+    await this.getCellGroupById(groupId, churchId);
     const group = await this.prisma.cellGroup.findFirst({
       where: {
         id: groupId,

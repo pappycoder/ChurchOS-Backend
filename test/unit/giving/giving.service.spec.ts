@@ -852,6 +852,7 @@ describe('GivingService', () => {
     const group = {
       id: groupId,
       name: 'Lekki Fellowship',
+      leader_id: mockMemberId,
       branch_id: mockBranchId,
       archived_at: null,
     };
@@ -903,6 +904,28 @@ describe('GivingService', () => {
       expect(result.cellGroupMeetingDate).toBe('2026-10-11');
       expect(result.cellGroupName).toBe(group.name);
     });
+
+    it.each([false, true])(
+      'blocks another leader group even with HQ=%s on both giving paths',
+      async (hq) => {
+        model('cellGroup').findFirst.mockResolvedValue({ ...group, leader_id: 'another-leader' });
+        const input = {
+          cellGroupId: groupId,
+          categoryId: mockCategoryId,
+          amount: 1000,
+          type: 'cash' as const,
+          cellGroupMeetingDate: '2026-10-11',
+        };
+        const viewer = { ...leader, is_admin_hq: hq };
+        await expect(
+          service.recordCellGroupGiving(groupId, input, mockChurchId, mockUserId, viewer),
+        ).rejects.toThrow('You can only record giving');
+        await expect(
+          service.recordCashGiving(input, mockChurchId, mockUserId, viewer),
+        ).rejects.toThrow('You can only record giving');
+        expect(model('transaction').create).not.toHaveBeenCalled();
+      },
+    );
 
     it('cannot record against another leader group', async () => {
       model('cellGroup').findFirst.mockResolvedValue(null);

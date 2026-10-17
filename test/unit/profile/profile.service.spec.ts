@@ -202,9 +202,11 @@ describe('ProfileService', () => {
 
       const result = await service.getMyProfile(mockUserId);
 
-      expect(permissionsService.getUserPermissions).toHaveBeenCalledWith(mockChurchId, [
-        'church_admin',
-      ]);
+      expect(permissionsService.getUserPermissions).toHaveBeenCalledWith(
+        mockChurchId,
+        ['church_admin'],
+        undefined,
+      );
       expect(result.permissions).toEqual(['members:read', 'members:create', 'branches:read']);
     });
 

@@ -137,6 +137,7 @@ export class ProfileService {
       permissions = await this.permissionsService.getUserPermissions(
         profile.church_id,
         profile.role ?? [],
+        profile.is_admin_hq,
       );
     } catch (err) {
       this.logger.warn(

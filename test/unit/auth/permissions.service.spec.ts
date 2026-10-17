@@ -352,6 +352,18 @@ describe('PermissionsService', () => {
       },
     );
 
+    it.each([false, true])(
+      'derives department creation from own-update and HQ=%s without changing cached role grants',
+      async (hq) => {
+        jest
+          .spyOn(service, 'getPermissionsForRole')
+          .mockResolvedValue(['departments:read', 'departments:own:update']);
+        const permissions = await service.getUserPermissions(churchId, 'department_head', hq);
+        expect(permissions.includes('departments:create')).toBe(hq);
+        expect(permissions).not.toContain('departments:delete');
+      },
+    );
+
     it('unions permissions across template and owned roles', async () => {
       prisma.role.findMany.mockImplementation(
         (args: { where: { name: string | { in: string[] } } }) => {

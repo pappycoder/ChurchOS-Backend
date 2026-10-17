@@ -1,5 +1,7 @@
 # AGENTS.md — ChurchOS Backend
 
+- **2026-10-17 — Group ownership, HQ creation, department meetings and read-based exports.** Group-giving writes now check leadership even under HQ and on manual entry. HQ own-update department grants derive creation centrally; group creation validates church/branch/leader assignments. Added scoped department member/visitor meeting attendance, date/status/search tables and exports. All shared tables and visible dashboard collections have read-only exports; branch heads/leaders can export readable lists. Apply `20261017190000_department_meeting_attendance` before deployment. See docs/GROUP-MEETINGS-AND-EXPORTS-2026-10-17.md for rules, export limits and verification.
+
 - **2026-10-16 — Console reduced to requested actions only.** Backend exposes only dev build/watch, production build, tests, migration deployment, super-user creation and church-admin creation; frontend exposes the first three. Removed Tools menus, production-start helpers and all extra CLI action IDs. Simplified the command dispatcher and docs; retained dotenv parsing, hidden admin passwords, tenant-bound confirmations and verified backups before migrations.
 
 - **2026-10-16 — Five-action consoles and Vercel-owned deployment.** Both consoles now show only dev, production, build, tests and Tools. Other operations are grouped inside Tools with existing safeguards. Removed the obsolete commented backend deploy job and documented Vercel deployment ownership in both CI workflows; validation jobs and disposable test-database migrations remain.

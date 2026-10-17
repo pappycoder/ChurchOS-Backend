@@ -144,7 +144,11 @@ export class PermissionsService {
    * @param roleNames - Role name(s) from the user's profile
    * @returns Array of permission name strings
    */
-  async getUserPermissions(churchId: string, roleNames: string | string[]): Promise<string[]> {
+  async getUserPermissions(
+    churchId: string,
+    roleNames: string | string[],
+    isAdminHq = false,
+  ): Promise<string[]> {
     const roles = [...new Set(Array.isArray(roleNames) ? roleNames : [roleNames])];
     if (roles.length === 0) {
       return [];
@@ -179,6 +183,9 @@ export class PermissionsService {
           permSet.delete(permission);
         }
       }
+    }
+    if (isAdminHq && permSet.has('departments:own:update')) {
+      permSet.add('departments:create');
     }
     return Array.from(permSet);
   }

@@ -13,6 +13,10 @@
  */
 
 import {
+  DepartmentAttendanceQueryDto,
+  RecordDepartmentAttendanceDto,
+} from './dto/department-attendance.dto';
+import {
   Controller,
   Get,
   Post,
@@ -263,7 +267,7 @@ export class AdminController {
     // Extract church ID from the authenticated user's profile
     const churchId = req.profile?.church_id || '';
     // Delegate to AdminService to create the cell group
-    return this.adminService.createCellGroup(dto, churchId, user.sub);
+    return this.adminService.createCellGroup(dto, churchId, user.sub, req.profile);
   }
 
   /**
@@ -447,6 +451,38 @@ export class AdminController {
     return this.adminService.deleteCellGroup(groupId, churchId, user.sub);
   }
 
+  @Get('departments/:departmentId/attendance')
+  @RequirePermissions('departments:read')
+  async listDepartmentAttendance(
+    @Param('departmentId') departmentId: string,
+    @Query() query: DepartmentAttendanceQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.adminService.listDepartmentAttendance(
+      departmentId,
+      req.profile!.church_id,
+      query.meetingDate,
+      req.profile,
+    );
+  }
+
+  @Post('departments/:departmentId/attendance')
+  @RequirePermissions('departments:update')
+  async recordDepartmentAttendance(
+    @Param('departmentId') departmentId: string,
+    @Body() dto: RecordDepartmentAttendanceDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.adminService.recordDepartmentAttendance(
+      departmentId,
+      dto,
+      req.profile!.church_id,
+      user.sub,
+      req.profile,
+    );
+  }
+
   // ─── Cell Group Members ───────────────────────────────────
 
   /**
@@ -555,7 +591,7 @@ export class AdminController {
     @Req() req: AuthenticatedRequest,
   ) {
     const churchId = req.profile?.church_id || '';
-    return this.adminService.listCellGroupAttendance(groupId, churchId, meetingDate);
+    return this.adminService.listCellGroupAttendance(groupId, churchId, meetingDate, req.profile);
   }
 
   /**

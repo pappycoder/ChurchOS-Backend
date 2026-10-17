@@ -286,6 +286,7 @@ model Member {
   converted_visitors    Visitor[]
   sermon_bookmarks      SermonBookmark[]
   cell_group_members    CellGroupMember[]
+  department_attendance DepartmentAttendance[]
   cell_group_attendance CellGroupAttendance[]
   recurring_giving      RecurringGiving[]
 
@@ -808,12 +809,29 @@ model Department {
   church             Church             @relation(fields: [church_id], references: [id])
   branch             Branch?            @relation(fields: [branch_id], references: [id], onDelete: SetNull)
   department_members DepartmentMember[]
+  attendance         DepartmentAttendance[]
   assets             Asset[]
 
   @@index([church_id])
   @@index([church_id, branch_id])
   @@index([head_member_id])
   @@map("departments")
+}
+
+model DepartmentAttendance {
+  id            String @id @default(uuid())
+  department_id String
+  member_id     String?
+  visitor_name  String?
+  meeting_date  DateTime @db.Date
+  status        String @default("present")
+  notes         String?
+  created_at    DateTime @default(now())
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  member Member? @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  @@unique([department_id, member_id, meeting_date])
+  @@index([department_id, meeting_date])
+  @@map("department_attendance")
 }
 
 model DepartmentMember {
