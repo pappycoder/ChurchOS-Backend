@@ -32,6 +32,7 @@ describe('Cell group meeting giving with PostgreSQL', () => {
     {} as never,
     new BranchScopeService(new RequestContextService()),
     {} as never,
+    {} as never,
   );
   const input = (date: string) => ({
     categoryId,

@@ -94,8 +94,8 @@ export const RESOURCES = [
   'broadcasts',
   'analytics',
   'church_settings',
-  'messaging_integrations',
   'integrations',
+  'billing',
   'calls',
   'visitors',
   'users',
@@ -227,8 +227,8 @@ const pastorPermissions = generateAllPermissions()
     const [resource, action] = name.split(':');
     if (
       resource === 'church_settings' ||
-      resource === 'messaging_integrations' ||
       resource === 'integrations' ||
+      resource === 'billing' ||
       resource === 'analytics' ||
       resource === 'data_scope'
     )

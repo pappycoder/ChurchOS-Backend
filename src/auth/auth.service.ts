@@ -33,7 +33,7 @@ import { LoginDto } from './dto/login.dto';
 import { Login2faDto } from './dto/login-2fa.dto';
 import { LoginResponseDto } from './dto/session-response.dto';
 import { ConfigService } from '@nestjs/config';
-import { ResendService } from '../communication/resend.service';
+import { EmailDeliveryService } from '../communication/email-delivery.service';
 import {
   generateTwoFactorCode,
   hashTwoFactorCode,
@@ -55,7 +55,7 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly audit: AuditLoggingService,
     private readonly config: ConfigService,
-    private readonly resend: ResendService,
+    private readonly resend: EmailDeliveryService,
     private readonly authenticator: AuthenticatorService,
     private readonly jwks: JwksService,
   ) {}
@@ -125,6 +125,7 @@ export class AuthService {
           data: {
             name: dto.churchName,
             denomination: dto.denomination,
+            address: dto.churchAddress,
             email: dto.email,
           },
         });
@@ -143,6 +144,13 @@ export class AuthService {
           },
         });
 
+        await tx.platformSubscription.create({
+          data: {
+            church_id: church.id,
+            plan: dto.plan ?? 'essentials',
+            cycle: dto.billingCycle ?? 'monthly',
+          },
+        });
         return { church, profile };
       });
 

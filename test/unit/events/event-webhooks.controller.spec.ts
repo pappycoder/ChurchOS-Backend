@@ -18,7 +18,18 @@ describe('EventWebhooksController', () => {
         .fn()
         .mockReturnValue({ event: 'charge.success', reference: 'EVT-REF-001' }),
     };
-    controller = new EventWebhooksController(eventsService as never, paystack as never);
+    controller = new EventWebhooksController(
+      eventsService as never,
+      paystack as never,
+      { historical: jest.fn().mockResolvedValue(paystack) } as never,
+      {
+        transaction: {
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ church_id: 'church-a', integration_account_id: 'account-a' }),
+        },
+      } as never,
+    );
   });
 
   it('validates the exact raw payload before settling the event registration', async () => {

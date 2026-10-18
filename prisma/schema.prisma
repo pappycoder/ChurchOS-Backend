@@ -124,7 +124,31 @@ enum AssetLoanStatus {
   overdue
 }
 
-// ─── Core Models ─────────────────────────────────────────
+enum SubscriptionPlan {
+  essentials
+  community
+  network
+  enterprise
+}
+
+enum BillingCycle {
+  monthly
+  annual
+}
+
+enum SubscriptionPaymentStatus {
+  pending
+  success
+  failed
+  reversed
+}
+
+enum SubscriptionGateway {
+  paystack
+  flutterwave
+}
+
+// ─── Church & branch structure ───
 
 model Church {
   id           String    @id @default(uuid())
@@ -143,6 +167,8 @@ model Church {
   updated_at   DateTime  @updatedAt
   archived_at  DateTime? // Set when archived
 
+  subscription             PlatformSubscription?
+  subscription_payments    SubscriptionPayment[]
   branches                 Branch[]
   profiles                 Profile[]
   members                  Member[]
@@ -159,12 +185,11 @@ model Church {
   asset_categories         AssetCategory[]
   assets                   Asset[]
   audit_logs               AuditLog[]
-  attendance_sessions       AttendanceSession[]
+  attendance_sessions      AttendanceSession[]
   attendances              Attendance[]
   church_configs           ChurchConfig[]
-  messaging_integrations   MessagingIntegration[]
-  integration_accounts IntegrationAccount[]
-  integration_channels IntegrationChannel[]
+  integration_accounts     IntegrationAccount[]
+  integration_channels     IntegrationChannel[]
   sermons                  Sermon[]
   media_assets             MediaAsset[]
   broadcasts               Broadcast[]
@@ -192,60 +217,194 @@ model Branch {
   updated_at      DateTime  @updatedAt
   archived_at     DateTime? // Set when archived
 
-  church       Church        @relation(fields: [church_id], references: [id])
-  profiles     Profile[]
-  members      Member[]
-  visitors     Visitor[]
+  church              Church              @relation(fields: [church_id], references: [id])
+  profiles            Profile[]
+  members             Member[]
+  visitors            Visitor[]
   attendance_sessions AttendanceSession[]
-  services     Service[]
-  transactions Transaction[]
-  events       Event[]
-  assets       Asset[]
-  cellGroups   CellGroup[]
-  departments  Department[]
-  families     Family[]
-  givingCategories GivingCategory[]
-  templates    Template[]
-  sermons      Sermon[]
-  mediaAssets  MediaAsset[]
-  forms        Form[]
+  services            Service[]
+  transactions        Transaction[]
+  events              Event[]
+  assets              Asset[]
+  cellGroups          CellGroup[]
+  departments         Department[]
+  families            Family[]
+  givingCategories    GivingCategory[]
+  templates           Template[]
+  sermons             Sermon[]
+  mediaAssets         MediaAsset[]
+  forms               Form[]
 
   @@index([church_id])
   @@map("branches")
 }
 
+model ChurchConfig {
+  id         String   @id @default(uuid())
+  church_id  String
+  key        String
+  value      Json
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  church Church @relation(fields: [church_id], references: [id])
+
+  @@unique([church_id, key])
+  @@map("church_configs")
+}
+
+// ─── Platform subscriptions · ChurchOS merchant account ───
+
+// Every church requires an explicit paid subscription for workspace access.
+model PlatformSubscription {
+  church_id  String           @id
+  plan       SubscriptionPlan
+  cycle      BillingCycle
+  paid_until DateTime?
+  created_at DateTime         @default(now())
+  church     Church           @relation(fields: [church_id], references: [id], onDelete: Cascade)
+
+  @@map("platform_subscriptions")
+}
+
+// Immutable payment facts. The partial unique pending index is defined in SQL.
+model SubscriptionPayment {
+  reference    String                    @id
+  church_id    String
+  gateway      SubscriptionGateway
+  plan         SubscriptionPlan
+  cycle        BillingCycle
+  amount       Int
+  currency     String                    @default("NGN")
+  status       SubscriptionPaymentStatus @default(pending)
+  checkout_url String?
+  verified_at  DateTime?
+  created_at   DateTime                  @default(now())
+  church       Church                    @relation(fields: [church_id], references: [id], onDelete: Restrict)
+
+  @@index([church_id, created_at])
+  @@map("subscription_payments")
+}
+
+// ─── Identity & access ───
+
 model Profile {
-  id          String    @id @default(uuid())
-  user_id     String    @unique // Supabase Auth user ID
-  church_id   String
-  branch_id   String?
-  member_id   String?   @unique
-  role        String[]  @default(["member"]) // ordered by rank desc; role[0] = primary
-  status      String    @default("active") // active, inactive (deactivated)
-  first_name  String
-  last_name   String
-  email       String?
-  phone       String?
-  avatar_url  String?
-  mfa_enabled         Boolean   @default(false)
-  two_factor_enabled  Boolean   @default(false) // 2FA enabled; secrets and session assurance managed by backend
-  is_admin_hq         Boolean   @default(false) // HQ access override: see data from ALL branches in the church within the user's permission scope; defaulted ON for church_admin
-  created_at          DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  archived_at DateTime? // Set when archived
+  id                 String    @id @default(uuid())
+  user_id            String    @unique // Supabase Auth user ID
+  church_id          String
+  branch_id          String?
+  member_id          String?   @unique
+  role               String[]  @default(["member"]) // ordered by rank desc; role[0] = primary
+  status             String    @default("active") // active, inactive (deactivated)
+  first_name         String
+  last_name          String
+  email              String?
+  phone              String?
+  avatar_url         String?
+  mfa_enabled        Boolean   @default(false)
+  two_factor_enabled Boolean   @default(false) // 2FA enabled; secrets and session assurance managed by backend
+  is_admin_hq        Boolean   @default(false) // HQ access override: see data from ALL branches in the church within the user's permission scope; defaulted ON for church_admin
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+  archived_at        DateTime? // Set when archived
 
   church Church  @relation(fields: [church_id], references: [id])
   branch Branch? @relation(fields: [branch_id], references: [id])
   member Member? @relation(fields: [member_id], references: [id])
 
-  assigned_visitors Visitor[] @relation("AssignedTo")
-  authenticator ProfileAuthenticator?
-  mfa_sessions VerifiedMfaSession[]
+  assigned_visitors Visitor[]             @relation("AssignedTo")
+  authenticator     ProfileAuthenticator?
+  mfa_sessions      VerifiedMfaSession[]
 
   @@index([church_id])
   @@index([user_id])
   @@map("profiles")
 }
+
+// Server-only authenticator secrets; never returned in profile responses.
+model ProfileAuthenticator {
+  user_id           String   @id
+  secret_ciphertext String
+  revision          String
+  last_used_step    BigInt   @default(-1)
+  recovery_hashes   String[] @default([])
+  created_at        DateTime @default(now())
+  profile           Profile  @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("profile_authenticators")
+}
+
+// Supabase session_id remains stable across refresh; approvals expire absolutely.
+model VerifiedMfaSession {
+  user_id    String
+  session_id String
+  revision   String
+  expires_at DateTime
+  profile    Profile  @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@id([user_id, session_id])
+  @@index([expires_at])
+  @@map("verified_mfa_sessions")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  church_id   String? // null = global template available to all churches
+  name        String
+  label       String? // Human-friendly display name (custom roles); templates use frontend dictionary
+  description String?
+  permissions RolePermission[]
+  created_at  DateTime         @default(now())
+
+  church Church? @relation(fields: [church_id], references: [id], onDelete: Cascade)
+
+  @@unique([church_id, name])
+  @@index([church_id])
+  @@map("roles")
+}
+
+model Permission {
+  id               String                 @id @default(uuid())
+  name             String                 @unique
+  description      String?
+  resource         String
+  action           String // create, read, update, delete
+  roles            RolePermission[]
+  church_overrides ChurchRolePermission[]
+  created_at       DateTime               @default(now())
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            String @id @default(uuid())
+  role_id       String
+  permission_id String
+
+  role       Role       @relation(fields: [role_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  @@unique([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+model ChurchRolePermission {
+  id            String @id @default(uuid())
+  church_id     String
+  role_name     String // matches Profile.role string (e.g., "secretary")
+  permission_id String
+
+  church     Church     @relation(fields: [church_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  created_at DateTime @default(now())
+
+  @@unique([church_id, role_name, permission_id])
+  @@index([church_id, role_name])
+  @@map("church_role_permissions")
+}
+
+// ─── People & households ───
 
 model Member {
   id              String       @id @default(uuid())
@@ -270,8 +429,8 @@ model Member {
   updated_at      DateTime     @updatedAt
   archived_at     DateTime? // Set when archived
 
-  church                Church                @relation(fields: [church_id], references: [id])
-  branch                Branch?               @relation(fields: [branch_id], references: [id])
+  church                Church                 @relation(fields: [church_id], references: [id])
+  branch                Branch?                @relation(fields: [branch_id], references: [id])
   profile               Profile?
   family_members        FamilyMember[]
   attendance            Attendance[]
@@ -280,8 +439,8 @@ model Member {
   risk_scores           RiskScore[]
   engagement_scores     EngagementScore[]
   life_events           LifeEvent[]
-  pastoral_notes_from   PastoralNote[]        @relation("Author")
-  pastoral_notes_about  PastoralNote[]        @relation("Subject")
+  pastoral_notes_from   PastoralNote[]         @relation("Author")
+  pastoral_notes_about  PastoralNote[]         @relation("Subject")
   department_members    DepartmentMember[]
   custodian_assets      Asset[]
   asset_loans           AssetLoan[]
@@ -331,7 +490,62 @@ model FamilyMember {
   @@map("family_members")
 }
 
-// ─── Attendance ──────────────────────────────────────────
+model Visitor {
+  id                  String    @id @default(uuid())
+  church_id           String
+  branch_id           String? // Branch the visitor was first received in (derived from the recording user at create time)
+  first_name          String
+  last_name           String?
+  gender              String?
+  phone               String?
+  whatsapp_number     String?
+  email               String?
+  first_visit_date    DateTime  @default(now())
+  follow_up_status    String    @default("new") // new, contacted, follow_up_scheduled, interested, converted, dropped_off
+  assigned_to_id      String? // Profile ID of follow-up team member
+  notes               String?
+  custom_fields       Json      @default("{}")
+  converted_member_id String? // Member ID if converted
+  converted_at        DateTime?
+  deleted_at          DateTime? // Set when converted to a member (soft-delete)
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+  archived_at         DateTime? // Set when archived
+
+  church              Church                @relation(fields: [church_id], references: [id])
+  branch              Branch?               @relation(fields: [branch_id], references: [id])
+  assigned_to         Profile?              @relation("AssignedTo", fields: [assigned_to_id], references: [id])
+  converted_member    Member?               @relation(fields: [converted_member_id], references: [id])
+  attendance          Attendance[]
+  cellGroupAttendance CellGroupAttendance[]
+
+  @@index([church_id, follow_up_status])
+  @@index([church_id, assigned_to_id])
+  @@index([branch_id])
+  @@map("visitors")
+}
+
+model CustomFieldDefinition {
+  id            String    @id @default(uuid())
+  church_id     String
+  name          String
+  field_type    String // text, number, date, dropdown, checkbox, textarea
+  options       Json      @default("[]") // dropdown options or validation config
+  is_required   Boolean   @default(false)
+  display_order Int       @default(0)
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  archived_at   DateTime? // Set when archived
+
+  church Church @relation(fields: [church_id], references: [id])
+
+  @@unique([church_id, name])
+  @@index([church_id])
+  @@map("custom_field_definitions")
+}
+
+// ─── Services & attendance ───
 
 model Service {
   id          String    @id @default(uuid())
@@ -347,39 +561,39 @@ model Service {
   updated_at  DateTime  @updatedAt
   archived_at DateTime? // Set when archived
 
-  church       Church        @relation(fields: [church_id], references: [id])
-  branch       Branch?       @relation(fields: [branch_id], references: [id])
-  attendance   Attendance[]
+  church              Church              @relation(fields: [church_id], references: [id])
+  branch              Branch?             @relation(fields: [branch_id], references: [id])
+  attendance          Attendance[]
   attendance_sessions AttendanceSession[]
-  transactions Transaction[]
+  transactions        Transaction[]
 
   @@index([church_id, branch_id])
   @@map("services")
 }
 
 model AttendanceSession {
-  id              String   @id @default(uuid())
-  church_id       String
-  branch_id       String
-  service_id      String?
-  event_id        String?
-  department_id   String?
-  cell_group_id   String?
-  attendance_date DateTime @db.Date
-  total           Int
-  adult_count     Int?
-  children_count  Int?
-  male_count      Int?
-  female_count    Int?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-  church          Church   @relation(fields: [church_id], references: [id])
-  branch          Branch   @relation(fields: [branch_id], references: [id])
-  service         Service? @relation(fields: [service_id], references: [id], onDelete: Restrict)
-  event           Event? @relation(fields: [event_id], references: [id], onDelete: Restrict)
-  department      Department? @relation(fields: [department_id], references: [id], onDelete: Restrict)
-  cell_group      CellGroup? @relation(fields: [cell_group_id], references: [id], onDelete: Restrict)
-  attendance      Attendance[]
+  id                    String                 @id @default(uuid())
+  church_id             String
+  branch_id             String
+  service_id            String?
+  event_id              String?
+  department_id         String?
+  cell_group_id         String?
+  attendance_date       DateTime               @db.Date
+  total                 Int
+  adult_count           Int?
+  children_count        Int?
+  male_count            Int?
+  female_count          Int?
+  created_at            DateTime               @default(now())
+  updated_at            DateTime               @updatedAt
+  church                Church                 @relation(fields: [church_id], references: [id])
+  branch                Branch                 @relation(fields: [branch_id], references: [id])
+  service               Service?               @relation(fields: [service_id], references: [id], onDelete: Restrict)
+  event                 Event?                 @relation(fields: [event_id], references: [id], onDelete: Restrict)
+  department            Department?            @relation(fields: [department_id], references: [id], onDelete: Restrict)
+  cell_group            CellGroup?             @relation(fields: [cell_group_id], references: [id], onDelete: Restrict)
+  attendance            Attendance[]
   department_attendance DepartmentAttendance[]
   cell_group_attendance CellGroupAttendance[]
 
@@ -393,38 +607,37 @@ model AttendanceSession {
 }
 
 model Attendance {
-  id           String   @id @default(uuid())
-  church_id    String
-  service_id   String?
-  event_id     String?
-  member_id    String?
-  visitor_id   String?
-  visitor_name String?
-  category     String   @default("adult") // adult | children | unspecified
+  id              String   @id @default(uuid())
+  church_id       String
+  service_id      String?
+  event_id        String?
+  member_id       String?
+  visitor_id      String?
+  visitor_name    String?
+  category        String   @default("adult") // adult | children | unspecified
   attendance_date DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  checkin_at   DateTime @default(now())
-  source       String   @default("manual") // manual, whatsapp, qr
-  created_at   DateTime @default(now())
+  checkin_at      DateTime @default(now())
+  source          String   @default("manual") // manual, whatsapp, qr
+  created_at      DateTime @default(now())
 
-  church  Church   @relation(fields: [church_id], references: [id])
-  service Service? @relation(fields: [service_id], references: [id])
-  event   Event?   @relation(fields: [event_id], references: [id])
-  member  Member?  @relation(fields: [member_id], references: [id])
-  visitor Visitor? @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
+  church     Church             @relation(fields: [church_id], references: [id])
+  service    Service?           @relation(fields: [service_id], references: [id])
+  event      Event?             @relation(fields: [event_id], references: [id])
+  member     Member?            @relation(fields: [member_id], references: [id])
+  visitor    Visitor?           @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
+  session_id String?
+  session    AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
 
   @@unique([service_id, member_id, attendance_date]) // One check-in per recurring service date per member
   @@unique([event_id, member_id]) // One check-in per event per member
   @@index([church_id, service_id, checkin_at])
   @@index([church_id, event_id, checkin_at])
   @@index([church_id, visitor_id])
-  @@map("attendance")
-  session_id String?
-  session AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
   @@index([session_id])
-
+  @@map("attendance")
 }
 
-// ─── Giving & Finance ────────────────────────────────────
+// ─── Giving & finance · church merchant accounts ───
 
 model GivingCategory {
   id            String    @id @default(uuid())
@@ -448,28 +661,28 @@ model GivingCategory {
 }
 
 model Transaction {
-  id                String            @id @default(uuid())
+  id                     String              @id @default(uuid())
   integration_account_id String?
-  integration_account IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
-  church_id         String
-  branch_id         String?
-  member_id         String?
-  category_id       String?
-  service_id        String? // Optional linkage: gift recorded against a service
-  event_id          String? // Optional linkage: gift recorded against an event
-  amount            Float
-  currency          String            @default("NGN")
-  type              TransactionType   @default(digital)
-  status            TransactionStatus @default(pending)
-  payment_reference String?           @unique
-  payment_gateway   PaymentGateway    @default(paystack)
-  payment_method    String? // card, bank, ussd, mobile_money, cash, bank_transfer
-  receipt_number    String?
-  receipt_url       String?
-  metadata          Json              @default("{}")
-  notes             String?
-  created_at        DateTime          @default(now())
-  updated_at        DateTime          @updatedAt
+  integration_account    IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
+  church_id              String
+  branch_id              String?
+  member_id              String?
+  category_id            String?
+  service_id             String? // Optional linkage: gift recorded against a service
+  event_id               String? // Optional linkage: gift recorded against an event
+  amount                 Float
+  currency               String              @default("NGN")
+  type                   TransactionType     @default(digital)
+  status                 TransactionStatus   @default(pending)
+  payment_reference      String?             @unique
+  payment_gateway        PaymentGateway      @default(paystack)
+  payment_method         String? // card, bank, ussd, mobile_money, cash, bank_transfer
+  receipt_number         String?
+  receipt_url            String?
+  metadata               Json                @default("{}")
+  notes                  String?
+  created_at             DateTime            @default(now())
+  updated_at             DateTime            @updatedAt
 
   church   Church          @relation(fields: [church_id], references: [id])
   branch   Branch?         @relation(fields: [branch_id], references: [id])
@@ -486,24 +699,24 @@ model Transaction {
 }
 
 model RecurringGiving {
-  id                   String    @id @default(uuid())
+  id                     String              @id @default(uuid())
   integration_account_id String?
-  integration_account IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
-  church_id            String
-  member_id            String
-  category_id          String
-  amount               Float
-  currency             String    @default("NGN")
-  frequency            String // weekly, monthly, quarterly
-  payment_reference    String?
-  authorization_code   String? // Paystack authorization code
-  is_active            Boolean   @default(true)
-  paused_at            DateTime?
-  next_charge_date     DateTime?
-  last_charge_date     DateTime?
-  failed_attempt_count Int       @default(0)
-  created_at           DateTime  @default(now())
-  updated_at           DateTime  @updatedAt
+  integration_account    IntegrationAccount? @relation(fields: [integration_account_id], references: [id], onDelete: Restrict)
+  church_id              String
+  member_id              String
+  category_id            String
+  amount                 Float
+  currency               String              @default("NGN")
+  frequency              String // weekly, monthly, quarterly
+  payment_reference      String?
+  authorization_code     String? // Paystack authorization code
+  is_active              Boolean             @default(true)
+  paused_at              DateTime?
+  next_charge_date       DateTime?
+  last_charge_date       DateTime?
+  failed_attempt_count   Int                 @default(0)
+  created_at             DateTime            @default(now())
+  updated_at             DateTime            @updatedAt
 
   member Member @relation(fields: [member_id], references: [id], onDelete: Cascade)
 
@@ -511,7 +724,7 @@ model RecurringGiving {
   @@map("recurring_giving")
 }
 
-// ─── Events ──────────────────────────────────────────────
+// ─── Events & ticketing ───
 
 model Event {
   id                  String    @id @default(uuid())
@@ -531,18 +744,17 @@ model Event {
   updated_at          DateTime  @updatedAt
   archived_at         DateTime? // Set when archived
 
-  church        Church              @relation(fields: [church_id], references: [id])
-  branch        Branch?             @relation(fields: [branch_id], references: [id])
-  registrations EventRegistration[]
-  tickets       Ticket[]
-  ticket_tiers  EventTicketTier[]
-  transactions  Transaction[]
-  attendance    Attendance[]
+  church              Church              @relation(fields: [church_id], references: [id])
+  branch              Branch?             @relation(fields: [branch_id], references: [id])
+  registrations       EventRegistration[]
+  tickets             Ticket[]
+  ticket_tiers        EventTicketTier[]
+  transactions        Transaction[]
+  attendance          Attendance[]
+  attendance_sessions AttendanceSession[]
 
   @@index([church_id, start_date])
   @@map("events")
-  attendance_sessions AttendanceSession[]
-
 }
 
 model EventRegistration {
@@ -569,6 +781,23 @@ model EventRegistration {
   @@map("event_registrations")
 }
 
+model EventTicketTier {
+  id            String    @id @default(uuid())
+  event_id      String
+  name          String
+  price         Float
+  capacity      Int?
+  description   String?
+  display_order Int       @default(0)
+  created_at    DateTime  @default(now())
+  archived_at   DateTime? // Set when archived
+
+  event Event @relation(fields: [event_id], references: [id])
+
+  @@index([event_id])
+  @@map("event_ticket_tiers")
+}
+
 model Ticket {
   id                String       @id @default(uuid())
   event_id          String
@@ -592,24 +821,137 @@ model Ticket {
   @@map("tickets")
 }
 
-model EventTicketTier {
-  id            String    @id @default(uuid())
-  event_id      String
-  name          String
-  price         Float
-  capacity      Int?
-  description   String?
-  display_order Int       @default(0)
-  created_at    DateTime  @default(now())
-  archived_at   DateTime? // Set when archived
+// ─── Departments & cell groups ───
 
-  event Event @relation(fields: [event_id], references: [id])
+model Department {
+  id             String    @id @default(uuid())
+  church_id      String
+  branch_id      String?
+  name           String
+  description    String?
+  parent_id      String?
+  head_member_id String? // Free-form head member id (mirrors CellGroup.leader_id)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  archived_at    DateTime? // Set when archived
 
-  @@index([event_id])
-  @@map("event_ticket_tiers")
+  church              Church                 @relation(fields: [church_id], references: [id])
+  branch              Branch?                @relation(fields: [branch_id], references: [id], onDelete: SetNull)
+  department_members  DepartmentMember[]
+  attendance          DepartmentAttendance[]
+  assets              Asset[]
+  attendance_sessions AttendanceSession[]
+
+  @@index([church_id])
+  @@index([church_id, branch_id])
+  @@index([head_member_id])
+  @@map("departments")
 }
 
-// ─── Communication ───────────────────────────────────────
+model DepartmentMember {
+  id            String   @id @default(uuid())
+  department_id String
+  member_id     String
+  role          String   @default("member")
+  joined_at     DateTime @default(now())
+
+  department Department @relation(fields: [department_id], references: [id])
+  member     Member     @relation(fields: [member_id], references: [id])
+
+  @@unique([department_id, member_id])
+  @@map("department_members")
+}
+
+model DepartmentAttendance {
+  id            String             @id @default(uuid())
+  department_id String
+  member_id     String?
+  visitor_name  String?
+  meeting_date  DateTime           @db.Date
+  status        String             @default("present")
+  notes         String?
+  created_at    DateTime           @default(now())
+  department    Department         @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  member        Member?            @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  session_id    String?
+  session       AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@unique([department_id, member_id, meeting_date])
+  @@index([department_id, meeting_date])
+  @@index([session_id])
+  @@map("department_attendance")
+}
+
+model CellGroup {
+  id           String    @id @default(uuid())
+  church_id    String
+  branch_id    String?
+  name         String
+  address      String?
+  leader_id    String?
+  latitude     Float?
+  longitude    Float?
+  meeting_day  String?
+  meeting_time String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  archived_at  DateTime? // Set when archived
+
+  church Church  @relation(fields: [church_id], references: [id])
+  branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
+
+  members             CellGroupMember[]
+  attendance          CellGroupAttendance[]
+  attendance_sessions AttendanceSession[]
+
+  @@index([church_id])
+  @@index([church_id, branch_id])
+  @@map("cell_groups")
+}
+
+model CellGroupMember {
+  id            String   @id @default(uuid())
+  cell_group_id String
+  member_id     String
+  role          String   @default("member") // member, leader, assistant
+  joined_at     DateTime @default(now())
+
+  cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
+  member     Member    @relation(fields: [member_id], references: [id])
+
+  @@unique([cell_group_id, member_id])
+  @@index([cell_group_id])
+  @@index([member_id])
+  @@map("cell_group_members")
+}
+
+model CellGroupAttendance {
+  id            String   @id @default(uuid())
+  cell_group_id String
+  member_id     String?
+  visitor_id    String?
+  visitor_name  String?
+  meeting_date  DateTime @default(now())
+  status        String   @default("present") // present, absent, excused
+  notes         String?
+  created_at    DateTime @default(now())
+
+  cell_group CellGroup          @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
+  member     Member?            @relation(fields: [member_id], references: [id])
+  visitor    Visitor?           @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
+  session_id String?
+  session    AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@unique([cell_group_id, member_id, meeting_date])
+  @@unique([cell_group_id, visitor_id, meeting_date])
+  @@index([cell_group_id])
+  @@index([cell_group_id, meeting_date])
+  @@index([cell_group_id, visitor_id])
+  @@index([session_id])
+  @@map("cell_group_attendance")
+}
+
+// ─── Communication ───
 
 model Message {
   id                String           @id @default(uuid())
@@ -700,7 +1042,91 @@ model BroadcastRecipient {
   @@map("broadcast_recipients")
 }
 
-// ─── Media / Sermons ─────────────────────────────────────
+// Internal inbox body. Recipient copies live in EmailRecipient.
+model EmailMessage {
+  id          String           @id @default(uuid())
+  church_id   String
+  sender_id   String // sender Profile.id
+  sender_name String? // denormalized for list display
+  subject     String
+  body        String
+  reply_to_id String? // reply threading
+  deleted_at  DateTime? // set when the sender trashes their Sent copy
+  created_at  DateTime         @default(now())
+  recipients  EmailRecipient[]
+
+  @@index([church_id, created_at])
+  @@map("email_messages")
+}
+
+model EmailRecipient {
+  id         String       @id @default(uuid())
+  message_id String
+  profile_id String // recipient Profile.id
+  read_at    DateTime?
+  deleted_at DateTime? // set when the recipient trashes their Inbox copy
+  created_at DateTime     @default(now())
+  message    EmailMessage @relation(fields: [message_id], references: [id], onDelete: Cascade)
+
+  @@index([profile_id, read_at])
+  @@index([message_id])
+  @@map("email_recipients")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  church_id  String
+  profile_id String
+  type       String // system, attendance, giving, event, pastoral, broadcast
+  title      String
+  body       String
+  data       Json?
+  read_at    DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([church_id, profile_id, read_at])
+  @@index([church_id, profile_id, created_at])
+  @@map("notifications")
+}
+
+// ─── Provider accounts & channel routing ───
+
+// Immutable encrypted credential versions; historical payments retain their account.
+model IntegrationAccount {
+  id                  String               @id @default(uuid())
+  church_id           String
+  provider            String
+  label               String
+  ciphertext          String
+  verification_status String               @default("unchecked")
+  verified_at         DateTime?
+  archived_at         DateTime?
+  created_at          DateTime             @default(now())
+  church              Church               @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  channels            IntegrationChannel[]
+  transactions        Transaction[]
+  recurring           RecurringGiving[]
+
+  @@index([church_id, provider])
+  @@map("integration_accounts")
+}
+
+model IntegrationChannel {
+  church_id  String
+  channel    String
+  mode       String              @default("disabled")
+  provider   String?
+  account_id String?
+  settings   Json                @default("{}")
+  updated_at DateTime            @updatedAt
+  church     Church              @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  account    IntegrationAccount? @relation(fields: [account_id], references: [id], onDelete: Restrict)
+
+  @@id([church_id, channel])
+  @@map("integration_channels")
+}
+
+// ─── Media & sermons ───
 
 model Sermon {
   id                  String    @id @default(uuid())
@@ -748,18 +1174,18 @@ model SermonBookmark {
 
 model MediaAsset {
   uploaded_by_user_id String?
-  storage_path String?
-  storage_bucket String?
-  id          String   @id @default(uuid())
-  church_id   String
-  branch_id   String?
-  filename    String
-  url         String
-  mime_type   String
-  size_bytes  Int
-  folder      String   @default("general")
-  permissions String   @default("members") // public, members, leadership
-  created_at  DateTime @default(now())
+  storage_path        String?
+  storage_bucket      String?
+  id                  String   @id @default(uuid())
+  church_id           String
+  branch_id           String?
+  filename            String
+  url                 String
+  mime_type           String
+  size_bytes          Int
+  folder              String   @default("general")
+  permissions         String   @default("members") // public, members, leadership
+  created_at          DateTime @default(now())
 
   church Church  @relation(fields: [church_id], references: [id])
   branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
@@ -768,7 +1194,7 @@ model MediaAsset {
   @@map("media_assets")
 }
 
-// ─── Pastoral Care ───────────────────────────────────────
+// ─── Pastoral care ───
 
 model PastoralNote {
   id              String               @id @default(uuid())
@@ -837,138 +1263,31 @@ model EngagementScore {
   @@map("engagement_scores")
 }
 
-// ─── Operations ──────────────────────────────────────────
-
-model Department {
-  id             String    @id @default(uuid())
-  church_id      String
-  branch_id      String?
-  name           String
-  description    String?
-  parent_id      String?
-  head_member_id String? // Free-form head member id (mirrors CellGroup.leader_id)
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
-  archived_at    DateTime? // Set when archived
-
-  church             Church             @relation(fields: [church_id], references: [id])
-  branch             Branch?            @relation(fields: [branch_id], references: [id], onDelete: SetNull)
-  department_members DepartmentMember[]
-  attendance         DepartmentAttendance[]
-  assets             Asset[]
-
-  @@index([church_id])
-  @@index([church_id, branch_id])
-  @@index([head_member_id])
-  @@map("departments")
-  attendance_sessions AttendanceSession[]
-
-}
-
-model DepartmentAttendance {
-  id            String @id @default(uuid())
-  department_id String
-  member_id     String?
-  visitor_name  String?
-  meeting_date  DateTime @db.Date
-  status        String @default("present")
-  notes         String?
-  created_at    DateTime @default(now())
-  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
-  member Member? @relation(fields: [member_id], references: [id], onDelete: Cascade)
-  @@unique([department_id, member_id, meeting_date])
-  @@index([department_id, meeting_date])
-  @@map("department_attendance")
-  session_id String?
-  session AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
-  @@index([session_id])
-
-}
-
-model DepartmentMember {
-  id            String   @id @default(uuid())
-  department_id String
-  member_id     String
-  role          String   @default("member")
-  joined_at     DateTime @default(now())
-
-  department Department @relation(fields: [department_id], references: [id])
-  member     Member     @relation(fields: [member_id], references: [id])
-
-  @@unique([department_id, member_id])
-  @@map("department_members")
-}
-
-model CellGroup {
+// Staff-to-pastor appointments; authorization and branch scope are service-enforced.
+model Appointment {
   id           String    @id @default(uuid())
   church_id    String
-  branch_id    String?
-  name         String
-  address      String?
-  leader_id    String?
-  latitude     Float?
-  longitude    Float?
-  meeting_day  String?
-  meeting_time String?
+  branch_id    String? // resolved birth context (the With pastor's branch)
+  pastor_id    String // With party — pastor Profile.id (branch_pastor | church_admin | senior_pastor)
+  person_id    String // Who party — person Profile.id (any staff/member)
+  visitor_id   String? // Who party when it's a visitor (null for profile Who)
+  title        String
+  scheduled_at DateTime
+  location     String?
+  notes        String?
+  status       String    @default("pending") // pending, confirmed, completed, cancelled
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
-  archived_at  DateTime? // Set when archived
+  archived_at  DateTime? // set when archived
 
-  church Church  @relation(fields: [church_id], references: [id])
-  branch Branch? @relation(fields: [branch_id], references: [id], onDelete: SetNull)
-
-  members    CellGroupMember[]
-  attendance CellGroupAttendance[]
-
-  @@index([church_id])
-  @@index([church_id, branch_id])
-  @@map("cell_groups")
-  attendance_sessions AttendanceSession[]
-
+  @@index([church_id, scheduled_at])
+  @@index([person_id])
+  @@index([pastor_id])
+  @@index([visitor_id])
+  @@map("appointments")
 }
 
-model CellGroupMember {
-  id            String   @id @default(uuid())
-  cell_group_id String
-  member_id     String
-  role          String   @default("member") // member, leader, assistant
-  joined_at     DateTime @default(now())
-
-  cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
-  member     Member    @relation(fields: [member_id], references: [id])
-
-  @@unique([cell_group_id, member_id])
-  @@index([cell_group_id])
-  @@index([member_id])
-  @@map("cell_group_members")
-}
-
-model CellGroupAttendance {
-  id            String   @id @default(uuid())
-  cell_group_id String
-  member_id     String?
-  visitor_id    String?
-  visitor_name  String?
-  meeting_date  DateTime @default(now())
-  status        String   @default("present") // present, absent, excused
-  notes         String?
-  created_at    DateTime @default(now())
-
-  cell_group CellGroup @relation(fields: [cell_group_id], references: [id], onDelete: Cascade)
-  member     Member?   @relation(fields: [member_id], references: [id])
-  visitor    Visitor?  @relation(fields: [visitor_id], references: [id], onDelete: SetNull)
-
-  @@unique([cell_group_id, member_id, meeting_date])
-  @@unique([cell_group_id, visitor_id, meeting_date])
-  @@index([cell_group_id])
-  @@index([cell_group_id, meeting_date])
-  @@index([cell_group_id, visitor_id])
-  @@map("cell_group_attendance")
-  session_id String?
-  session AttendanceSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
-  @@index([session_id])
-
-}
+// ─── Assets & inventory ───
 
 model AssetCategory {
   id          String    @id @default(uuid())
@@ -1111,24 +1430,24 @@ model AssetScanLog {
   @@map("asset_scan_logs")
 }
 
-// ─── Forms ───────────────────────────────────────────────
+// ─── Forms ───
 
 model Form {
-  id           String     @id @default(uuid())
-  church_id    String
-  branch_id    String?
-  title        String
-  description  String?
-  fields       Json       @default("[]") // Array of field definitions
-  status       FormStatus @default(draft)
-  is_template  Boolean    @default(false)
-  is_public    Boolean    @default(false)
-  public_token String?    @unique
-  unique_field String? // Field key (e.g. "email") used to detect duplicate public submissions
-  submission_limit Int   @default(0) // 0 = unlimited; >0 caps total submissions
-  created_at   DateTime   @default(now())
-  updated_at   DateTime   @updatedAt
-  archived_at  DateTime? // Set when archived
+  id               String     @id @default(uuid())
+  church_id        String
+  branch_id        String?
+  title            String
+  description      String?
+  fields           Json       @default("[]") // Array of field definitions
+  status           FormStatus @default(draft)
+  is_template      Boolean    @default(false)
+  is_public        Boolean    @default(false)
+  public_token     String?    @unique
+  unique_field     String? // Field key (e.g. "email") used to detect duplicate public submissions
+  submission_limit Int        @default(0) // 0 = unlimited; >0 caps total submissions
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+  archived_at      DateTime? // Set when archived
 
   church      Church           @relation(fields: [church_id], references: [id])
   branch      Branch?          @relation(fields: [branch_id], references: [id], onDelete: SetNull)
@@ -1161,155 +1480,7 @@ model FormSubmission {
   @@map("form_submissions")
 }
 
-// ─── System ──────────────────────────────────────────────
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  church_id  String
-  user_id    String?
-  action     String
-  entity     String
-  entity_id  String?
-  old_values Json?
-  new_values Json?
-  ip_address String?
-  user_agent String?
-  created_at DateTime @default(now())
-
-  church Church @relation(fields: [church_id], references: [id])
-
-  @@index([church_id, created_at])
-  @@index([entity, entity_id])
-  @@map("audit_logs")
-}
-
-model ChurchConfig {
-  id         String   @id @default(uuid())
-  church_id  String
-  key        String
-  value      Json
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  church Church @relation(fields: [church_id], references: [id])
-
-  @@unique([church_id, key])
-  @@map("church_configs")
-}
-
-// ─── Visitors & Custom Fields ──────────────────────────────
-
-model Visitor {
-  id                  String    @id @default(uuid())
-  church_id           String
-  branch_id           String? // Branch the visitor was first received in (derived from the recording user at create time)
-  first_name          String
-  last_name           String?
-  gender              String?
-  phone               String?
-  whatsapp_number     String?
-  email               String?
-  first_visit_date    DateTime  @default(now())
-  follow_up_status    String    @default("new") // new, contacted, follow_up_scheduled, interested, converted, dropped_off
-  assigned_to_id      String? // Profile ID of follow-up team member
-  notes               String?
-  custom_fields       Json      @default("{}")
-  converted_member_id String? // Member ID if converted
-  converted_at        DateTime?
-  deleted_at          DateTime? // Set when converted to a member (soft-delete)
-  created_at          DateTime  @default(now())
-  updated_at          DateTime  @updatedAt
-  archived_at         DateTime? // Set when archived
-
-  church              Church                @relation(fields: [church_id], references: [id])
-  branch              Branch?               @relation(fields: [branch_id], references: [id])
-  assigned_to         Profile?              @relation("AssignedTo", fields: [assigned_to_id], references: [id])
-  converted_member    Member?               @relation(fields: [converted_member_id], references: [id])
-  attendance          Attendance[]
-  cellGroupAttendance CellGroupAttendance[]
-
-  @@index([church_id, follow_up_status])
-  @@index([church_id, assigned_to_id])
-  @@index([branch_id])
-  @@map("visitors")
-}
-
-model CustomFieldDefinition {
-  id            String    @id @default(uuid())
-  church_id     String
-  name          String
-  field_type    String // text, number, date, dropdown, checkbox, textarea
-  options       Json      @default("[]") // dropdown options or validation config
-  is_required   Boolean   @default(false)
-  display_order Int       @default(0)
-  is_active     Boolean   @default(true)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-  archived_at   DateTime? // Set when archived
-
-  church Church @relation(fields: [church_id], references: [id])
-
-  @@unique([church_id, name])
-  @@index([church_id])
-  @@map("custom_field_definitions")
-}
-
-model Role {
-  id          String           @id @default(uuid())
-  church_id   String? // null = global template available to all churches
-  name        String
-  label       String? // Human-friendly display name (custom roles); templates use frontend dictionary
-  description String?
-  permissions RolePermission[]
-  created_at  DateTime         @default(now())
-
-  church Church? @relation(fields: [church_id], references: [id], onDelete: Cascade)
-
-  @@unique([church_id, name])
-  @@index([church_id])
-  @@map("roles")
-}
-
-model Permission {
-  id               String                 @id @default(uuid())
-  name             String                 @unique
-  description      String?
-  resource         String
-  action           String // create, read, update, delete
-  roles            RolePermission[]
-  church_overrides ChurchRolePermission[]
-  created_at       DateTime               @default(now())
-
-  @@map("permissions")
-}
-
-model RolePermission {
-  id            String @id @default(uuid())
-  role_id       String
-  permission_id String
-
-  role       Role       @relation(fields: [role_id], references: [id])
-  permission Permission @relation(fields: [permission_id], references: [id])
-
-  @@unique([role_id, permission_id])
-  @@map("role_permissions")
-}
-
-model ChurchRolePermission {
-  id            String @id @default(uuid())
-  church_id     String
-  role_name     String // matches Profile.role string (e.g., "secretary")
-  permission_id String
-
-  church     Church     @relation(fields: [church_id], references: [id])
-  permission Permission @relation(fields: [permission_id], references: [id])
-
-  created_at DateTime @default(now())
-
-  @@unique([church_id, role_name, permission_id])
-  @@index([church_id, role_name])
-  @@map("church_role_permissions")
-}
+// ─── Offline synchronization ───
 
 // Durable acknowledgements are independent of the expiring change feed.
 model OfflineReceipt {
@@ -1326,16 +1497,16 @@ model OfflineReceipt {
 }
 
 model SyncQueue {
-  id         String    @id @default(uuid())
-  church_id  String
-  entity     String
-  entity_id  String
+  id          String    @id @default(uuid())
+  church_id   String
+  entity      String
+  entity_id   String
   mutation_id String?
-  action     String // create, update, delete
-  data       Json
-  synced     Boolean   @default(false)
-  synced_at  DateTime?
-  created_at DateTime  @default(now())
+  action      String // create, update, delete
+  data        Json
+  synced      Boolean   @default(false)
+  synced_at   DateTime?
+  created_at  DateTime  @default(now())
 
   @@unique([church_id, mutation_id])
   @@index([church_id, created_at, id])
@@ -1356,84 +1527,26 @@ model SyncDevice {
   @@map("sync_devices")
 }
 
-model Notification {
-  id         String    @id @default(uuid())
+// ─── System & webhooks ───
+
+model AuditLog {
+  id         String   @id @default(uuid())
   church_id  String
-  profile_id String
-  type       String // system, attendance, giving, event, pastoral, broadcast
-  title      String
-  body       String
-  data       Json?
-  read_at    DateTime?
-  created_at DateTime  @default(now())
+  user_id    String?
+  action     String
+  entity     String
+  entity_id  String?
+  old_values Json?
+  new_values Json?
+  ip_address String?
+  user_agent String?
+  created_at DateTime @default(now())
 
-  @@index([church_id, profile_id, read_at])
-  @@map("notifications")
-  @@index([church_id, profile_id, created_at])
-}
-
-// Internal in-app email: a message body (email_messages) with per-recipient
-// copies (email_recipients). Sender/recipient references are Profile ids.
-// Trash is a soft-delete: EmailMessage.deleted_at for the Sent copy,
-// EmailRecipient.deleted_at for each Inbox copy. Hard delete removes rows.
-model EmailMessage {
-  id          String    @id @default(uuid())
-  church_id   String
-  sender_id   String   // sender Profile.id
-  sender_name String? // denormalized for list display
-  subject     String
-  body        String
-  reply_to_id String? // reply threading
-  deleted_at  DateTime? // set when the sender trashes their Sent copy
-  created_at  DateTime  @default(now())
-  recipients  EmailRecipient[]
+  church Church @relation(fields: [church_id], references: [id])
 
   @@index([church_id, created_at])
-  @@map("email_messages")
-}
-
-model EmailRecipient {
-  id         String       @id @default(uuid())
-  message_id String
-  profile_id String       // recipient Profile.id
-  read_at    DateTime?
-  deleted_at DateTime?    // set when the recipient trashes their Inbox copy
-  created_at DateTime     @default(now())
-  message    EmailMessage @relation(fields: [message_id], references: [id], onDelete: Cascade)
-
-  @@index([profile_id, read_at])
-  @@index([message_id])
-  @@map("email_recipients")
-}
-
-// Appointment / booking registry pairing a secretary with a pastor.
-// secretary_id/pastor_id are free-form Profile ids (resolved to names at read
-// time, matching the email/leader_id convention). Access rule: a branch
-// secretary books with pastor-role profiles in the same branch; an HQ
-// secretary (is_admin_hq or seated at the HQ branch) books church-wide.
-// Status: pending | confirmed | completed | cancelled. Archived rows are
-// hidden from active lists; Restore brings them back; Delete purges them.
-model Appointment {
-  id           String    @id @default(uuid())
-  church_id    String
-  branch_id    String?   // resolved birth context (the With pastor's branch)
-  pastor_id    String    // With party — pastor Profile.id (branch_pastor | church_admin | senior_pastor)
-  person_id    String    // Who party — person Profile.id (any staff/member)
-  visitor_id   String?   // Who party when it's a visitor (null for profile Who)
-  title        String
-  scheduled_at DateTime
-  location     String?
-  notes        String?
-  status       String    @default("pending") // pending, confirmed, completed, cancelled
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
-  archived_at  DateTime? // set when archived
-
-  @@index([church_id, scheduled_at])
-  @@index([person_id])
-  @@index([pastor_id])
-  @@index([visitor_id])
-  @@map("appointments")
+  @@index([entity, entity_id])
+  @@map("audit_logs")
 }
 
 model WebhookSubscription {
@@ -1465,72 +1578,4 @@ model WebhookDelivery {
 
   @@index([subscription_id, status])
   @@map("webhook_deliveries")
-}
-
-// Self-service authenticator data is never included in profile responses.
-model ProfileAuthenticator {
-  user_id String @id
-  secret_ciphertext String
-  revision String
-  last_used_step BigInt @default(-1)
-  recovery_hashes String[] @default([])
-  created_at DateTime @default(now())
-  profile Profile @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  @@map("profile_authenticators")
-}
-
-// Supabase session_id is stable across refresh; approvals expire absolutely.
-model VerifiedMfaSession {
-  user_id String
-  session_id String
-  revision String
-  expires_at DateTime
-  profile Profile @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  @@id([user_id, session_id])
-  @@index([expires_at])
-  @@map("verified_mfa_sessions")
-}
-
-// Server-only encrypted credentials. No browser-facing RLS policies.
-model MessagingIntegration {
-  church_id String
-  provider String
-  mode String @default("disabled")
-  ciphertext String?
-  updated_at DateTime @updatedAt
-  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
-  @@id([church_id, provider])
-  @@map("messaging_integrations")
-}
-
-// Immutable credential versions; historical payments retain the originating account.
-model IntegrationAccount {
-  id String @id @default(uuid())
-  church_id String
-  provider String
-  label String
-  ciphertext String
-  verification_status String @default("unchecked")
-  verified_at DateTime?
-  archived_at DateTime?
-  created_at DateTime @default(now())
-  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
-  channels IntegrationChannel[]
-  transactions Transaction[]
-  recurring RecurringGiving[]
-  @@index([church_id, provider])
-  @@map("integration_accounts")
-}
-model IntegrationChannel {
-  church_id String
-  channel String
-  mode String @default("disabled")
-  provider String?
-  account_id String?
-  settings Json @default("{}")
-  updated_at DateTime @updatedAt
-  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
-  account IntegrationAccount? @relation(fields: [account_id], references: [id], onDelete: Restrict)
-  @@id([church_id, channel])
-  @@map("integration_channels")
 }

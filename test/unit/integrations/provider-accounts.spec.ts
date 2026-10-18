@@ -4,7 +4,6 @@ import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ProviderTransportService } from '../../../src/integrations/provider-transport.service';
 import { PaymentAccountsService } from '../../../src/giving/services/payment-accounts.service';
-import { PaystackService } from '../../../src/giving/services/paystack.service';
 import { FlutterwaveService } from '../../../src/giving/services/flutterwave.service';
 
 describe('Provider account isolation and historical payment credentials', () => {
@@ -56,8 +55,7 @@ describe('Provider account isolation and historical payment credentials', () => 
     };
     const service = new PaymentAccountsService(
       accounts as unknown as IntegrationAccountsService,
-      new PaystackService(config),
-      new FlutterwaveService(config),
+      config,
     );
     expect(await service.defaultGateway('church-a')).toBe('flutterwave');
     await expect(service.current('church-a', 'paystack')).rejects.toThrow('not enabled');
@@ -66,6 +64,21 @@ describe('Provider account isolation and historical payment credentials', () => 
     expect(historical.isConfigured()).toBe(true);
     await expect(service.historical('church-a', 'flutterwave', 'old-account')).rejects.toThrow(
       'does not match',
+    );
+  });
+  it('rejects missing church credentials even with organization keys configured', async () => {
+    const accounts = {
+      account: jest.fn().mockResolvedValue({ provider: 'paystack', credentials: {} }),
+    };
+    const service = new PaymentAccountsService(
+      accounts as never,
+      new ConfigService({ PAYSTACK_SECRET_KEY: 'organization-only' }),
+    );
+    await expect(service.historical('church-a', 'paystack', 'account-a')).rejects.toThrow(
+      'credentials are missing',
+    );
+    await expect(service.historical('church-a', 'paystack', null)).rejects.toThrow(
+      'account is required',
     );
   });
   it('verifies Flutterwave v3 secret hashes and modern signed payloads using the separate webhook secret', () => {

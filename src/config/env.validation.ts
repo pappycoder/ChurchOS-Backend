@@ -45,7 +45,7 @@ const envSchema = z
     PAYSTACK_PUBLIC_KEY: z.string().optional(),
     FLUTTERWAVE_SECRET_KEY: z.string().optional(),
 
-    // ─── Messaging (Termii — single platform for WhatsApp + SMS) ───
+    // ─── Church provider accounts and callback verification ───
     PUBLIC_API_URL: z.url().optional(),
     FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
     INTEGRATIONS_ENCRYPTION_KEY: z.preprocess(
@@ -55,22 +55,6 @@ const envSchema = z
         .regex(/^[a-fA-F0-9]{64}$/)
         .optional(),
     ),
-    MESSAGING_ENCRYPTION_KEY: z.preprocess(
-      (value) => (value === '' ? undefined : value),
-      z
-        .string()
-        .regex(/^[a-fA-F0-9]{64}$/)
-        .optional(),
-    ),
-    TERMII_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
-    TERMII_BASE_URL: z
-      .enum(['https://api.termii.com', 'https://api.ng.termii.com'])
-      .default('https://api.termii.com'),
-    TERMII_API_KEY: z.string().optional(),
-    TERMII_FROM: z.string().default('ChurchOS'),
-    TERMII_WHATSAPP_DEVICE_ID: z.string().optional(),
-    TERMII_WEBHOOK_SECRET: z.string().optional(),
-    TERMII_DEFAULT_CHURCH_ID: z.string().optional(),
     ENABLE_SMS_FALLBACK: z
       .preprocess((value) => value === true || value === 'true', z.boolean())
       .default(false),

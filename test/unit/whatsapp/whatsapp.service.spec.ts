@@ -14,7 +14,7 @@ import { PrismaService } from '../../../src/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
-import { TermiiService } from '../../../src/communication/termii.service';
+import { MessagingDeliveryService } from '../../../src/communication/messaging-delivery.service';
 import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('WhatsAppService', () => {
@@ -89,7 +89,7 @@ describe('WhatsAppService', () => {
       new RequestContextService(),
       config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
-      termiiService as unknown as TermiiService,
+      termiiService as unknown as MessagingDeliveryService,
       moduleRef as unknown as ModuleRef,
     );
   });

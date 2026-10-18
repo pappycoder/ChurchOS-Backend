@@ -4,7 +4,7 @@
  *
  * Handles jobs from the 'sms-outbound' queue. Each job contains
  * a recipient phone number, message content, and church ID.
- * Delegates to TermiiService for delivery via the Termii API.
+ * Delegates to MessagingDeliveryService for delivery via the Termii API.
  *
  * Retry policy: 3 attempts with exponential backoff (5s base).
  *
@@ -15,24 +15,24 @@
 import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { TermiiService } from '../../communication/termii.service';
+import { MessagingDeliveryService } from '../../communication/messaging-delivery.service';
 
 @Processor('sms-outbound', { concurrency: 1 })
 export class SmsOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(SmsOutboundProcessor.name);
 
-  constructor(private readonly termiiService: TermiiService) {
+  constructor(private readonly termiiService: MessagingDeliveryService) {
     super();
   }
 
   /**
    * Processes a single outbound SMS message job.
    *
-   * Delegates to TermiiService.sendSms() which handles Termii API
+   * Delegates to MessagingDeliveryService.sendSms() which handles Termii API
    * communication and persists the outbound message to the Message table.
    *
    * @param job - BullMQ job containing recipient phone, message content, and church ID
-   * @returns Void — SMS sent via TermiiService (Termii API)
+   * @returns Void — SMS sent via MessagingDeliveryService (Termii API)
    * @throws Error if Termii API is not configured or send fails (triggers retry)
    */
   async process(job: Job<{ to: string; message: string; churchId: string }>): Promise<void> {

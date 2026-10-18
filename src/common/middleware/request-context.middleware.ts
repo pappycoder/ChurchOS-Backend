@@ -12,7 +12,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, NestMiddleware, ForbiddenException } from '@nestjs/common';
+import { Injectable, NestMiddleware, ForbiddenException, HttpException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RequestContextService } from '../services/request-context.service';
 import { AuthenticatedRequest } from '../decorators/current-user.decorator';
@@ -100,10 +100,29 @@ export class RequestContextMiddleware implements NestMiddleware {
           is_admin_hq: true,
           two_factor_enabled: true,
           authenticator: { select: { revision: true } },
-          church: { select: { archived_at: true } },
+          church: { select: { archived_at: true, subscription: { select: { paid_until: true } } } },
         },
       });
       if (profile) {
+        const subscription = profile.church?.subscription;
+        const billingExempt = /^\/api\/v1\/(?:auth(?:\/|$)|billing(?:\/|$)|profiles\/me$)/.test(
+          (req.originalUrl ?? req.url ?? req.path ?? '').split('?')[0],
+        );
+        if (
+          profile.status === 'active' &&
+          !profile.archived_at &&
+          !profile.church?.archived_at &&
+          (!subscription?.paid_until || subscription.paid_until <= new Date()) &&
+          !billingExempt
+        ) {
+          next(
+            new HttpException(
+              'A ChurchOS subscription is required. Your administrator can complete checkout.',
+              402,
+            ),
+          );
+          return;
+        }
         const permissions = await this.permissionsService.getUserPermissions(
           profile.church_id,
           profile.role,

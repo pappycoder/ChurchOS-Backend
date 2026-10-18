@@ -1,25 +1,24 @@
 /**
- * @file resend.service.ts
- * @description Email delivery service using the Resend API.
+ * @file email-delivery.service.ts
+ * @description Church email delivery through provider accounts; organization email through Resend.
  *
  * Provides a sendEmail() method that sends HTML emails via Resend and
  * logs church-owned outbound messages to the Prisma Message model with
  * channel: 'email'. This ensures all communications are tracked
  * in the unified message history.
  *
- * Resolves church credentials or platform RESEND_API_KEY. Platform authentication
+ * Church sends require an enabled provider account. Organization authentication
  * emails have no tenant Message row.
  *
- * @module communication/resend.service
+ * @module communication/email-delivery.service
  * @since 1.0.0
  */
 
 import { IntegrationAccountsService } from '../integrations/integration-accounts.service';
-import { MessagingCredentialsService } from '../messaging-integrations/messaging-credentials.service';
-import { Injectable, Logger, InternalServerErrorException, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 import { INTEGRATION_ALERT_SERVICE_TOKEN } from '../notifications/notification-tokens';
 
 interface EmailAttachment {
@@ -28,8 +27,8 @@ interface EmailAttachment {
 }
 
 @Injectable()
-export class ResendService {
-  private readonly logger = new Logger(ResendService.name);
+export class EmailDeliveryService {
+  private readonly logger = new Logger(EmailDeliveryService.name);
   private alertService?: {
     notify(
       churchId: string,
@@ -43,8 +42,8 @@ export class ResendService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly moduleRef: ModuleRef,
-    private readonly credentials: MessagingCredentialsService,
-    @Optional() private readonly accounts?: IntegrationAccountsService,
+    private readonly config: ConfigService,
+    private readonly accounts: IntegrationAccountsService,
   ) {}
 
   /**
@@ -86,9 +85,11 @@ export class ResendService {
     churchId: string,
     attachment?: EmailAttachment,
   ): Promise<string> {
-    const integration = await this.accounts?.resolve(churchId, 'email');
-    if (integration) {
-      const id = await this.accounts!.deliver(integration, 'email', {
+    if (churchId) {
+      const integration = await this.accounts.resolve(churchId, 'email');
+      if (!integration)
+        throw new InternalServerErrorException('Configure a church email account first');
+      const id = await this.accounts.deliver(integration, 'email', {
         ...integration.settings,
         from: integration.settings.from,
         to,
@@ -114,7 +115,8 @@ export class ResendService {
       });
       return message.id;
     }
-    const { apiKey, from: fromAddress } = await this.credentials.resolve(churchId, 'resend');
+    const apiKey = this.config.get<string>('RESEND_API_KEY', '');
+    const fromAddress = this.config.get<string>('RESEND_FROM', 'noreply@churchos.app');
 
     if (!apiKey) {
       await this.notifyFailure(churchId, 'Email not delivered', 'Resend API not configured.');
@@ -159,23 +161,8 @@ export class ResendService {
 
       if (!result.id)
         throw new InternalServerErrorException('Resend did not confirm message acceptance');
-      // Platform sign-in/recovery emails have no tenant and cannot create a church-owned row.
-      if (!churchId) return result.id;
-
-      const message = await this.prisma.message.create({
-        data: {
-          church_id: churchId,
-          phone: to,
-          direction: 'outbound' as never,
-          channel: 'email',
-          content: subject,
-          status: 'sent',
-          metadata: { resend_id: result.id, subject } as Prisma.InputJsonValue,
-        },
-      });
-
-      this.logger.log(`Email sent to ${to}: ${subject} (${result.id})`);
-      return message.id;
+      // Organization authentication messages have no church-owned log row.
+      return result.id;
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       this.logger.error(`Email send error: provider request failed`);

@@ -8,23 +8,20 @@ import { PaymentGatewayProvider } from './payment-gateway.interface';
 export class PaymentAccountsService {
   constructor(
     private readonly accounts: IntegrationAccountsService,
-    private readonly paystack: PaystackService,
-    private readonly flutterwave: FlutterwaveService,
     private readonly config: ConfigService = new ConfigService(),
   ) {}
-  private gateway(name: string, credentials?: Record<string, string>): PaymentGatewayProvider {
+  private gateway(name: string, credentials: Record<string, string>): PaymentGatewayProvider {
     if (!['paystack', 'flutterwave'].includes(name))
       throw new BadRequestException('Unsupported payment gateway');
-    const provider = !credentials
-      ? name === 'paystack'
-        ? this.paystack
-        : this.flutterwave
-      : name === 'paystack'
+    if (typeof credentials.secretKey !== 'string' || !credentials.secretKey.trim())
+      throw new BadRequestException('Church merchant credentials are missing');
+    const provider =
+      name === 'paystack'
         ? new PaystackService(new ConfigService({ PAYSTACK_SECRET_KEY: credentials.secretKey }))
         : new FlutterwaveService(
             new ConfigService({
               FLUTTERWAVE_SECRET_KEY: credentials.secretKey,
-              FLUTTERWAVE_WEBHOOK_SECRET: credentials.webhookSecret,
+              FLUTTERWAVE_WEBHOOK_SECRET: credentials.webhookSecret ?? '',
               WEB_URL: this.config.get<string>('WEB_URL', 'http://localhost:3000'),
             }),
           );
@@ -43,7 +40,7 @@ export class PaymentAccountsService {
     return { provider: this.gateway(name, account.credentials), accountId: account.accountId };
   }
   async historical(churchId: string, name: string, id?: string | null) {
-    if (!id) return this.gateway(name);
+    if (!id) throw new BadRequestException('A church payment account is required');
     const account = await this.accounts.account(churchId, id, true);
     if (account.provider !== name)
       throw new BadRequestException('Payment account does not match gateway');

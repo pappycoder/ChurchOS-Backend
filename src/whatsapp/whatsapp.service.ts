@@ -24,7 +24,7 @@ import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
-import { TermiiService } from '../communication/termii.service';
+import { MessagingDeliveryService } from '../communication/messaging-delivery.service';
 import { WebhookBodyDto } from './dto/webhook.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { Prisma, MessageDirection } from '@prisma/client';
@@ -80,7 +80,7 @@ export class WhatsAppService {
     private readonly requestContext: RequestContextService,
     private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
-    private readonly termiiService: TermiiService,
+    private readonly termiiService: MessagingDeliveryService,
     private readonly moduleRef: ModuleRef,
   ) {
     this.registerCommands();
@@ -122,7 +122,7 @@ export class WhatsAppService {
   /**
    * Process an inbound WhatsApp webhook from Termii.
    *
-   * Handles both the Termii flat payload shape and the legacy Meta/360dialog
+   * Handles both the Termii flat payload shape and the Meta Cloud
    * envelope for backward compatibility during transition.
    */
   async processWebhook(

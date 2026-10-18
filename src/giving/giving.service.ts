@@ -13,7 +13,6 @@ import { PaymentAccountsService } from './services/payment-accounts.service';
 
 import {
   Injectable,
-  Optional,
   Logger,
   NotFoundException,
   ConflictException,
@@ -69,23 +68,19 @@ export class GivingService {
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
     private readonly integrationAlert: IntegrationAlertService,
-    @Optional() private readonly paymentAccounts?: PaymentAccountsService,
+    private readonly paymentAccounts: PaymentAccountsService,
   ) {}
 
   /**
    * Gets the gateway selected by this church. Unconfigured churches cannot charge.
    */
   private async getDefaultGateway(churchId: string): Promise<string> {
-    if (!this.paymentAccounts)
-      throw new BadRequestException('Church payment integrations are unavailable');
     const configured = await this.paymentAccounts.defaultGateway(churchId);
     if (!configured) throw new BadRequestException('Configure a church payment account first');
     return configured;
   }
 
   private async churchPayment(churchId: string, gatewayName: string) {
-    if (!this.paymentAccounts)
-      throw new BadRequestException('Church payment integrations are unavailable');
     return this.paymentAccounts.current(churchId, gatewayName);
   }
 
@@ -549,13 +544,11 @@ export class GivingService {
     }
 
     // Resolve gateway from the transaction's stored gateway
-    const provider = this.paymentAccounts
-      ? await this.paymentAccounts.historical(
-          churchId,
-          transaction.payment_gateway,
-          transaction.integration_account_id,
-        )
-      : this.gatewayRegistry.get(transaction.payment_gateway);
+    const provider = await this.paymentAccounts.historical(
+      churchId,
+      transaction.payment_gateway,
+      transaction.integration_account_id,
+    );
     if (!provider || !provider.isConfigured()) {
       this.logger.warn(
         `Gateway ${transaction.payment_gateway} not available for verification of ${reference}`,
@@ -568,10 +561,9 @@ export class GivingService {
 
       if (verification.status === 'success') {
         if (
-          this.paymentAccounts &&
-          (verification.amount !== transaction.amount ||
-            verification.currency !== transaction.currency ||
-            (verification.reference && verification.reference !== reference))
+          verification.amount !== transaction.amount ||
+          verification.currency !== transaction.currency ||
+          (verification.reference && verification.reference !== reference)
         )
           throw new BadRequestException(
             'Payment does not match the expected amount, currency or reference',
@@ -642,31 +634,26 @@ export class GivingService {
   ): Promise<{ processed: boolean; event?: string }> {
     const parser = this.gatewayRegistry.get(gatewayName);
     if (!parser) throw new BadRequestException('Unknown payment gateway');
-    if (!this.paymentAccounts && !parser.validateWebhookSignature(payload, signature))
-      throw new BadRequestException('Invalid webhook signature');
     const event = parser.parseWebhookEvent(payload);
     const transaction = await this.prisma.transaction.findFirst({
       where: { payment_reference: event.reference },
       include: { category: true },
     });
-    const provider =
-      transaction && this.paymentAccounts
-        ? await this.paymentAccounts.historical(
-            transaction.church_id,
-            gatewayName,
-            transaction.integration_account_id,
-          )
-        : parser;
+    if (!transaction) return { processed: false, event: event.event };
+    const provider = await this.paymentAccounts.historical(
+      transaction.church_id,
+      gatewayName,
+      transaction.integration_account_id,
+    );
     if (!provider.validateWebhookSignature(payload, signature))
       throw new BadRequestException('Invalid webhook signature');
-    if (!transaction) return { processed: false, event: event.event };
     if (transaction.payment_gateway !== gatewayName)
       throw new BadRequestException('Gateway does not match payment');
     if (!event.event.startsWith('charge.') && !event.event.startsWith('chargecompleted'))
       return { processed: false, event: event.event };
     const status = provider.mapEventToStatus(event.event);
     if (!status) return { processed: false, event: event.event };
-    if (status === 'success' && this.paymentAccounts) {
+    if (status === 'success') {
       const verified = await provider.verifyTransaction(event.reference);
       if (
         verified.status !== 'success' ||

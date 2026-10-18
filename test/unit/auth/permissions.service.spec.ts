@@ -218,7 +218,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v26:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v28:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -361,10 +361,10 @@ describe('PermissionsService', () => {
           .spyOn(service, 'getPermissionsForRole')
           .mockResolvedValue([
             'members:read',
-            'messaging_integrations:read',
-            'messaging_integrations:update',
             'integrations:read',
             'integrations:update',
+            'billing:read',
+            'billing:update',
           ]);
         expect(await service.getUserPermissions(churchId, [role])).toEqual(['members:read']);
       },
@@ -375,8 +375,8 @@ describe('PermissionsService', () => {
         'members:read',
         'integrations:read',
         'integrations:update',
-        'messaging_integrations:read',
-        'messaging_integrations:update',
+        'billing:read',
+        'billing:update',
       ]);
 
       expect(await service.getUserPermissions(churchId, ['senior_pastor', 'custom_admin'])).toEqual(
@@ -391,8 +391,8 @@ describe('PermissionsService', () => {
         const permissions = [
           'integrations:read',
           'integrations:update',
-          'messaging_integrations:read',
-          'messaging_integrations:update',
+          'billing:read',
+          'billing:update',
         ];
         prisma.permission.findMany.mockResolvedValue(permissions.map((name) => ({ name })));
 
@@ -458,7 +458,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v26:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v28:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {

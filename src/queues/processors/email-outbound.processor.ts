@@ -4,7 +4,7 @@
  *
  * Handles jobs from the 'email-outbound' queue. Each job contains
  * a recipient email, subject, HTML body, and church ID.
- * Delegates to ResendService for delivery via the Resend API.
+ * Delegates to EmailDeliveryService for delivery via the Resend API.
  *
  * Retry policy: 3 attempts with exponential backoff (5s base).
  *
@@ -15,24 +15,24 @@
 import { Processor, OnWorkerEvent, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { ResendService } from '../../communication/resend.service';
+import { EmailDeliveryService } from '../../communication/email-delivery.service';
 
 @Processor('email-outbound', { concurrency: 1 })
 export class EmailOutboundProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailOutboundProcessor.name);
 
-  constructor(private readonly resendService: ResendService) {
+  constructor(private readonly resendService: EmailDeliveryService) {
     super();
   }
 
   /**
    * Processes a single outbound email job.
    *
-   * Delegates to ResendService.sendEmail() which handles Resend API
+   * Delegates to EmailDeliveryService.sendEmail() which handles Resend API
    * communication and persists the outbound message to the Message table.
    *
    * @param job - BullMQ job containing recipient email, subject, HTML body, and church ID
-   * @returns Void — email sent via ResendService (Resend API)
+   * @returns Void — email sent via EmailDeliveryService (Resend API)
    * @throws Error if Resend API is not configured or send fails (triggers retry)
    */
   async process(

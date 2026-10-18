@@ -6,7 +6,7 @@
  * a recipient phone number, message content, and church ID for tenant scoping.
  * Delegates to WhatsAppService to send via the Termii WhatsApp API.
  * If WhatsApp delivery fails after all retries and ENABLE_SMS_FALLBACK is true,
- * the processor falls back to SMS delivery via TermiiService.
+ * the processor falls back to SMS delivery via MessagingDeliveryService.
  *
  * Retry policy: 3 attempts with exponential backoff (5s base).
  * Failed jobs are retained for 7 days for debugging.
@@ -20,7 +20,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
-import { TermiiService } from '../../communication/termii.service';
+import { MessagingDeliveryService } from '../../communication/messaging-delivery.service';
 
 type WhatsAppSendJob = Job<{
   to: string;
@@ -47,7 +47,7 @@ export class WhatsAppOutboundProcessor extends WorkerHost {
   constructor(
     private readonly whatsappService: WhatsAppService,
     private readonly config: ConfigService,
-    private readonly termiiService: TermiiService,
+    private readonly termiiService: MessagingDeliveryService,
   ) {
     super();
   }

@@ -6,6 +6,8 @@ import { join, relative } from 'node:path';
 // cannot be described as one static ALL-permissions requirement. New exceptions
 // must be reviewed here rather than silently bypassing the global guard.
 const exceptions: Record<string, string[]> = {
+  // Provider signatures plus server verification authenticate subscription callbacks.
+  'billing/billing.controller.ts': ['webhook'],
   'auth/auth.controller.ts': [
     'session',
     'register',
@@ -72,14 +74,9 @@ const exceptions: Record<string, string[]> = {
   'sync/sync.controller.ts': ['pushChanges', 'bootstrap', 'pullChanges', 'markSynced'],
   'integrations/integration-callbacks.controller.ts': ['verify', 'receive'],
   'integrations/payment-callbacks.controller.ts': ['receive'],
-  'whatsapp/whatsapp.controller.ts': [
-    'verifyWebhook',
-    'processWebhook',
-    'verifyChurchWebhook',
-    'processChurchWebhook',
-  ],
 };
 const publicRoutes = new Set([
+  'billing/billing.controller.ts:webhook',
   'integrations/integration-callbacks.controller.ts:verify',
   'integrations/integration-callbacks.controller.ts:receive',
   'integrations/payment-callbacks.controller.ts:receive',
@@ -96,11 +93,7 @@ const publicRoutes = new Set([
   'health/health.controller.ts:check',
   'giving/giving.controller.ts:handlePaystackWebhook',
   'giving/giving.controller.ts:handleFlutterwaveWebhook',
-  'whatsapp/whatsapp.controller.ts:verifyWebhook',
-  'whatsapp/whatsapp.controller.ts:processWebhook',
   // Church-specific callbacks authenticate with provider signatures/subscription tokens.
-  'whatsapp/whatsapp.controller.ts:verifyChurchWebhook',
-  'whatsapp/whatsapp.controller.ts:processChurchWebhook',
 ]);
 
 function files(directory: string): string[] {

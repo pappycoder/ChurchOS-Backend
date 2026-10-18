@@ -21,7 +21,6 @@ import { RequestContextService } from '../common/services/request-context.servic
 
 import {
   Injectable,
-  Optional,
   Logger,
   NotFoundException,
   ConflictException,
@@ -64,7 +63,7 @@ export class EventsService {
     _gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
-    @Optional() private readonly paymentAccounts?: PaymentAccountsService,
+    private readonly paymentAccounts: PaymentAccountsService,
   ) {}
 
   // ─── EVENT CRUD ────────────────────────────────────────────────
@@ -1068,8 +1067,6 @@ export class EventsService {
       }
     }
 
-    if (!this.paymentAccounts)
-      throw new BadRequestException('Church payment integrations are unavailable');
     const gatewayName = await this.paymentAccounts.defaultGateway(churchId);
     if (!gatewayName) throw new BadRequestException('Configure a church payment account first');
     const paymentAccount = await this.paymentAccounts.current(churchId, gatewayName);
@@ -1179,25 +1176,23 @@ export class EventsService {
    * @throws BadRequestException if registration is not in pending state
    */
   async confirmTicketPayment(reference: string): Promise<RegistrationResponseDto> {
-    if (this.paymentAccounts) {
-      const payment = await this.prisma.transaction.findFirst({
-        where: { payment_reference: reference },
-      });
-      if (!payment) throw new NotFoundException('Payment not found');
-      const provider = await this.paymentAccounts.historical(
-        payment.church_id,
-        payment.payment_gateway,
-        payment.integration_account_id,
-      );
-      const verified = await provider.verifyTransaction(reference);
-      if (
-        verified.status !== 'success' ||
-        verified.amount !== payment.amount ||
-        verified.currency !== payment.currency ||
-        (verified.reference && verified.reference !== reference)
-      )
-        throw new BadRequestException('Ticket payment does not match');
-    }
+    const payment = await this.prisma.transaction.findFirst({
+      where: { payment_reference: reference },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    const provider = await this.paymentAccounts.historical(
+      payment.church_id,
+      payment.payment_gateway,
+      payment.integration_account_id,
+    );
+    const verified = await provider.verifyTransaction(reference);
+    if (
+      verified.status !== 'success' ||
+      verified.amount !== payment.amount ||
+      verified.currency !== payment.currency ||
+      (verified.reference && verified.reference !== reference)
+    )
+      throw new BadRequestException('Ticket payment does not match');
 
     const registration = await this.prisma.eventRegistration.findFirst({
       where: { payment_reference: reference },

@@ -16,7 +16,7 @@ import { SupabaseService } from '../../../src/supabase/supabase.service';
 import { RedisService } from '../../../src/redis/redis.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { ConfigService } from '@nestjs/config';
-import { ResendService } from '../../../src/communication/resend.service';
+import { EmailDeliveryService } from '../../../src/communication/email-delivery.service';
 import {
   ConflictException,
   UnauthorizedException,
@@ -38,7 +38,13 @@ describe('AuthService', () => {
   let refreshSessionMock: jest.Mock;
   let resetPasswordForEmailMock: jest.Mock;
   let signOutMock: jest.Mock;
-  let redis: { set: jest.Mock; get: jest.Mock; del: jest.Mock; incr: jest.Mock; consume: jest.Mock };
+  let redis: {
+    set: jest.Mock;
+    get: jest.Mock;
+    del: jest.Mock;
+    incr: jest.Mock;
+    consume: jest.Mock;
+  };
   let resend: { sendEmail: jest.Mock };
   let audit: { log: jest.Mock };
   let config: { get: jest.Mock };
@@ -107,7 +113,17 @@ describe('AuthService', () => {
     service = new AuthService(
       prisma as unknown as PrismaService,
       {
-        createAuthClient: () => ({ auth: { signInWithPassword: signInMock, refreshSession: refreshSessionMock, resetPasswordForEmail: resetPasswordForEmailMock, verifyOtp: getUserByIdMock, updateUser: updateUserMock, getUser: getUserByIdMock, setSession: jest.fn().mockResolvedValue({ error: null }) } }),
+        createAuthClient: () => ({
+          auth: {
+            signInWithPassword: signInMock,
+            refreshSession: refreshSessionMock,
+            resetPasswordForEmail: resetPasswordForEmailMock,
+            verifyOtp: getUserByIdMock,
+            updateUser: updateUserMock,
+            getUser: getUserByIdMock,
+            setSession: jest.fn().mockResolvedValue({ error: null }),
+          },
+        }),
         client: {
           auth: {
             signUp: signUpMock,
@@ -127,9 +143,20 @@ describe('AuthService', () => {
       redis as unknown as RedisService,
       audit as unknown as AuditLoggingService,
       config as unknown as ConfigService,
-      resend as unknown as ResendService,
-      { approve: jest.fn().mockResolvedValue(undefined), attempt: jest.fn(), setup: jest.fn().mockResolvedValue({ factorId: 'factor-1', secret: 'secret', qrCode: 'qr', uri: 'uri' }), assertSession: jest.fn().mockResolvedValue(undefined) } as never,
-      { verifyToken: jest.fn().mockResolvedValue({ payload: { sub: mockUserId, session_id: 'session-1' } }) } as never,
+      resend as unknown as EmailDeliveryService,
+      {
+        approve: jest.fn().mockResolvedValue(undefined),
+        attempt: jest.fn(),
+        setup: jest
+          .fn()
+          .mockResolvedValue({ factorId: 'factor-1', secret: 'secret', qrCode: 'qr', uri: 'uri' }),
+        assertSession: jest.fn().mockResolvedValue(undefined),
+      } as never,
+      {
+        verifyToken: jest
+          .fn()
+          .mockResolvedValue({ payload: { sub: mockUserId, session_id: 'session-1' } }),
+      } as never,
     );
   });
 
@@ -175,6 +202,7 @@ describe('AuthService', () => {
             profile: {
               create: profileCreate,
             },
+            platformSubscription: { create: jest.fn().mockResolvedValue({}) },
           });
         },
       );
@@ -547,11 +575,17 @@ describe('AuthService', () => {
 
   describe('forgotPassword', () => {
     it('should call Supabase resetPasswordForEmail', async () => {
-      resetPasswordForEmailMock.mockResolvedValue({ data: { properties: { hashed_token: 'recovery-hash' } }, error: null });
+      resetPasswordForEmailMock.mockResolvedValue({
+        data: { properties: { hashed_token: 'recovery-hash' } },
+        error: null,
+      });
 
       await service.forgotPassword('pastor@gracecommunity.com');
 
-      expect(resetPasswordForEmailMock).toHaveBeenCalledWith({ type: 'recovery', email: 'pastor@gracecommunity.com' });
+      expect(resetPasswordForEmailMock).toHaveBeenCalledWith({
+        type: 'recovery',
+        email: 'pastor@gracecommunity.com',
+      });
       expect(resend.sendEmail).toHaveBeenCalled();
     });
 
@@ -569,7 +603,10 @@ describe('AuthService', () => {
 
   describe('resetPassword', () => {
     it('should update password successfully', async () => {
-      getUserByIdMock.mockResolvedValue({ data: { user: { id: mockUserId }, session: { access_token: 'recovery-session' } }, error: null });
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId }, session: { access_token: 'recovery-session' } },
+        error: null,
+      });
       updateUserMock.mockResolvedValue({ error: null });
 
       await expect(
@@ -580,7 +617,10 @@ describe('AuthService', () => {
     });
 
     it('should throw BadRequestException if token is invalid', async () => {
-      getUserByIdMock.mockResolvedValue({ data: { user: null, session: null }, error: { message: 'Expired' } });
+      getUserByIdMock.mockResolvedValue({
+        data: { user: null, session: null },
+        error: { message: 'Expired' },
+      });
       updateUserMock.mockResolvedValue({
         error: { message: 'Token expired', status: 401 },
       });
@@ -599,7 +639,10 @@ describe('AuthService', () => {
         data: { user: { id: mockUserId, email: 'pastor@church.com' } },
         error: null,
       });
-      signInMock.mockResolvedValue({ data: { session: { access_token: 'verified-password-token' } }, error: null });
+      signInMock.mockResolvedValue({
+        data: { session: { access_token: 'verified-password-token' } },
+        error: null,
+      });
       adminUpdateUserByIdMock.mockResolvedValue({ error: null });
 
       await expect(
@@ -656,7 +699,10 @@ describe('AuthService', () => {
         data: { user: { id: mockUserId, email: 'pastor@church.com' } },
         error: null,
       });
-      signInMock.mockResolvedValue({ data: { session: { access_token: 'verified-password-token' } }, error: null });
+      signInMock.mockResolvedValue({
+        data: { session: { access_token: 'verified-password-token' } },
+        error: null,
+      });
       adminUpdateUserByIdMock.mockResolvedValue({
         error: { message: 'Update failed' },
       });

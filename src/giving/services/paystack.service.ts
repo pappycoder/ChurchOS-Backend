@@ -139,6 +139,7 @@ export class PaystackService implements PaymentGatewayProvider {
     amount: number,
     reference: string,
     metadata?: Record<string, unknown>,
+    options?: { callbackUrl?: string },
   ): Promise<PaymentInitializeResult> {
     if (!this.isConfigured()) {
       throw new BadRequestException('Paystack is not configured. Set PAYSTACK_SECRET_KEY.');
@@ -157,6 +158,7 @@ export class PaystackService implements PaymentGatewayProvider {
     if (metadata) {
       body.metadata = metadata;
     }
+    if (options?.callbackUrl) body.callback_url = options.callbackUrl;
 
     const result = await this.request<PaystackInitializeResponse>(
       `${this.baseUrl}/transaction/initialize`,

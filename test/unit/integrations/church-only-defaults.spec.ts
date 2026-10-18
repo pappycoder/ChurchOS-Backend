@@ -1,9 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { IntegrationAccountsService } from '../../../src/integrations/integration-accounts.service';
-import { MessagingCredentialsService } from '../../../src/messaging-integrations/messaging-credentials.service';
-import { ResendService } from '../../../src/communication/resend.service';
-import { TermiiService } from '../../../src/communication/termii.service';
+import { EmailDeliveryService } from '../../../src/communication/email-delivery.service';
+import { MessagingDeliveryService } from '../../../src/communication/messaging-delivery.service';
 import { PaymentAccountsService } from '../../../src/giving/services/payment-accounts.service';
 import { CHANNELS } from '../../../src/integrations/provider-catalog';
 import { BroadcastService } from '../../../src/broadcast/broadcast.service';
@@ -12,7 +11,6 @@ import { GivingService } from '../../../src/giving/giving.service';
 describe('Church-owned integration defaults', () => {
   const config = new ConfigService({
     INTEGRATIONS_ENCRYPTION_KEY: 'ab'.repeat(32),
-    MESSAGING_ENCRYPTION_KEY: 'ab'.repeat(32),
     RESEND_API_KEY: 'organization-email-key',
     RESEND_FROM: 'organization@example.org',
     TERMII_API_KEY: 'organization-sms-key',
@@ -21,9 +19,8 @@ describe('Church-owned integration defaults', () => {
   let prisma: Record<string, { [key: string]: jest.Mock }>;
   let transport: { deliver: jest.Mock };
   let accounts: IntegrationAccountsService;
-  let credentials: MessagingCredentialsService;
-  let email: ResendService;
-  let sms: TermiiService;
+  let email: EmailDeliveryService;
+  let sms: MessagingDeliveryService;
   let fetcher: jest.SpyInstance;
   beforeEach(() => {
     prisma = {
@@ -33,7 +30,6 @@ describe('Church-owned integration defaults', () => {
         upsert: jest.fn(),
       },
       integrationAccount: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-      messagingIntegration: { findUnique: jest.fn().mockResolvedValue(null) },
       message: { create: jest.fn().mockResolvedValue({ id: 'message-id' }) },
     };
     transport = { deliver: jest.fn().mockResolvedValue('provider-id') };
@@ -43,12 +39,9 @@ describe('Church-owned integration defaults', () => {
       { log: jest.fn() } as never,
       transport as never,
     );
-    credentials = new MessagingCredentialsService(prisma as never, config, {
-      log: jest.fn(),
-    } as never);
     const moduleRef = { get: jest.fn() } as unknown as ModuleRef;
-    email = new ResendService(prisma as never, moduleRef, credentials, accounts);
-    sms = new TermiiService(prisma as never, moduleRef, credentials, accounts);
+    email = new EmailDeliveryService(prisma as never, moduleRef, config, accounts);
+    sms = new MessagingDeliveryService(prisma as never, accounts);
     fetcher = jest
       .spyOn(global, 'fetch')
       .mockResolvedValue(
@@ -57,9 +50,9 @@ describe('Church-owned integration defaults', () => {
   });
 
   it.each(CHANNELS)(
-    'blocks unconfigured, disabled and old platform-mode %s even when environment keys exist',
+    'blocks unconfigured and disabled %s even when environment keys exist',
     async (kind) => {
-      for (const row of [null, { mode: 'platform' }, { mode: 'disabled' }]) {
+      for (const row of [null, { mode: 'disabled' }]) {
         prisma.integrationChannel.findUnique.mockResolvedValue(row);
         await expect(accounts.resolve('church-a', kind)).rejects.toThrow('disabled');
       }
@@ -121,9 +114,9 @@ describe('Church-owned integration defaults', () => {
     expect(prisma.message.create).not.toHaveBeenCalled();
   });
 
-  it('rejects tenant platform mode and reports every unconfigured channel as disabled', async () => {
+  it('rejects unsupported channel modes and reports every unconfigured channel as disabled', async () => {
     await expect(
-      accounts.configure('church-a', 'email', { mode: 'platform' }, 'admin'),
+      accounts.configure('church-a', 'email', { mode: 'invalid' } as never, 'admin'),
     ).rejects.toThrow('Invalid channel mode');
     expect(prisma.integrationChannel.upsert).not.toHaveBeenCalled();
     const settings = await accounts.list('church-a');
@@ -131,15 +124,17 @@ describe('Church-owned integration defaults', () => {
     expect(settings.channels.every((item) => item.mode === 'disabled')).toBe(true);
   });
 
-  it('blocks new organization-funded church payments while preserving historical verification', async () => {
+  it('blocks new organization-funded church payments and rejects unbound payments', async () => {
     const platform = {
       isConfigured: jest.fn().mockReturnValue(true),
       initializeTransaction: jest.fn(),
     };
-    const payments = new PaymentAccountsService(accounts, platform as never, platform as never);
+    const payments = new PaymentAccountsService(accounts, config);
     await expect(payments.current('church-a', 'paystack')).rejects.toThrow('disabled');
     expect(platform.initializeTransaction).not.toHaveBeenCalled();
-    expect(await payments.historical('church-a', 'paystack', null)).toBe(platform);
+    await expect(payments.historical('church-a', 'paystack', null)).rejects.toThrow(
+      'account is required',
+    );
   });
 
   it('rejects church checkout before creating a pending payment', async () => {
@@ -147,7 +142,7 @@ describe('Church-owned integration defaults', () => {
       isConfigured: jest.fn().mockReturnValue(true),
       initializeTransaction: jest.fn(),
     };
-    const payments = new PaymentAccountsService(accounts, platform as never, platform as never);
+    const payments = new PaymentAccountsService(accounts, config);
     const service = new GivingService(
       prisma as never,
       {} as never,

@@ -11,7 +11,7 @@
 
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ResendService } from '../communication/resend.service';
+import { EmailDeliveryService } from '../communication/email-delivery.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { NotificationResponseDto } from './dto/notification-response.dto';
 import { Prisma } from '@prisma/client';
@@ -22,7 +22,7 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly resendService?: ResendService,
+    private readonly resendService?: EmailDeliveryService,
     private readonly whatsappService?: WhatsAppService,
   ) {}
 

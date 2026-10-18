@@ -1,6 +1,6 @@
 /**
  * @file whatsapp.module.ts
- * @description WhatsApp Business API integration module (delivery via Termii).
+ * @description WhatsApp messaging module using church-specific provider accounts.
  *
  * @module whatsapp/whatsapp.module
  * @since 1.0.0

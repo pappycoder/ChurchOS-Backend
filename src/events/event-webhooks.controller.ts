@@ -8,7 +8,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   BadRequestException,
   Controller,
-  Optional,
   Headers,
   HttpCode,
   HttpStatus,
@@ -34,8 +33,8 @@ export class EventWebhooksController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly paystack: PaystackService,
-    @Optional() private readonly paymentAccounts?: PaymentAccountsService,
-    @Optional() private readonly prisma?: PrismaService,
+    private readonly paymentAccounts: PaymentAccountsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post(':eventId/webhook/paystack')
@@ -57,23 +56,17 @@ export class EventWebhooksController {
       throw new BadRequestException('Missing raw webhook payload');
     }
 
-    if (
-      !signature ||
-      (!this.paymentAccounts && !this.paystack.validateWebhookSignature(rawBody, signature))
-    )
-      throw new UnauthorizedException('Invalid Paystack webhook signature');
+    if (!signature) throw new UnauthorizedException('Invalid Paystack webhook signature');
     const parsed = this.paystack.parseWebhookEvent(rawBody);
-    const transaction = this.prisma
-      ? await this.prisma.transaction.findFirst({ where: { payment_reference: parsed.reference } })
-      : null;
-    const signer =
-      transaction && this.paymentAccounts
-        ? await this.paymentAccounts.historical(
-            transaction.church_id,
-            'paystack',
-            transaction.integration_account_id,
-          )
-        : this.paystack;
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { payment_reference: parsed.reference },
+    });
+    if (!transaction) return { received: true };
+    const signer = await this.paymentAccounts.historical(
+      transaction.church_id,
+      'paystack',
+      transaction.integration_account_id,
+    );
     if (!signer.validateWebhookSignature(rawBody, signature || '')) {
       throw new UnauthorizedException('Invalid Paystack webhook signature');
     }

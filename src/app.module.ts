@@ -20,7 +20,7 @@
  */
 
 import { IntegrationsModule } from './integrations/integrations.module';
-import { MessagingIntegrationsModule } from './messaging-integrations/messaging-integrations.module';
+import { BillingModule } from './billing/billing.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
@@ -79,7 +79,6 @@ import { PermissionsModule } from './auth/permissions.module';
  */
 @Module({
   imports: [
-    MessagingIntegrationsModule,
     IntegrationsModule,
     // Configure ConfigModule for environment variable management.
     // - isGlobal: true → Makes ConfigService injectable in any module without
@@ -214,6 +213,7 @@ import { PermissionsModule } from './auth/permissions.module';
 
     // Import DeveloperGuideModule for the developer integration guide.
     DeveloperGuideModule,
+    BillingModule,
   ],
   controllers: [],
   providers: [

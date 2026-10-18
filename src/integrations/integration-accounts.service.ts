@@ -28,7 +28,7 @@ export interface ResolvedIntegration extends ProviderAccountSecret {
   settings: Record<string, string>;
 }
 export interface ChannelInput {
-  mode: 'platform' | 'custom' | 'disabled';
+  mode: 'custom' | 'disabled';
   provider?: string;
   accountId?: string;
   settings?: Record<string, string>;
@@ -52,9 +52,7 @@ export class IntegrationAccountsService {
     private readonly transport: ProviderTransportService,
   ) {}
   private key() {
-    const value =
-      this.config.get<string>('INTEGRATIONS_ENCRYPTION_KEY') ||
-      this.config.get<string>('MESSAGING_ENCRYPTION_KEY');
+    const value = this.config.get<string>('INTEGRATIONS_ENCRYPTION_KEY');
     if (!value || !/^[a-fA-F0-9]{64}$/.test(value))
       throw new ServiceUnavailableException('Integration encryption is not configured');
     return Buffer.from(value, 'hex');

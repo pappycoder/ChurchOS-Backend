@@ -1,3 +1,4 @@
+import { SubscriptionPlan, BillingCycle } from '@prisma/client';
 /**
  * @file register.dto.ts
  * @description DTO for user registration endpoint.
@@ -9,10 +10,30 @@
  * @since 1.0.0
  */
 
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  churchAddress?: string;
+  @IsOptional()
+  @IsIn([SubscriptionPlan.essentials, SubscriptionPlan.community, SubscriptionPlan.network])
+  plan?: Exclude<SubscriptionPlan, 'enterprise'>;
+  @IsOptional()
+  @IsEnum(BillingCycle)
+  billingCycle?: BillingCycle;
+
   @ApiProperty({
     description: 'Admin email address',
     example: 'pastor@demo.com',

@@ -804,6 +804,10 @@ describe('GivingService', () => {
 
     it('should reject invalid webhook signature', async () => {
       paystack.validateWebhookSignature.mockReturnValue(false);
+      model('transaction').findFirst.mockResolvedValue({
+        ...mockTransaction,
+        integration_account_id: 'church-payment-account',
+      });
 
       await expect(service.handleWebhook('{}', 'invalid-signature', 'paystack')).rejects.toThrow(
         BadRequestException,

@@ -11,7 +11,7 @@
 import { WhatsAppOutboundProcessor } from '../../../src/queues/processors/whatsapp-outbound.processor';
 import { WhatsAppService } from '../../../src/whatsapp/whatsapp.service';
 import { ConfigService } from '@nestjs/config';
-import { TermiiService } from '../../../src/communication/termii.service';
+import { MessagingDeliveryService } from '../../../src/communication/messaging-delivery.service';
 import { Job } from 'bullmq';
 
 describe('WhatsAppOutboundProcessor', () => {
@@ -28,7 +28,7 @@ describe('WhatsAppOutboundProcessor', () => {
     processor = new WhatsAppOutboundProcessor(
       whatsappService as unknown as WhatsAppService,
       configService as unknown as ConfigService,
-      termiiService as unknown as TermiiService,
+      termiiService as unknown as MessagingDeliveryService,
     );
   });
 
