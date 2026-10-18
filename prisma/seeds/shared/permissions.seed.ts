@@ -54,7 +54,8 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
   {
     name: 'usher',
-    description: 'Treasurer access plus service and attendance management, records and reports',
+    description:
+      'Treasurer access plus service/event creation, attendance, check-in, records and reports',
   },
   {
     name: 'cell_leader',
@@ -446,6 +447,16 @@ RAW_DEFAULT_PERMISSION_MATRIX.usher = [
   'attendance:read',
   'attendance:update',
   'attendance:delete',
+  // Event setup and attendance without unrelated event deletion or ticket writes.
+  'events:create',
+  'events:all:read',
+  'events:registrations:read',
+  'events:checkin:create',
+  'events:checkin:read',
+  'events:checkin:update',
+  // The check-in form registers first-time visitors before recording attendance.
+  'visitors:new:create',
+  'visitors:list:read',
   'reports:attendance:read',
   'analytics:attendance:read',
 ];

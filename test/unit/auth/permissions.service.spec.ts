@@ -218,7 +218,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v22:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v23:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -410,7 +410,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v22:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v23:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {
