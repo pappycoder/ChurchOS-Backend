@@ -44,5 +44,5 @@ Provider contracts: [Paystack verification](https://paystack.com/docs/payments/v
 - Backend: production build and scoped lint pass; 1,510 unit tests across 82 suites pass.
 - Fresh local PostgreSQL: the complete migration chain and all 126 database/HTTP tests across 12 suites pass; the temporary database was stopped afterward. No deployed data was changed.
 - Frontend: production build, TypeScript and scoped lint pass; all 308 Vitest tests pass. The navigation/control audit reports no issues.
-- Production-browser fixtures: 36 auth/marketing/integration checks pass, including responsive screenshots, seeded login visibility, MFA/recovery, password reset, registration, checkout and consolidated provider settings. The final cosmetic login cleanup is checked separately.
+- Production-browser fixtures: 36 auth/marketing/integration checks pass, including responsive screenshots, seeded login visibility, MFA/recovery, password reset, registration, checkout and consolidated provider settings. All 17 auth checks also pass after the final login cleanup, which removes an unused Remember Me control and duplicate copyright and aligns the recovery link with the teal theme.
 - Provider calls are fixtures. Real merchant acceptance on the deployed origins remains a deployment step. Plan capacity/feature quotas and automated renewals/refunds are separate work.
