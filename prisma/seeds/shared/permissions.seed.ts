@@ -219,7 +219,7 @@ export function expandPermissions(base: string[]): string[] {
 // from the coarse grants — so per-role visible menus never change.
 // `super_admin` is handled separately (always ALL permissions, locked).
 
-// Pastors can use every operational page. Church configuration, branch
+// Pastors can use operational pages. Analytics, church configuration, branch
 // creation and church-wide account/permission administration stay admin-only.
 const pastorPermissions = generateAllPermissions()
   .map((permission) => permission.name)
@@ -229,6 +229,7 @@ const pastorPermissions = generateAllPermissions()
       resource === 'church_settings' ||
       resource === 'messaging_integrations' ||
       resource === 'integrations' ||
+      resource === 'analytics' ||
       resource === 'data_scope'
     )
       return false;
@@ -384,8 +385,6 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'media:read',
     'profiles:read',
     'church:read',
-    // Analytics — giving only
-    'analytics:giving:read',
     // Inbox access includes composing messages.
     'emails:read',
     'emails:create',
@@ -462,7 +461,6 @@ RAW_DEFAULT_PERMISSION_MATRIX.usher = [
   'visitors:new:create',
   'visitors:list:read',
   'reports:attendance:read',
-  'analytics:attendance:read',
 ];
 
 // Every role's effective grants = coarse matrix + derived hierarchical grants.

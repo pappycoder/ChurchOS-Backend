@@ -56,12 +56,7 @@ const contracts: Record<string, { allow: string[]; deny: string[] }> = {
     ],
   },
   treasurer: {
-    allow: [
-      'giving:records:create',
-      'assets:list:delete',
-      'reports:financial:read',
-      'analytics:giving:read',
-    ],
+    allow: ['giving:records:create', 'assets:list:delete', 'reports:financial:read'],
     deny: [
       'members:all:read',
       'attendance:services:create',
@@ -138,6 +133,43 @@ function context(profile: unknown): ExecutionContext {
 }
 
 const cases = DEFAULT_ROLES.flatMap(({ name }) => [false, true].map((hq) => ({ role: name, hq })));
+
+describe('Analytics administrator-only defaults', () => {
+  it.each(cases)(
+    '$role (HQ=$hq) is checked at every analytics API permission',
+    async ({ role, hq }) => {
+      const service = resolver();
+      for (const surface of [
+        'dashboard',
+        'giving',
+        'attendance',
+        'members',
+        'events',
+        'communication',
+      ]) {
+        const guard = new PermissionsGuard(
+          { getAllAndOverride: () => [`analytics:${surface}:read`] } as unknown as Reflector,
+          service,
+          {} as never,
+        );
+        const request = context({ church_id: 'church', role, roles: [role], is_admin_hq: hq });
+        if (['church_admin', 'super_admin'].includes(role))
+          await expect(guard.canActivate(request)).resolves.toBe(true);
+        else await expect(guard.canActivate(request)).rejects.toThrow(ForbiddenException);
+      }
+    },
+  );
+
+  it.each(DEFAULT_ROLES.map((role) => role.name))('keeps analytics exclusive for %s', (role) => {
+    const grants =
+      role === 'super_admin'
+        ? generateAllPermissions().map((permission) => permission.name)
+        : DEFAULT_PERMISSION_MATRIX[role];
+    expect(grants.some((permission) => permission.startsWith('analytics:'))).toBe(
+      ['church_admin', 'super_admin'].includes(role),
+    );
+  });
+});
 
 describe('All built-in roles × branch/HQ authorization', () => {
   it('has an explicit allow/deny contract for every seeded role', () => {

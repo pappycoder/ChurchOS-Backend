@@ -218,7 +218,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v24:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v25:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -296,6 +296,54 @@ describe('PermissionsService', () => {
   // ─── Resolution & caching ─────────────────────────────────
 
   describe('getUserPermissions', () => {
+    it.each([
+      'senior_pastor',
+      'branch_pastor',
+      'secretary',
+      'treasurer',
+      'usher',
+      'department_head',
+      'cell_leader',
+      'member',
+      'custom_admin',
+    ])('reserves every analytics permission from %s despite overrides and HQ', async (role) => {
+      const analytics = [
+        'analytics:view',
+        'analytics:read',
+        'analytics:dashboard:read',
+        'analytics:giving:read',
+        'analytics:attendance:read',
+        'analytics:members:read',
+        'analytics:events:read',
+        'analytics:communication:read',
+      ];
+      jest
+        .spyOn(service, 'getPermissionsForRole')
+        .mockResolvedValue(['members:read', ...analytics]);
+      for (const hq of [false, true])
+        expect(await service.getUserPermissions(churchId, [role, 'custom_analytics'], hq)).toEqual([
+          'members:read',
+        ]);
+    });
+    it.each(['church_admin', 'super_admin'])(
+      'preserves analytics for %s in mixed-role accounts',
+      async (role) => {
+        const analytics = [
+          'analytics:view',
+          'analytics:dashboard:read',
+          'analytics:giving:read',
+          'analytics:attendance:read',
+          'analytics:members:read',
+          'analytics:events:read',
+          'analytics:communication:read',
+        ];
+        prisma.permission.findMany.mockResolvedValue(analytics.map((name) => ({ name })));
+        expect(await service.getUserPermissions(churchId, ['usher', role], true)).toEqual(
+          analytics,
+        );
+      },
+    );
+
     it.each([
       'senior_pastor',
       'branch_pastor',
@@ -410,7 +458,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v24:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v25:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {

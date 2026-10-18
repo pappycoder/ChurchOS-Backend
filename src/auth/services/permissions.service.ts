@@ -34,7 +34,7 @@ import { RolePermission } from '@prisma/client';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v24:';
+const CACHE_PREFIX = 'perms:v25:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -177,6 +177,7 @@ export class PermissionsService {
           permission.startsWith('church_settings:') ||
           permission.startsWith('messaging_integrations:') ||
           permission.startsWith('integrations:') ||
+          permission.startsWith('analytics:') ||
           permission === 'branches:create' ||
           permission === 'data_scope:church:read'
         ) {

@@ -57,9 +57,11 @@ describe('Usher role', () => {
         'attendance:dashboard:read',
         'attendance:reports:read',
         'reports:attendance:read',
-        'analytics:attendance:read',
       ]),
     );
+    expect(
+      DEFAULT_PERMISSION_MATRIX.usher.some((permission) => permission.startsWith('analytics:')),
+    ).toBe(false);
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('visitors:list:delete');
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('church_settings:update');
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('branches:create');
