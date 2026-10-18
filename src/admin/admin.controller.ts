@@ -42,6 +42,7 @@ import {
   AuthenticatedRequest,
 } from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
+import { BulkMeetingAttendanceDto } from './dto/bulk-meeting-attendance.dto';
 import { ScoringService } from '../pastoral/scoring.service';
 import {
   CreateDepartmentDto,
@@ -466,6 +467,24 @@ export class AdminController {
     );
   }
 
+  @Post('departments/:departmentId/attendance/bulk')
+  @RequirePermissions('departments:update')
+  async bulkDepartmentAttendance(
+    @Param('departmentId') departmentId: string,
+    @Body() dto: BulkMeetingAttendanceDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.adminService.recordMeetingRoster(
+      'department',
+      departmentId,
+      dto,
+      req.profile!.church_id,
+      user.sub,
+      req.profile,
+    );
+  }
+
   @Post('departments/:departmentId/attendance')
   @RequirePermissions('departments:update')
   async recordDepartmentAttendance(
@@ -552,6 +571,24 @@ export class AdminController {
   /**
    * Records attendance for a cell group meeting.
    */
+  @Post('cell-groups/:groupId/attendance/bulk')
+  @RequirePermissions('cell_groups:create')
+  async bulkCellGroupAttendance(
+    @Param('groupId') groupId: string,
+    @Body() dto: BulkMeetingAttendanceDto,
+    @CurrentUser() user: SupabaseUser,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.adminService.recordMeetingRoster(
+      'cell_group',
+      groupId,
+      dto,
+      req.profile!.church_id,
+      user.sub,
+      req.profile,
+    );
+  }
+
   @Post('cell-groups/:groupId/attendance')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('cell_groups:create')

@@ -47,9 +47,9 @@ describe('AdminController permission decorators', () => {
     const cgDelete = source.match(/@RequirePermissions\('cell_groups:delete'\)/g)?.length ?? 0;
     expect(depCreate).toBe(1);
     expect(depRead).toBe(3);
-    expect(depUpdate).toBe(6);
+    expect(depUpdate).toBe(7);
     expect(depDelete).toBe(1);
-    expect(cgCreate).toBe(3);
+    expect(cgCreate).toBe(4);
     expect(cgRead).toBe(4);
     expect((source.match(/@RequirePermissions\('cell_groups:details:read'\)/g) || []).length).toBe(
       3,

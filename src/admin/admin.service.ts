@@ -28,6 +28,7 @@ import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
 import { RecordDepartmentAttendanceDto } from './dto/department-attendance.dto';
+import { BulkMeetingAttendanceDto } from './dto/bulk-meeting-attendance.dto';
 import { CreateDepartmentDto, AddDepartmentMemberDto } from './dto/create-department.dto';
 import { CreateCellGroupDto } from './dto/create-cell-group.dto';
 import { ListCellGroupsDto } from './dto/list-cell-groups.dto';
@@ -1529,6 +1530,130 @@ export class AdminService {
       status: record.status,
       notes: record.notes,
     }));
+  }
+
+  async recordMeetingRoster(
+    type: 'department' | 'cell_group',
+    contextId: string,
+    dto: BulkMeetingAttendanceDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ) {
+    viewer ??= this.requestContext.getStore()?.viewer;
+    const ids = [...new Set(dto.memberIds)];
+    const date = new Date(dto.meetingDate);
+    if (
+      !ids.length ||
+      ids.length > 200 ||
+      Number.isNaN(date.getTime()) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(dto.meetingDate) ||
+      date.toISOString().slice(0, 10) !== dto.meetingDate ||
+      !['present', 'late', 'absent', 'excused'].includes(dto.status)
+    ) {
+      throw new BadRequestException('Select 1–200 members and a valid meeting date and status');
+    }
+    const parent =
+      type === 'department'
+        ? await this.getDepartmentById(contextId, churchId, viewer)
+        : await this.getCellGroupById(contextId, churchId, viewer);
+    if (parent.archivedAt)
+      throw new BadRequestException('Cannot record attendance for an archived meeting');
+    if (type === 'department') {
+      this.assertDepartmentHeadOwnership(viewer, {
+        head_member_id: 'headMemberId' in parent ? (parent.headMemberId ?? null) : null,
+      });
+    } else {
+      this.assertCellLeaderOwnership(viewer, {
+        leader_id: 'leaderId' in parent ? (parent.leaderId ?? null) : null,
+      });
+    }
+    const memberWhere = {
+      id: { in: ids },
+      church_id: churchId,
+      ...(parent.branchId
+        ? { branch_id: parent.branchId }
+        : this.branchScope.isBranchRestricted(viewer)
+          ? { branch_id: viewer!.branch_id! }
+          : {}),
+    };
+    // Validate the entire selection before starting any writes. A roster is
+    // limited to actual members of this department/group, even for HQ staff.
+    const memberships =
+      type === 'department'
+        ? await this.prisma.departmentMember.findMany({
+            where: { department_id: contextId, member: memberWhere },
+            select: { member_id: true },
+          })
+        : await this.prisma.cellGroupMember.findMany({
+            where: { cell_group_id: contextId, member: memberWhere },
+            select: { member_id: true },
+          });
+    if (memberships.length !== ids.length)
+      throw new NotFoundException('One or more members are outside this meeting roster');
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      type,
+      contextId,
+      churchId,
+      date,
+      parent.branchId,
+      viewer,
+    );
+    const values = {
+      status: dto.status,
+      notes: dto.notes?.trim() || null,
+      ...(sessionId ? { session_id: sessionId } : {}),
+    };
+    // Two set-based writes per batch, rather than one database round trip per member.
+    // Existing member/date records are corrected; new records are inserted once.
+    if (type === 'department') {
+      await this.prisma.$transaction([
+        this.prisma.departmentAttendance.createMany({
+          data: ids.map((memberId) => ({
+            department_id: contextId,
+            member_id: memberId,
+            meeting_date: date,
+            ...values,
+          })),
+          skipDuplicates: true,
+        }),
+        this.prisma.departmentAttendance.updateMany({
+          where: { department_id: contextId, member_id: { in: ids }, meeting_date: date },
+          data: values,
+        }),
+      ]);
+    } else {
+      await this.prisma.$transaction([
+        this.prisma.cellGroupAttendance.createMany({
+          data: ids.map((memberId) => ({
+            cell_group_id: contextId,
+            member_id: memberId,
+            meeting_date: date,
+            ...values,
+          })),
+          skipDuplicates: true,
+        }),
+        this.prisma.cellGroupAttendance.updateMany({
+          where: { cell_group_id: contextId, member_id: { in: ids }, meeting_date: date },
+          data: values,
+        }),
+      ]);
+    }
+    await this.audit.log({
+      churchId,
+      userId,
+      action: 'CREATE',
+      entity: `${type}_attendance`,
+      entityId: contextId,
+      newValues: {
+        memberIds: ids,
+        meetingDate: dto.meetingDate,
+        status: dto.status,
+        count: ids.length,
+      },
+    });
+    return { recorded: ids.length };
   }
 
   async recordDepartmentAttendance(

@@ -93,6 +93,7 @@ describe('Shared attendance sessions with PostgreSQL', () => {
         where: { department: { church_id: church } },
       });
       await prisma.cellGroupAttendance.deleteMany({ where: { cell_group: { church_id: church } } });
+      await prisma.cellGroupMember.deleteMany({ where: { cell_group: { church_id: church } } });
       await prisma.departmentMember.deleteMany({ where: { department: { church_id: church } } });
       await prisma.department.deleteMany({ where: { church_id: church } });
       await prisma.cellGroup.deleteMany({ where: { church_id: church } });
@@ -240,4 +241,48 @@ describe('Shared attendance sessions with PostgreSQL', () => {
       ).rejects.toThrow();
     }
   });
+  it.each(['department', 'cell_group'] as const)(
+    'bulk %s attendance inserts, corrects duplicates and rejects outside members atomically',
+    async (type) => {
+      const id = type === 'department' ? dept : group;
+      if (type === 'department')
+        await prisma.departmentMember.create({ data: { department_id: id, member_id: owner } });
+      else
+        await prisma.cellGroupMember.createMany({
+          data: [member, owner].map((member_id) => ({ cell_group_id: id, member_id })),
+        });
+      const batch = { memberIds: [member, owner], meetingDate: '2026-10-21', status: 'present' };
+      await admin.recordMeetingRoster(type, id, batch, church, user, viewer);
+      await admin.recordMeetingRoster(type, id, { ...batch, status: 'late' }, church, user, viewer);
+      const rows =
+        type === 'department'
+          ? await prisma.departmentAttendance.findMany({
+              where: { department_id: id, meeting_date: new Date(batch.meetingDate) },
+            })
+          : await prisma.cellGroupAttendance.findMany({
+              where: { cell_group_id: id, meeting_date: new Date(batch.meetingDate) },
+            });
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row) => row.status === 'late')).toBe(true);
+      await expect(
+        admin.recordMeetingRoster(
+          type,
+          id,
+          { ...batch, memberIds: [member, randomUUID()], status: 'absent' },
+          church,
+          user,
+          viewer,
+        ),
+      ).rejects.toThrow('outside');
+      const unchanged =
+        type === 'department'
+          ? await prisma.departmentAttendance.findMany({
+              where: { department_id: id, meeting_date: new Date(batch.meetingDate) },
+            })
+          : await prisma.cellGroupAttendance.findMany({
+              where: { cell_group_id: id, meeting_date: new Date(batch.meetingDate) },
+            });
+      expect(unchanged.every((row) => row.status === 'late')).toBe(true);
+    },
+  );
 });
