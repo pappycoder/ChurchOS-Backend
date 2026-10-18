@@ -55,7 +55,7 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   {
     name: 'usher',
     description:
-      'Treasurer access plus service/event creation, attendance, check-in, records and reports',
+      'Treasurer access plus service/event management, attendance, check-in, records and reports',
   },
   {
     name: 'cell_leader',
@@ -447,8 +447,12 @@ RAW_DEFAULT_PERMISSION_MATRIX.usher = [
   'attendance:read',
   'attendance:update',
   'attendance:delete',
-  // Event setup and attendance without unrelated event deletion or ticket writes.
+  // Full event operations, still subject to church/branch visibility and history safeguards.
   'events:create',
+  'events:read',
+  'events:update',
+  'events:delete',
+  'events:ticket-records:read',
   'events:all:read',
   'events:registrations:read',
   'events:checkin:create',

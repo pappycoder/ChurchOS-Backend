@@ -35,6 +35,15 @@ describe('Usher role', () => {
         'attendance:records:read',
         'attendance:records:update',
         'events:create',
+        'events:read',
+        'events:update',
+        'events:delete',
+        'events:tickets:create',
+        'events:tickets:read',
+        'events:tickets:update',
+        'events:tickets:delete',
+        'events:ticket-records:read',
+        'events:registrations:update',
         'events:view',
         'events:list:read',
         'events:all:read',
@@ -51,8 +60,6 @@ describe('Usher role', () => {
         'analytics:attendance:read',
       ]),
     );
-    expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('events:delete');
-    expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('events:update');
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('visitors:list:delete');
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('church_settings:update');
     expect(DEFAULT_PERMISSION_MATRIX.usher).not.toContain('branches:create');
