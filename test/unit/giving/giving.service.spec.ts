@@ -1477,6 +1477,7 @@ describe('GivingService', () => {
         id: mockChurchId,
         name: 'Grace Community Church',
         address: '12 Allen Avenue',
+        logo_url: 'https://storage.example.com/logo.webp',
       });
       model('member').findUnique.mockResolvedValue({
         id: mockMemberId,
@@ -1489,7 +1490,13 @@ describe('GivingService', () => {
 
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.filename).toContain('receipt-');
-      expect(receipt.generateReceipt).toHaveBeenCalled();
+      expect(receipt.generateReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          churchId: mockChurchId,
+          churchName: 'Grace Community Church',
+          churchLogoUrl: 'https://storage.example.com/logo.webp',
+        }),
+      );
     });
 
     it('should throw NotFoundException if transaction not found', async () => {

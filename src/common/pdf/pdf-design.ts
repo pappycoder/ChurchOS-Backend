@@ -1,12 +1,12 @@
 import { join } from 'path';
 
 export const PDF_COLORS = {
-  navy: '#14243C',
-  blue: '#2563EB',
-  ink: '#243449',
-  muted: '#64748B',
-  line: '#E2E8F0',
-  soft: '#F4F7FC',
+  navy: '#173D3E',
+  blue: '#526F4A',
+  ink: '#183B40',
+  muted: '#586D61',
+  line: '#D3DED2',
+  soft: '#F1F5E9',
   green: '#047857',
 };
 
@@ -19,18 +19,45 @@ export function preparePdf(doc: PDFKit.PDFDocument): void {
   doc.font('ChurchOSSans');
 }
 
-export function drawPdfHeader(doc: PDFKit.PDFDocument, label: string): void {
+export function drawPdfHeader(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  branding?: { name: string; logo?: Buffer },
+): void {
   const { x, y } = doc;
   doc.save();
   doc.rect(0, 0, doc.page.width, 112).fill(PDF_COLORS.navy);
-  doc.rect(0, 112, doc.page.width, 4).fill(PDF_COLORS.blue);
-  doc.image(asset('churchos-lockup-light.png'), 40, 16, { fit: [145, 80] });
+  doc.rect(0, 112, doc.page.width, 4).fill('#D6ED97');
+  if (branding) {
+    let textX = 50;
+    if (branding.logo) {
+      doc.roundedRect(40, 24, 64, 64, 6).fill('#FCFCF9');
+      doc.image(branding.logo, 45, 29, { fit: [54, 54], align: 'center', valign: 'center' });
+      textX = 118;
+    }
+    doc
+      .font('ChurchOSSans-Bold')
+      .fontSize(16)
+      .fillColor('#FFFFFF')
+      .text(branding.name, textX, 31, {
+        width: doc.page.width - textX - 185,
+        height: 48,
+        ellipsis: true,
+      });
+    doc
+      .font('ChurchOSSans')
+      .fontSize(8)
+      .fillColor('#D6ED97')
+      .text('Powered by ChurchOS', textX, 88, { lineBreak: false });
+  } else {
+    doc.image(asset('churchos-lockup-light.png'), 40, 16, { fit: [145, 80] });
+  }
   doc
     .font('ChurchOSSans-Bold')
     .fontSize(13)
     .fillColor('#FFFFFF')
-    .text(label.toUpperCase(), 280, 51, {
-      width: doc.page.width - 330,
+    .text(label.toUpperCase(), doc.page.width - 180, 51, {
+      width: 130,
       align: 'right',
       lineBreak: false,
     });
@@ -57,7 +84,7 @@ export function drawPdfFooters(doc: PDFKit.PDFDocument, generatedAt: Date): void
       .fontSize(8)
       .fillColor(PDF_COLORS.muted)
       .text(
-        `ChurchOS  ·  ${generatedAt.toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+        `Powered by ChurchOS  ·  ${generatedAt.toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' })}`,
         50,
         height - 43,
         { lineBreak: false },

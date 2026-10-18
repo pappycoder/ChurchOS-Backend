@@ -10,6 +10,8 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { loadChurchLogo } from '../../common/pdf/church-logo';
 import PDFDocument from 'pdfkit';
 import { randomBytes } from 'crypto';
 import {
@@ -31,6 +33,8 @@ export interface ReceiptTransactionData {
   paymentMethod: string;
   createdAt: Date;
   churchName: string;
+  churchId?: string;
+  churchLogoUrl?: string;
   churchAddress?: string;
   memberName?: string;
   memberEmail?: string;
@@ -43,6 +47,7 @@ export interface ReceiptTransactionData {
 @Injectable()
 export class ReceiptService {
   private readonly logger = new Logger(ReceiptService.name);
+  constructor(private readonly config: ConfigService) {}
 
   /**
    * Generates a PDF receipt for a transaction.
@@ -51,6 +56,15 @@ export class ReceiptService {
    * @returns PDF buffer
    */
   async generateReceipt(data: ReceiptTransactionData): Promise<Buffer> {
+    const branding = {
+      name: data.churchName,
+      logo: await loadChurchLogo(
+        data.churchLogoUrl,
+        data.churchId,
+        this.config.get<string>('SUPABASE_URL'),
+        this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'media'),
+      ),
+    };
     return new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({
@@ -60,6 +74,7 @@ export class ReceiptService {
           info: {
             Title: `Giving Receipt - ${data.receiptNumber}`,
             Author: data.churchName,
+            Creator: 'ChurchOS',
             Subject: 'Giving Receipt',
           },
         });
@@ -70,8 +85,8 @@ export class ReceiptService {
         doc.on('error', reject);
 
         preparePdf(doc);
-        drawPdfHeader(doc, 'Giving receipt');
-        doc.on('pageAdded', () => drawPdfHeader(doc, 'Giving receipt'));
+        drawPdfHeader(doc, 'Giving receipt', branding);
+        doc.on('pageAdded', () => drawPdfHeader(doc, 'Giving receipt', branding));
         const contentWidth = doc.page.width - 100;
         let y = 148;
 

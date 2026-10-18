@@ -1845,7 +1845,7 @@ export class GivingService {
     // Get church details
     const church = await this.prisma.church.findUnique({
       where: { id: churchId },
-      select: { name: true, address: true },
+      select: { name: true, address: true, logo_url: true },
     });
 
     // Get member name if available
@@ -1871,6 +1871,8 @@ export class GivingService {
       paymentMethod: transaction.payment_method || 'unknown',
       createdAt: transaction.created_at,
       churchName: church?.name || 'Church',
+      churchId,
+      churchLogoUrl: church?.logo_url || undefined,
       churchAddress: church?.address || undefined,
       memberName,
       memberEmail,
