@@ -21,6 +21,8 @@ import { CreateBroadcastDto } from './dto/create-broadcast.dto';
 import { ListBroadcastsDto } from './dto/list-broadcasts.dto';
 import { BroadcastResponseDto } from './dto/broadcast-response.dto';
 import { Prisma } from '@prisma/client';
+import { channel } from '../integrations/provider-catalog';
+import { IntegrationAccountsService } from '../integrations/integration-accounts.service';
 
 /**
  * Audience filter structure for broadcast recipient queries.
@@ -45,6 +47,7 @@ export class BroadcastService {
     @InjectQueue('whatsapp-outbound') private readonly whatsappQueue: Queue,
     @InjectQueue('sms-outbound') private readonly smsQueue: Queue,
     @InjectQueue('email-outbound') private readonly emailQueue: Queue,
+    private readonly integrations: IntegrationAccountsService,
   ) {}
 
   /**
@@ -81,6 +84,8 @@ export class BroadcastService {
     if (template.status !== 'published') {
       throw new BadRequestException('Template must be published before use in a broadcast');
     }
+
+    await this.integrations.resolve(churchId, dto.channel);
 
     const audienceFilter = (dto.audienceFilter ?? {}) as AudienceFilter;
     const recipients = await this.findRecipients(churchId, dto.channel, audienceFilter);
@@ -259,6 +264,8 @@ export class BroadcastService {
       this.logger.log(`Broadcast ${broadcastId} is ${broadcast.status}, skipping`);
       return;
     }
+
+    await this.integrations.resolve(churchId, channel(broadcast.channel));
 
     await this.prisma.broadcast.update({
       where: { id: broadcastId },

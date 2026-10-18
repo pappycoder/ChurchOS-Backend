@@ -173,10 +173,10 @@ describe('Encrypted church messaging credentials (PostgreSQL + HTTP)', () => {
       provider: string;
       mode: string;
     }[];
-    expect(statusB.find((row) => row.provider === 'resend')?.mode).toBe('platform');
+    expect(statusB.find((row) => row.provider === 'resend')?.mode).toBe('disabled');
     const resolver = app.get(MessagingCredentialsService);
     expect((await resolver.resolve(churchA, 'resend')).apiKey).toBe(secret);
-    expect((await resolver.resolve(churchB, 'resend')).apiKey).toBe('platform-account-key');
+    await expect(resolver.resolve(churchB, 'resend')).rejects.toThrow('disabled');
   });
   it('rejects mass-assignment, invalid provider/channel, and incomplete configurations', async () => {
     for (const body of [

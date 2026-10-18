@@ -1,7 +1,7 @@
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import type { MessagingMode } from './messaging-credentials.service';
 export class SaveMessagingIntegrationDto {
-  @IsIn(['platform', 'custom', 'disabled']) mode!: MessagingMode;
+  @IsIn(['custom', 'disabled']) mode!: MessagingMode;
   @IsOptional() @IsString() @MaxLength(512) apiKey?: string;
   @IsOptional() @IsIn(['https://api.termii.com', 'https://api.ng.termii.com']) baseUrl?: string;
   @IsOptional() @IsString() @MaxLength(254) from?: string;

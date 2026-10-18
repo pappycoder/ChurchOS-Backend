@@ -14,9 +14,10 @@ import { AuthModule } from '../auth/auth.module';
 import { QueuesModule } from '../queues/queues.module';
 import { BroadcastController } from './broadcast.controller';
 import { BroadcastService } from './broadcast.service';
+import { IntegrationAccountsModule } from '../integrations/integration-accounts.module';
 
 @Module({
-  imports: [AuthModule, forwardRef(() => QueuesModule)],
+  imports: [AuthModule, forwardRef(() => QueuesModule), IntegrationAccountsModule],
   controllers: [BroadcastController],
   providers: [BroadcastService],
   exports: [BroadcastService],

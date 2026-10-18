@@ -85,6 +85,7 @@ describe('GivingService - Recurring Giving', () => {
     frequency: 'monthly',
     payment_reference: null,
     authorization_code: 'AUTH_xxx',
+    integration_account_id: 'church-payment-account',
     is_active: true,
     next_charge_date: new Date('2026-08-20T10:00:00.000Z'),
     last_charge_date: null,
@@ -100,7 +101,9 @@ describe('GivingService - Recurring Giving', () => {
     paystack = {
       isConfigured: jest.fn().mockReturnValue(true),
       initializeTransaction: jest.fn(),
-      verifyTransaction: jest.fn(),
+      verifyTransaction: jest
+        .fn()
+        .mockResolvedValue({ amount: 5000, currency: 'NGN', status: 'success' }),
       validateWebhookSignature: jest.fn().mockReturnValue(true),
       parseWebhookEvent: jest.fn(),
       mapChannelToPaymentMethod: jest.fn().mockReturnValue('card'),
@@ -128,6 +131,14 @@ describe('GivingService - Recurring Giving', () => {
       new BranchScopeService(new RequestContextService()),
       {
         notify: jest.fn().mockResolvedValue(undefined),
+      } as never,
+      {
+        defaultGateway: jest.fn().mockResolvedValue('paystack'),
+        current: jest.fn().mockImplementation(async () => ({
+          provider: paystack,
+          accountId: 'church-payment-account',
+        })),
+        historical: jest.fn().mockImplementation(async () => paystack),
       } as never,
     );
   });

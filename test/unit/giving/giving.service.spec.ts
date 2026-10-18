@@ -77,9 +77,11 @@ describe('GivingService', () => {
     return {
       isConfigured: jest.fn().mockReturnValue(true),
       initializeTransaction: jest.fn(),
-      verifyTransaction: jest.fn(),
+      verifyTransaction: jest
+        .fn()
+        .mockResolvedValue({ amount: 10000, currency: 'NGN', status: 'success' }),
       validateWebhookSignature: jest.fn().mockReturnValue(true),
-      parseWebhookEvent: jest.fn(),
+      parseWebhookEvent: jest.fn().mockReturnValue({ event: '', reference: '' }),
       mapChannelToPaymentMethod: jest.fn().mockReturnValue('card'),
       mapEventToStatus: jest.fn(),
     };
@@ -148,6 +150,16 @@ describe('GivingService', () => {
       } as never,
       new BranchScopeService(new RequestContextService()),
       (integrationAlert = { notify: jest.fn().mockResolvedValue(undefined) }) as never,
+      {
+        defaultGateway: jest.fn().mockResolvedValue('paystack'),
+        current: jest.fn(async (_churchId: string, name: string) => {
+          const provider = gatewayRegistry.get(name);
+          if (!provider || !provider.isConfigured())
+            throw new BadRequestException('Payment gateway is not configured');
+          return { provider, accountId: 'church-payment-account' };
+        }),
+        historical: jest.fn(async (_churchId: string, name: string) => gatewayRegistry.get(name)),
+      } as never,
     );
   });
 
@@ -682,6 +694,7 @@ describe('GivingService', () => {
       model('transaction').findFirst.mockResolvedValue(pendingTransaction);
       paystack.verifyTransaction.mockResolvedValue({
         amount: 10000,
+        currency: 'NGN',
         status: 'success',
         paidAt: '2026-07-20T10:00:00.000Z',
         channel: 'card',
@@ -707,6 +720,7 @@ describe('GivingService', () => {
       model('transaction').findFirst.mockResolvedValue(pendingTransaction);
       flutterwave.verifyTransaction.mockResolvedValue({
         amount: 10000,
+        currency: 'NGN',
         status: 'success',
         paidAt: '2026-07-20T10:00:00.000Z',
         channel: 'card',

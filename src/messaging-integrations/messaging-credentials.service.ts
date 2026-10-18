@@ -105,8 +105,7 @@ export class MessagingCredentialsService {
     const row = await this.prisma.messagingIntegration.findUnique({
       where: { church_id_provider: { church_id: churchId, provider } },
     });
-    if (!row || row.mode === 'platform') return this.platform(provider);
-    if (row.mode === 'disabled')
+    if (!row || row.mode !== 'custom')
       throw new ServiceUnavailableException('Messaging provider is disabled');
     if (row.mode !== 'custom' || !row.ciphertext)
       throw new ServiceUnavailableException('Messaging provider is not configured');
@@ -122,10 +121,8 @@ export class MessagingCredentialsService {
       const row = rows.find((item) => item.provider === provider);
       return {
         provider,
-        mode: row?.mode ?? 'platform',
-        configured:
-          row?.mode === 'custom' ||
-          ((!row || row.mode === 'platform') && !!this.platform(provider).apiKey),
+        mode: row?.mode === 'custom' ? 'custom' : 'disabled',
+        configured: row?.mode === 'custom',
         updatedAt: row?.updated_at ?? null,
       };
     });
@@ -139,7 +136,7 @@ export class MessagingCredentialsService {
     userId: string,
   ) {
     this.provider(provider);
-    if (!churchId || !['platform', 'custom', 'disabled'].includes(mode))
+    if (!churchId || !['custom', 'disabled'].includes(mode))
       throw new BadRequestException('Invalid messaging configuration');
     let ciphertext: string | null = null;
     if (mode === 'custom') {
@@ -191,20 +188,7 @@ export class MessagingCredentialsService {
   }
 
   async platformWebhookChurch(): Promise<string> {
-    const churchId = this.config.get<string>('TERMII_DEFAULT_CHURCH_ID');
-    if (!churchId)
-      throw new ServiceUnavailableException('Platform webhook church is not configured');
-    const binding = await this.prisma.integrationChannel?.findUnique({
-      where: { church_id_channel: { church_id: churchId, channel: 'whatsapp' } },
-    });
-    if (binding && binding.mode !== 'platform')
-      throw new ServiceUnavailableException('Use the configured provider callback');
-    const row = await this.prisma.messagingIntegration.findUnique({
-      where: { church_id_provider: { church_id: churchId, provider: 'termii' } },
-    });
-    if (row && row.mode !== 'platform')
-      throw new ServiceUnavailableException('Platform webhook is disabled for this church');
-    return churchId;
+    throw new ServiceUnavailableException('Configure a church-owned WhatsApp provider callback');
   }
 
   async webhookCredentials(churchId: string): Promise<MessagingCredentials> {

@@ -96,7 +96,7 @@ describe('Messaging credential security and account selection', () => {
       apiKey: keyA,
       from: 'church@example.org',
     });
-    expect((await service.resolve(churchB, 'resend')).apiKey).toBe('platform-resend-key');
+    await expect(service.resolve(churchB, 'resend')).rejects.toThrow('disabled');
     expect(prisma.messagingIntegration.findUnique).toHaveBeenCalledWith({
       where: { church_id_provider: { church_id: churchB, provider: 'resend' } },
     });
@@ -106,7 +106,7 @@ describe('Messaging credential security and account selection', () => {
     expect(JSON.stringify([...rows.values()])).not.toContain(keyA);
   });
 
-  it('rotates credentials atomically and removes them when disabling or explicitly selecting platform', async () => {
+  it('rotates credentials atomically, removes them when disabled and rejects platform mode', async () => {
     await service.save(
       churchA,
       'resend',
@@ -125,8 +125,8 @@ describe('Messaging credential security and account selection', () => {
     await service.save(churchA, 'resend', 'disabled', {}, 'actor');
     await expect(service.resolve(churchA, 'resend')).rejects.toThrow('disabled');
     expect(rows.get(`${churchA}:resend`)?.ciphertext).toBeNull();
-    await service.save(churchA, 'resend', 'platform', {}, 'actor');
-    expect((await service.resolve(churchA, 'resend')).apiKey).toBe('platform-resend-key');
+    await expect(service.save(churchA, 'resend', 'platform', {}, 'actor')).rejects.toThrow();
+    expect((await service.resolve('', 'resend')).apiKey).toBe('platform-resend-key');
   });
 
   it('never falls back on corrupted custom credentials or database failures', async () => {
@@ -188,9 +188,9 @@ describe('Messaging credential security and account selection', () => {
     ).rejects.toThrow();
   });
 
-  it('only enables tenant webhooks for custom accounts and restricts the platform endpoint to its configured church', async () => {
+  it('only enables tenant webhooks for custom accounts and disables platform callbacks', async () => {
     await expect(service.webhookCredentials(churchA)).rejects.toThrow();
-    expect(await service.platformWebhookChurch()).toBe(churchA);
+    await expect(service.platformWebhookChurch()).rejects.toThrow();
     const input = {
       apiKey: 'termii-private-key',
       from: 'Church',
@@ -204,7 +204,7 @@ describe('Messaging credential security and account selection', () => {
       baseUrl: 'https://api.termii.com',
     });
     await expect(service.webhookCredentials(churchB)).rejects.toThrow();
-    await expect(service.platformWebhookChurch()).rejects.toThrow('disabled');
+    await expect(service.platformWebhookChurch()).rejects.toThrow();
     await service.save(churchA, 'termii', 'disabled', {}, 'actor');
     await expect(service.webhookCredentials(churchA)).rejects.toThrow();
   });

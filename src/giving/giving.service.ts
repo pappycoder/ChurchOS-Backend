@@ -50,7 +50,6 @@ import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 
 /** Default payment gateway when church config does not specify one */
-const DEFAULT_GATEWAY = 'paystack';
 
 /**
  * Service for managing giving operations.
@@ -74,56 +73,27 @@ export class GivingService {
   ) {}
 
   /**
-   * Resolves a payment gateway provider by name.
-   *
-   * @param gatewayName - The gateway identifier (e.g. 'paystack', 'flutterwave')
-   * @returns The PaymentGatewayProvider instance
-   * @throws BadRequestException if the gateway is not registered or not configured
-   */
-  private resolveGateway(gatewayName: string): PaymentGatewayProvider {
-    const provider = this.gatewayRegistry.get(gatewayName);
-    if (!provider) {
-      throw new BadRequestException(
-        `Payment gateway "${gatewayName}" is not available. Supported gateways: ${Array.from(this.gatewayRegistry.keys()).join(', ')}`,
-      );
-    }
-    if (!provider.isConfigured()) {
-      throw new BadRequestException(
-        `Payment gateway "${gatewayName}" is not configured. Please check your environment variables.`,
-      );
-    }
-    return provider;
-  }
-
-  /**
-   * Gets the default payment gateway from church config.
-   * Falls back to DEFAULT_GATEWAY if not configured.
+   * Gets the gateway selected by this church. Unconfigured churches cannot charge.
    */
   private async getDefaultGateway(churchId: string): Promise<string> {
-    const configured = await this.paymentAccounts?.defaultGateway(churchId);
-    if (configured) return configured;
-    const church = await this.prisma.church.findUnique({
-      where: { id: churchId },
-      select: { config: true },
-    });
+    if (!this.paymentAccounts)
+      throw new BadRequestException('Church payment integrations are unavailable');
+    const configured = await this.paymentAccounts.defaultGateway(churchId);
+    if (!configured) throw new BadRequestException('Configure a church payment account first');
+    return configured;
+  }
 
-    if (church?.config) {
-      const config = church.config as Record<string, unknown>;
-      if (typeof config.default_payment_gateway === 'string') {
-        return config.default_payment_gateway;
-      }
-    }
-
-    return DEFAULT_GATEWAY;
+  private async churchPayment(churchId: string, gatewayName: string) {
+    if (!this.paymentAccounts)
+      throw new BadRequestException('Church payment integrations are unavailable');
+    return this.paymentAccounts.current(churchId, gatewayName);
   }
 
   async paymentOptions(churchId: string) {
     try {
-      const payment = await this.paymentAccounts?.current(churchId, 'paystack');
+      const payment = await this.churchPayment(churchId, 'paystack');
       return {
-        recurringAvailable: payment
-          ? payment.provider.isConfigured()
-          : !!this.gatewayRegistry.get('paystack')?.isConfigured(),
+        recurringAvailable: payment.provider.isConfigured(),
       };
     } catch {
       return { recurringAvailable: false };
@@ -432,8 +402,8 @@ export class GivingService {
   }> {
     // Resolve which gateway to use
     const gatewayName = dto.gateway || (await this.getDefaultGateway(churchId));
-    const paymentAccount = await this.paymentAccounts?.current(churchId, gatewayName);
-    const provider = paymentAccount?.provider ?? this.resolveGateway(gatewayName);
+    const paymentAccount = await this.churchPayment(churchId, gatewayName);
+    const provider = paymentAccount.provider;
 
     // Verify category exists
     const category = await this.prisma.givingCategory.findUnique({
@@ -1280,7 +1250,7 @@ export class GivingService {
     userId: string,
     viewer?: ViewerScope | null,
   ): Promise<RecurringGivingResponseDto> {
-    if (this.paymentAccounts) await this.paymentAccounts.current(churchId, 'paystack');
+    await this.churchPayment(churchId, 'paystack');
     const category = await this.prisma.givingCategory.findUnique({
       where: { id: dto.categoryId },
     });
@@ -1647,7 +1617,7 @@ export class GivingService {
     // Resolve gateway (default to paystack for recurring)
     let currentPayment: Awaited<ReturnType<PaymentAccountsService['current']>> | undefined;
     try {
-      currentPayment = await this.paymentAccounts?.current(churchId, 'paystack');
+      currentPayment = await this.churchPayment(churchId, 'paystack');
     } catch {
       this.logger.warn('Recurring charge skipped: Paystack is not enabled for this church');
       return false;
@@ -1661,7 +1631,7 @@ export class GivingService {
       );
       return false;
     }
-    const provider = currentPayment?.provider ?? this.gatewayRegistry.get('paystack');
+    const provider = currentPayment?.provider;
     if (!provider || !provider.isConfigured() || !provider.chargeAuthorization) {
       this.logger.error('Paystack gateway not available for recurring charge');
       return false;

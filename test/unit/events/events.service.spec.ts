@@ -81,6 +81,14 @@ describe('EventsService', () => {
         broadcastToChurch: jest.fn().mockResolvedValue({ sent: 0 }),
       } as never,
       new BranchScopeService(new RequestContextService()),
+      {
+        defaultGateway: jest.fn().mockResolvedValue('paystack'),
+        current: jest.fn(async (_churchId: string, name: string) => ({
+          provider: gatewayRegistry.get(name),
+          accountId: 'church-payment-account',
+        })),
+        historical: jest.fn(async (_churchId: string, name: string) => gatewayRegistry.get(name)),
+      } as never,
     );
   });
 
@@ -400,6 +408,17 @@ describe('EventsService', () => {
     };
 
     beforeEach(() => {
+      prisma.transaction.findFirst.mockResolvedValue({
+        church_id: mockChurchId,
+        payment_gateway: 'paystack',
+        amount: 5000,
+        currency: 'NGN',
+      });
+      gatewayRegistry.set('paystack', {
+        verifyTransaction: jest
+          .fn()
+          .mockResolvedValue({ status: 'success', amount: 5000, currency: 'NGN' }),
+      });
       (prisma as unknown as { $transaction: jest.Mock }).$transaction.mockImplementation(
         async (callback: (client: typeof prisma) => unknown) => callback(prisma),
       );

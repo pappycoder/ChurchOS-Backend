@@ -37,7 +37,7 @@ export class PaymentAccountsService {
   }
   async current(churchId: string, name: string) {
     const account = await this.accounts.resolve(churchId, 'payment');
-    if (!account) return { provider: this.gateway(name), accountId: null };
+    if (!account) throw new BadRequestException('Configure a church payment account first');
     if (account.provider !== name)
       throw new BadRequestException('This gateway is not enabled for the church');
     return { provider: this.gateway(name, account.credentials), accountId: account.accountId };

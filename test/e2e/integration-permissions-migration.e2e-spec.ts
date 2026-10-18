@@ -53,6 +53,47 @@ describe('Provider integration permission migration', () => {
       expect(
         (await client.query("SELECT * FROM role_permissions WHERE id = 'existing-grant'")).rowCount,
       ).toBe(1);
+      await client.query(`
+        CREATE TABLE integration_channels (church_id TEXT, mode TEXT, provider TEXT, account_id TEXT, settings JSONB, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE messaging_integrations (church_id TEXT, mode TEXT, ciphertext TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        INSERT INTO integration_channels VALUES ('a','platform',NULL,NULL,'{}',CURRENT_TIMESTAMP), ('b','custom','resend','church-account','{"from":"church@example.org"}',CURRENT_TIMESTAMP);
+        INSERT INTO messaging_integrations VALUES ('a','platform',NULL,CURRENT_TIMESTAMP), ('b','custom','encrypted-key',CURRENT_TIMESTAMP);
+      `);
+      const strict = readFileSync(
+        join(
+          process.cwd(),
+          'prisma/migrations/20261018230000_church_owned_integrations_only/migration.sql',
+        ),
+        'utf8',
+      );
+      await client.query(strict);
+      await client.query(strict);
+      expect(
+        (await client.query("SELECT mode FROM integration_channels WHERE church_id = 'a'")).rows[0]
+          .mode,
+      ).toBe('disabled');
+      expect(
+        (
+          await client.query(
+            "SELECT mode, ciphertext FROM messaging_integrations WHERE church_id = 'b'",
+          )
+        ).rows[0],
+      ).toEqual({ mode: 'custom', ciphertext: 'encrypted-key' });
+      expect(
+        (
+          await client.query(
+            "SELECT account_id, mode FROM integration_channels WHERE church_id = 'b'",
+          )
+        ).rows[0],
+      ).toEqual({ account_id: 'church-account', mode: 'custom' });
+      await client.query("INSERT INTO integration_channels (church_id) VALUES ('new')");
+      expect(
+        (await client.query("SELECT mode FROM integration_channels WHERE church_id = 'new'"))
+          .rows[0].mode,
+      ).toBe('disabled');
+      await expect(
+        client.query("INSERT INTO integration_channels (church_id,mode) VALUES ('bad','platform')"),
+      ).rejects.toThrow();
     } finally {
       await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       client.release();

@@ -61,7 +61,7 @@ export class EventsService {
     private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
     @Inject(PAYMENT_GATEWAY_REGISTRY)
-    private readonly gatewayRegistry: Map<string, PaymentGatewayProvider>,
+    _gatewayRegistry: Map<string, PaymentGatewayProvider>,
     private readonly notifications: NotificationsService,
     private readonly branchScope: BranchScopeService,
     @Optional() private readonly paymentAccounts?: PaymentAccountsService,
@@ -1068,6 +1068,11 @@ export class EventsService {
       }
     }
 
+    if (!this.paymentAccounts)
+      throw new BadRequestException('Church payment integrations are unavailable');
+    const gatewayName = await this.paymentAccounts.defaultGateway(churchId);
+    if (!gatewayName) throw new BadRequestException('Configure a church payment account first');
+    const paymentAccount = await this.paymentAccounts.current(churchId, gatewayName);
     const reference = this.generatePaymentReference(event.title);
     const memberEmail = (member as Record<string, unknown>).email as string | undefined;
 
@@ -1084,8 +1089,6 @@ export class EventsService {
       },
     });
 
-    const gatewayName = (await this.paymentAccounts?.defaultGateway(churchId)) ?? 'paystack';
-    const paymentAccount = await this.paymentAccounts?.current(churchId, gatewayName);
     const transaction = await this.prisma.transaction.create({
       data: {
         church_id: churchId,
@@ -1113,7 +1116,7 @@ export class EventsService {
     });
 
     // Initialize payment with gateway
-    const provider = paymentAccount?.provider ?? this.gatewayRegistry.get(gatewayName);
+    const provider = paymentAccount.provider;
     if (!provider || !provider.isConfigured()) {
       throw new BadRequestException('Payment gateway not configured');
     }

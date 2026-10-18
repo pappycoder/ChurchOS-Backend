@@ -1495,7 +1495,7 @@ model VerifiedMfaSession {
 model MessagingIntegration {
   church_id String
   provider String
-  mode String
+  mode String @default("disabled")
   ciphertext String?
   updated_at DateTime @updatedAt
   church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
@@ -1524,7 +1524,7 @@ model IntegrationAccount {
 model IntegrationChannel {
   church_id String
   channel String
-  mode String
+  mode String @default("disabled")
   provider String?
   account_id String?
   settings Json @default("{}")

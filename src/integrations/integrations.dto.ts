@@ -5,7 +5,7 @@ export class CreateIntegrationAccountDto {
   @IsObject() credentials!: Record<string, string>;
 }
 export class ConfigureIntegrationChannelDto {
-  @IsIn(['platform', 'custom', 'disabled']) mode!: 'platform' | 'custom' | 'disabled';
+  @IsIn(['custom', 'disabled']) mode!: 'custom' | 'disabled';
   @IsOptional() @IsString() @MaxLength(32) provider?: string;
   @IsOptional() @IsUUID() accountId?: string;
   @IsOptional() @IsObject() settings?: Record<string, string>;

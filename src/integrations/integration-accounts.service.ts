@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import {
   Channel,
+  CHANNELS,
   channel,
   definition,
   ProviderId,
@@ -100,7 +101,23 @@ export class IntegrationAccountsService {
       }),
       this.prisma.integrationChannel.findMany({ where: { church_id: churchId } }),
     ]);
-    return { providers: PROVIDERS, accounts, channels };
+    return {
+      providers: PROVIDERS,
+      accounts,
+      channels: CHANNELS.map((kind) => {
+        const saved = channels.find((item) => item.channel === kind);
+        return saved?.mode === 'custom'
+          ? saved
+          : {
+              channel: kind,
+              mode: 'disabled',
+              provider: null,
+              account_id: null,
+              settings: {},
+              updated_at: saved?.updated_at ?? null,
+            };
+      }),
+    };
   }
   async create(
     churchId: string,
@@ -189,7 +206,7 @@ export class IntegrationAccountsService {
   }
   async configure(churchId: string, kindValue: string, input: ChannelInput, userId: string) {
     const kind = channel(kindValue);
-    if (!['platform', 'custom', 'disabled'].includes(input.mode))
+    if (!['custom', 'disabled'].includes(input.mode))
       throw new BadRequestException('Invalid channel mode');
     let provider: ProviderId | null = null;
     let accountId: string | null = null;
@@ -248,8 +265,7 @@ export class IntegrationAccountsService {
     const row = await this.prisma.integrationChannel.findUnique({
       where: { church_id_channel: { church_id: churchId, channel: kind } },
     });
-    if (!row || row.mode === 'platform') return null;
-    if (row.mode === 'disabled')
+    if (!row || row.mode !== 'custom')
       throw new ServiceUnavailableException(`${kind} is disabled for this church`);
     if (!row.account_id) throw new ServiceUnavailableException('Channel account is unavailable');
     const account = await this.account(churchId, row.account_id);

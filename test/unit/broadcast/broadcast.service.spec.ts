@@ -90,6 +90,7 @@ describe('BroadcastService', () => {
       queues.whatsapp as never,
       queues.sms as never,
       queues.email as never,
+      { resolve: jest.fn().mockResolvedValue({ accountId: 'church-account' }) } as never,
     );
   });
 

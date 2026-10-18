@@ -9,12 +9,12 @@ Church admins and super admins can configure messaging under **Settings → Mess
 1. Apply `20261016170000_messaging_credentials` with `npx prisma migrate deploy --config .config/prisma.config.ts`.
 2. Run the reference permission seed (`npm run prisma:seed-perms`). Permission cache namespace is v21. Refresh existing web sessions to load the updated permission catalog.
 3. Generate a dedicated 32-byte key using `openssl rand -hex 32`. Store it as `MESSAGING_ENCRYPTION_KEY` in the backend/API and persistent worker's secret environment. Use the same key everywhere. Never commit it or place it in frontend environment variables. Back it up outside the database.
-4. Deploy backend, worker and frontend. Existing Termii/Resend environment credentials remain the default for churches without a saved setting.
+4. Deploy backend, worker and frontend with migration `20261018230000_church_owned_integrations_only`. External church services are disabled until church-owned provider accounts and channel bindings are configured through the current [provider editor](PROVIDER-INTEGRATIONS.md). Environment keys serve organization/platform operations only.
 5. An administrator selects the account, saves credentials and sends an explicit test to a controlled recipient. SMS/WhatsApp tests may cost money. A successful API response means provider acceptance; confirm arrival and webhook delivery separately.
 
 ## Account modes
 
-- **Platform** uses backend environment credentials. Explicitly switching to this mode erases saved church credentials.
+- **Platform** is no longer accepted for church settings. Existing platform bindings are migrated to disabled.
 - **Custom** uses only the church's encrypted account. Saving is a full replacement, including sender/device settings. There is no automatic platform fallback after an error, missing key, disabled account or failed decryption.
 - **Disabled** blocks the provider and erases saved credentials. Termii covers both SMS and WhatsApp, so disabling Termii blocks both.
 
@@ -32,7 +32,7 @@ https://YOUR_BACKEND/api/v1/whatsapp/webhook/CHURCH_UUID
 
 The POST authenticates the exact raw body against `X-Termii-Signature` using HMAC-SHA512, matching [Termii's messaging event documentation](https://developers.termii.com/events-and-reports). Supply the signing key used by the account. The church in the verified destination path scopes member phone lookups, inbound records and delivery updates. The sender's phone does not select the tenant. A verification token is optional for legacy GET subscription challenges; it is not an API key.
 
-The original platform callback `/api/v1/whatsapp/webhook` now requires `TERMII_DEFAULT_CHURCH_ID` and rejects processing if that church has selected a custom or disabled Termii account. It accepts Termii SHA512 signatures; the legacy Meta header retains SHA256 compatibility. A shared platform inbound number cannot select an arbitrary church from a matching sender phone. Use church-specific accounts/callbacks for multi-church inbound routing.
+The original shared platform callback `/api/v1/whatsapp/webhook` is disabled for church routing. Use the church-owned provider account callbacks described in the current provider guide. Church-specific legacy callback validation remains tenant-bound.
 
 ## Storage and operational behavior
 
