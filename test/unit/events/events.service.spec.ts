@@ -206,6 +206,15 @@ describe('EventsService', () => {
   });
 
   describe('deleteEvent', () => {
+    it('protects event attendance sessions from permanent deletion', async () => {
+      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 0 } });
+      prisma.attendanceSession.count.mockResolvedValue(1);
+      await expect(service.deleteEvent(mockEventId, mockChurchId, mockUserId)).rejects.toThrow(
+        'Archive it instead',
+      );
+      expect(prisma.event.delete).not.toHaveBeenCalled();
+    });
+
     it('should delete event with no registrations', async () => {
       prisma.event.findFirst.mockResolvedValue({ ...mockEvent, _count: { registrations: 0 } });
       prisma.event.delete.mockResolvedValue(mockEvent);

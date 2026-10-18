@@ -11,12 +11,13 @@
 
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AttendanceSessionsController } from './attendance-sessions.controller';
 import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 
 @Module({
   imports: [AuthModule],
-  controllers: [AttendanceController],
+  controllers: [AttendanceController, AttendanceSessionsController],
   providers: [AttendanceService],
   exports: [AttendanceService],
 })

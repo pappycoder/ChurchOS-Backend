@@ -165,6 +165,26 @@ describe('AdminService', () => {
   });
 
   describe('deleteDepartment', () => {
+    it('protects department attendance sessions from permanent deletion', async () => {
+      prisma.department.findFirst.mockResolvedValue({
+        ...mockDepartment,
+        _count: { department_members: 0 },
+      });
+      prisma.attendanceSession.count.mockResolvedValue(1);
+      await expect(
+        service.deleteDepartment(mockDepartmentId, mockChurchId, mockUserId),
+      ).rejects.toThrow('Archive it instead');
+      expect(prisma.department.delete).not.toHaveBeenCalled();
+    });
+    it('protects cell group attendance sessions from permanent deletion', async () => {
+      prisma.cellGroup.findFirst.mockResolvedValue(mockCellGroup);
+      prisma.attendanceSession.count.mockResolvedValue(1);
+      await expect(service.deleteCellGroup(mockGroupId, mockChurchId, mockUserId)).rejects.toThrow(
+        'Archive it instead',
+      );
+      expect(prisma.cellGroup.delete).not.toHaveBeenCalled();
+    });
+
     it('should delete an empty department', async () => {
       prisma.department.findFirst.mockResolvedValue({
         ...mockDepartment,

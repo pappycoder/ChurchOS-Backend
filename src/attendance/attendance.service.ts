@@ -1,3 +1,5 @@
+import { attendanceSessionId } from './attendance-session-links';
+import { AttendanceSessionsService } from './attendance-sessions.service';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file attendance.service.ts
@@ -21,7 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
-import { CreateServiceDto } from './dto/create-service.dto';
+import { CreateServiceDto, defaultAttendanceCategory } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
 import { ListAttendanceDto } from './dto/list-attendance.dto';
@@ -34,17 +36,24 @@ import {
   AttendanceTrendDto,
 } from './dto/attendance-response.dto';
 import { Prisma } from '@prisma/client';
+import {
+  GeneralAttendanceCountsDto,
+  GeneralAttendanceQueryDto,
+  RecordGeneralAttendanceDto,
+} from './dto/general-attendance.dto';
 
 @Injectable()
-export class AttendanceService {
+export class AttendanceService extends AttendanceSessionsService {
   private readonly logger = new Logger(AttendanceService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly requestContext: RequestContextService,
-    private readonly audit: AuditLoggingService,
-    private readonly branchScope: BranchScopeService,
-  ) {}
+    prisma: PrismaService,
+    requestContext: RequestContextService,
+    audit: AuditLoggingService,
+    branchScope: BranchScopeService,
+  ) {
+    super(prisma, requestContext, audit, branchScope);
+  }
 
   // ─── Service CRUD ──────────────────────────────────────
 
@@ -240,6 +249,14 @@ export class AttendanceService {
       where: { service_id: id },
     });
 
+    const generalAttendanceCount = await this.prisma.attendanceSession.count({
+      where: { service_id: id, church_id: churchId },
+    });
+    if (generalAttendanceCount > 0) {
+      throw new ConflictException(
+        'Cannot delete a service with general attendance history. Archive it instead.',
+      );
+    }
     if (attendanceCount > 0 || transactionCount > 0) {
       throw new ConflictException(
         `Cannot delete this service: ${attendanceCount} attendance record(s) and ${transactionCount} giving transaction(s) reference it. Remove those records first.`,
@@ -367,13 +384,17 @@ export class AttendanceService {
       throw new BadRequestException('Either serviceId or eventId must be provided');
     }
 
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
     let serviceCategory: string | null = null;
+    let parentBranch: string | null | undefined;
 
     if (dto.eventId) {
       const event = await this.prisma.event.findFirst({
         where: { id: dto.eventId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
+      parentBranch = event?.branch_id;
       if (!event) {
         throw new NotFoundException('Event not found');
       }
@@ -389,6 +410,7 @@ export class AttendanceService {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
+      parentBranch = service.branch_id;
     }
 
     if (dto.memberId) {
@@ -431,7 +453,8 @@ export class AttendanceService {
       } else {
         const existing = await this.prisma.attendance.findUnique({
           where: {
-            service_id_member_id: {
+            service_id_member_id_attendance_date: {
+              attendance_date: attendanceDate,
               service_id: dto.serviceId!,
               member_id: dto.memberId,
             },
@@ -443,10 +466,22 @@ export class AttendanceService {
       }
     }
 
-    const category = dto.category ?? serviceCategory ?? 'adult';
+    const category = dto.category ?? defaultAttendanceCategory(serviceCategory);
 
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      dto.eventId ? 'event' : 'service',
+      dto.eventId ?? dto.serviceId!,
+      churchId,
+      checkedInAt,
+      parentBranch,
+      this.requestContext.getStore()?.viewer,
+    );
     const attendance = await this.prisma.attendance.create({
       data: {
+        checkin_at: checkedInAt,
+        attendance_date: attendanceDate,
+        ...(sessionId ? { session_id: sessionId } : {}),
         church_id: churchId,
         service_id: dto.serviceId || null,
         event_id: dto.eventId || null,
@@ -492,13 +527,17 @@ export class AttendanceService {
     skipped: number;
     errors: Array<{ index: number; message: string }>;
   }> {
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
     let serviceCategory: string | null = null;
+    let parentBranch: string | null | undefined;
 
     if (dto.eventId) {
       const event = await this.prisma.event.findFirst({
         where: { id: dto.eventId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
+      parentBranch = event?.branch_id;
       if (!event) {
         throw new NotFoundException('Event not found');
       }
@@ -514,8 +553,18 @@ export class AttendanceService {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
+      parentBranch = service.branch_id;
     }
 
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      dto.eventId ? 'event' : 'service',
+      dto.eventId ?? dto.serviceId!,
+      churchId,
+      checkedInAt,
+      parentBranch,
+      this.requestContext.getStore()?.viewer,
+    );
     let recorded = 0;
     let skipped = 0;
     const errors: Array<{ index: number; message: string }> = [];
@@ -574,7 +623,8 @@ export class AttendanceService {
           } else {
             const existing = await this.prisma.attendance.findUnique({
               where: {
-                service_id_member_id: {
+                service_id_member_id_attendance_date: {
+                  attendance_date: attendanceDate,
                   service_id: dto.serviceId!,
                   member_id: record.memberId,
                 },
@@ -589,13 +639,16 @@ export class AttendanceService {
 
         await this.prisma.attendance.create({
           data: {
+            checkin_at: checkedInAt,
+            attendance_date: attendanceDate,
+            ...(sessionId ? { session_id: sessionId } : {}),
             church_id: churchId,
             service_id: dto.serviceId || null,
             event_id: dto.eventId || null,
             member_id: record.memberId || null,
             visitor_id: record.visitorId || null,
             visitor_name: record.visitorName || linkedVisitorName,
-            category: dto.category ?? serviceCategory ?? 'adult',
+            category: dto.category ?? defaultAttendanceCategory(serviceCategory),
             source: dto.source || 'manual',
           },
         });
@@ -649,13 +702,17 @@ export class AttendanceService {
       throw new BadRequestException('Visitor name is required');
     }
 
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
     let serviceCategory: string | null = null;
+    let parentBranch: string | null | undefined;
 
     if (dto.eventId) {
       const event = await this.prisma.event.findFirst({
         where: { id: dto.eventId, church_id: churchId },
-        select: { id: true },
+        select: { id: true, branch_id: true },
       });
+      parentBranch = event?.branch_id;
       if (!event) {
         throw new NotFoundException('Event not found');
       }
@@ -671,6 +728,7 @@ export class AttendanceService {
         throw new NotFoundException('Service not found');
       }
       serviceCategory = service.category;
+      parentBranch = service.branch_id;
     }
 
     if (dto.visitorId) {
@@ -684,14 +742,26 @@ export class AttendanceService {
       }
     }
 
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      dto.eventId ? 'event' : 'service',
+      dto.eventId ?? dto.serviceId!,
+      churchId,
+      checkedInAt,
+      parentBranch,
+      this.requestContext.getStore()?.viewer,
+    );
     const attendance = await this.prisma.attendance.create({
       data: {
+        checkin_at: checkedInAt,
+        attendance_date: attendanceDate,
+        ...(sessionId ? { session_id: sessionId } : {}),
         church_id: churchId,
         service_id: dto.serviceId || null,
         event_id: dto.eventId || null,
         visitor_id: dto.visitorId || null,
         visitor_name: dto.visitorName.trim(),
-        category: dto.category ?? serviceCategory ?? 'adult',
+        category: dto.category ?? defaultAttendanceCategory(serviceCategory),
         source: dto.source || 'manual',
       },
       include: {
@@ -859,6 +929,38 @@ export class AttendanceService {
     };
   }
 
+  async recordGeneralAttendance(
+    dto: RecordGeneralAttendanceDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ) {
+    return this.recordSession('service', dto.serviceId, dto, churchId, userId, viewer);
+  }
+  async updateGeneralAttendance(
+    id: string,
+    dto: GeneralAttendanceCountsDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ) {
+    return this.updateSession('service', undefined, id, dto, churchId, userId, viewer);
+  }
+  async listGeneralAttendance(
+    churchId: string,
+    query: GeneralAttendanceQueryDto,
+    viewer?: ViewerScope | null,
+  ) {
+    return this.listSessions('service', query.serviceId, churchId, query, viewer);
+  }
+  async getGeneralAttendanceSummary(
+    churchId: string,
+    query: GeneralAttendanceQueryDto = {},
+    viewer?: ViewerScope | null,
+  ) {
+    return this.sessionSummary('service', query.serviceId, churchId, query, viewer);
+  }
+
   async getAttendanceSummary(
     churchId: string,
     startDate?: string,
@@ -927,7 +1029,20 @@ export class AttendanceService {
       else byGender.unknown++;
     }
 
-    return { totalCheckIns, memberCheckIns, visitorCheckIns, bySource, byCategory, byGender };
+    const generalAttendance = await this.getGeneralAttendanceSummary(
+      churchId,
+      { startDate: startDate?.slice(0, 10), endDate: endDate?.slice(0, 10), branchId },
+      viewer,
+    );
+    return {
+      totalCheckIns,
+      memberCheckIns,
+      visitorCheckIns,
+      bySource,
+      byCategory,
+      byGender,
+      ...(generalAttendance.reportCount ? { generalAttendance } : {}),
+    };
   }
 
   async getAttendanceTrends(

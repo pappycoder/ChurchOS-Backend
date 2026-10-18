@@ -23,8 +23,14 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  GeneralAttendanceCountsDto,
+  GeneralAttendanceQueryDto,
+  RecordGeneralAttendanceDto,
+} from './dto/general-attendance.dto';
 import { AttendanceService } from './attendance.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -234,6 +240,60 @@ export class AttendanceController {
   ): Promise<AttendanceResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.attendanceService.recordVisitorAttendance(dto, churchId, user.id);
+  }
+
+  @Post('attendance/general')
+  @RequirePermissions('attendance:checkin:create')
+  async recordGeneralAttendance(
+    @Body() dto: RecordGeneralAttendanceDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.attendanceService.recordGeneralAttendance(
+      dto,
+      req.profile!.church_id,
+      user.id,
+      req.profile,
+    );
+  }
+
+  @Get('attendance/general')
+  @RequirePermissions('attendance:records:read')
+  async listGeneralAttendance(
+    @Query() query: GeneralAttendanceQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.attendanceService.listGeneralAttendance(req.profile!.church_id, query, req.profile);
+  }
+
+  @Get('attendance/general/summary')
+  @RequirePermissions('attendance:reports:read')
+  async generalAttendanceSummary(
+    @Query() query: GeneralAttendanceQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.attendanceService.getGeneralAttendanceSummary(
+      req.profile!.church_id,
+      query,
+      req.profile,
+    );
+  }
+
+  @Patch('attendance/general/:id')
+  @RequirePermissions('attendance:records:update')
+  async updateGeneralAttendance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GeneralAttendanceCountsDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.attendanceService.updateGeneralAttendance(
+      id,
+      dto,
+      req.profile!.church_id,
+      user.id,
+      req.profile,
+    );
   }
 
   @Delete('attendance/:attendanceId')

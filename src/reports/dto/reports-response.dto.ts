@@ -1,3 +1,4 @@
+import type { GeneralAttendanceSummary } from '../../attendance/general-attendance-summary';
 /**
  * @file reports-response.dto.ts
  * @description Response DTOs for report endpoints.
@@ -65,6 +66,7 @@ export class ServiceAttendanceDto {
 }
 
 export class AttendanceReportDto {
+  generalAttendance?: GeneralAttendanceSummary;
   @ApiProperty({ description: 'Report period start date' })
   startDate!: string;
 

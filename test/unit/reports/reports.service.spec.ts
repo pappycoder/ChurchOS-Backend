@@ -20,6 +20,7 @@ describe('ReportsService', () => {
     givingCategory: {
       findMany: jest.Mock;
     };
+    attendanceSession: { aggregate: jest.Mock };
     attendance: {
       aggregate: jest.Mock;
       findMany: jest.Mock;
@@ -50,6 +51,7 @@ describe('ReportsService', () => {
       givingCategory: {
         findMany: jest.fn(),
       },
+      attendanceSession: { aggregate: jest.fn() },
       attendance: {
         aggregate: jest.fn(),
         findMany: jest.fn(),

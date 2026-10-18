@@ -9,7 +9,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SERVICE_CATEGORIES } from './create-service.dto';
+import { ATTENDANCE_CATEGORIES } from './create-service.dto';
 
 /**
  * DTO for listing attendance records with pagination and filters.
@@ -55,9 +55,9 @@ export class ListAttendanceDto {
   @IsOptional()
   visitorId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by category', enum: SERVICE_CATEGORIES })
+  @ApiPropertyOptional({ description: 'Filter by category', enum: ATTENDANCE_CATEGORIES })
   @IsOptional()
-  @IsIn(SERVICE_CATEGORIES)
+  @IsIn(ATTENDANCE_CATEGORIES)
   category?: string;
 
   @ApiPropertyOptional({

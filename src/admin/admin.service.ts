@@ -1,3 +1,4 @@
+import { attendanceSessionId } from '../attendance/attendance-session-links';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file admin.service.ts
@@ -512,6 +513,15 @@ export class AdminService {
     }
 
     // Delete the department record
+    if (
+      (await this.prisma.attendanceSession.count({
+        where: { church_id: churchId, department_id: departmentId },
+      })) > 0
+    ) {
+      throw new ConflictException(
+        'Cannot delete a department with attendance history. Archive it instead.',
+      );
+    }
     await this.prisma.department.delete({ where: { id: departmentId } });
 
     // Log the deletion for operational monitoring
@@ -1282,6 +1292,15 @@ export class AdminService {
     }
 
     // Delete the cell group record
+    if (
+      (await this.prisma.attendanceSession.count({
+        where: { church_id: churchId, cell_group_id: groupId },
+      })) > 0
+    ) {
+      throw new ConflictException(
+        'Cannot delete a cell group with attendance history. Archive it instead.',
+      );
+    }
     await this.prisma.cellGroup.delete({ where: { id: groupId } });
 
     // Log the deletion for operational monitoring
@@ -1548,7 +1567,17 @@ export class AdminService {
       });
       if (!membership) throw new NotFoundException('Department member not found');
     }
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      'department',
+      departmentId,
+      churchId,
+      new Date(dto.meetingDate),
+      department.branchId,
+      viewer,
+    );
     const data = {
+      ...(sessionId ? { session_id: sessionId } : {}),
       department_id: departmentId,
       member_id: dto.memberId ?? null,
       visitor_name: dto.memberId ? null : dto.visitorName!.trim(),
@@ -1566,7 +1595,11 @@ export class AdminService {
             },
           },
           create: data,
-          update: { status: data.status, notes: data.notes },
+          update: {
+            status: data.status,
+            notes: data.notes,
+            ...(sessionId ? { session_id: sessionId } : {}),
+          },
         })
       : await this.prisma.departmentAttendance.create({ data });
     await this.audit.log({
@@ -1697,6 +1730,15 @@ export class AdminService {
     }
 
     const meetingDateObj = new Date(meetingDate);
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      'cell_group',
+      groupId,
+      churchId,
+      meetingDateObj,
+      group.branch_id,
+      viewer,
+    );
 
     const existing = memberId
       ? await this.prisma.cellGroupAttendance.findUnique({
@@ -1747,6 +1789,7 @@ export class AdminService {
               },
             },
         data: {
+          ...(sessionId ? { session_id: sessionId } : {}),
           status: status || 'present',
           notes: notes ?? null,
           ...(resolvedVisitorName !== undefined && { visitor_name: resolvedVisitorName }),
@@ -1762,6 +1805,7 @@ export class AdminService {
           visitor_id: visitorId ?? null,
           visitor_name: resolvedVisitorName ?? null,
           meeting_date: meetingDateObj,
+          ...(sessionId ? { session_id: sessionId } : {}),
           status: status || 'present',
           notes: notes ?? null,
         },
@@ -1872,6 +1916,45 @@ export class AdminService {
       where: { cell_group_id: groupId },
     });
 
+    const sessions = await this.prisma.attendanceSession.findMany({
+      where: {
+        church_id: churchId,
+        cell_group_id: groupId,
+        ...this.requestContext.branchWhere(churchId),
+      },
+      select: { attendance_date: true, total: true },
+    });
+    if (sessions?.length) {
+      const details = await this.prisma.cellGroupAttendance.groupBy({
+        by: ['meeting_date', 'status'],
+        where: { cell_group_id: groupId },
+        _count: true,
+      });
+      const byDate = new Map<string, number>();
+      for (const detail of details) {
+        const day = detail.meeting_date.toISOString().slice(0, 10);
+        byDate.set(
+          day,
+          (byDate.get(day) ?? 0) +
+            (['present', 'late'].includes(detail.status) ? detail._count : 0),
+        );
+      }
+      const reported = new Map<string, number>();
+      for (const session of sessions) {
+        const day = session.attendance_date.toISOString().slice(0, 10);
+        reported.set(day, (reported.get(day) ?? 0) + session.total);
+      }
+      // Reported meeting totals replace named counts for that date; never add both.
+      for (const [day, total] of reported) byDate.set(day, total);
+      const totalMeetings = byDate.size;
+      return {
+        totalMeetings,
+        averageAttendance: Math.round(
+          [...byDate.values()].reduce((sum, n) => sum + n, 0) / totalMeetings,
+        ),
+        memberCount,
+      };
+    }
     const dates = await this.prisma.cellGroupAttendance.findMany({
       where: { cell_group_id: groupId },
       select: { meeting_date: true },

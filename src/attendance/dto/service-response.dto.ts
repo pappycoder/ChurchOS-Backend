@@ -26,7 +26,7 @@ export class ServiceResponseDto {
 
   @ApiProperty({
     description: 'Check-in category this service targets',
-    enum: ['adult', 'children'],
+    enum: ['adult', 'children', 'mixed'],
   })
   category!: string;
 

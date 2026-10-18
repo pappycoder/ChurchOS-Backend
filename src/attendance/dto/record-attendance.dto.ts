@@ -8,7 +8,7 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
-import { SERVICE_CATEGORIES } from './create-service.dto';
+import { ATTENDANCE_CATEGORIES } from './create-service.dto';
 
 const CHECKIN_SOURCES = ['manual', 'qr', 'whatsapp'] as const;
 
@@ -44,11 +44,12 @@ export class RecordAttendanceDto {
   visitorName?: string;
 
   @ApiPropertyOptional({
-    description: 'Check-in category (defaults to the service category)',
-    enum: SERVICE_CATEGORIES,
+    description:
+      'Check-in category (defaults to the service category, or unspecified for a mixed service)',
+    enum: ATTENDANCE_CATEGORIES,
   })
   @IsOptional()
-  @IsIn(SERVICE_CATEGORIES)
+  @IsIn(ATTENDANCE_CATEGORIES)
   category?: string;
 
   @ApiPropertyOptional({
@@ -87,11 +88,12 @@ export class RecordVisitorAttendanceDto {
   visitorId?: string;
 
   @ApiPropertyOptional({
-    description: 'Check-in category (defaults to the service category)',
-    enum: SERVICE_CATEGORIES,
+    description:
+      'Check-in category (defaults to the service category, or unspecified for a mixed service)',
+    enum: ATTENDANCE_CATEGORIES,
   })
   @IsOptional()
-  @IsIn(SERVICE_CATEGORIES)
+  @IsIn(ATTENDANCE_CATEGORIES)
   category?: string;
 
   @ApiPropertyOptional({

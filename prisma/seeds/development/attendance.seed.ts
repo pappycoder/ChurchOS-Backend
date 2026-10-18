@@ -60,6 +60,7 @@ export async function seedAttendance(
         category: branchCategory,
         source,
         checkin_at: new Date('2026-08-30T09:30:00Z'),
+        attendance_date: new Date('2026-08-30T09:30:00Z'),
       },
     });
     count++;
@@ -77,6 +78,7 @@ export async function seedAttendance(
           category: 'adult',
           source: 'manual',
           checkin_at: new Date('2026-10-15T09:15:00Z'),
+          attendance_date: new Date('2026-10-15T09:15:00Z'),
         },
       });
       count++;
@@ -94,6 +96,7 @@ export async function seedAttendance(
         category: 'adult',
         source: 'manual',
         checkin_at: new Date('2026-08-30T10:00:00Z'),
+        attendance_date: new Date('2026-08-30T10:00:00Z'),
       },
     });
     count++;
@@ -108,6 +111,7 @@ export async function seedAttendance(
         category: 'adult',
         source: 'whatsapp',
         checkin_at: new Date('2026-08-23T09:40:00Z'),
+        attendance_date: new Date('2026-08-23T09:40:00Z'),
       },
     });
     count++;

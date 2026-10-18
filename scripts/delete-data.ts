@@ -56,6 +56,7 @@ const ALL_MODELS_IN_ORDER: string[] = [
   'FormSubmission',
   'Form',
   'Attendance',
+  'AttendanceSession',
   'Service',
   'FamilyMember',
   'Family',

@@ -1,3 +1,4 @@
+import { attendanceSessionId } from '../attendance/attendance-session-links';
 import { PaymentAccountsService } from '../giving/services/payment-accounts.service';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
@@ -408,6 +409,15 @@ export class EventsService {
       );
     }
 
+    if (
+      (await this.prisma.attendanceSession.count({
+        where: { church_id: churchId, event_id: eventId },
+      })) > 0
+    ) {
+      throw new ConflictException(
+        'Cannot delete a event with attendance history. Archive it instead.',
+      );
+    }
     await this.prisma.event.delete({ where: { id: eventId } });
 
     await this.audit.log({
@@ -1799,6 +1809,17 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      'event',
+      eventId,
+      churchId,
+      checkedInAt,
+      event.branch_id,
+      this.requestContext.getStore()?.viewer,
+    );
 
     const member = await this.prisma.member.findFirst({
       where: { id: memberId, church_id: churchId },
@@ -1820,6 +1841,9 @@ export class EventsService {
 
     const attendance = await this.prisma.attendance.create({
       data: {
+        checkin_at: checkedInAt,
+        attendance_date: attendanceDate,
+        ...(sessionId ? { session_id: sessionId } : {}),
         church_id: churchId,
         event_id: eventId,
         member_id: memberId,
@@ -1875,6 +1899,17 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      'event',
+      eventId,
+      churchId,
+      checkedInAt,
+      event.branch_id,
+      this.requestContext.getStore()?.viewer,
+    );
 
     let checkedIn = 0;
     let skipped = 0;
@@ -1903,6 +1938,9 @@ export class EventsService {
 
       await this.prisma.attendance.create({
         data: {
+          checkin_at: checkedInAt,
+          attendance_date: attendanceDate,
+          ...(sessionId ? { session_id: sessionId } : {}),
           church_id: churchId,
           event_id: eventId,
           member_id: memberId,
@@ -1958,6 +1996,17 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    const checkedInAt = new Date();
+    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
+    const sessionId = await attendanceSessionId(
+      this.prisma,
+      'event',
+      eventId,
+      churchId,
+      checkedInAt,
+      event.branch_id,
+      this.requestContext.getStore()?.viewer,
+    );
 
     let member = await this.prisma.member.findFirst({
       where: { church_id: churchId, phone: dto.phone },
@@ -1997,6 +2046,9 @@ export class EventsService {
 
     const attendance = await this.prisma.attendance.create({
       data: {
+        checkin_at: checkedInAt,
+        attendance_date: attendanceDate,
+        ...(sessionId ? { session_id: sessionId } : {}),
         church_id: churchId,
         event_id: eventId,
         member_id: member.id,

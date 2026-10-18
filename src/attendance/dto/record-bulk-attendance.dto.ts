@@ -21,7 +21,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SERVICE_CATEGORIES } from './create-service.dto';
+import { ATTENDANCE_CATEGORIES } from './create-service.dto';
 
 @ValidatorConstraint({ name: 'BulkServiceOrEventRequired', async: false })
 class BulkServiceOrEventRequired implements ValidatorConstraintInterface {
@@ -78,10 +78,10 @@ export class RecordBulkAttendanceDto {
   @ApiPropertyOptional({
     description:
       'Default check-in category for records without their own (falls back to the service category)',
-    enum: SERVICE_CATEGORIES,
+    enum: ATTENDANCE_CATEGORIES,
   })
   @IsOptional()
-  @IsIn(SERVICE_CATEGORIES)
+  @IsIn(ATTENDANCE_CATEGORIES)
   category?: string;
 
   @ApiPropertyOptional({

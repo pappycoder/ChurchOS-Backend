@@ -6,6 +6,7 @@
  * @since 1.0.0
  */
 
+import type { GeneralAttendanceSummary } from '../general-attendance-summary';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -33,7 +34,7 @@ export class AttendanceResponseDto {
   @ApiPropertyOptional({ description: 'Visitor name' })
   visitorName?: string;
 
-  @ApiProperty({ description: 'Check-in category', enum: ['adult', 'children'] })
+  @ApiProperty({ description: 'Check-in category', enum: ['adult', 'children', 'unspecified'] })
   category!: string;
 
   @ApiProperty({ description: 'Check-in time' })
@@ -59,6 +60,11 @@ export class AttendanceResponseDto {
  * Response DTO for attendance summary statistics.
  */
 export class AttendanceSummaryDto {
+  @ApiPropertyOptional({
+    description: 'General headcounts, reported separately from individual check-ins',
+  })
+  generalAttendance?: GeneralAttendanceSummary;
+
   @ApiProperty({ description: 'Total check-ins' })
   totalCheckIns!: number;
 

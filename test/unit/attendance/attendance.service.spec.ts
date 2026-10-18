@@ -82,6 +82,7 @@ describe('AttendanceService — categories & visitors', () => {
             delete: jest.fn(),
             count: jest.fn(),
             groupBy: jest.fn(),
+            aggregate: jest.fn(),
           };
         }
         return models[prop];

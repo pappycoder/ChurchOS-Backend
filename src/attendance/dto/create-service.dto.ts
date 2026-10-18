@@ -19,7 +19,7 @@ import {
 } from 'class-validator';
 
 /** Check-in audience categories a service can target. */
-export const SERVICE_CATEGORIES = ['adult', 'children'] as const;
+export const SERVICE_CATEGORIES = ['adult', 'children', 'mixed'] as const;
 export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number];
 
 /**
@@ -75,4 +75,10 @@ export class CreateServiceDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+/** Individual attendees are not themselves mixed; an unknown age group stays unspecified. */
+export const ATTENDANCE_CATEGORIES = ['adult', 'children', 'unspecified'] as const;
+export function defaultAttendanceCategory(serviceCategory?: string | null): string {
+  return serviceCategory === 'mixed' ? 'unspecified' : (serviceCategory ?? 'adult');
 }

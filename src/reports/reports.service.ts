@@ -1,3 +1,4 @@
+import { summarizeGeneralAttendance } from '../attendance/general-attendance-summary';
 /**
  * @file reports.service.ts
  * @description Service for generating church reports.
@@ -160,6 +161,15 @@ export class ReportsService {
     }, [] as ServiceAttendanceDto[]);
 
     const monthlyTrend = await this.getMonthlyAttendanceTrend(churchId, start, end, branchId);
+    const generalAttendance = await summarizeGeneralAttendance(this.prisma, {
+      service_id: { not: null },
+      church_id: churchId,
+      ...(branchId ? { branch_id: branchId } : {}),
+      attendance_date: {
+        gte: new Date(start.toISOString().slice(0, 10)),
+        lte: new Date(end.toISOString().slice(0, 10)),
+      },
+    });
 
     this.logger.log(`Attendance report generated for church ${churchId}`);
 
@@ -169,6 +179,7 @@ export class ReportsService {
       totalAttendance: total,
       serviceCount,
       averagePerService: serviceCount > 0 ? Math.round((total / serviceCount) * 10) / 10 : 0,
+      ...(generalAttendance.reportCount ? { generalAttendance } : {}),
       byService: serviceBreakdown,
       monthlyTrend,
     };
