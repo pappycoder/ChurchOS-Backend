@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 // must be reviewed here rather than silently bypassing the global guard.
 const exceptions: Record<string, string[]> = {
   // Provider signatures plus server verification authenticate subscription callbacks.
-  'billing/billing.controller.ts': ['webhook'],
+  'billing/billing.controller.ts': ['webhook', 'catalog'],
   'auth/auth.controller.ts': [
     'session',
     'register',
@@ -76,6 +76,8 @@ const exceptions: Record<string, string[]> = {
   'integrations/payment-callbacks.controller.ts': ['receive'],
 };
 const publicRoutes = new Set([
+  // Public server-owned subscription prices; no church or payment history.
+  'billing/billing.controller.ts:catalog',
   'billing/billing.controller.ts:webhook',
   'integrations/integration-callbacks.controller.ts:verify',
   'integrations/integration-callbacks.controller.ts:receive',

@@ -1,3 +1,5 @@
+import { SubscriptionPricingService } from '../../src/billing/subscription-pricing.service';
+import { RedisService } from '../../src/redis/redis.service';
 import { randomUUID, createHmac } from 'node:crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -33,18 +35,54 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     string,
     { amount: number; currency: string; status: string; reference: string }
   >();
-  const request = (
+  const quoteCache = new Map<string, unknown>();
+  const request = async (
     path: string,
     method = 'GET',
     body?: unknown,
     role = 'church_admin',
     church = churchA,
-  ) =>
-    originalFetch(base + path, {
+  ): Promise<globalThis.Response> => {
+    // Simulate the administrator reviewing a server quote before creating a new checkout.
+    const dto = body as Record<string, unknown> | undefined;
+    if (
+      path === '/billing/checkout' &&
+      role === 'church_admin' &&
+      dto &&
+      !dto.quoteId &&
+      ['essentials', 'community', 'network'].includes(String(dto.plan)) &&
+      Object.keys(dto).every((key) => ['plan', 'cycle', 'gateway', 'currency'].includes(key))
+    ) {
+      const existing = await prisma.subscriptionPayment.findFirst({
+        where: { church_id: church, status: 'pending', checkout_url: { not: null } },
+      });
+      if (existing)
+        return originalFetch(base + path, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-test-role': role,
+            'x-test-church': church,
+          },
+          body: JSON.stringify({ ...dto, currency: existing.currency }),
+        });
+      const quoted = await request(
+        '/billing/quote',
+        'POST',
+        { ...dto, currency: 'NGN' },
+        role,
+        church,
+      );
+      if (!quoted.ok) return quoted;
+      const data = (await quoted.json()).data;
+      body = { ...dto, currency: 'NGN', quoteId: data.quoteId };
+    }
+    return originalFetch(base + path, {
       method,
       headers: { 'Content-Type': 'application/json', 'x-test-role': role, 'x-test-church': church },
       body: body ? JSON.stringify(body) : undefined,
     });
+  };
   const result = async (r: globalThis.Response) =>
     (
       (await r.json()) as {
@@ -70,6 +108,18 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     });
     fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
+      if (url === 'https://open.er-api.com/v6/latest/USD')
+        return globalThis.Response.json({
+          result: 'success',
+          base_code: 'USD',
+          time_last_update_unix: Math.floor(Date.now() / 1000),
+          time_next_update_unix: Math.floor(Date.now() / 1000) + 86400,
+          rates: Object.fromEntries(
+            ['USD', 'NGN', 'EUR', 'GBP', 'CAD', 'GHS', 'KES', 'ZAR', 'UGX', 'XAF', 'XOF'].map(
+              (c) => [c, c === 'USD' ? 1 : 1000],
+            ),
+          ),
+        });
       if (url === 'https://api.paystack.co/transaction/initialize') {
         expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer ' + secret);
         const body = JSON.parse(String(init!.body));
@@ -150,6 +200,16 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
       controllers: [BillingController, BillingWebhookController],
       providers: [
         BillingService,
+        SubscriptionPricingService,
+        {
+          provide: RedisService,
+          useValue: {
+            get: async (key: string) => quoteCache.get(key) ?? null,
+            set: async (key: string, value: unknown) => {
+              quoteCache.set(key, value);
+            },
+          },
+        },
         PaystackService,
         FlutterwaveService,
         { provide: PrismaService, useValue: prisma },
@@ -222,7 +282,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     expect((await request('/billing/subscription', 'GET', undefined, 'super_admin')).status).toBe(
       200,
     );
-    expect((await request('/billing/subscription', 'GET', undefined, 'readonly')).status).toBe(200);
+    expect((await request('/billing/subscription', 'GET', undefined, 'readonly')).status).toBe(403);
     expect(
       (
         await request(

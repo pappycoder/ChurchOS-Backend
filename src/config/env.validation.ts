@@ -41,6 +41,16 @@ const envSchema = z
     UPSTASH_REDIS_TOKEN: z.string().optional(),
 
     // ─── Payments (Optional for MVP, required for production) ─
+    SUBSCRIPTION_PAYSTACK_CURRENCIES: z
+      .string()
+      .regex(/^(NGN|USD|GHS|KES|ZAR)(,(NGN|USD|GHS|KES|ZAR))*$/)
+      .default('NGN'),
+    SUBSCRIPTION_FLUTTERWAVE_CURRENCIES: z
+      .string()
+      .regex(
+        /^(USD|NGN|EUR|GBP|CAD|GHS|KES|ZAR|UGX|XAF|XOF)(,(USD|NGN|EUR|GBP|CAD|GHS|KES|ZAR|UGX|XAF|XOF))*$/,
+      )
+      .default('NGN'),
     PAYSTACK_SECRET_KEY: z.string().optional(),
     PAYSTACK_PUBLIC_KEY: z.string().optional(),
     FLUTTERWAVE_SECRET_KEY: z.string().optional(),

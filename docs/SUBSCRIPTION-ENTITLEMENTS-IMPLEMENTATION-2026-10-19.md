@@ -2,7 +2,7 @@
 
 ## Delivered behavior
 
-Essentials includes 100 non-archived members, two staff login accounts and one location (including HQ), at the existing ₦10,000/month or ₦108,000/year. Community remains 300/5/1 at ₦20,000/month or ₦216,000/year; Network remains 1,500/15/3 at ₦40,000/month or ₦432,000/year. Enterprise limits must be explicitly configured in the trusted subscription record's `enterprise_limits` JSON (`members`, `staff`, `locations`, nonnegative integers). Missing Enterprise values grant zero capacity, never unlimited capacity. Enterprise self-service payment remains unavailable; prices and service terms are negotiated.
+Essentials includes 100 non-archived members, two staff login accounts and one location (including HQ), at $10 USD/month or $108 USD/year. Community remains 300/5/1 at $20 USD/month or $216 USD/year; Network remains 1,500/15/3 at $40 USD/month or $432 USD/year. Enterprise limits must be explicitly configured in the trusted subscription record's `enterprise_limits` JSON (`members`, `staff`, `locations`, nonnegative integers). Missing Enterprise values grant zero capacity, never unlimited capacity. Enterprise self-service payment remains unavailable; prices and service terms are negotiated.
 
 Member records have no login role. Enabled non-archived profiles with staff roles consume a seat once, regardless of their number of roles. Invitations reserve a seat before Supabase network I/O, release the reservation when provisioning finishes, and expire after 15 minutes. Pending invitations count towards the allowance. Deactivation/archive releases a slot; restoration/reactivation rechecks it. Member status changes alone do not release capacity. Visitors consume a member slot only on conversion.
 
@@ -24,7 +24,7 @@ Allowance thresholds (80%, 90%, 100% for members/staff) create deduplicated bell
 
 ## Payment lifecycle
 
-- Immediate upgrades keep the current billing cycle and expiry. A server quote prorates the difference in plan prices over the remaining paid period, rounded up to whole naira. The immutable attempt stores its base subscription and target expiry. Access changes only after provider verification of reference, currency and amount.
+- Immediate upgrades keep the current billing cycle and expiry. A server quote prorates the difference in plan prices over the remaining paid period, converted from the USD base and rounded up to a whole payment currency unit. The immutable attempt stores its base subscription and target expiry. Access changes only after provider verification of reference, currency and amount.
 - Repeated callbacks claim a reference once. A late payment for a subscription that has changed, or an upgrade paid after its original period expires, is recorded as received/requiring review and cannot overwrite current access. Administrators see the review status and payment reference.
 - Downgrades are preferences for the next manual renewal: no charge or data deletion occurs when scheduled. The current paid plan stays active until expiry. The lower plan is applied after its renewal payment is verified. Administrators can cancel the scheduled preference. Active subscriptions cannot renew early or switch billing cycles immediately; renew after expiry, or upgrade within the existing cycle.
 - No automatic card charges, automatic refunds or automatic Enterprise grants were introduced. Tenant giving still uses the church's own merchant/provider accounts.
@@ -41,3 +41,5 @@ Development/demo seed data must belong to a church with an explicit adequate sub
 ## Verification
 
 Unit checks cover plan quotes, stale payment reconciliation, scheduling with pending payments, staff usage, administrator-only access and feature writes. Disposable PostgreSQL checks cover catalog parity, Enterprise fail-closed behavior, concurrent final-slot contention, member restoration, staff reservations/reactivation, HQ capacity, historical retention, administrator-only threshold/renewal notification deduplication and real Prisma error normalization. Production-browser fixtures cover administrator usage/upgrade review and trusted checkout, staff billing isolation, and downgrade scheduling without a charge. Providers are mocked in these checks; they are not live merchant transactions.
+
+USD currency selection, frozen quotes and merchant-currency rollout are documented in [Subscription currencies](SUBSCRIPTION-CURRENCIES-2026-10-19.md). This supersedes the earlier fixed NGN catalog.

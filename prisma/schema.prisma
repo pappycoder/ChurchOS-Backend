@@ -281,6 +281,7 @@ model SubscriptionPayment {
   amount       Int
   currency     String                    @default("NGN")
   status       SubscriptionPaymentStatus @default(pending)
+  pricing_snapshot Json?
   checkout_url String?
   intent String @default("renewal")
   base_plan SubscriptionPlan?

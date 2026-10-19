@@ -1,10 +1,10 @@
 import { SubscriptionPlan, BillingCycle } from '@prisma/client';
 export { SubscriptionPlan, BillingCycle };
-/** Server-owned NGN pricing. Enterprise requires an agreed quote. */
+/** Server-owned USD base pricing. Enterprise requires an agreed quote. */
 export const SUBSCRIPTION_PLANS = {
-  essentials: { name: 'Essentials', monthly: 10000, annual: 108000 },
-  community: { name: 'Community', monthly: 20000, annual: 216000 },
-  network: { name: 'Network', monthly: 40000, annual: 432000 },
+  essentials: { name: 'Essentials', monthly: 10, annual: 108 },
+  community: { name: 'Community', monthly: 20, annual: 216 },
+  network: { name: 'Network', monthly: 40, annual: 432 },
 } as const satisfies Record<
   Exclude<SubscriptionPlan, 'enterprise'>,
   { name: string; monthly: number; annual: number }

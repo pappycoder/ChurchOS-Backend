@@ -1,3 +1,5 @@
+import { SubscriptionPricingService } from '../../../src/billing/subscription-pricing.service';
+import { RedisService } from '../../../src/redis/redis.service';
 import { ConfigService } from '@nestjs/config';
 import { validate } from 'class-validator';
 import { CheckoutDto } from '../../../src/billing/billing.dto';
@@ -11,6 +13,7 @@ describe('Platform subscriptions', () => {
   let service: BillingService;
   let prisma: any;
   let gateway: any;
+  let pricing: SubscriptionPricingService;
   const payment = {
     reference,
     church_id: 'church-a',
@@ -38,7 +41,9 @@ describe('Platform subscriptions', () => {
         upsert: jest
           .fn()
           .mockResolvedValue({ plan: 'essentials', cycle: 'monthly', paid_until: null }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ paid_until: null }),
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ plan: 'essentials', cycle: 'monthly', paid_until: null }),
         update: jest.fn(),
       },
       subscriptionPayment: {
@@ -67,17 +72,35 @@ describe('Platform subscriptions', () => {
       validateWebhookSignature: jest.fn().mockReturnValue(true),
       parseWebhookEvent: jest.fn().mockReturnValue({ reference, event: 'charge.success' }),
     };
+    const cache = new Map<string, unknown>();
+    pricing = new SubscriptionPricingService(
+      {
+        get: jest.fn(async (key: string) => cache.get(key) ?? null),
+        set: jest.fn(async (key: string, value: unknown) => {
+          cache.set(key, value);
+        }),
+      } as unknown as RedisService,
+      new ConfigService({
+        SUBSCRIPTION_PAYSTACK_CURRENCIES: 'NGN,USD',
+        SUBSCRIPTION_FLUTTERWAVE_CURRENCIES: 'NGN,USD',
+      }),
+    );
     service = new BillingService(
       prisma as PrismaService,
       { getOrThrow: () => 'https://churchos.example' } as unknown as ConfigService,
       gateway as PaystackService,
       { ...gateway, name: 'flutterwave' } as FlutterwaveService,
+      pricing,
     );
   });
+  async function checkout(churchId: string, email: string, dto: CheckoutDto) {
+    const quote = await service.quote(churchId, dto);
+    return service.checkout(churchId, email, { ...dto, quoteId: quote.quoteId });
+  }
   it('calculates exact server-owned monthly/yearly prices', async () => {
     for (const [plan, prices] of Object.entries(SUBSCRIPTION_PLANS))
       for (const cycle of ['monthly', 'annual'] as const) {
-        await service.checkout('church-a', 'admin@example.org', {
+        await checkout('church-a', 'admin@example.org', {
           plan: plan as CheckoutDto['plan'],
           cycle,
           gateway: 'paystack',
@@ -87,7 +110,7 @@ describe('Platform subscriptions', () => {
           prices[cycle],
           expect.stringMatching(/^COSUB_[a-f0-9]{32}$/),
           { purpose: 'churchos_subscription', churchId: 'church-a' },
-          { callbackUrl: 'https://churchos.example/subscription' },
+          { callbackUrl: 'https://churchos.example/subscription', currency: 'USD' },
         );
       }
   });
@@ -98,6 +121,8 @@ describe('Platform subscriptions', () => {
       { cycle: 'forever' },
       { gateway: 'custom' },
       { amount: 1 },
+      { currency: 'BTC' },
+      { quoteId: 'fake' },
     ]) {
       const dto = Object.assign(
         new CheckoutDto(),
@@ -116,12 +141,12 @@ describe('Platform subscriptions', () => {
       paid_until: new Date(Date.now() + 60000),
     });
     await expect(
-      service.checkout('church-a', 'admin@example.org', {
+      checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
         cycle: 'monthly',
         gateway: 'paystack',
       }),
-    ).rejects.toThrow('already active');
+    ).rejects.toThrow('subscription changed');
     expect(gateway.initializeTransaction).not.toHaveBeenCalled();
   });
   it('resumes the same unpaid checkout without another initialization', async () => {
@@ -148,7 +173,7 @@ describe('Platform subscriptions', () => {
       Promise.resolve({ reference: ref, authorizationUrl }),
     );
     await expect(
-      service.checkout('church-a', 'admin@example.org', {
+      checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
         cycle: 'monthly',
         gateway: 'paystack',
@@ -238,8 +263,8 @@ describe('Platform subscriptions', () => {
       });
       expect(quote).toMatchObject({
         intent: 'upgrade',
-        amount: 5000,
-        renewBy: new Date('2026-10-31T00:00:00Z'),
+        amount: 5,
+        renewBy: '2026-10-31T00:00:00.000Z',
       });
       expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
     } finally {
@@ -265,6 +290,79 @@ describe('Platform subscriptions', () => {
       }),
     );
     expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
+  });
+  it('does not silently substitute a different pending quote from another tab', async () => {
+    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' };
+    const quoted = await service.quote('church-a', dto);
+    prisma.subscriptionPayment.findFirst.mockResolvedValue({
+      ...payment,
+      currency: 'USD',
+      pricing_snapshot: { quoteId: 'COSQ_' + 'c'.repeat(32) },
+      checkout_url: 'https://checkout.paystack.com/other-tab',
+    });
+    await expect(
+      service.checkout('church-a', 'admin@example.org', { ...dto, quoteId: quoted.quoteId }),
+    ).rejects.toThrow('Another checkout');
+    expect(gateway.initializeTransaction).not.toHaveBeenCalled();
+  });
+  it('freezes a rounded NGN quote and passes its currency to the provider', async () => {
+    jest
+      .spyOn(pricing, 'exchange')
+      .mockResolvedValue({ rate: 1500.111, updatedAt: new Date().toISOString() });
+    const dto: CheckoutDto = {
+      plan: 'essentials',
+      cycle: 'monthly',
+      gateway: 'paystack',
+      currency: 'NGN',
+    };
+    const quoted = await service.quote('church-a', dto);
+    expect(quoted.amount).toBe(15002);
+    jest
+      .spyOn(pricing, 'exchange')
+      .mockResolvedValue({ rate: 2000, updatedAt: new Date().toISOString() });
+    await service.checkout('church-a', 'admin@example.org', { ...dto, quoteId: quoted.quoteId });
+    expect(gateway.initializeTransaction).toHaveBeenCalledWith(
+      expect.any(String),
+      15002,
+      expect.any(String),
+      expect.any(Object),
+      { callbackUrl: 'https://churchos.example/subscription', currency: 'NGN' },
+    );
+    expect(prisma.subscriptionPayment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 15002,
+          currency: 'NGN',
+          pricing_snapshot: expect.objectContaining({ exchangeRate: 1500.111, usdAmount: 10 }),
+        }),
+      }),
+    );
+  });
+  it('requires a quote and rejects expired, cross-church and changed-currency quotes', async () => {
+    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' };
+    await expect(service.checkout('church-a', 'admin@example.org', dto)).rejects.toThrow(
+      'fresh payment quote',
+    );
+    const quoted = await service.quote('church-a', dto);
+    await expect(
+      service.checkout('church-b', 'admin@example.org', { ...dto, quoteId: quoted.quoteId }),
+    ).rejects.toThrow('expired');
+    await expect(
+      service.checkout('church-a', 'admin@example.org', {
+        ...dto,
+        currency: 'NGN',
+        quoteId: quoted.quoteId,
+      }),
+    ).rejects.toThrow('different');
+    jest.useFakeTimers().setSystemTime(Date.now() + 901000);
+    try {
+      await expect(
+        service.checkout('church-a', 'admin@example.org', { ...dto, quoteId: quoted.quoteId }),
+      ).rejects.toThrow('expired');
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(gateway.initializeTransaction).not.toHaveBeenCalled();
   });
   it('returns church-wide usage including reserved staff seats', async () => {
     prisma.staffInvitationReservation.count.mockResolvedValue(1);

@@ -1,13 +1,24 @@
+import { SubscriptionPricingService } from './subscription-pricing.service';
 import { Module } from '@nestjs/common';
 import { BillingAdminGuard } from './plan-feature.guard';
 import { AuthModule } from '../auth/auth.module';
-import { BillingController, BillingWebhookController } from './billing.controller';
+import {
+  BillingController,
+  BillingWebhookController,
+  SubscriptionPricingController,
+} from './billing.controller';
 import { BillingService } from './billing.service';
 import { PaystackService } from '../giving/services/paystack.service';
 import { FlutterwaveService } from '../giving/services/flutterwave.service';
 @Module({
   imports: [AuthModule],
-  controllers: [BillingController, BillingWebhookController],
-  providers: [BillingAdminGuard, BillingService, PaystackService, FlutterwaveService],
+  controllers: [BillingController, BillingWebhookController, SubscriptionPricingController],
+  providers: [
+    SubscriptionPricingService,
+    BillingAdminGuard,
+    BillingService,
+    PaystackService,
+    FlutterwaveService,
+  ],
 })
 export class BillingModule {}

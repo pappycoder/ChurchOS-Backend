@@ -40,6 +40,14 @@ export class RequestContextMiddleware implements NestMiddleware {
   }
 
   private async hydrate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+    // Public price conversion must work even with an expired browser session.
+    if (
+      req.method === 'GET' &&
+      (req.originalUrl ?? req.url ?? '').split('?')[0] === '/api/v1/pricing/subscriptions'
+    ) {
+      next();
+      return;
+    }
     const authReq = req as AuthenticatedRequest;
 
     // Extract Bearer token from Authorization header

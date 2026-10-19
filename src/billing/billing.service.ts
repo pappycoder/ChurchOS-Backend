@@ -21,7 +21,12 @@ import {
   PLAN_CAPACITIES,
 } from './plans';
 import { churchEntitlements } from './entitlements';
-import { SubscriptionPlan } from '@prisma/client';
+import { Prisma, SubscriptionPlan } from '@prisma/client';
+import {
+  SubscriptionPricingService,
+  convertedPrice,
+  LockedQuote,
+} from './subscription-pricing.service';
 
 @Injectable()
 export class BillingService {
@@ -30,6 +35,7 @@ export class BillingService {
     private readonly config: ConfigService,
     private readonly paystack: PaystackService,
     private readonly flutterwave: FlutterwaveService,
+    private readonly pricing: SubscriptionPricingService,
   ) {}
 
   private gateway(name: string): PaymentGatewayProvider {
@@ -40,6 +46,10 @@ export class BillingService {
         'Subscription checkout is unavailable for this gateway. Please choose another or contact ChurchOS.',
       );
     return gateway;
+  }
+
+  pricingCatalog(currency: string) {
+    return this.pricing.catalog(currency);
   }
 
   async status(churchId: string) {
@@ -55,6 +65,7 @@ export class BillingService {
         plan: true,
         cycle: true,
         amount: true,
+        currency: true,
         checkout_url: true,
         created_at: true,
       },
@@ -83,6 +94,8 @@ export class BillingService {
           plan: true,
           cycle: true,
           amount: true,
+          currency: true,
+          pricing_snapshot: true,
           status: true,
           intent: true,
           application_status: true,
@@ -92,6 +105,11 @@ export class BillingService {
       }),
     ]);
     return {
+      baseCurrency: 'USD',
+      gatewayCurrencies: {
+        paystack: this.pricing.gatewayCurrencies('paystack'),
+        flutterwave: this.pricing.gatewayCurrencies('flutterwave'),
+      },
       catalog: Object.entries(SUBSCRIPTION_PLANS).map(([id, pricing]) => ({
         id,
         ...pricing,
@@ -113,6 +131,7 @@ export class BillingService {
             plan: latestPayment.plan,
             cycle: latestPayment.cycle,
             amount: latestPayment.amount,
+            currency: latestPayment.currency,
           }
         : null,
     };
@@ -171,10 +190,7 @@ export class BillingService {
           (current.paid_until!.getTime() - start.getTime()),
       ),
     );
-    const amount = Math.max(
-      1,
-      Math.ceil((price - SUBSCRIPTION_PLANS[current.plan][cycle]) * fraction),
-    );
+    const amount = Math.max(0.000001, (price - SUBSCRIPTION_PLANS[current.plan][cycle]) * fraction);
     return {
       intent: 'upgrade',
       amount,
@@ -187,7 +203,33 @@ export class BillingService {
     const current = await this.prisma.platformSubscription.findUniqueOrThrow({
       where: { church_id: churchId },
     });
-    return this.calculateQuote(current, dto.plan, dto.cycle);
+    const currency = dto.currency || 'USD';
+    this.pricing.assertGatewayCurrency(dto.gateway, currency);
+    const calculated = this.calculateQuote(current, dto.plan, dto.cycle);
+    const exchange = await this.pricing.exchange(currency);
+    const payload: LockedQuote = {
+      plan: dto.plan,
+      cycle: dto.cycle,
+      gateway: dto.gateway,
+      currency,
+      intent: calculated.intent,
+      amount: convertedPrice(calculated.amount, exchange.rate),
+      usdAmount: calculated.amount,
+      exchangeRate: exchange.rate,
+      rateUpdatedAt: exchange.updatedAt,
+      effectiveAt: calculated.effectiveAt.toISOString(),
+      renewBy: calculated.renewBy.toISOString(),
+      credit: calculated.credit,
+      expiresAt: new Date(Date.now() + 900000).toISOString(),
+      base: {
+        plan: current.plan,
+        cycle: current.cycle,
+        paidUntil: current.paid_until?.toISOString() ?? null,
+        periodStartedAt: current.period_started_at?.toISOString() ?? null,
+      },
+    };
+    const quoteId = await this.pricing.saveQuote(churchId, payload);
+    return { ...payload, quoteId };
   }
   async schedule(
     churchId: string,
@@ -231,7 +273,7 @@ export class BillingService {
         create: { church_id: churchId, plan: dto.plan, cycle: dto.cycle },
         update: {},
       });
-      const quote = this.calculateQuote(subscription, dto.plan, dto.cycle);
+
       // One payable attempt per church prevents two tabs buying overlapping periods.
       // A terminated API invocation must not leave checkout permanently locked.
       await tx.subscriptionPayment.updateMany({
@@ -250,14 +292,41 @@ export class BillingService {
         if (
           pending.plan !== dto.plan ||
           pending.cycle !== dto.cycle ||
-          pending.gateway !== dto.gateway
+          pending.gateway !== dto.gateway ||
+          (dto.currency !== undefined && pending.currency !== dto.currency)
         )
           throw new ConflictException(
             'Complete the existing pending checkout before selecting another plan.',
           );
+        const snapshot = pending.pricing_snapshot as { quoteId?: string } | null;
+        if (dto.quoteId && snapshot?.quoteId !== dto.quoteId)
+          throw new ConflictException(
+            'Another checkout is pending. Refresh Plan & Billing to review its amount before resuming.',
+          );
         if (pending.checkout_url) return pending;
         throw new ConflictException('A checkout is being prepared. Please retry shortly.');
       }
+      const quote = await this.pricing.getQuote(churchId, dto.quoteId);
+      const currency = dto.currency || 'USD';
+      this.pricing.assertGatewayCurrency(dto.gateway, currency);
+      if (
+        quote.plan !== dto.plan ||
+        quote.cycle !== dto.cycle ||
+        quote.gateway !== dto.gateway ||
+        quote.currency !== currency
+      )
+        throw new BadRequestException(
+          'This quote belongs to a different plan, currency or gateway. Review a fresh quote.',
+        );
+      if (
+        quote.base.plan !== subscription.plan ||
+        quote.base.cycle !== subscription.cycle ||
+        quote.base.paidUntil !== (subscription.paid_until?.toISOString() ?? null) ||
+        quote.base.periodStartedAt !== (subscription.period_started_at?.toISOString() ?? null)
+      )
+        throw new ConflictException('Your subscription changed. Review a fresh payment quote.');
+      // Validate the entitlement transition again under the church lock; charge the frozen price.
+      this.calculateQuote(subscription, dto.plan, dto.cycle);
       return tx.subscriptionPayment.create({
         data: {
           church_id: churchId,
@@ -270,7 +339,8 @@ export class BillingService {
           base_plan: subscription.plan,
           base_paid_until: subscription.paid_until,
           target_paid_until: quote.intent === 'upgrade' ? subscription.paid_until : null,
-          currency: 'NGN',
+          currency,
+          pricing_snapshot: { ...quote, quoteId: dto.quoteId } as unknown as Prisma.InputJsonValue,
           status: 'pending',
         },
       });
@@ -283,7 +353,7 @@ export class BillingService {
         attempt.amount,
         attempt.reference,
         { purpose: 'churchos_subscription', churchId },
-        { callbackUrl: callback },
+        { callbackUrl: callback, currency: attempt.currency },
       );
       const url = new URL(result.authorizationUrl);
       const hosts =

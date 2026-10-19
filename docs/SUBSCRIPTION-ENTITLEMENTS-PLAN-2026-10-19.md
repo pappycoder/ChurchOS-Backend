@@ -1,3 +1,5 @@
+> Pricing update: the USD catalog and conversion contract in [Subscription currencies](SUBSCRIPTION-CURRENCIES-2026-10-19.md) supersede this original NGN proposal.
+
 # Subscription entitlement rollout plan
 
 Status: implemented locally. Apply migration `20261019140000_subscription_entitlements` and deploy backend, workers and web together. See SUBSCRIPTION-ENTITLEMENTS-IMPLEMENTATION-2026-10-19.md for the delivered contract and verification.

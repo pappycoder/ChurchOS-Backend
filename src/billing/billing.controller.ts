@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   RawBodyRequest,
   Req,
   UseGuards,
@@ -68,5 +69,15 @@ export class BillingWebhookController {
       req.rawBody?.toString('utf8') ?? '',
       gateway === 'paystack' ? paystack : flutterwave || verificationHash,
     );
+  }
+}
+
+@Controller('pricing')
+export class SubscriptionPricingController {
+  constructor(private readonly billing: BillingService) {}
+  @Get('subscriptions')
+  @RateLimit({ limit: 60, windowSeconds: 60 })
+  catalog(@Query('currency') currency = 'USD') {
+    return this.billing.pricingCatalog(currency);
   }
 }

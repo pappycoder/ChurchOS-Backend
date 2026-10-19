@@ -139,7 +139,7 @@ export class PaystackService implements PaymentGatewayProvider {
     amount: number,
     reference: string,
     metadata?: Record<string, unknown>,
-    options?: { callbackUrl?: string },
+    options?: { callbackUrl?: string; currency?: string },
   ): Promise<PaymentInitializeResult> {
     if (!this.isConfigured()) {
       throw new BadRequestException('Paystack is not configured. Set PAYSTACK_SECRET_KEY.');
@@ -152,7 +152,7 @@ export class PaystackService implements PaymentGatewayProvider {
       email,
       amount: amountInKobo,
       reference,
-      currency: 'NGN',
+      currency: options?.currency || 'NGN',
     };
 
     if (metadata) {

@@ -15,7 +15,7 @@ Example Essentials account:
 ```text
 Plan & Billing
 Essentials                                      Active
-₦10,000 / month                                  Renew by: 19 Nov 2026
+USD 10 / month                                  Renew by: 19 Nov 2026
 
 Members              87 / 100                    [usage bar: 87%]
 Staff accounts        1 / 2                      [usage bar: 50%]
@@ -73,3 +73,5 @@ Before expiry, show a renewal reminder to billing administrators. After expiry, 
 ## Implementation sequence
 
 First implement the authoritative entitlement/usage API and transactional quotas, then the usage cards and limit dialogs, then active-plan upgrades and feature availability. Backend, background workers and web must enforce the same entitlement contract. This document describes the intended UI; it does not claim these new subscription screens are deployed.
+
+Pricing now includes a shared currency selector, whole-unit converted totals and an explicit payment-currency quote. See [Subscription currencies](SUBSCRIPTION-CURRENCIES-2026-10-19.md).

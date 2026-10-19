@@ -104,7 +104,7 @@ export interface PaymentGatewayProvider {
     amount: number,
     reference: string,
     metadata?: Record<string, unknown>,
-    options?: { callbackUrl?: string },
+    options?: { callbackUrl?: string; currency?: string },
   ): Promise<PaymentInitializeResult>;
 
   /** Verify a payment by reference */

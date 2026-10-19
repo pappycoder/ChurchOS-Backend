@@ -126,7 +126,7 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     amount: number,
     reference: string,
     metadata?: Record<string, unknown>,
-    options?: { callbackUrl?: string },
+    options?: { callbackUrl?: string; currency?: string },
   ): Promise<PaymentInitializeResult> {
     if (!this.isConfigured()) {
       throw new BadRequestException('Flutterwave is not configured. Set FLUTTERWAVE_SECRET_KEY.');
@@ -135,7 +135,7 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     const body: Record<string, unknown> = {
       tx_ref: reference,
       amount,
-      currency: 'NGN',
+      currency: options?.currency || 'NGN',
       redirect_url:
         options?.callbackUrl ||
         metadata?.redirect_url ||
