@@ -1,3 +1,4 @@
+import { subscriptionError } from '../billing/plan-errors';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RequestContextService } from '../common/services/request-context.service';
@@ -708,7 +709,9 @@ export class MembersService {
       } catch (error) {
         errors.push({
           row: rowNum,
-          message: error instanceof Error ? error.message : 'Unknown error',
+          message:
+            subscriptionError(error)?.message ??
+            (error instanceof Error ? error.message : 'Unknown error'),
         });
       }
     }

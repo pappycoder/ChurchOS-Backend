@@ -1,3 +1,4 @@
+import { churchEntitlements, reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file profile.service.ts
@@ -145,7 +146,11 @@ export class ProfileService {
       );
     }
 
-    return this.mapToResponseDto(profile, { permissions });
+    const entitlement = await churchEntitlements(this.prisma, profile.church_id);
+    return {
+      ...this.mapToResponseDto(profile, { permissions }),
+      planFeatures: entitlement.features,
+    };
   }
 
   /**
@@ -1051,66 +1056,71 @@ export class ProfileService {
     // TODO: Send the invitation via Resend (branded email with church name,
     // inviter details, and setup instructions) instead of Supabase's default
     // invite template.
-    const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
-      data: {
-        first_name: dto.firstName,
-        last_name: dto.lastName,
-        church_id: churchId,
-        role: dto.role,
-      },
-      redirectTo: `${this.config.get<string>('WEB_URL')}/auth/callback`,
-    });
-
-    if (error) {
-      this.logger.error(`Supabase invite failed: ${error.message}`);
-      throw new BadRequestException(`Failed to send invitation: ${error.message}`);
-    }
-
-    if (!data?.user) {
-      throw new BadRequestException('Failed to create user');
-    }
-
-    let profile;
+    const reservation = await reserveStaffSeat(this.prisma, churchId, normalizedEmail);
     try {
-      profile = await this.prisma.profile.create({
+      const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
         data: {
-          user_id: data.user.id,
-          church_id: churchId,
-          branch_id: branchId || null,
-          role: [dto.role],
-          is_admin_hq: dto.role === 'church_admin',
           first_name: dto.firstName,
           last_name: dto.lastName,
-          phone: dto.phone || null,
-          email: normalizedEmail,
+          church_id: churchId,
+          role: dto.role,
         },
+        redirectTo: `${this.config.get<string>('WEB_URL')}/auth/callback`,
       });
-    } catch (err) {
-      // Roll back the created Supabase Auth user so we don't leak an orphaned
-      // account that has no local profile.
-      this.logger.error(
-        `Profile creation failed for invited user, deleting Supabase user ${data.user.id}: ${(err as Error).message}`,
-      );
-      await supabase.auth.admin.deleteUser(data.user.id).catch(() => {});
-      throw new BadRequestException('Failed to create user profile');
+
+      if (error) {
+        this.logger.error(`Supabase invite failed: ${error.message}`);
+        throw new BadRequestException(`Failed to send invitation: ${error.message}`);
+      }
+
+      if (!data?.user) {
+        throw new BadRequestException('Failed to create user');
+      }
+
+      let profile;
+      try {
+        profile = await this.prisma.profile.create({
+          data: {
+            user_id: data.user.id,
+            church_id: churchId,
+            branch_id: branchId || null,
+            role: [dto.role],
+            is_admin_hq: dto.role === 'church_admin',
+            first_name: dto.firstName,
+            last_name: dto.lastName,
+            phone: dto.phone || null,
+            email: normalizedEmail,
+          },
+        });
+      } catch (err) {
+        // Roll back the created Supabase Auth user so we don't leak an orphaned
+        // account that has no local profile.
+        this.logger.error(
+          `Profile creation failed for invited user, deleting Supabase user ${data.user.id}: ${(err as Error).message}`,
+        );
+        await supabase.auth.admin.deleteUser(data.user.id).catch(() => {});
+        throw new BadRequestException('Failed to create user profile');
+      }
+
+      await this.audit.log({
+        userId: invitedByUserId,
+        churchId,
+        entity: 'user',
+        action: 'CREATE',
+        entityId: profile.id,
+        newValues: { email: dto.email, role: dto.role },
+      });
+
+      this.logger.log(`User invited: ${dto.email} as ${dto.role} for church ${churchId}`);
+
+      return this.mapToResponseDto({
+        ...profile,
+        church: null,
+        branch: null,
+      });
+    } finally {
+      await releaseStaffSeat(this.prisma, reservation.id);
     }
-
-    await this.audit.log({
-      userId: invitedByUserId,
-      churchId,
-      entity: 'user',
-      action: 'CREATE',
-      entityId: profile.id,
-      newValues: { email: dto.email, role: dto.role },
-    });
-
-    this.logger.log(`User invited: ${dto.email} as ${dto.role} for church ${churchId}`);
-
-    return this.mapToResponseDto({
-      ...profile,
-      church: null,
-      branch: null,
-    });
   }
 
   /**

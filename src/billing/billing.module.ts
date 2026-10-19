@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BillingAdminGuard } from './plan-feature.guard';
 import { AuthModule } from '../auth/auth.module';
 import { BillingController, BillingWebhookController } from './billing.controller';
 import { BillingService } from './billing.service';
@@ -7,6 +8,6 @@ import { FlutterwaveService } from '../giving/services/flutterwave.service';
 @Module({
   imports: [AuthModule],
   controllers: [BillingController, BillingWebhookController],
-  providers: [BillingService, PaystackService, FlutterwaveService],
+  providers: [BillingAdminGuard, BillingService, PaystackService, FlutterwaveService],
 })
 export class BillingModule {}

@@ -130,6 +130,14 @@ export class AuthService {
           },
         });
 
+        await tx.platformSubscription.create({
+          data: {
+            church_id: church.id,
+            plan: dto.plan ?? 'essentials',
+            cycle: dto.billingCycle ?? 'monthly',
+          },
+        });
+
         // Create admin profile
         const profile = await tx.profile.create({
           data: {
@@ -144,13 +152,6 @@ export class AuthService {
           },
         });
 
-        await tx.platformSubscription.create({
-          data: {
-            church_id: church.id,
-            plan: dto.plan ?? 'essentials',
-            cycle: dto.billingCycle ?? 'monthly',
-          },
-        });
         return { church, profile };
       });
 

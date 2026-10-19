@@ -1,6 +1,6 @@
 # Subscription entitlement rollout plan
 
-Status: proposed implementation; runtime enforcement is not implemented by this document.
+Status: implemented locally. Apply migration `20261019140000_subscription_entitlements` and deploy backend, workers and web together. See SUBSCRIPTION-ENTITLEMENTS-IMPLEMENTATION-2026-10-19.md for the delivered contract and verification.
 
 The agreed immediate change is Essentials at 100 members for ₦10,000/month or ₦108,000/year, one location and two staff accounts. The web display catalog has been updated. Community and Network prices and allowances remain unchanged.
 

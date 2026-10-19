@@ -24,6 +24,11 @@ describe('Church-owned integration defaults', () => {
   let fetcher: jest.SpyInstance;
   beforeEach(() => {
     prisma = {
+      platformSubscription: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ plan: 'network', paid_until: new Date(Date.now() + 86400000) }),
+      },
       integrationChannel: {
         findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),

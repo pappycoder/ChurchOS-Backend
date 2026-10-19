@@ -69,6 +69,10 @@ describe('EventsService', () => {
 
   beforeEach(() => {
     prisma = createPrismaMock();
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'network',
+      paid_until: new Date(Date.now() + 86400000),
+    });
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     gatewayRegistry = new Map();
     service = new EventsService(

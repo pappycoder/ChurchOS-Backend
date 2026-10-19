@@ -60,6 +60,11 @@ export class NightlyJobsProcessor extends WorkerHost {
     const { churchId } = job.data;
 
     this.logger.log(`Running nightly jobs for church ${churchId}`);
+    try {
+      await this.prisma.$executeRaw`SELECT churchos_notify_renewal(${churchId})`;
+    } catch {
+      this.logger.warn('Subscription renewal reminders could not be refreshed');
+    }
 
     const engagementScored = await this.scoringService.calculateEngagementScores(churchId);
     await job.updateProgress(20);

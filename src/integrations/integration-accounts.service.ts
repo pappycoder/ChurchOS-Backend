@@ -1,3 +1,4 @@
+import { assertPlanFeature } from '../billing/entitlements';
 import {
   BadRequestException,
   Injectable,
@@ -260,6 +261,11 @@ export class IntegrationAccountsService {
   }
   async resolve(churchId: string, kind: Channel): Promise<ResolvedIntegration | null> {
     if (!churchId) return null;
+    await assertPlanFeature(
+      this.prisma,
+      churchId,
+      kind === 'payment' ? 'giving' : kind === 'voice' ? 'calls' : kind,
+    );
     const row = await this.prisma.integrationChannel.findUnique({
       where: { church_id_channel: { church_id: churchId, channel: kind } },
     });

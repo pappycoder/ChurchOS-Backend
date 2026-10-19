@@ -24,6 +24,10 @@ describe('Platform subscriptions', () => {
   };
   beforeEach(() => {
     prisma = {
+      member: { count: jest.fn().mockResolvedValue(25) },
+      profile: { count: jest.fn().mockResolvedValue(1) },
+      branch: { count: jest.fn().mockResolvedValue(1) },
+      staffInvitationReservation: { count: jest.fn().mockResolvedValue(0) },
       platformSubscription: {
         findUnique: jest.fn().mockResolvedValue({
           church_id: 'church-a',
@@ -31,12 +35,15 @@ describe('Platform subscriptions', () => {
           cycle: 'monthly',
           paid_until: null,
         }),
-        upsert: jest.fn().mockResolvedValue({ paid_until: null }),
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ plan: 'essentials', cycle: 'monthly', paid_until: null }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ paid_until: null }),
         update: jest.fn(),
       },
       subscriptionPayment: {
         findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         create: jest.fn().mockImplementation(({ data }) => ({ ...data, checkout_url: null })),
         update: jest.fn(),
@@ -104,6 +111,8 @@ describe('Platform subscriptions', () => {
   });
   it('does not charge an already-active workspace', async () => {
     prisma.platformSubscription.upsert.mockResolvedValueOnce({
+      plan: 'essentials',
+      cycle: 'monthly',
       paid_until: new Date(Date.now() + 60000),
     });
     await expect(
@@ -123,7 +132,7 @@ describe('Platform subscriptions', () => {
     expect(
       await service.checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
-        cycle: 'annual',
+        cycle: 'monthly',
         gateway: 'paystack',
       }),
     ).toEqual({ reference, authorizationUrl: 'https://checkout.paystack.com/old' });
@@ -212,6 +221,68 @@ describe('Platform subscriptions', () => {
     prisma.subscriptionPayment.findUnique.mockResolvedValue({ ...payment, gateway: 'flutterwave' });
     await service.webhook('paystack', '{}', 'signed');
     expect(gateway.verifyTransaction).not.toHaveBeenCalled();
+  });
+  it('quotes an immediate upgrade for only the remaining paid period', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-16T00:00:00Z'));
+    try {
+      prisma.platformSubscription.findUniqueOrThrow.mockResolvedValue({
+        plan: 'essentials',
+        cycle: 'monthly',
+        period_started_at: new Date('2026-10-01T00:00:00Z'),
+        paid_until: new Date('2026-10-31T00:00:00Z'),
+      });
+      const quote = await service.quote('church-a', {
+        plan: 'community',
+        cycle: 'monthly',
+        gateway: 'paystack',
+      });
+      expect(quote).toMatchObject({
+        intent: 'upgrade',
+        amount: 5000,
+        renewBy: new Date('2026-10-31T00:00:00Z'),
+      });
+      expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+  it('records a stale successful payment for review without changing the current paid plan', async () => {
+    prisma.subscriptionPayment.findFirst.mockResolvedValue({
+      ...payment,
+      intent: 'upgrade',
+      base_plan: 'essentials',
+      base_paid_until: new Date('2026-10-31T00:00:00Z'),
+      target_paid_until: new Date('2026-10-31T00:00:00Z'),
+    });
+    prisma.platformSubscription.findUniqueOrThrow.mockResolvedValue({
+      plan: 'network',
+      paid_until: new Date('2027-01-01T00:00:00Z'),
+    });
+    await service.verify('church-a', reference);
+    expect(prisma.subscriptionPayment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'success', application_status: 'review' }),
+      }),
+    );
+    expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
+  });
+  it('returns church-wide usage including reserved staff seats', async () => {
+    prisma.staffInvitationReservation.count.mockResolvedValue(1);
+    const status = await service.status('church-a');
+    expect(status.limits).toEqual({ members: 100, staff: 2, locations: 1 });
+    expect(status.usage).toEqual({ members: 25, staff: 2, locations: 1, pendingInvitations: 1 });
+  });
+  it('blocks plan scheduling while an unpaid checkout is outstanding', async () => {
+    prisma.platformSubscription.findUniqueOrThrow.mockResolvedValue({
+      plan: 'network',
+      cycle: 'monthly',
+      paid_until: new Date(Date.now() + 86400000),
+    });
+    prisma.subscriptionPayment.findFirst.mockResolvedValue(payment);
+    await expect(service.schedule('church-a', 'community', 'monthly')).rejects.toThrow(
+      'pending checkout',
+    );
+    expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
   });
   it.each([
     ['2026-01-31T14:12:00Z', 'monthly', '2026-02-28T14:12:00.000Z'],

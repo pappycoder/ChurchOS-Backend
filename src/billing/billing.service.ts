@@ -13,7 +13,15 @@ import { PaystackService } from '../giving/services/paystack.service';
 import { FlutterwaveService } from '../giving/services/flutterwave.service';
 import { PaymentGatewayProvider } from '../giving/services/payment-gateway.interface';
 import { CheckoutDto } from './billing.dto';
-import { SUBSCRIPTION_PLANS, subscriptionEnd, BillingCycle } from './plans';
+import {
+  SUBSCRIPTION_PLANS,
+  subscriptionEnd,
+  BillingCycle,
+  PLAN_RANK,
+  PLAN_CAPACITIES,
+} from './plans';
+import { churchEntitlements } from './entitlements';
+import { SubscriptionPlan } from '@prisma/client';
 
 @Injectable()
 export class BillingService {
@@ -51,7 +59,48 @@ export class BillingService {
         created_at: true,
       },
     });
+    const entitlement = await churchEntitlements(this.prisma, churchId);
+    const [members, staff, locations, pendingInvitations, payments] = await Promise.all([
+      this.prisma.member.count({ where: { church_id: churchId, archived_at: null } }),
+      this.prisma.profile.count({
+        where: {
+          church_id: churchId,
+          archived_at: null,
+          status: 'active',
+          NOT: { role: { isEmpty: true } },
+        },
+      }),
+      this.prisma.branch.count({ where: { church_id: churchId, archived_at: null } }),
+      this.prisma.staffInvitationReservation.count({
+        where: { church_id: churchId, expires_at: { gt: new Date() } },
+      }),
+      this.prisma.subscriptionPayment.findMany({
+        where: { church_id: churchId },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+        select: {
+          reference: true,
+          plan: true,
+          cycle: true,
+          amount: true,
+          status: true,
+          intent: true,
+          application_status: true,
+          created_at: true,
+          verified_at: true,
+        },
+      }),
+    ]);
     return {
+      catalog: Object.entries(SUBSCRIPTION_PLANS).map(([id, pricing]) => ({
+        id,
+        ...pricing,
+        limits: PLAN_CAPACITIES[id as keyof typeof PLAN_CAPACITIES],
+      })),
+      limits: entitlement.limits,
+      features: entitlement.features,
+      usage: { members, staff: staff + pendingInvitations, locations, pendingInvitations },
+      payments,
       subscription,
       active: !!(subscription?.paid_until && subscription.paid_until > new Date()),
       gateways: [this.paystack, this.flutterwave]
@@ -69,6 +118,108 @@ export class BillingService {
     };
   }
 
+  private calculateQuote(
+    current: {
+      plan: SubscriptionPlan;
+      cycle: BillingCycle;
+      paid_until: Date | null;
+      period_started_at?: Date | null;
+      scheduled_plan?: SubscriptionPlan | null;
+    },
+    plan: Exclude<SubscriptionPlan, 'enterprise'>,
+    cycle: BillingCycle,
+  ) {
+    const now = new Date();
+    const active = !!(current.paid_until && current.paid_until > now);
+    const price = SUBSCRIPTION_PLANS[plan][cycle];
+    if (!active)
+      return {
+        intent: 'renewal',
+        amount: price,
+        effectiveAt: now,
+        renewBy: subscriptionEnd(now, cycle),
+        credit: 0,
+      };
+    if (current.plan === plan)
+      throw new ConflictException(
+        'Your subscription is already active. Renew after the current period ends.',
+      );
+
+    if (current.plan === 'enterprise' || PLAN_RANK[plan] <= PLAN_RANK[current.plan])
+      throw new ConflictException('Schedule a downgrade for your next renewal.');
+    if (cycle !== current.cycle)
+      throw new ConflictException('Keep your current billing period for an immediate upgrade.');
+    const start = current.period_started_at
+      ? new Date(current.period_started_at)
+      : new Date(current.paid_until!);
+    if (!current.period_started_at) {
+      const day = start.getUTCDate();
+      start.setUTCDate(1);
+      start.setUTCMonth(start.getUTCMonth() - (cycle === 'annual' ? 12 : 1));
+      start.setUTCDate(
+        Math.min(
+          day,
+          new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)).getUTCDate(),
+        ),
+      );
+    }
+    const fraction = Math.max(
+      0,
+      Math.min(
+        1,
+        (current.paid_until!.getTime() - now.getTime()) /
+          (current.paid_until!.getTime() - start.getTime()),
+      ),
+    );
+    const amount = Math.max(
+      1,
+      Math.ceil((price - SUBSCRIPTION_PLANS[current.plan][cycle]) * fraction),
+    );
+    return {
+      intent: 'upgrade',
+      amount,
+      effectiveAt: now,
+      renewBy: current.paid_until!,
+      credit: Math.floor(SUBSCRIPTION_PLANS[current.plan][cycle] * fraction),
+    };
+  }
+  async quote(churchId: string, dto: CheckoutDto) {
+    const current = await this.prisma.platformSubscription.findUniqueOrThrow({
+      where: { church_id: churchId },
+    });
+    return this.calculateQuote(current, dto.plan, dto.cycle);
+  }
+  async schedule(
+    churchId: string,
+    plan: Exclude<SubscriptionPlan, 'enterprise'> | null,
+    cycle?: BillingCycle,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM churches WHERE id=${churchId} FOR UPDATE`;
+      const current = await tx.platformSubscription.findUniqueOrThrow({
+        where: { church_id: churchId },
+      });
+      if (
+        await tx.subscriptionPayment.findFirst({
+          where: { church_id: churchId, status: 'pending' },
+        })
+      )
+        throw new ConflictException('Complete your pending checkout first.');
+      if (
+        plan &&
+        (PLAN_RANK[plan] > PLAN_RANK[current.plan] ||
+          !current.paid_until ||
+          current.paid_until <= new Date())
+      )
+        throw new BadRequestException('Choose a downgrade for an active subscription.');
+      await tx.platformSubscription.update({
+        where: { church_id: churchId },
+        data: { scheduled_plan: plan, scheduled_cycle: plan ? (cycle ?? current.cycle) : null },
+      });
+    });
+    return this.status(churchId);
+  }
+
   async checkout(churchId: string, email: string, dto: CheckoutDto) {
     const gateway = this.gateway(dto.gateway);
     const callback = new URL('/subscription', this.config.getOrThrow<string>('WEB_URL')).href;
@@ -80,10 +231,7 @@ export class BillingService {
         create: { church_id: churchId, plan: dto.plan, cycle: dto.cycle },
         update: {},
       });
-      if (subscription.paid_until && subscription.paid_until > new Date())
-        throw new ConflictException(
-          'Your subscription is already active. Renew after the current period ends.',
-        );
+      const quote = this.calculateQuote(subscription, dto.plan, dto.cycle);
       // One payable attempt per church prevents two tabs buying overlapping periods.
       // A terminated API invocation must not leave checkout permanently locked.
       await tx.subscriptionPayment.updateMany({
@@ -99,6 +247,14 @@ export class BillingService {
         where: { church_id: churchId, status: 'pending' },
       });
       if (pending) {
+        if (
+          pending.plan !== dto.plan ||
+          pending.cycle !== dto.cycle ||
+          pending.gateway !== dto.gateway
+        )
+          throw new ConflictException(
+            'Complete the existing pending checkout before selecting another plan.',
+          );
         if (pending.checkout_url) return pending;
         throw new ConflictException('A checkout is being prepared. Please retry shortly.');
       }
@@ -109,7 +265,11 @@ export class BillingService {
           gateway: dto.gateway,
           plan: dto.plan,
           cycle: dto.cycle,
-          amount: SUBSCRIPTION_PLANS[dto.plan][dto.cycle],
+          amount: quote.amount,
+          intent: quote.intent,
+          base_plan: subscription.plan,
+          base_paid_until: subscription.paid_until,
+          target_paid_until: quote.intent === 'upgrade' ? subscription.paid_until : null,
           currency: 'NGN',
           status: 'pending',
         },
@@ -181,14 +341,24 @@ export class BillingService {
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM churches WHERE id = ${churchId} FOR UPDATE`;
-      const claimed = await tx.subscriptionPayment.updateMany({
-        where: { reference, church_id: churchId, status: { not: 'success' } },
-        data: { status: 'success', verified_at: new Date(), checkout_url: null },
-      });
-      if (!claimed.count) return;
       const current = await tx.platformSubscription.findUniqueOrThrow({
         where: { church_id: churchId },
       });
+      const staleUpgrade =
+        (!!payment.base_plan &&
+          (current.plan !== payment.base_plan ||
+            current.paid_until?.getTime() !== payment.base_paid_until?.getTime())) ||
+        (payment.intent === 'upgrade' && (!current.paid_until || current.paid_until <= new Date()));
+      const claimed = await tx.subscriptionPayment.updateMany({
+        where: { reference, church_id: churchId, status: { not: 'success' } },
+        data: {
+          status: 'success',
+          verified_at: new Date(),
+          checkout_url: null,
+          application_status: staleUpgrade ? 'review' : 'applied',
+        },
+      });
+      if (!claimed.count || staleUpgrade) return;
       const start =
         current.paid_until && current.paid_until > new Date() ? current.paid_until : new Date();
       await tx.platformSubscription.update({
@@ -196,7 +366,13 @@ export class BillingService {
         data: {
           plan: payment.plan,
           cycle: payment.cycle,
-          paid_until: subscriptionEnd(start, payment.cycle as BillingCycle),
+          paid_until:
+            payment.intent === 'upgrade'
+              ? payment.target_paid_until
+              : subscriptionEnd(start, payment.cycle as BillingCycle),
+          ...(payment.intent === 'upgrade' ? {} : { period_started_at: start }),
+          scheduled_plan: null,
+          scheduled_cycle: null,
         },
       });
     });

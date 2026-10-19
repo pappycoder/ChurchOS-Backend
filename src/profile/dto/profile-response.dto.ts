@@ -85,6 +85,11 @@ export class MemberSummaryDto {
  * Used for GET /profiles/me, GET /profiles/:id, and list responses.
  */
 export class ProfileResponseDto {
+  @ApiPropertyOptional({
+    description: 'Subscription feature availability (no billing details)',
+    type: [String],
+  })
+  planFeatures?: string[];
   @ApiProperty({ description: 'Profile ID', example: '22222222-2222-2222-2222-222222222222' })
   profileId!: string;
 

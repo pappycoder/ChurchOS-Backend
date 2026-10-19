@@ -1,3 +1,4 @@
+import { assertPlanFeature } from '../billing/entitlements';
 /**
  * @file sync.service.ts
  * @description Service for offline data synchronization.
@@ -639,6 +640,8 @@ export class SyncService {
   ): Promise<Record<string, unknown>> {
     const config = ENTITY_CONFIGS[change.entity];
     if (!config) throw new BadRequestException('Unsupported sync entity');
+    if (change.entity === 'transaction' && change.action !== 'delete')
+      await assertPlanFeature(tx as unknown as PrismaService, churchId, 'giving');
     const delegate = (tx as unknown as Record<string, DelegateLike>)[config.delegate];
     const existing = await delegate.findUnique({ where: { id: change.entityId } });
     const scope = { ...this.readScope(change.entity, churchId, viewer), id: change.entityId };

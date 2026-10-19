@@ -1,3 +1,4 @@
+import { subscriptionError } from '../../billing/plan-errors';
 import {
   ExceptionFilter,
   Catch,
@@ -94,6 +95,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     message: string;
     details?: unknown;
   } {
+    const planFailure = subscriptionError(exception);
+    if (planFailure) return planFailure;
+
     // Handle Zod validation errors
     if (exception instanceof ZodError) {
       return {
@@ -127,7 +131,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       return {
         status,
-        code: this.getErrorCode(status),
+        code:
+          typeof exceptionResponse === 'object' &&
+          exceptionResponse !== null &&
+          'code' in exceptionResponse
+            ? String(exceptionResponse.code)
+            : this.getErrorCode(status),
         message,
         details,
       };

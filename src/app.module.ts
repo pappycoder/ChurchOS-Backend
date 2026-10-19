@@ -1,3 +1,4 @@
+import { PlanFeatureGuard } from './billing/plan-feature.guard';
 /**
  * @file app.module.ts
  * @description Root application module for the ChurchOS Backend API.
@@ -225,6 +226,7 @@ import { PermissionsModule } from './auth/permissions.module';
       provide: 'APP_GUARD',
       useClass: PermissionsGuard,
     },
+    { provide: 'APP_GUARD', useClass: PlanFeatureGuard },
   ],
 })
 export class AppModule {}

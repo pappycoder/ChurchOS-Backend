@@ -35,6 +35,7 @@ describe('ChurchService', () => {
 
   beforeEach(async () => {
     prisma = createPrismaMock();
+    (prisma.$transaction as unknown as jest.Mock).mockResolvedValue({ id: 'seat-reservation' });
     auditLog = jest.fn();
     mediaDelete = jest.fn();
 

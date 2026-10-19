@@ -261,6 +261,10 @@ model PlatformSubscription {
   plan       SubscriptionPlan
   cycle      BillingCycle
   paid_until DateTime?
+  period_started_at DateTime?
+  scheduled_plan SubscriptionPlan?
+  scheduled_cycle BillingCycle?
+  enterprise_limits Json?
   created_at DateTime         @default(now())
   church     Church           @relation(fields: [church_id], references: [id], onDelete: Cascade)
 
@@ -278,6 +282,11 @@ model SubscriptionPayment {
   currency     String                    @default("NGN")
   status       SubscriptionPaymentStatus @default(pending)
   checkout_url String?
+  intent String @default("renewal")
+  base_plan SubscriptionPlan?
+  base_paid_until DateTime?
+  target_paid_until DateTime?
+  application_status String @default("pending")
   verified_at  DateTime?
   created_at   DateTime                  @default(now())
   church       Church                    @relation(fields: [church_id], references: [id], onDelete: Restrict)
@@ -1578,4 +1587,27 @@ model WebhookDelivery {
 
   @@index([subscription_id, status])
   @@map("webhook_deliveries")
+}
+
+// Seats reserved before calling an external authentication provider.
+model StaffInvitationReservation {
+  id String @id @default(uuid())
+  church_id String
+  email String
+  expires_at DateTime
+  created_at DateTime @default(now())
+  @@unique([church_id, email])
+  @@index([church_id, expires_at])
+  @@map("staff_invitation_reservations")
+}
+
+model SubscriptionAlertKey {
+ id String @id
+ church_id String
+ profile_id String
+ resource String
+ threshold Int
+ period_end DateTime
+ @@unique([church_id, profile_id, resource, threshold, period_end])
+ @@map("subscription_alert_keys")
 }

@@ -15,16 +15,27 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { BillingService } from './billing.service';
-import { CheckoutDto, VerifySubscriptionDto } from './billing.dto';
+import { CheckoutDto, VerifySubscriptionDto, SchedulePlanDto } from './billing.dto';
+import { BillingAdminGuard } from './plan-feature.guard';
 import { RateLimit } from '../common/guards/rate-limit.guard';
 @Controller('billing')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, BillingAdminGuard)
 export class BillingController {
   constructor(private readonly billing: BillingService) {}
   @Get('subscription')
   @RequirePermissions('billing:read')
   status(@Req() req: AuthenticatedRequest) {
     return this.billing.status(req.profile!.church_id);
+  }
+  @Post('quote')
+  @RequirePermissions('billing:read')
+  quote(@Req() req: AuthenticatedRequest, @Body() dto: CheckoutDto) {
+    return this.billing.quote(req.profile!.church_id, dto);
+  }
+  @Post('schedule')
+  @RequirePermissions('billing:update')
+  schedule(@Req() req: AuthenticatedRequest, @Body() dto: SchedulePlanDto) {
+    return this.billing.schedule(req.profile!.church_id, dto.plan ?? null, dto.cycle);
   }
   @Post('checkout')
   @RequirePermissions('billing:update')

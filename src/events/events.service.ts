@@ -1,3 +1,4 @@
+import { assertPlanFeature } from '../billing/entitlements';
 import { attendanceSessionId } from '../attendance/attendance-session-links';
 import { PaymentAccountsService } from '../giving/services/payment-accounts.service';
 import { RequestContextService } from '../common/services/request-context.service';
@@ -948,6 +949,8 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+
+    if (!event.is_free) await assertPlanFeature(this.prisma, churchId, 'tickets');
 
     // Duplicate check
     const existingRegistration = await this.prisma.eventRegistration.findUnique({

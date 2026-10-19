@@ -1,3 +1,4 @@
+import { subscriptionError } from '../billing/plan-errors';
 import {
   BadRequestException,
   ConflictException,
@@ -202,14 +203,16 @@ export class OfflineService {
         // Infrastructure failures remain retryable; validation/authorization never auto-retry.
         results.push({
           mutationId: mutation.mutationId,
-          status:
-            error instanceof ConflictException
+          status: subscriptionError(error)
+            ? 'rejected'
+            : error instanceof ConflictException
               ? 'conflict'
               : error instanceof HttpException
                 ? 'rejected'
                 : 'retry',
           message:
-            error instanceof HttpException ? error.message : 'Unable to sync now. Try again.',
+            subscriptionError(error)?.message ??
+            (error instanceof HttpException ? error.message : 'Unable to sync now. Try again.'),
         });
       }
     }

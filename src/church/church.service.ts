@@ -1,3 +1,4 @@
+import { reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
 import { RequestContextService } from '../common/services/request-context.service';
 import { isRetiredRole } from '../auth/role-policy';
 /**
@@ -416,78 +417,90 @@ export class ChurchService {
       throw new InternalServerErrorException('Email is required');
     }
 
-    const { data: inviteData, error: inviteError } =
-      await this.supabase.client.auth.admin.inviteUserByEmail(normalizedEmail, {
-        data: {
-          first_name: normalizedFirstName,
-          last_name: normalizedLastName,
-          church_id: churchId,
+    const reservation = await reserveStaffSeat(this.prisma, churchId, normalizedEmail);
+    try {
+      const { data: inviteData, error: inviteError } =
+        await this.supabase.client.auth.admin.inviteUserByEmail(normalizedEmail, {
+          data: {
+            first_name: normalizedFirstName,
+            last_name: normalizedLastName,
+            church_id: churchId,
+            role: normalizedRole,
+          },
+          redirectTo: `${process.env['WEB_URL'] || 'http://localhost:3000'}/auth/callback`,
+        });
+
+      if (inviteError) {
+        this.logger.error(`Supabase invite error: ${inviteError.message}`);
+        throw new InternalServerErrorException(
+          `Failed to send staff invitation: ${inviteError.message}`,
+        );
+      }
+
+      if (!inviteData?.user) {
+        throw new InternalServerErrorException('Failed to create staff account');
+      }
+
+      const profile = await this.prisma.profile
+        .create({
+          data: {
+            user_id: inviteData.user.id,
+            church_id: churchId,
+            branch_id: branchId || null,
+            role: [normalizedRole],
+            is_admin_hq: normalizedRole === 'church_admin',
+            first_name: normalizedFirstName,
+            last_name: normalizedLastName,
+            phone: normalizedPhone,
+            email: normalizedEmail,
+          },
+        })
+        .catch(async (error: unknown) => {
+          await this.supabase.client.auth.admin
+            .deleteUser(inviteData.user.id)
+            .catch(() => undefined);
+          throw error;
+        });
+      let branchName: string | undefined;
+      if (dto.branchId) {
+        const branch = await this.prisma.branch.findUnique({
+          where: { id: dto.branchId },
+          select: { name: true },
+        });
+        branchName = branch?.name;
+      }
+
+      await this.audit.log({
+        userId,
+        churchId,
+        entity: 'staff',
+        action: 'CREATE',
+        entityId: profile.id,
+        newValues: {
+          email: normalizedEmail,
+          firstName: normalizedFirstName,
+          lastName: normalizedLastName,
           role: normalizedRole,
         },
-        redirectTo: `${process.env['WEB_URL'] || 'http://localhost:3000'}/auth/callback`,
       });
 
-    if (inviteError) {
-      this.logger.error(`Supabase invite error: ${inviteError.message}`);
-      throw new InternalServerErrorException(
-        `Failed to send staff invitation: ${inviteError.message}`,
-      );
-    }
+      this.logger.log(`Staff invited: ${normalizedEmail} → ${normalizedRole} (${churchId})`);
 
-    if (!inviteData?.user) {
-      throw new InternalServerErrorException('Failed to create staff account');
-    }
-
-    const profile = await this.prisma.profile.create({
-      data: {
-        user_id: inviteData.user.id,
-        church_id: churchId,
-        branch_id: branchId || null,
-        role: [normalizedRole],
-        is_admin_hq: normalizedRole === 'church_admin',
-        first_name: normalizedFirstName,
-        last_name: normalizedLastName,
-        phone: normalizedPhone,
-      },
-    });
-
-    let branchName: string | undefined;
-    if (dto.branchId) {
-      const branch = await this.prisma.branch.findUnique({
-        where: { id: dto.branchId },
-        select: { name: true },
-      });
-      branchName = branch?.name;
-    }
-
-    await this.audit.log({
-      userId,
-      churchId,
-      entity: 'staff',
-      action: 'CREATE',
-      entityId: profile.id,
-      newValues: {
+      return {
+        profileId: profile.id,
+        userId: profile.user_id,
         email: normalizedEmail,
-        firstName: normalizedFirstName,
-        lastName: normalizedLastName,
-        role: normalizedRole,
-      },
-    });
-
-    this.logger.log(`Staff invited: ${normalizedEmail} → ${normalizedRole} (${churchId})`);
-
-    return {
-      profileId: profile.id,
-      userId: profile.user_id,
-      email: normalizedEmail,
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      phone: profile.phone || undefined,
-      role: profile.role,
-      branchName,
-      branchId: profile.branch_id || undefined,
-      createdAt: profile.created_at.toISOString(),
-    };
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        phone: profile.phone || undefined,
+        role: profile.role,
+        branchName,
+        branchId: profile.branch_id || undefined,
+        createdAt: profile.created_at.toISOString(),
+      };
+    } finally {
+      await releaseStaffSeat(this.prisma, reservation.id);
+    }
   }
 
   /**

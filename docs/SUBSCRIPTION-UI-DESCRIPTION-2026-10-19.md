@@ -1,6 +1,6 @@
 # Subscription interface description
 
-Status: proposed subscription UI, not an implemented screen. Essentials is already advertised at 100 members. Member login-role retirement is implemented separately and requires its migration/deployment.
+Status: implemented locally; deployment and the entitlement migration are required. Essentials is already advertised at 100 members. Member login-role retirement is implemented separately and requires its migration/deployment.
 
 ## Account model
 
