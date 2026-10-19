@@ -6,6 +6,9 @@ import { join, relative } from 'node:path';
 // cannot be described as one static ALL-permissions requirement. New exceptions
 // must be reviewed here rather than silently bypassing the global guard.
 const exceptions: Record<string, string[]> = {
+  // Self-service product guidance only: JWT plus AssistantService active staff/church checks.
+  // No business-record reads/actions; grants, scope and plan are resolved from the verified profile.
+  'assistant/assistant.controller.ts': ['context', 'ask'],
   // Provider signatures plus server verification authenticate subscription callbacks.
   'billing/billing.controller.ts': ['webhook', 'catalog'],
   'auth/auth.controller.ts': [

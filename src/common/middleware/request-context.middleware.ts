@@ -121,9 +121,10 @@ export class RequestContextMiddleware implements NestMiddleware {
           return;
         }
         const subscription = profile.church?.subscription;
-        const billingExempt = /^\/api\/v1\/(?:auth(?:\/|$)|billing(?:\/|$)|profiles\/me$)/.test(
-          (req.originalUrl ?? req.url ?? req.path ?? '').split('?')[0],
-        );
+        const billingExempt =
+          /^\/api\/v1\/(?:auth(?:\/|$)|billing(?:\/|$)|profiles\/me$|assistant\/(?:context|message)$)/.test(
+            (req.originalUrl ?? req.url ?? req.path ?? '').split('?')[0],
+          );
         if (
           profile.status === 'active' &&
           !profile.archived_at &&

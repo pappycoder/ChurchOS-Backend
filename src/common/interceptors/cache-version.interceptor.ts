@@ -37,7 +37,11 @@ export class CacheVersionInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
 
     // Only mutations invalidate caches.
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+    if (
+      ['GET', 'HEAD', 'OPTIONS'].includes(request.method) ||
+      (request.method === 'POST' &&
+        (request.originalUrl ?? request.url ?? '').split('?')[0] === '/api/v1/assistant/message')
+    ) {
       return next.handle();
     }
 

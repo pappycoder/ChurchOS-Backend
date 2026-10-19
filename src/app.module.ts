@@ -1,3 +1,4 @@
+import { AssistantModule } from './assistant/assistant.module';
 import { PlanFeatureGuard } from './billing/plan-feature.guard';
 /**
  * @file app.module.ts
@@ -118,6 +119,7 @@ import { PermissionsModule } from './auth/permissions.module';
 
     // Import AuthModule for JWT authentication.
     AuthModule,
+    AssistantModule,
 
     // Import MembersModule for member management.
     MembersModule,
