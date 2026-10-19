@@ -42,15 +42,14 @@ export class ListProfilesDto {
     example: 'church_admin',
     enum: [
       'super_admin',
+      'senior_pastor',
       'church_admin',
       'branch_pastor',
+      'department_head',
       'secretary',
       'treasurer',
       'usher',
       'cell_leader',
-      'usher',
-      'worship_leader',
-      'member',
     ],
   })
   @IsString()

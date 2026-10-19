@@ -42,15 +42,9 @@ describe('Offline API contract', () => {
     ])
       expect(DEFAULT_PERMISSION_MATRIX.cell_leader).not.toContain(permission);
   });
-  it('keeps member event browsing but excludes management and offline access', () => {
-    expect(DEFAULT_PERMISSION_MATRIX.member).toEqual(
-      expect.arrayContaining(['events:calendar:read', 'events:list:read', 'events:tickets:read']),
-    );
-    for (const permission of ['offline:read', 'events:all:read', 'events:registrations:read'])
-      expect(DEFAULT_PERMISSION_MATRIX.member).not.toContain(permission);
-    expect(DEFAULT_PERMISSION_MATRIX.secretary).toContain('offline:read');
-    expect(DEFAULT_PERMISSION_MATRIX.secretary).toContain('events:all:read');
-    expect(DEFAULT_PERMISSION_MATRIX.church_admin).toContain('events:all:read');
+  it('has no member login grants and retains staff offline access', () => {
+    expect(DEFAULT_PERMISSION_MATRIX.member).toBeUndefined();
+    expect(DEFAULT_PERMISSION_MATRIX.cell_leader).toContain('offline:read');
   });
 
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });

@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 
 /**
  * DTO for listing selectable recipient contacts.
- * Recipients are profiles with a main role (not `member`) in the same church,
+ * Recipients are profiles with an eligible staff role in the same church,
  * optionally filtered by branch, role, or a search term (name / email).
  */
 export class ListEmailContactsDto {

@@ -100,16 +100,7 @@ const contracts: Record<string, { allow: string[]; deny: string[] }> = {
       'roles:update',
     ],
   },
-  member: {
-    allow: ['members:own:read', 'events:tickets:read', 'sermons:list:read', 'media:library:read'],
-    deny: [
-      'members:all:read',
-      'profiles:update',
-      'church_settings:update',
-      'roles:update',
-      'offline:read',
-    ],
-  },
+
 };
 
 function resolver() {

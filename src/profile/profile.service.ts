@@ -37,6 +37,7 @@ import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { ListProfilesDto } from './dto/list-profiles.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { Prisma } from '@prisma/client';
+import { isRetiredRole } from '../auth/role-policy';
 
 /**
  * Rank of each role for privilege-escalation checks. A user may only assign
@@ -53,7 +54,6 @@ const ROLE_RANK: Record<string, number> = {
   usher: 40,
   department_head: 40,
   cell_leader: 20,
-  member: 10,
 };
 
 /**
@@ -594,6 +594,8 @@ export class ProfileService {
     }
 
     const requestedRoles = Array.from(new Set(dto.roles));
+    if (requestedRoles.length === 0 || requestedRoles.some(isRetiredRole))
+      throw new BadRequestException('Assign at least one supported staff role');
 
     // Validate every requested role exists and is visible to this church
     // (a global template or one owned by this church — never another church's)
@@ -1001,6 +1003,7 @@ export class ProfileService {
     if (!dto.email?.trim()) {
       throw new BadRequestException('Email is required');
     }
+    if (isRetiredRole(dto.role)) throw new BadRequestException('This login role has been removed');
 
     if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
       throw new BadRequestException('First name and last name are required');

@@ -18,7 +18,6 @@ const VALID_ROLES = [
   'treasurer',
   'usher',
   'cell_leader',
-  'member',
 ] as const;
 
 export class InviteUserDto {

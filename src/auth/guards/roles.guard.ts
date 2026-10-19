@@ -19,6 +19,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PermissionsService } from '../services/permissions.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedRequest } from '../../common/decorators/current-user.decorator';
+import { accessRoles } from '../role-policy';
 
 /**
  * Guard that checks user roles against the @RequireRoles() decorator.
@@ -71,7 +72,8 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User profile not found');
     }
 
-    const roleNames = profile.role ?? [];
+    const roleNames = accessRoles(profile.role);
+    if (roleNames.length === 0) throw new ForbiddenException('No staff role assigned');
 
     // Populate permissions on the request for downstream use
     // This is cached in Redis by PermissionsService (15-min TTL)

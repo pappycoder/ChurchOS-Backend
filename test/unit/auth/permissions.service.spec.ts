@@ -218,7 +218,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v28:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v29:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -304,7 +304,6 @@ describe('PermissionsService', () => {
       'usher',
       'department_head',
       'cell_leader',
-      'member',
       'custom_admin',
     ])('reserves every analytics permission from %s despite overrides and HQ', async (role) => {
       const analytics = [
@@ -352,7 +351,6 @@ describe('PermissionsService', () => {
       'usher',
       'department_head',
       'cell_leader',
-      'member',
       'custom_admin',
     ])(
       'strips integration administration from %s even if custom overrides grant it',
@@ -458,7 +456,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v28:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v29:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {

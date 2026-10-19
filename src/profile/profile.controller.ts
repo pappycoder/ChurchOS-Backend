@@ -281,7 +281,7 @@ export class ProfileController {
       dto,
       churchId,
       user.sub,
-      req.profile?.role || 'member',
+      req.profile?.role || '',
     );
   }
 
@@ -309,7 +309,7 @@ export class ProfileController {
       dto,
       churchId,
       user.sub,
-      req.profile?.role || 'member',
+      req.profile?.role || '',
     );
   }
 
@@ -337,7 +337,7 @@ export class ProfileController {
       dto,
       churchId,
       user.sub,
-      req.profile?.role || 'member',
+      req.profile?.role || '',
     );
   }
 

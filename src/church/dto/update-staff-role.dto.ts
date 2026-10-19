@@ -15,11 +15,11 @@ import { IsNotEmpty, IsString, IsIn } from 'class-validator';
 export class UpdateStaffRoleDto {
   @ApiProperty({
     description: 'New role for the staff member',
-    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher', 'member'],
+    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher'],
     example: 'church_admin',
   })
   @IsString()
   @IsNotEmpty()
-  @IsIn(['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher', 'member'])
+  @IsIn(['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher'])
   role!: string;
 }

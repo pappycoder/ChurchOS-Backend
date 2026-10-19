@@ -56,7 +56,7 @@ interface UserDef {
 
 /**
  * Ordered late-binding: members parameter lets the caller pass the seeded
- * members so keyboard member profiles can link member_id.
+ * members so staff profiles can link their member_id.
  */
 export async function seedUsers(
   prisma: PrismaClient,
@@ -144,22 +144,13 @@ export async function seedUsers(
       isAdminHq: true,
       memberIndex: 1,
     },
-    {
-      key: 'member_hq',
-      email: `member.hq@${EMAIL_DOMAIN}`,
-      firstName: 'Adebayo',
-      lastName: 'Ogundimu',
-      role: ['member'],
-      branch: 'hq',
-      isAdminHq: false,
-      memberIndex: 0,
-    },
+
     {
       key: 'cell_leader_hq',
       email: `cell.leader.hq@${EMAIL_DOMAIN}`,
       firstName: 'Chinedu',
       lastName: 'Okafor',
-      role: ['cell_leader', 'member'],
+      role: ['cell_leader'],
       branch: 'hq',
       isAdminHq: true,
       memberIndex: 10,
@@ -217,30 +208,11 @@ export async function seedUsers(
       email: `cell.leader@${EMAIL_DOMAIN}`,
       firstName: 'Yemi',
       lastName: 'Afolabi',
-      role: ['cell_leader', 'member'],
+      role: ['cell_leader'],
       branch: 'lekki',
       isAdminHq: false,
       memberIndex: 15,
     },
-    {
-      key: 'member_lekki',
-      email: `member.lekki@${EMAIL_DOMAIN}`,
-      firstName: 'Tunde',
-      lastName: 'Bakare',
-      role: ['member'],
-      branch: 'lekki',
-      isAdminHq: false,
-      memberIndex: 6,
-    },
-  ];
-
-  // ── Bulk member auth accounts (remaining seeded members — login-able) ──
-  const BULK_MEMBER_INDICES: { idx: number; branch: 'hq' | 'lekki' }[] = [
-    { idx: 3, branch: 'hq' }, // Fatima Abdullahi
-    { idx: 5, branch: 'lekki' }, // Ngozi Eze
-    { idx: 7, branch: 'hq' }, // Aisha Mohammed
-    { idx: 8, branch: 'lekki' }, // Kunle Fashola
-    { idx: 9, branch: 'hq' }, // Blessing Effiong
   ];
 
   const ensureAuthUser = async (
@@ -357,7 +329,7 @@ export async function seedUsers(
     return profile.id;
   };
 
-  // ── Staff + member-role users ─────────────────────────────────────
+  // ── Staff users ─────────────────────────────────────
   for (const def of USERS) {
     if (accountKeys && !accountKeys.includes(def.key)) continue;
     const userId = await ensureAuthUser(def.email, def.firstName, def.lastName);
@@ -367,30 +339,6 @@ export async function seedUsers(
     result.profilesByKey[def.key] = profileId;
     result.usersByKey[def.key] = userId;
     console.log(`  ✅ ${def.key}: ${def.email} (${def.role[0]}) — ${def.branch.toUpperCase()}`);
-  }
-
-  // ── Bulk member accounts ────────────────────────────────────────────
-  for (const b of BULK_MEMBER_INDICES) {
-    if (accountKeys && !accountKeys.includes(`bulk_member_${b.idx}`)) continue;
-    const m = members[b.idx];
-    if (!m) continue;
-    const def: UserDef = {
-      key: `bulk_member_${b.idx}`,
-      email: `${m.first_name.toLowerCase()}.${m.last_name.toLowerCase()}@${EMAIL_DOMAIN}`,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: ['member'],
-      branch: b.branch,
-      isAdminHq: false,
-      memberIndex: b.idx,
-    };
-    const userId = await ensureAuthUser(def.email, def.firstName, def.lastName);
-    if (!userId) continue;
-    const profileId = await upsertProfile(def, userId);
-    if (!profileId) continue;
-    result.profilesByKey[def.key] = profileId;
-    result.usersByKey[def.key] = userId;
-    console.log(`  ✅ ${def.key}: ${def.email} (member) — ${def.branch.toUpperCase()}`);
   }
 
   console.log(

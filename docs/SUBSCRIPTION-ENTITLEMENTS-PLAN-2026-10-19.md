@@ -13,13 +13,13 @@ The agreed immediate change is Essentials at 100 members for ₦10,000/month or 
 | Network | 1,500 | 3 | 15 |
 | Enterprise | Explicit agreement | Explicit agreement | Explicit agreement |
 
-These are church-wide totals across all branches, not per-branch allowances. They are distinct from Supabase MAU and database limits. Member login accounts are not staff seats unless they also hold a staff role.
+These are church-wide totals across all branches, not per-branch allowances. They are distinct from Supabase MAU and database limits. Members are directory records without a login role. Every enabled application login profile consumes a staff seat.
 
 Proposed counting rules to finalize before enabling enforcement:
 
 - Members: all non-archived member records, including inactive/suspended/transferred statuses. Changing a status must not bypass capacity. Visitors are separate; conversion into a member consumes a member slot.
 - Locations: all non-archived branches, including headquarters. Restoring a location consumes capacity.
-- Staff: non-archived, enabled profiles with any role other than `member`, including church administrators, church-scoped super administrators and custom roles. Count each profile once regardless of its number of roles. Invitations reserve seats until provisioning completes or the reservation expires. Deactivation/archive releases a seat; reactivation, restore and promotion from member-only roles must recheck capacity. Retained historical records still consume database storage.
+- Staff: non-archived, enabled profiles with at least one supported staff role, including church administrators, church-scoped super administrators and custom roles. Count each profile once regardless of its number of roles. Invitations reserve seats until provisioning completes or the reservation expires. Deactivation/archive releases a seat; reactivation, restore and assignment of a staff role to an unassigned account must recheck capacity. Retained historical records still consume database storage.
 - The registration flow must consistently provision or account for the initial administrator and HQ. Platform support access must be separately authenticated and audited, never inferred from a church role to bypass quotas.
 - Enterprise needs persisted, validated, negotiated limits and feature grants. Missing configuration must fail closed for capacity-increasing writes, with an actionable support message; never silently grant unlimited capacity.
 
@@ -74,7 +74,7 @@ Use stable machine-readable errors, e.g. `PLAN_LIMIT_REACHED` with resource, cur
 1. Finalize counting rules and the route-level feature matrix. Add the typed server catalog, Enterprise agreement representation and read-only usage API.
 2. Implement transactional member/location capacity checks and staff reservation lifecycle across every writer. Audit existing customer usage first and surface over-limit states without deleting data.
 3. Add plan-feature guards, including workers/public entry points, and UI capability/usage rendering. Implement paid active-plan upgrades before linking enforcement messages to checkout.
-4. Verify in an isolated database: exact boundary acceptance/rejection; concurrent creates at the last slot; imports/conversions/offline retries; invite failures and retries; role promotion/restores; branch/HQ totals; custom roles; Enterprise missing configuration; tenant isolation; downgrade preservation; expiry recovery; signed callback idempotency and settlement.
+4. Verify in an isolated database: exact boundary acceptance/rejection; concurrent creates at the last slot; imports/conversions/offline retries; invite failures and retries; role changes/restores; branch/HQ totals; custom roles; Enterprise missing configuration; tenant isolation; downgrade preservation; expiry recovery; signed callback idempotency and settlement.
 5. Stage migration and an observation period before enabling enforcement. Review existing churches against their paid agreements, then enable in production with coordinated backend/worker/web deployment. Do not alter live subscriptions or records as part of planning.
 
 Commercial capacities protect plan boundaries. Separate monitoring and retention are still required for database space, uploads, audit logs, sync data, compute and external provider spending.

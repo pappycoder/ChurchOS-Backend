@@ -20,7 +20,7 @@ import {
 import { APPOINTMENT_STATUS } from './appointment-response.dto';
 
 /**
- * The Who party can be a staff/member profile or an existing visitor.
+ * The Who party can be a staff profile or an existing visitor.
  */
 export type AppointmentWhoKind = 'profile' | 'visitor';
 
@@ -28,7 +28,7 @@ export type AppointmentWhoKind = 'profile' | 'visitor';
  * DTO for creating a new appointment in the booking registry.
  *
  * Every appointment has a fixed With party (a pastor: branch_pastor /
- * senior_pastor / church_admin) and a Who party (a staff/member profile or an
+ * senior_pastor / church_admin) and a Who party (a staff profile or an
  * existing visitor). The booker (secretary or pastor) is implicit — there is
  * no stored creator column.
  */
@@ -56,7 +56,7 @@ export class CreateAppointmentDto {
 
   @ApiProperty({
     description:
-      'The Who party — a staff/member Profile ID. Mutually exclusive with the visitor form.',
+      'The Who party — a staff Profile ID. Mutually exclusive with the visitor form.',
     example: '22222222-2222-2222-2222-222222222222',
   })
   @IsUUID('4')

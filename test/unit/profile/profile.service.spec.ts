@@ -613,7 +613,7 @@ describe('ProfileService', () => {
           id: mockProfileId,
           user_id: mockUserId,
           church_id: mockChurchId,
-          role: ['member'],
+          role: ['cell_leader'],
           assigned_roles: [],
         })
         .mockResolvedValueOnce({
@@ -651,7 +651,7 @@ describe('ProfileService', () => {
       await expect(
         service.updateProfileRole(
           mockProfileId,
-          { role: 'member' },
+          { role: 'cell_leader' },
           mockChurchId,
           mockAdminUserId,
           'church_admin',
@@ -671,7 +671,7 @@ describe('ProfileService', () => {
       await expect(
         service.updateProfileRole(
           mockProfileId,
-          { role: 'member' },
+          { role: 'cell_leader' },
           mockChurchId,
           mockAdminUserId,
           'church_admin',
@@ -691,7 +691,7 @@ describe('ProfileService', () => {
       await expect(
         service.updateProfileRole(
           mockProfileId,
-          { role: 'member' },
+          { role: 'cell_leader' },
           mockChurchId,
           mockAdminUserId,
           'church_admin',
@@ -704,7 +704,7 @@ describe('ProfileService', () => {
         id: mockProfileId,
         user_id: mockUserId,
         church_id: mockChurchId,
-        role: 'member',
+        role: 'cell_leader',
         assigned_roles: [],
       });
 
@@ -724,7 +724,7 @@ describe('ProfileService', () => {
         id: mockProfileId,
         user_id: mockUserId,
         church_id: mockChurchId,
-        role: 'member',
+        role: 'cell_leader',
         assigned_roles: [],
       });
 
@@ -745,7 +745,7 @@ describe('ProfileService', () => {
           id: mockProfileId,
           user_id: mockUserId,
           church_id: mockChurchId,
-          role: ['member'],
+          role: ['cell_leader'],
           assigned_roles: [],
         })
         .mockResolvedValueOnce({
@@ -775,7 +775,7 @@ describe('ProfileService', () => {
       user_id: mockUserId,
       church_id: mockChurchId,
       branch_id: null,
-      role: ['member'],
+      role: ['cell_leader'],
       status: 'active',
       first_name: 'Adebayo',
       last_name: 'Ogundimu',
@@ -787,19 +787,19 @@ describe('ProfileService', () => {
       updated_at: new Date('2026-07-19T14:30:00.000Z'),
     };
 
-    it('orders cell_leader above member when both roles are assigned', async () => {
+    it('orders department_head above cell_leader when both roles are assigned', async () => {
       model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile });
       jest.spyOn(service, 'getProfileById').mockResolvedValue({} as never);
       await service.updateProfileRoles(
         mockProfileId,
-        { roles: ['member', 'cell_leader'] },
+        { roles: ['cell_leader', 'department_head'] },
         mockChurchId,
         mockAdminUserId,
         'church_admin',
       );
       expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
         where: { id: mockProfileId },
-        data: { role: ['cell_leader', 'member'] },
+        data: { role: ['department_head', 'cell_leader'] },
       });
     });
 
@@ -823,7 +823,7 @@ describe('ProfileService', () => {
       expect(result.role).toEqual(['church_admin', 'treasurer']);
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          oldValues: { roles: ['member'] },
+          oldValues: { roles: ['cell_leader'] },
           newValues: { roles: ['church_admin', 'treasurer'] },
         }),
       );
@@ -865,7 +865,7 @@ describe('ProfileService', () => {
       await expect(
         service.updateProfileRoles(
           mockProfileId,
-          { roles: ['member'] },
+          { roles: ['cell_leader'] },
           mockChurchId,
           mockAdminUserId,
           'super_admin',
@@ -964,7 +964,7 @@ describe('ProfileService', () => {
             email: 'invite@example.com',
             firstName: 'Test',
             lastName: 'User',
-            role: 'member',
+            role: 'cell_leader',
             branchId: 'foreign-branch',
           },
           mockChurchId,
@@ -1133,7 +1133,7 @@ describe('ProfileService', () => {
         id: mockProfileId,
         user_id: mockUserId,
         church_id: mockChurchId,
-        role: 'member',
+        role: 'cell_leader',
         status: 'active',
       });
 
@@ -1271,7 +1271,7 @@ describe('ProfileService', () => {
         id: mockProfileId,
         user_id: mockUserId,
         church_id: mockChurchId,
-        role: ['member'],
+        role: ['cell_leader'],
         archived_at: new Date('2026-08-28T10:00:00.000Z'),
       });
 

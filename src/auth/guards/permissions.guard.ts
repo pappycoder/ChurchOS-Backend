@@ -26,6 +26,7 @@ import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { PermissionsService } from '../services/permissions.service';
 import { AuthenticatedRequest } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { accessRoles } from '../role-policy';
 
 /**
  * Guard that checks user permissions against the @RequirePermissions() decorator.
@@ -83,7 +84,8 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('User profile not found');
     }
 
-    const roleNames = profile.role ?? [];
+    const roleNames = accessRoles(profile.role);
+    if (roleNames.length === 0) throw new ForbiddenException('No staff role assigned');
 
     // Get effective permissions across all of the user's roles in their church
     const userPermissions =

@@ -45,7 +45,7 @@ describe('Hydrated scope and report security', () => {
             ...state,
             id: 'profile',
             church_id: 'church',
-            role: ['member'],
+            role: ['secretary'],
             is_admin_hq: false,
             church: {
               archived_at: null,

@@ -1,4 +1,5 @@
 import { RequestContextService } from '../common/services/request-context.service';
+import { isRetiredRole } from '../auth/role-policy';
 /**
  * @file Church management service with CRUD operations.
  * @module ChurchService
@@ -380,6 +381,8 @@ export class ChurchService {
     dto: InviteStaffDto,
     userId: string,
   ): Promise<StaffResponseDto> {
+    if (isRetiredRole(dto.role?.trim()))
+      throw new BadRequestException('This login role has been removed');
     const existingProfile = await this.prisma.profile.findFirst({
       where: { church_id: churchId },
     });
@@ -558,6 +561,7 @@ export class ChurchService {
     dto: UpdateStaffRoleDto,
     userId: string,
   ): Promise<StaffResponseDto> {
+    if (isRetiredRole(dto.role)) throw new BadRequestException('This login role has been removed');
     const profile = await this.prisma.profile.findUnique({
       where: { id: profileId },
       include: {

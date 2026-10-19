@@ -80,7 +80,7 @@ describe('all-role action guard acceptance matrix', () => {
   const scenarios = roles.flatMap((role) => [false, true].map((hq) => ({ ...role, hq })));
   it('includes the application controller contracts and every built-in role', () => {
     expect(contracts.length).toBeGreaterThan(250);
-    expect(roles).toHaveLength(10);
+    expect(roles).toHaveLength(9);
     expect(contracts.filter((contract) => contract.method !== 'Get').length).toBeGreaterThan(140);
   });
 

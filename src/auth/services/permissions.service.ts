@@ -30,11 +30,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { AuditLoggingService } from '../../common/services/audit-logging.service';
 import { RolePermission } from '@prisma/client';
+import { isRetiredRole, RETIRED_ROLE_NAMES, accessRoles } from '../role-policy';
 
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v28:';
+const CACHE_PREFIX = 'perms:v29:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -47,7 +48,7 @@ export const RESERVED_ROLE_NAMES = [
   'secretary',
   'treasurer',
   'usher',
-  'member',
+  ...RETIRED_ROLE_NAMES,
 ] as const;
 
 /** Custom role names are lowercase snake_case, 3–40 chars, starting with a letter. */
@@ -104,6 +105,7 @@ export class PermissionsService {
    * @returns Array of permission name strings (e.g., ["members:read", "members:update"])
    */
   async getPermissionsForRole(churchId: string, roleName: string): Promise<string[]> {
+    if (isRetiredRole(roleName)) return [];
     if (roleName === 'super_admin' || roleName === 'church_admin') {
       return this.getAllPermissionNames();
     }
@@ -149,7 +151,7 @@ export class PermissionsService {
     roleNames: string | string[],
     isAdminHq = false,
   ): Promise<string[]> {
-    const roles = [...new Set(Array.isArray(roleNames) ? roleNames : [roleNames])];
+    const roles = [...new Set(accessRoles(Array.isArray(roleNames) ? roleNames : [roleNames]))];
     if (roles.length === 0) {
       return [];
     }
@@ -224,6 +226,9 @@ export class PermissionsService {
     actorUserId?: string,
   ): Promise<RoleWithPermissions> {
     const roleName = this.slugifyRoleName(input.label);
+
+    if (isRetiredRole(roleName))
+      throw new ConflictException(`The role name "${roleName}" is retired and reserved.`);
 
     if ((RESERVED_ROLE_NAMES as readonly string[]).includes(roleName)) {
       throw new ConflictException(
@@ -316,6 +321,7 @@ export class PermissionsService {
       }
     >();
     for (const role of roles) {
+      if (isRetiredRole(role.name)) continue;
       const current = rolesByName.get(role.name);
       if (!current || (current.church_id === null && role.church_id !== null)) {
         rolesByName.set(role.name, role);
@@ -610,6 +616,7 @@ export class PermissionsService {
     label: string | null;
     description: string | null;
   } | null> {
+    if (isRetiredRole(roleName)) return null;
     const candidates = await this.prisma.role.findMany({
       where: { name: roleName, OR: [{ church_id: churchId }, { church_id: null }] },
       select: { id: true, church_id: true, name: true, label: true, description: true },

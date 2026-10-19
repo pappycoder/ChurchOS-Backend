@@ -22,6 +22,7 @@ import { PermissionsService } from '../../auth/services/permissions.service';
 import { JwksService } from '../../auth/services/jwks.service';
 import { queryMetrics } from '../../prisma/query-metrics';
 import { errors } from 'jose';
+import { accessRoles } from '../../auth/role-policy';
 
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
@@ -104,6 +105,13 @@ export class RequestContextMiddleware implements NestMiddleware {
         },
       });
       if (profile) {
+        profile.role = accessRoles(profile.role);
+        if (profile.role.length === 0) {
+          next(
+            new ForbiddenException('No staff role assigned. Contact your church administrator.'),
+          );
+          return;
+        }
         const subscription = profile.church?.subscription;
         const billingExempt = /^\/api\/v1\/(?:auth(?:\/|$)|billing(?:\/|$)|profiles\/me$)/.test(
           (req.originalUrl ?? req.url ?? req.path ?? '').split('?')[0],
@@ -135,7 +143,7 @@ export class RequestContextMiddleware implements NestMiddleware {
           church_id: profile.church_id,
           branch_id: profile.branch_id ?? undefined,
           member_id: profile.member_id ?? undefined,
-          role: profile.role[0] ?? 'member',
+          role: profile.role[0] ?? '',
           roles: profile.role,
           status: profile.status,
           profile_archived_at: profile.archived_at?.toISOString(),
@@ -166,7 +174,7 @@ export class RequestContextMiddleware implements NestMiddleware {
       userId: authReq.user.id,
       churchId: profile?.church_id || '',
       branchId: profile?.branch_id,
-      role: profile?.role || 'member',
+      role: profile?.role || '',
       viewer: profile,
     };
 

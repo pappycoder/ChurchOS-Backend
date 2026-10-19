@@ -1983,7 +1983,7 @@ abc123challengetoken`,
   "success": true,
   "data": {
     "user": { "id": "a1b2c3d4-...", "email": "chioma@example.com" },
-    "profile": { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okeke", "role": "member" },
+    "profile": { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okeke", "role": "secretary" },
     "session": { "access_token": "eyJhbGciOi...", "refresh_token": "eyJhbGciOi...", "expires_in": 3600 }
   }
 }`,
@@ -2006,7 +2006,7 @@ abc123challengetoken`,
     "refresh_token": "rt_refresh_token_value",
     "expires_in": 3600,
     "user": { "id": "a1b2c3d4-...", "email": "chioma@example.com" },
-    "profile": { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okeke", "role": "member", "church_id": "ch_abc123" }
+    "profile": { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okeke", "role": "secretary", "church_id": "ch_abc123" }
   }
 }`,
         note: 'Login uses Supabase signInWithPassword. The JWT is verified server-side via JWKS endpoint using jose library.',
@@ -2142,7 +2142,7 @@ abc123challengetoken`,
     "lastName": "Okeke",
     "email": "chioma@example.com",
     "phone": "+2348034567890",
-    "role": "member",
+    "role": "secretary",
     "avatarUrl": "https://storage.churchos.com/avatars/p9f8e7d6.webp",
     "church": { "id": "ch_abc123", "name": "RCCG Victory Chapel" },
     "branch": { "id": "br_001", "name": "Ikeja Main Parish" },
@@ -2203,18 +2203,18 @@ abc123challengetoken`,
       'Search, filter, and manage church staff profiles. Update user roles with appropriate authorization checks.',
     prerequisites: 'Role updates require admin role (super_admin, senior_pastor, or church_admin).',
     businessRule:
-      'Valid roles: super_admin, senior_pastor, church_admin, branch_pastor, secretary, treasurer, department_head, member, visitor. Self-demotion and super_admin modification are blocked.',
+      'Valid roles: super_admin, senior_pastor, church_admin, branch_pastor, secretary, treasurer, usher, department_head, cell_leader. Self-demotion and super_admin modification are blocked.',
     steps: [
       {
         method: 'GET',
         path: '/api/v1/profiles',
         title: 'List profiles with filters',
-        curl: `curl -X GET "https://api.churchos.com/api/v1/profiles?search=Chioma&role=member&branch=br_001&page=1&limit=20&sort=lastName&order=asc" \\
+        curl: `curl -X GET "https://api.churchos.com/api/v1/profiles?search=Chioma&role=secretary&branch=br_001&page=1&limit=20&sort=lastName&order=asc" \\
   -H "Authorization: Bearer eyJhbGciOi..."`,
         response: `{
   "success": true,
   "data": [
-    { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okafor", "email": "chioma@example.com", "role": "member" }
+    { "id": "p9f8e7d6-...", "firstName": "Chioma", "lastName": "Okafor", "email": "chioma@example.com", "role": "secretary" }
   ],
   "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
 }`,

@@ -277,7 +277,6 @@ describe('all-role CRUD with isolated PostgreSQL', () => {
       'attendance',
       'service',
       'visitor',
-      'member',
       'auditLog',
       'syncQueue',
       'branch',

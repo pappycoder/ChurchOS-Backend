@@ -4,7 +4,7 @@ import { RequestContextService } from '../common/services/request-context.servic
  * @description Service for the appointment/booking registry (With/Who model).
  *
  * Every appointment has a fixed With party (a pastor: branch_pastor |
- * church_admin | senior_pastor) and a Who party (a staff/member profile or an
+ * church_admin | senior_pastor) and a Who party (a staff profile or an
  * existing visitor). The booker (secretary or pastor) is implicit — there is no
  * stored organizer column.
  *
@@ -701,7 +701,7 @@ export class AppointmentsService {
     return {
       id: p.id,
       name: this.fullName(p),
-      role: (p.role as string[])[0] || 'member',
+      role: (p.role as string[])[0] || '',
       kind,
       isPastor: kind === 'with',
       branchId: p.branch_id ?? undefined,

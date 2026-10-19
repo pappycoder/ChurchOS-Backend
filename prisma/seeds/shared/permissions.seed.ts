@@ -47,8 +47,7 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   },
   {
     name: 'department_head',
-    description:
-      'Department leader with member-level access plus management of their own department',
+    description: 'Department leader with personal access plus management of their own department',
   },
   { name: 'secretary', description: 'Church secretary with member and event management access' },
   { name: 'treasurer', description: 'Financial officer with giving and reports access' },
@@ -60,9 +59,8 @@ export const DEFAULT_ROLES: RoleSeed[] = [
   {
     name: 'cell_leader',
     description:
-      'Cell group leader with member-level access plus management of their own group (edit details, members, attendance)',
+      'Cell group leader with personal access plus management of their own group (edit details, members, attendance)',
   },
-  { name: 'member', description: 'Regular church member with read-only access' },
 ];
 
 // ─── Resource Definitions ──────────────────────────────────
@@ -400,15 +398,15 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'events:calendar:read',
     'events:list:read',
     'events:tickets:read',
-    // Sermons — read (member parity)
+    // Sermons — read (personal access)
     'sermons:read',
-    // Media — read (member parity)
+    // Media — read (personal access)
     'media:read',
-    // Profiles — read (member parity)
+    // Profiles — read (personal access)
     'profiles:read',
-    // Church — read (member parity)
+    // Church — read (personal access)
     'church:read',
-    // Cell Groups — read + create + update (the ONLY additions over member:
+    // Cell Groups — read + create + update (group leadership operations:
     // editing their own group, adding/removing members, and recording
     // attendance — all enforced to their OWN group server-side)
     'cell_groups:own:read',
@@ -417,24 +415,6 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'cell_groups:update',
     'cell_groups:own:create',
     'cell_groups:own:update',
-  ],
-
-  member: [
-    'members:own:read',
-    'branches:read',
-    // Personal event browsing and booking; no management menus.
-    'events:view',
-    'events:calendar:read',
-    'events:list:read',
-    'events:tickets:read',
-    // Sermons — read
-    'sermons:read',
-    // Media — read
-    'media:read',
-    // Profiles — read
-    'profiles:read',
-    // Church — read
-    'church:read',
   ],
 };
 
@@ -472,7 +452,7 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEn
     expandPermissions([
       ...perms,
       'branches:read',
-      ...(role === 'member' ? [] : ['offline:read']),
+      'offline:read',
       ...(perms.includes('cell_groups:read') && !['treasurer', 'usher'].includes(role)
         ? ['cell_groups:details:read']
         : []),

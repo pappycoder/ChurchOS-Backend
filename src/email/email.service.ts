@@ -4,8 +4,8 @@ import { RequestContextService } from '../common/services/request-context.servic
  * @description Service for internal in-app email (email-style private messaging).
  *
  * Messages are stored as a body (email_messages) with per-recipient copies
- * (email_recipients). Recipients are restricted to "main roles" (every role
- * except `member`) within the same church. Trash is a soft-delete: setting
+ * (email_recipients). Recipients are restricted to eligible staff roles
+ * within the same church. Trash is a soft-delete: setting
  * `deleted_at` on the recipient copy (inbox trash) or the message (sent trash);
  * hard-deleting from trash permanently removes the rows.
  *
@@ -27,8 +27,7 @@ import { EmailBox } from './dto/list-emails.dto';
 import { Prisma } from '@prisma/client';
 
 /**
- * Roles that may receive/send internal email. Every seeded role except
- * `member` (regular church member with read-only access) is a "main role".
+ * Staff roles eligible to receive/send internal email.
  */
 export const MAIN_ROLES = [
   'super_admin',
@@ -683,7 +682,7 @@ export class EmailService {
     return {
       id: p.id,
       name: this.fullName(p),
-      role: (p.role as string[])[0] || 'member',
+      role: (p.role as string[])[0] || '',
       email: p.email ?? undefined,
       branchId: p.branch_id ?? undefined,
       branchName: p.branch?.name,
