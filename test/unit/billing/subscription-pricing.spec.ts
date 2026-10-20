@@ -73,6 +73,68 @@ describe('USD subscription prices and FX', () => {
     await expect(service.catalog('NGN')).rejects.toThrow('temporarily unavailable');
     expect(redis.set).not.toHaveBeenCalled();
   });
+  function providerResponse() {
+    return Response.json({
+      result: 'success',
+      base_code: 'USD',
+      rates: Object.fromEntries(PRICING_CURRENCIES.map((c) => [c, c === 'USD' ? 1 : 1.1])),
+      time_last_update_unix: Math.floor(Date.now() / 1000),
+      time_next_update_unix: Math.floor(Date.now() / 1000) + 86400,
+    });
+  }
+  it('converts all supported currencies when Redis reads and writes fail', async () => {
+    redis.get.mockRejectedValueOnce(new Error('Redis unavailable'));
+    redis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+    const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(providerResponse());
+    for (const currency of PRICING_CURRENCIES.filter((c) => c !== 'USD')) {
+      expect((await service.catalog(currency)).plans[0]).toMatchObject({
+        monthly: 11,
+        annual: 119,
+      });
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(redis.get).toHaveBeenCalledTimes(1);
+  });
+  it('shares one provider request across simultaneous currency requests', async () => {
+    const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(providerResponse());
+    await Promise.all(['NGN', 'EUR', 'GBP'].map((currency) => service.catalog(currency)));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(redis.get).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { rates: { USD: 1, NGN: -1 } },
+    { updatedAt: 'invalid' },
+    { updatedAt: new Date(Date.now() + 86400000).toISOString() },
+    { updatedAt: new Date(Date.now() - 200000000).toISOString() },
+  ])('refetches malformed, future or stale shared-cache data: %j', async (invalid) => {
+    cache.set('subscription:fx:usd:v1', {
+      updatedAt: new Date().toISOString(),
+      expiresAt: Date.now() + 86400000,
+      rates: Object.fromEntries(PRICING_CURRENCIES.map((c) => [c, c === 'USD' ? 1 : 1.1])),
+      ...invalid,
+    });
+    const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(providerResponse());
+    expect((await service.catalog('NGN')).plans[0].monthly).toBe(11);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('does not serve expired in-process rates when the provider fails', async () => {
+    const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(providerResponse());
+    await service.catalog('NGN');
+    const later = Date.now() + 172800001;
+    jest.spyOn(Date, 'now').mockReturnValue(later);
+    fetch.mockRejectedValue(new Error('provider unavailable'));
+    await expect(service.catalog('NGN')).rejects.toThrow('temporarily unavailable');
+  });
+  it('still requires Redis for payment quote storage and lookup', async () => {
+    redis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+    await expect(service.saveQuote('church-a', {} as never)).rejects.toThrow(
+      'prepare your payment quote',
+    );
+    redis.get.mockRejectedValueOnce(new Error('Redis unavailable'));
+    await expect(service.getQuote('church-a', 'quote-id')).rejects.toThrow(
+      'retrieve your payment quote',
+    );
+  });
   it('only enables explicitly configured merchant currencies', () => {
     expect(service.gatewayCurrencies('paystack')).toEqual(['NGN']);
     expect(() => service.assertGatewayCurrency('paystack', 'USD')).toThrow('not enabled');

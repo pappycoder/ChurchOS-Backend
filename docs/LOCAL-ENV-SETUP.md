@@ -32,6 +32,18 @@ The local backend currently connects to a remote database. Recover existing encr
 
 `RESEND_FROM` must match a sender/domain verified in your Resend account. Storage bucket defaults name buckets; they do not create or verify them. Existing database, Supabase, Redis, mail, monitoring and push credentials are preserved. The web app receives only the Supabase URL and public anonymous key, never the service-role key.
 
+## Integration key setup on October 20
+
+A read-only check confirmed zero `integration_accounts` in the configured database.
+A cryptographically random 32-byte integration key was generated into the ignored
+backend `.env` (64 hex characters, file permissions 0600). An AES-256-GCM
+encryption/decryption check passed without database writes. The key was not printed
+or committed. Copy that exact `INTEGRATIONS_ENCRYPTION_KEY` into any API/worker
+deployment sharing this database before storing integration accounts there, and
+restart the API/worker after setting it. This application key is separate from
+Flutterwave API credentials and webhook hashes. Existing authenticator and pastoral
+encryption keys were preserved.
+
 ## Official references
 
 - [Flutterwave v3 authentication and test keys](https://developer.flutterwave.com/v3.0.0/docs/authentication)

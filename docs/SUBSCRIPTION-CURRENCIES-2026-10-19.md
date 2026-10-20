@@ -56,9 +56,18 @@ The free open ExchangeRate-API endpoint (`https://open.er-api.com/v6/latest/USD`
 is called only from the backend. Validated daily rates are shared in Redis until
 the next update (with a minimum one-hour fetch interval); timestamps over 48 hours
 old, invalid rates and provider errors cannot create a local-currency quote. USD
-prices need no FX request. Redis is required to lock all payment quotes.
+prices need no FX request. A Redis read or write failure falls back to validated
+provider rates cached in the API process until the same expiry. Concurrent currency
+requests share one fetch. Shared-cache data is validated before use; invalid,
+future-dated, expired or stale rates are never used. This fallback supports price
+conversion during cache outages; Redis is still required to lock all payment quotes.
 The UI links attribution on pages using the rates. The public API returns prices
 rather than redistributing the raw provider rate dictionary.
+
+Local troubleshooting: `REDIS_URL=redis://localhost:6379` requires a running Redis
+service. With Docker available, run `docker compose up -d redis` from the backend
+directory. An offline Redis previously prevented every non-USD conversion before
+the API even requested rates. Restart the API after updating the conversion code.
 
 Official source: https://www.exchangerate-api.com/docs/free
 

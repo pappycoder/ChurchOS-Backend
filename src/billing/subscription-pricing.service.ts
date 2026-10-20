@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
@@ -49,6 +54,8 @@ export function convertedPrice(usd: number, rate: number): number {
 }
 @Injectable()
 export class SubscriptionPricingService {
+  private readonly logger = new Logger(SubscriptionPricingService.name);
+  private cachedRates?: RateData;
   private inflight?: Promise<RateData>;
   constructor(
     private readonly redis: RedisService,
@@ -82,24 +89,58 @@ export class SubscriptionPricingService {
       );
   }
   private async rates(): Promise<RateData> {
+    if (this.validRates(this.cachedRates)) return this.cachedRates;
+    if (!this.inflight)
+      this.inflight = this.loadRates().finally(() => {
+        this.inflight = undefined;
+      });
     try {
-      const cached = await this.redis.get<RateData>('subscription:fx:usd:v1');
-      if (
-        cached &&
-        cached.expiresAt > Date.now() &&
-        Date.now() - Date.parse(cached.updatedAt) <= 172800000
-      )
-        return cached;
-      if (!this.inflight)
-        this.inflight = this.fetchRates().finally(() => {
-          this.inflight = undefined;
-        });
       return await this.inflight;
     } catch {
       throw new ServiceUnavailableException(
         'Currency conversion is temporarily unavailable. You can select USD or try again later.',
       );
     }
+  }
+  private validRates(value: unknown): value is RateData {
+    if (!value || typeof value !== 'object') return false;
+    const data = value as RateData;
+    const updated = Date.parse(data.updatedAt);
+    return (
+      Number.isFinite(updated) &&
+      updated <= Date.now() + 300000 &&
+      Date.now() - updated <= 172800000 &&
+      Number.isFinite(data.expiresAt) &&
+      data.expiresAt > Date.now() &&
+      data.rates?.USD === 1 &&
+      PRICING_CURRENCIES.every((currency) => {
+        const rate = data.rates[currency];
+        return Number.isFinite(rate) && rate > 0 && rate <= 1e8;
+      })
+    );
+  }
+  private async loadRates(): Promise<RateData> {
+    try {
+      const cached = await this.redis.get<RateData>('subscription:fx:usd:v1');
+      if (this.validRates(cached)) {
+        this.cachedRates = cached;
+        return cached;
+      }
+    } catch {
+      this.logger.warn('FX cache read failed; fetching validated provider rates');
+    }
+    const result = await this.fetchRates();
+    this.cachedRates = result;
+    try {
+      await this.redis.set(
+        'subscription:fx:usd:v1',
+        result,
+        Math.max(1, Math.floor((result.expiresAt - Date.now()) / 1000)),
+      );
+    } catch {
+      this.logger.warn('FX cache write failed; using validated in-process rates');
+    }
+    return result;
   }
   private async fetchRates(): Promise<RateData> {
     const response = await fetch('https://open.er-api.com/v6/latest/USD', {
@@ -134,11 +175,6 @@ export class SubscriptionPricingService {
       Math.max(Date.now() + 3600000, Number.isFinite(next) ? next : Date.now() + 3600000),
     );
     const result = { updatedAt: new Date(updated).toISOString(), expiresAt, rates: body.rates };
-    await this.redis.set(
-      'subscription:fx:usd:v1',
-      result,
-      Math.max(1, Math.floor((expiresAt - Date.now()) / 1000)),
-    );
     return result;
   }
   async exchange(currency: string) {
