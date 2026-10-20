@@ -394,11 +394,21 @@ export class BillingService {
   }
 
   async verify(churchId: string, reference: string) {
+    await this.reconcilePayment(churchId, reference);
+    const payment = await this.prisma.subscriptionPayment.findFirst({
+      where: { reference, church_id: churchId },
+      select: { reference: true, status: true, application_status: true },
+    });
+    return { ...(await this.status(churchId)), verification: payment };
+  }
+
+  /** Reused by browser verification, signed callbacks and the recovery worker. */
+  async reconcilePayment(churchId: string, reference: string): Promise<void> {
     const payment = await this.prisma.subscriptionPayment.findFirst({
       where: { reference, church_id: churchId },
     });
     if (!payment) throw new NotFoundException('Subscription payment not found');
-    if (payment.status === 'success') return this.status(churchId);
+    if (payment.status === 'success') return;
     const verified = await this.gateway(payment.gateway).verifyTransaction(reference);
     if (
       verified.reference !== reference ||
@@ -415,7 +425,7 @@ export class BillingService {
           where: { reference, church_id: churchId, status: 'pending' },
           data: { status: verified.status },
         });
-      return this.status(churchId);
+      return;
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM churches WHERE id = ${churchId} FOR UPDATE`;
@@ -454,7 +464,6 @@ export class BillingService {
         },
       });
     });
-    return this.status(churchId);
   }
 
   async webhook(name: string, raw: string, signature: string) {
@@ -467,7 +476,7 @@ export class BillingService {
       where: { reference: event.reference },
     });
     if (payment && payment.gateway === name)
-      await this.verify(payment.church_id, payment.reference);
+      await this.reconcilePayment(payment.church_id, payment.reference);
     return { received: true };
   }
 }

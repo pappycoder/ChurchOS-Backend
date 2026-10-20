@@ -1,4 +1,5 @@
 import { SubscriptionPricingService } from './subscription-pricing.service';
+import { PaymentReconciliationService } from './payment-reconciliation.service';
 import { Module } from '@nestjs/common';
 import { BillingAdminGuard } from './plan-feature.guard';
 import { AuthModule } from '../auth/auth.module';
@@ -15,6 +16,7 @@ import { FlutterwaveService } from '../giving/services/flutterwave.service';
   controllers: [BillingController, BillingWebhookController, SubscriptionPricingController],
   providers: [
     SubscriptionPricingService,
+    PaymentReconciliationService,
     BillingAdminGuard,
     BillingService,
     PaystackService,

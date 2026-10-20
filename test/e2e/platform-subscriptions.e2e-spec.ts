@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { BillingController, BillingWebhookController } from '../../src/billing/billing.controller';
 import { BillingService } from '../../src/billing/billing.service';
+import { PaymentReconciliationService } from '../../src/billing/payment-reconciliation.service';
 import { PaystackService } from '../../src/giving/services/paystack.service';
 import { FlutterwaveService } from '../../src/giving/services/flutterwave.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
@@ -186,7 +187,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
               tx_ref: ref,
               amount: record.amount,
               currency: record.currency,
-              status: 'successful',
+              status: record.status === 'success' ? 'successful' : record.status,
               created_at: new Date().toISOString(),
               payment_type: 'card',
               customer: { email: 'admin@example.org' },
@@ -451,6 +452,104 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     expect(active.paid_until!.getTime()).toBeGreaterThan(Date.now() + 364 * 86400000);
   });
 
+  it('recovers a pending then failed payment that succeeds without a callback or webhook', async () => {
+    const recoveryChurch = randomUUID();
+    const previousWorkers = process.env.ENABLE_QUEUE_WORKERS;
+    process.env.ENABLE_QUEUE_WORKERS = 'true';
+    try {
+      await prisma.church.create({
+        data: { id: recoveryChurch, name: 'Payment recovery fixture' },
+      });
+      await prisma.platformSubscription.create({
+        data: { church_id: recoveryChurch, plan: 'essentials', cycle: 'monthly' },
+      });
+      const checkout = await result(
+        await request(
+          '/billing/checkout',
+          'POST',
+          {
+            plan: 'essentials',
+            cycle: 'monthly',
+            gateway: 'flutterwave',
+          },
+          'church_admin',
+          recoveryChurch,
+        ),
+      );
+      const record = providerPayments.get(checkout.reference)!;
+      record.status = 'pending';
+      const pending = await result(
+        await request(
+          '/billing/verify',
+          'POST',
+          { reference: checkout.reference },
+          'church_admin',
+          recoveryChurch,
+        ),
+      );
+      expect(pending).toMatchObject({
+        active: false,
+        verification: { reference: checkout.reference, status: 'pending' },
+      });
+      record.status = 'failed';
+      await request(
+        '/billing/verify',
+        'POST',
+        { reference: checkout.reference },
+        'church_admin',
+        recoveryChurch,
+      );
+      expect(
+        (
+          await prisma.subscriptionPayment.findUniqueOrThrow({
+            where: { reference: checkout.reference },
+          })
+        ).status,
+      ).toBe('failed');
+      record.status = 'success';
+      const recovery = new PaymentReconciliationService(
+        prisma,
+        app.get(BillingService),
+        app.get(FlutterwaveService),
+      );
+      await recovery.reconcile();
+      const confirmed = await result(
+        await request(
+          '/billing/verify',
+          'POST',
+          { reference: checkout.reference },
+          'church_admin',
+          recoveryChurch,
+        ),
+      );
+      expect(confirmed).toMatchObject({
+        active: true,
+        verification: {
+          reference: checkout.reference,
+          status: 'success',
+          application_status: 'applied',
+        },
+      });
+      const paidUntil = (
+        await prisma.platformSubscription.findUniqueOrThrow({
+          where: { church_id: recoveryChurch },
+        })
+      ).paid_until;
+      await recovery.reconcile();
+      expect(
+        (
+          await prisma.platformSubscription.findUniqueOrThrow({
+            where: { church_id: recoveryChurch },
+          })
+        ).paid_until,
+      ).toEqual(paidUntil);
+    } finally {
+      if (previousWorkers === undefined) delete process.env.ENABLE_QUEUE_WORKERS;
+      else process.env.ENABLE_QUEUE_WORKERS = previousWorkers;
+      await prisma.subscriptionPayment.deleteMany({ where: { church_id: recoveryChurch } });
+      await prisma.church.deleteMany({ where: { id: recoveryChurch } });
+    }
+  });
   it('removes the obsolete messaging table and permission family', async () => {
     expect(
       await prisma.$queryRaw`SELECT to_regclass('public.messaging_integrations')::text AS obsolete`,
