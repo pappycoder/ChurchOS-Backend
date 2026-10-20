@@ -115,6 +115,7 @@ describe('AuthService', () => {
       {
         createAuthClient: () => ({
           auth: {
+            signUp: signUpMock,
             signInWithPassword: signInMock,
             refreshSession: refreshSessionMock,
             resetPasswordForEmail: resetPasswordForEmailMock,
@@ -173,67 +174,97 @@ describe('AuthService', () => {
       denomination: 'Pentecostal',
     };
 
-    it('should create user, church, and profile successfully', async () => {
-      signUpMock.mockResolvedValue({
-        data: { user: { id: mockUserId, email: validDto.email } },
-        error: null,
-      });
+    it.each([
+      [false, false],
+      [true, false],
+      [true, true],
+    ])(
+      'creates the account with session=%s and approvalFailure=%s',
+      async (hasSession, approvalFailure) => {
+        const approve = jest.spyOn(service['authenticator'], 'approve');
+        if (approvalFailure) approve.mockRejectedValueOnce(new Error('approval unavailable'));
+        signUpMock.mockResolvedValue({
+          data: {
+            user: { id: mockUserId, email: validDto.email },
+            session: hasSession
+              ? {
+                  access_token: 'signup-access',
+                  refresh_token: 'signup-refresh',
+                  expires_at: 1900000000,
+                }
+              : null,
+          },
+          error: null,
+        });
 
-      const profileCreate = jest.fn().mockResolvedValue({
-        id: mockProfileId,
-        user_id: mockUserId,
-        church_id: mockChurchId,
-        role: 'church_admin',
-        first_name: validDto.firstName,
-        last_name: validDto.lastName,
-        phone: validDto.phone,
-      });
+        const profileCreate = jest.fn().mockResolvedValue({
+          id: mockProfileId,
+          user_id: mockUserId,
+          church_id: mockChurchId,
+          role: 'church_admin',
+          first_name: validDto.firstName,
+          last_name: validDto.lastName,
+          phone: validDto.phone,
+        });
 
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: Record<string, Record<string, jest.Mock>>) => Promise<unknown>) => {
-          return cb({
-            church: {
-              create: jest.fn().mockResolvedValue({
-                id: mockChurchId,
-                name: validDto.churchName,
-                denomination: validDto.denomination,
-              }),
-            },
-            profile: {
-              create: profileCreate,
-            },
-            platformSubscription: { create: jest.fn().mockResolvedValue({}) },
-          });
-        },
-      );
+        prisma.$transaction.mockImplementation(
+          async (cb: (tx: Record<string, Record<string, jest.Mock>>) => Promise<unknown>) => {
+            return cb({
+              church: {
+                create: jest.fn().mockResolvedValue({
+                  id: mockChurchId,
+                  name: validDto.churchName,
+                  denomination: validDto.denomination,
+                }),
+              },
+              profile: {
+                create: profileCreate,
+              },
+              platformSubscription: { create: jest.fn().mockResolvedValue({}) },
+            });
+          },
+        );
 
-      const result = await service.register(validDto);
+        const result = await service.register(validDto);
 
-      expect(result).toEqual({
-        userId: mockUserId,
-        email: validDto.email,
-        profileId: mockProfileId,
-        churchId: mockChurchId,
-        churchName: validDto.churchName,
-        role: 'church_admin',
-      });
-
-      expect(profileCreate).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          role: ['church_admin'],
-          is_admin_hq: true,
-        }),
-      });
-
-      expect(audit.log).toHaveBeenCalledWith(
-        expect.objectContaining({
+        expect(result).toEqual({
+          requiresEmailConfirmation: !hasSession,
+          ...(hasSession && !approvalFailure
+            ? {
+                accessToken: 'signup-access',
+                refreshToken: 'signup-refresh',
+                expiresAt: 1900000000,
+              }
+            : {}),
           userId: mockUserId,
+          email: validDto.email,
+          profileId: mockProfileId,
           churchId: mockChurchId,
-          entity: 'auth',
-          action: 'CREATE',
-        }),
-      );
-    });
+          churchName: validDto.churchName,
+          role: 'church_admin',
+        });
+        expect(signInMock).not.toHaveBeenCalled();
+        if (hasSession)
+          expect(approve).toHaveBeenCalledWith(mockUserId, 'signup-access', 'password-session');
+        else expect(approve).not.toHaveBeenCalled();
+
+        expect(profileCreate).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            role: ['church_admin'],
+            is_admin_hq: true,
+          }),
+        });
+
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: mockUserId,
+            churchId: mockChurchId,
+            entity: 'auth',
+            action: 'CREATE',
+          }),
+        );
+      },
+    );
 
     it('should throw ConflictException if email is already registered', async () => {
       signUpMock.mockResolvedValue({

@@ -77,17 +77,19 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
     // TODO: Change Supabase rate limit back to 30/5mins after testing (currently set to 3000/5mins)
     // Create Supabase Auth user
-    const { data: authData, error: authError } = await this.supabase.client.auth.signUp({
-      email: dto.email,
-      password: dto.password,
-      options: {
-        data: {
-          first_name: dto.firstName,
-          last_name: dto.lastName,
-          church_name: dto.churchName,
+    const { data: authData, error: authError } = await this.supabase
+      .createAuthClient()
+      .auth.signUp({
+        email: dto.email,
+        password: dto.password,
+        options: {
+          data: {
+            first_name: dto.firstName,
+            last_name: dto.lastName,
+            church_name: dto.churchName,
+          },
         },
-      },
-    });
+      });
 
     if (authError) {
       this.logger.error(
@@ -172,7 +174,28 @@ export class AuthService {
 
       this.logger.log('Account registered');
 
+      // Supabase already authenticates confirmed signups. Release that session
+      // only after the church/profile commit and normal session approval.
+      let registrationSession: Partial<LoginResponseDto> = {};
+      if (authData.session) {
+        try {
+          await this.authenticator.approve(
+            userId,
+            authData.session.access_token,
+            'password-session',
+          );
+          registrationSession = {
+            accessToken: authData.session.access_token,
+            refreshToken: authData.session.refresh_token,
+            expiresAt: authData.session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+          };
+        } catch {
+          this.logger.warn('Registration completed; session approval requires a sign-in retry');
+        }
+      }
       return {
+        ...registrationSession,
+        requiresEmailConfirmation: !authData.session,
         userId,
         email: dto.email,
         profileId: result.profile.id,

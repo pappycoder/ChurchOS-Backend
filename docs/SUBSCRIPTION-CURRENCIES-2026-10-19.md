@@ -1,5 +1,9 @@
 # USD subscription pricing and payment currencies
 
+> October 20 update: new subscription payments support Flutterwave only.
+> Paystack collection settings below are historical and cannot enable new
+> subscription checkouts. See [Flutterwave checkout fix](FLUTTERWAVE-SUBSCRIPTION-CHECKOUT-2026-10-20.md).
+
 ## Catalog and rounding
 
 | Plan | Monthly USD | Annual USD | Members / staff / locations |

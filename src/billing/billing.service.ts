@@ -13,6 +13,7 @@ import { PaystackService } from '../giving/services/paystack.service';
 import { FlutterwaveService } from '../giving/services/flutterwave.service';
 import { PaymentGatewayProvider } from '../giving/services/payment-gateway.interface';
 import { CheckoutDto } from './billing.dto';
+import { trustedFlutterwaveCheckout } from './checkout-url';
 import {
   SUBSCRIPTION_PLANS,
   subscriptionEnd,
@@ -107,7 +108,6 @@ export class BillingService {
     return {
       baseCurrency: 'USD',
       gatewayCurrencies: {
-        paystack: this.pricing.gatewayCurrencies('paystack'),
         flutterwave: this.pricing.gatewayCurrencies('flutterwave'),
       },
       catalog: Object.entries(SUBSCRIPTION_PLANS).map(([id, pricing]) => ({
@@ -121,9 +121,7 @@ export class BillingService {
       payments,
       subscription,
       active: !!(subscription?.paid_until && subscription.paid_until > new Date()),
-      gateways: [this.paystack, this.flutterwave]
-        .filter((g) => g.isConfigured())
-        .map((g) => g.name),
+      gateways: [this.flutterwave].filter((g) => g.isConfigured()).map((g) => g.name),
       latestPayment: latestPayment
         ? {
             reference: latestPayment.reference,
@@ -200,6 +198,7 @@ export class BillingService {
     };
   }
   async quote(churchId: string, dto: CheckoutDto) {
+    this.assertSubscriptionGateway(dto.gateway);
     const current = await this.prisma.platformSubscription.findUniqueOrThrow({
       where: { church_id: churchId },
     });
@@ -263,6 +262,7 @@ export class BillingService {
   }
 
   async checkout(churchId: string, email: string, dto: CheckoutDto) {
+    this.assertSubscriptionGateway(dto.gateway);
     const gateway = this.gateway(dto.gateway);
     const callback = new URL('/subscription', this.config.getOrThrow<string>('WEB_URL')).href;
     // Lock only our local ledger; provider I/O runs outside the transaction.
@@ -345,9 +345,11 @@ export class BillingService {
         },
       });
     });
-    if (attempt.checkout_url)
-      return { authorizationUrl: attempt.checkout_url, reference: attempt.reference };
     try {
+      if (attempt.checkout_url) {
+        const url = this.checkoutUrl(attempt.checkout_url);
+        return { authorizationUrl: url.href, reference: attempt.reference };
+      }
       const result = await gateway.initializeTransaction(
         email,
         attempt.amount,
@@ -355,19 +357,8 @@ export class BillingService {
         { purpose: 'churchos_subscription', churchId },
         { callbackUrl: callback, currency: attempt.currency },
       );
-      const url = new URL(result.authorizationUrl);
-      const hosts =
-        dto.gateway === 'paystack'
-          ? ['checkout.paystack.com']
-          : ['checkout.flutterwave.com', 'ravemodal.flutterwave.com'];
-      if (
-        result.reference !== attempt.reference ||
-        url.protocol !== 'https:' ||
-        url.username ||
-        url.password ||
-        url.port ||
-        !hosts.includes(url.hostname)
-      )
+      const url = this.checkoutUrl(result.authorizationUrl);
+      if (result.reference !== attempt.reference)
         throw new ServiceUnavailableException('The payment provider returned an invalid checkout.');
       await this.prisma.subscriptionPayment.update({
         where: { reference: attempt.reference },
@@ -383,6 +374,23 @@ export class BillingService {
       });
       throw error;
     }
+  }
+
+  private assertSubscriptionGateway(gateway: string) {
+    if (gateway !== 'flutterwave')
+      throw new BadRequestException(
+        'ChurchOS subscriptions use Flutterwave. Refresh Plan & Billing.',
+      );
+  }
+
+  private checkoutUrl(value: string): URL {
+    const testMode = this.config
+      .get<string>('FLUTTERWAVE_SECRET_KEY', '')
+      .startsWith('FLWSECK_TEST-');
+    const url = trustedFlutterwaveCheckout(value, testMode);
+    if (!url)
+      throw new ServiceUnavailableException('The payment provider returned an invalid checkout.');
+    return url;
   }
 
   async verify(churchId: string, reference: string) {

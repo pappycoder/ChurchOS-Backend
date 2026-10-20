@@ -8,7 +8,7 @@ export class CheckoutDto {
   plan!: Exclude<SubscriptionPlan, 'enterprise'>;
   @IsEnum(BillingCycle)
   cycle!: BillingCycle;
-  @IsEnum(SubscriptionGateway)
+  @IsIn([SubscriptionGateway.flutterwave])
   gateway!: SubscriptionGateway;
 }
 export class VerifySubscriptionDto {

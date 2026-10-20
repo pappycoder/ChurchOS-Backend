@@ -22,7 +22,7 @@ describe('Platform subscriptions', () => {
     amount: 10000,
     currency: 'NGN',
     status: 'pending',
-    gateway: 'paystack',
+    gateway: 'flutterwave',
     checkout_url: null,
   };
   beforeEach(() => {
@@ -58,12 +58,12 @@ describe('Platform subscriptions', () => {
     };
     prisma.$transaction = jest.fn((fn) => fn(prisma));
     gateway = {
-      name: 'paystack',
+      name: 'flutterwave',
       isConfigured: jest.fn().mockReturnValue(true),
       initializeTransaction: jest.fn().mockImplementation((_e, _a, ref) =>
         Promise.resolve({
           reference: ref,
-          authorizationUrl: 'https://checkout.paystack.com/secure',
+          authorizationUrl: 'https://checkout.flutterwave.com/secure',
         }),
       ),
       verifyTransaction: jest
@@ -87,7 +87,10 @@ describe('Platform subscriptions', () => {
     );
     service = new BillingService(
       prisma as PrismaService,
-      { getOrThrow: () => 'https://churchos.example' } as unknown as ConfigService,
+      {
+        getOrThrow: () => 'https://churchos.example',
+        get: () => 'FLWSECK_TEST-fixture-X',
+      } as unknown as ConfigService,
       gateway as PaystackService,
       { ...gateway, name: 'flutterwave' } as FlutterwaveService,
       pricing,
@@ -103,7 +106,7 @@ describe('Platform subscriptions', () => {
         await checkout('church-a', 'admin@example.org', {
           plan: plan as CheckoutDto['plan'],
           cycle,
-          gateway: 'paystack',
+          gateway: 'flutterwave',
         });
         expect(gateway.initializeTransaction).toHaveBeenLastCalledWith(
           'admin@example.org',
@@ -114,19 +117,51 @@ describe('Platform subscriptions', () => {
         );
       }
   });
+  it('only advertises Flutterwave and rejects new Paystack payments and quotes', async () => {
+    expect(await service.status('church-a')).toMatchObject({ gateways: ['flutterwave'] });
+    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' };
+    await expect(service.quote('church-a', dto)).rejects.toThrow('use Flutterwave');
+    await expect(service.checkout('church-a', 'admin@example.org', dto)).rejects.toThrow(
+      'use Flutterwave',
+    );
+    expect(gateway.initializeTransaction).not.toHaveBeenCalled();
+  });
+  it('accepts and resumes the real Flutterwave test checkout host', async () => {
+    const link = 'https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/test';
+    gateway.initializeTransaction.mockImplementation((_e: string, _a: number, ref: string) =>
+      Promise.resolve({ reference: ref, authorizationUrl: link }),
+    );
+    expect(
+      await checkout('church-a', 'admin@example.org', {
+        plan: 'essentials',
+        cycle: 'monthly',
+        gateway: 'flutterwave',
+      }),
+    ).toMatchObject({ authorizationUrl: link });
+    prisma.subscriptionPayment.findFirst.mockResolvedValue({ ...payment, checkout_url: link });
+    expect(
+      await service.checkout('church-a', 'admin@example.org', {
+        plan: 'essentials',
+        cycle: 'monthly',
+        gateway: 'flutterwave',
+      }),
+    ).toMatchObject({ authorizationUrl: link });
+    expect(gateway.initializeTransaction).toHaveBeenCalledTimes(1);
+  });
   it('rejects arbitrary plans, periods, gateways and browser price fields', async () => {
     for (const change of [
       { plan: 'free' },
       { plan: 'enterprise' },
       { cycle: 'forever' },
       { gateway: 'custom' },
+      { gateway: 'paystack' },
       { amount: 1 },
       { currency: 'BTC' },
       { quoteId: 'fake' },
     ]) {
       const dto = Object.assign(
         new CheckoutDto(),
-        { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' },
+        { plan: 'essentials', cycle: 'monthly', gateway: 'flutterwave' },
         change,
       );
       expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).not.toHaveLength(
@@ -144,7 +179,7 @@ describe('Platform subscriptions', () => {
       checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
         cycle: 'monthly',
-        gateway: 'paystack',
+        gateway: 'flutterwave',
       }),
     ).rejects.toThrow('subscription changed');
     expect(gateway.initializeTransaction).not.toHaveBeenCalled();
@@ -152,22 +187,22 @@ describe('Platform subscriptions', () => {
   it('resumes the same unpaid checkout without another initialization', async () => {
     prisma.subscriptionPayment.findFirst.mockResolvedValue({
       ...payment,
-      checkout_url: 'https://checkout.paystack.com/old',
+      checkout_url: 'https://checkout.flutterwave.com/old',
     });
     expect(
       await service.checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
         cycle: 'monthly',
-        gateway: 'paystack',
+        gateway: 'flutterwave',
       }),
-    ).toEqual({ reference, authorizationUrl: 'https://checkout.paystack.com/old' });
+    ).toEqual({ reference, authorizationUrl: 'https://checkout.flutterwave.com/old' });
     expect(gateway.initializeTransaction).not.toHaveBeenCalled();
   });
   it.each([
     'https://evil.example/checkout',
     'javascript:alert(1)',
-    'https://checkout.paystack.com.evil.example/pay',
-    'https://user@checkout.paystack.com/pay',
+    'https://checkout.flutterwave.com.evil.example/pay',
+    'https://user@checkout.flutterwave.com/pay',
   ])('rejects untrusted redirect %s', async (authorizationUrl) => {
     gateway.initializeTransaction.mockImplementation((_e: any, _a: any, ref: string) =>
       Promise.resolve({ reference: ref, authorizationUrl }),
@@ -176,7 +211,7 @@ describe('Platform subscriptions', () => {
       checkout('church-a', 'admin@example.org', {
         plan: 'essentials',
         cycle: 'monthly',
-        gateway: 'paystack',
+        gateway: 'flutterwave',
       }),
     ).rejects.toThrow();
     expect(prisma.subscriptionPayment.updateMany).toHaveBeenCalledWith(
@@ -237,14 +272,14 @@ describe('Platform subscriptions', () => {
   });
   it('rejects unsigned callbacks before accessing the ledger', async () => {
     gateway.validateWebhookSignature.mockReturnValue(false);
-    await expect(service.webhook('paystack', '{}', 'bad')).rejects.toThrow(
+    await expect(service.webhook('flutterwave', '{}', 'bad')).rejects.toThrow(
       'Invalid payment signature',
     );
     expect(prisma.subscriptionPayment.findUnique).not.toHaveBeenCalled();
   });
   it('does not reconcile a reference through a different gateway', async () => {
-    prisma.subscriptionPayment.findUnique.mockResolvedValue({ ...payment, gateway: 'flutterwave' });
-    await service.webhook('paystack', '{}', 'signed');
+    prisma.subscriptionPayment.findUnique.mockResolvedValue({ ...payment, gateway: 'paystack' });
+    await service.webhook('flutterwave', '{}', 'signed');
     expect(gateway.verifyTransaction).not.toHaveBeenCalled();
   });
   it('quotes an immediate upgrade for only the remaining paid period', async () => {
@@ -259,7 +294,7 @@ describe('Platform subscriptions', () => {
       const quote = await service.quote('church-a', {
         plan: 'community',
         cycle: 'monthly',
-        gateway: 'paystack',
+        gateway: 'flutterwave',
       });
       expect(quote).toMatchObject({
         intent: 'upgrade',
@@ -292,13 +327,13 @@ describe('Platform subscriptions', () => {
     expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
   });
   it('does not silently substitute a different pending quote from another tab', async () => {
-    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' };
+    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'flutterwave' };
     const quoted = await service.quote('church-a', dto);
     prisma.subscriptionPayment.findFirst.mockResolvedValue({
       ...payment,
       currency: 'USD',
       pricing_snapshot: { quoteId: 'COSQ_' + 'c'.repeat(32) },
-      checkout_url: 'https://checkout.paystack.com/other-tab',
+      checkout_url: 'https://checkout.flutterwave.com/other-tab',
     });
     await expect(
       service.checkout('church-a', 'admin@example.org', { ...dto, quoteId: quoted.quoteId }),
@@ -312,7 +347,7 @@ describe('Platform subscriptions', () => {
     const dto: CheckoutDto = {
       plan: 'essentials',
       cycle: 'monthly',
-      gateway: 'paystack',
+      gateway: 'flutterwave',
       currency: 'NGN',
     };
     const quoted = await service.quote('church-a', dto);
@@ -339,7 +374,7 @@ describe('Platform subscriptions', () => {
     );
   });
   it('requires a quote and rejects expired, cross-church and changed-currency quotes', async () => {
-    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' };
+    const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'flutterwave' };
     await expect(service.checkout('church-a', 'admin@example.org', dto)).rejects.toThrow(
       'fresh payment quote',
     );

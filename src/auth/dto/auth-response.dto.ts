@@ -9,6 +9,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterResponseDto {
+  @ApiPropertyOptional({
+    description: 'Registration session, omitted when email confirmation is required',
+  })
+  accessToken?: string;
+
+  @ApiPropertyOptional()
+  refreshToken?: string;
+
+  @ApiPropertyOptional()
+  expiresAt?: number;
+
+  @ApiPropertyOptional()
+  requiresEmailConfirmation?: boolean;
+
   @ApiProperty({
     description: 'Supabase Auth user ID',
     example: '11111111-1111-1111-1111-111111111111',

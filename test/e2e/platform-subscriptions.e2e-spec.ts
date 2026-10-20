@@ -288,7 +288,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
         await request(
           '/billing/checkout',
           'POST',
-          { plan: 'essentials', cycle: 'monthly', gateway: 'paystack' },
+          { plan: 'essentials', cycle: 'monthly', gateway: 'flutterwave' },
           'readonly',
         )
       ).status,
@@ -301,7 +301,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
           await request('/billing/checkout', 'POST', {
             plan: 'essentials',
             cycle: 'monthly',
-            gateway: 'paystack',
+            gateway: 'flutterwave',
             ...extra,
           })
         ).status,
@@ -310,7 +310,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
   it('requires enrollment and leaves all unconfigured workspaces unpaid', async () => {
     expect(await result(await request('/billing/subscription'))).toMatchObject({
       active: false,
-      gateways: ['paystack', 'flutterwave'],
+      gateways: ['flutterwave'],
     });
     expect(
       await result(
@@ -330,7 +330,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
         request('/billing/checkout', 'POST', {
           plan: 'essentials',
           cycle: 'monthly',
-          gateway: 'paystack',
+          gateway: 'flutterwave',
         }),
       ),
     );
@@ -343,10 +343,10 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
       await request('/billing/checkout', 'POST', {
         plan: 'essentials',
         cycle: 'monthly',
-        gateway: 'paystack',
+        gateway: 'flutterwave',
       }),
     );
-    expect(checkout.authorizationUrl).toMatch(/^https:\/\/checkout.paystack.com\//);
+    expect(checkout.authorizationUrl).toMatch(/^https:\/\/checkout.flutterwave.com\//);
     expect(providerPayments.size).toBe(1);
   });
   it('isolates payment references by tenant and validates amount/currency before activation', async () => {
@@ -369,7 +369,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     expect(
       (await request('/billing/verify', 'POST', { reference: payment.reference })).status,
     ).toBe(400);
-    record.amount = 1000000;
+    record.amount = payment.amount;
     record.currency = 'USD';
     expect(
       (await request('/billing/verify', 'POST', { reference: payment.reference })).status,
@@ -384,15 +384,15 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
     const payment = await prisma.subscriptionPayment.findFirstOrThrow({
       where: { church_id: churchA },
     });
-    const raw = JSON.stringify({ event: 'charge.success', data: { reference: payment.reference } });
+    const raw = JSON.stringify({ event: 'charge.completed', data: { tx_ref: payment.reference } });
     const webhook = (signature: string) =>
-      originalFetch(base + '/billing/webhooks/paystack', {
+      originalFetch(base + '/billing/webhooks/flutterwave', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-paystack-signature': signature },
+        headers: { 'Content-Type': 'application/json', 'flutterwave-signature': signature },
         body: raw,
       });
     expect((await webhook('bad')).status).toBe(401);
-    const signed = createHmac('sha512', secret).update(raw).digest('hex');
+    const signed = createHmac('sha256', 'platform-webhook-test').update(raw).digest('base64');
     const responses = await Promise.all([
       webhook(signed),
       ...Array.from({ length: 4 }, () =>
@@ -415,7 +415,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
         await request('/billing/checkout', 'POST', {
           plan: 'essentials',
           cycle: 'monthly',
-          gateway: 'paystack',
+          gateway: 'flutterwave',
         })
       ).status,
     ).toBe(409);
