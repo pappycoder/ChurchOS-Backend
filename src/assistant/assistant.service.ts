@@ -12,8 +12,71 @@ import {
   routeAccess,
 } from './assistant.knowledge';
 import type { AccessContext } from './assistant.knowledge';
-import type { AssistantReply, StaffProfile } from './assistant.types';
+import type {
+  AssistantAccess,
+  AssistantReply,
+  AssistantSource,
+  StaffProfile,
+} from './assistant.types';
 import type { AssistantQuestionDto } from './assistant.dto';
+
+/** Extract a short, relevant reference answer instead of dumping full guide sections. */
+export function conciseReference(source: AssistantSource | undefined, question: string): string {
+  if (!source)
+    return 'I could not find a reliable ChurchOS answer. Try a specific feature or open the Help Centre.';
+  const words = [...new Set(question.toLowerCase().match(/[a-z]{4,}/g) ?? [])].filter(
+    (word) =>
+      ![
+        'what',
+        'does',
+        'this',
+        'that',
+        'with',
+        'from',
+        'your',
+        'have',
+        'work',
+        'works',
+        'explain',
+        'churchos',
+      ].includes(word),
+  );
+  const sentences = source.text
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((text, index) => ({ text: text.trim(), index }))
+    .filter((item) => item.text.split(/\s+/).length >= 6);
+  const selected = sentences
+    .map((item) => ({
+      ...item,
+      score: words.reduce((sum, word) => sum + (item.text.toLowerCase().includes(word) ? 1 : 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 2)
+    .sort((a, b) => a.index - b.index)
+    .map((item) => item.text)
+    .join(' ');
+  const answer = (selected || source.text).split(/\s+/).slice(0, 75).join(' ');
+  return /[.!?]$/.test(answer) ? answer : `${answer.replace(/[,;:]$/, '')}…`;
+}
+function conciseAccess(item: AssistantAccess | undefined, reviewing: boolean): string {
+  if (!item) return 'Ask about a specific ChurchOS feature so I can check its access requirements.';
+  switch (item.status) {
+    case 'missing_permission':
+      return reviewing
+        ? 'Your account does not have submission review permission. Ask your church administrator to enable it.'
+        : 'Your current permissions do not allow this page or action. Ask your church administrator to review your access.';
+    case 'admin_required':
+      return 'This feature is restricted to church administrators and super administrators. HQ access alone does not enable it.';
+    case 'plan_required':
+      return 'Your church plan does not currently enable this feature. Ask your church administrator to review the plan; authorized historical reads may still be available.';
+    case 'subscription_required':
+      return 'Your church subscription is not active. Your church administrator can review Plan & Billing.';
+    case 'available':
+      return reviewing
+        ? 'You have submission review permission. Only pending responses within your authorized scope can be reviewed.'
+        : 'You have the required page or action grant. Branch, record ownership and status checks still apply.';
+  }
+}
 
 @Injectable()
 export class AssistantService {
@@ -95,29 +158,25 @@ export class AssistantService {
         question,
       );
     const sources = found.sources.slice(0, 5);
-    const guideText = sources
-      .slice(0, 2)
-      .map((source) => `${source.title}\n${source.text.slice(0, 1900)}`)
-      .join('\n\n');
-    const pageIntro = /explain this page|this screen|where am i/i.test(question)
-      ? `You are on ${current.trail}. ${routeAccess(page, context).detail}\n\n`
-      : '';
-    const fallback =
-      permissionsQuestion && access.length
-        ? `Here is what your current ChurchOS access confirms:\n\n${access.map((item) => `${item.label}: ${item.detail}`).join('\n\n')}\n\n${context.profile.is_admin_hq ? 'HQ extends branch scope within your permissions; it does not grant every action.' : 'Your access remains within your assigned scope.'} I cannot verify individual record states or leadership assignments. Your church administrator can review those.`
-        : pageIntro +
-          (guideText ||
-            'I could not find a reliable ChurchOS reference for that question. Ask about a ChurchOS feature, navigation or access, or open the Help Centre. I cannot inspect church records or perform actions.');
+    const reviewing = /approv|reject|review.*(?:form|response|submission)/i.test(question);
+    const primaryAccess = reviewing
+      ? access.find((item) => item.label === 'forms:submissions:update')
+      : /this page|this screen|my access/i.test(question)
+        ? routeAccess(page, context)
+        : (access.find((item) => item.status !== 'available') ?? access[0]);
+    const reference = conciseReference(sources[0], question);
+    const fallback = permissionsQuestion
+      ? conciseAccess(primaryAccess, reviewing)
+      : /explain this page|this screen|where am i/i.test(question)
+        ? `You are on ${current.trail}. ${sources.length ? reference : 'Ask about a task on this page for specific steps.'}`
+        : reference;
     const ownOverview =
       /my permissions|my roles|what (?:access|permissions) do i have|list (?:all )?my (?:access|permissions)/i.test(
         question,
       );
     const granted = [...new Set(context.profile.permissions ?? [])].sort();
-    const summaries = [...new Set(granted.map((code) => code.split(':')[0]))].map(
-      (resource) =>
-        `${resource}: ${granted.filter((code) => code.startsWith(`${resource}:`)).length} grants`,
-    );
-    const overview = `Your verified staff roles: ${(context.profile.roles ?? []).join(', ')}.\nScope: ${context.profile.is_admin_hq ? 'HQ across authorized branches' : context.profile.branch_id ? 'your assigned branch' : 'no branch assigned'}. HQ does not grant every action.\nChurch plan: ${context.plan}; subscription ${context.subscriptionActive ? 'active' : 'inactive'}.\n\nYou hold ${granted.length} effective permission grants across ${summaries.length} resources:\n${summaries.join('\n') || 'No effective grants were resolved.'}\n\nAsk about a specific feature or permission code for its exact checks. Feature eligibility, record ownership, branch scope and state still apply; a permission count does not prove unrestricted access.`;
+    const resources = new Set(granted.map((code) => code.split(':')[0]));
+    const overview = `Your roles: ${(context.profile.roles ?? []).join(', ')}. You hold ${granted.length} effective permission grants across ${resources.size} ${resources.size === 1 ? 'area' : 'areas'}, scoped to ${context.profile.is_admin_hq ? 'authorized HQ branches' : context.profile.branch_id ? 'your assigned branch' : 'no assigned branch'}. Ask about a specific feature for its exact checks.`;
     const base: AssistantReply = {
       answer: ownOverview ? overview : fallback,
       mode: 'guides',
@@ -158,8 +217,7 @@ export class AssistantService {
     if (!reserved)
       return {
         ...base,
-        notice:
-          'AI guidance is unavailable or its daily allowance has been reached. Showing ChurchOS references instead.',
+        notice: 'AI is unavailable or its daily allowance is reached. Showing reference guidance.',
       };
     try {
       const answer = await this.provider.answer(body, sources);
@@ -172,7 +230,7 @@ export class AssistantService {
     } catch {
       return {
         ...base,
-        notice: 'AI guidance is temporarily unavailable. Showing ChurchOS references instead.',
+        notice: 'AI is temporarily unavailable. Showing reference guidance.',
       };
     }
   }

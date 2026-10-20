@@ -49,14 +49,14 @@ describe('OpenAI provider boundary', () => {
     expect(answer.answer).toBe('Use Table view.');
     expect(body).toMatchObject({
       store: false,
-      max_output_tokens: 900,
+      max_output_tokens: 450,
       text: { format: { strict: true, type: 'json_schema' } },
     });
     expect(body).not.toHaveProperty('tools');
     expect(JSON.stringify(body)).not.toContain('test-only-key');
     expect(fetcher.mock.calls[0][0]).toBe('https://api.openai.com/v1/responses');
     expect(fetcher.mock.calls[0][1]?.redirect).toBe('error');
-    expect(provider.reserveCost(body)).toBeGreaterThan(5900);
+    expect(provider.reserveCost(body)).toBeGreaterThan(5000);
   });
   it.each([
     { answer: 'An invented answer.', sources: ['invented'] },
@@ -65,6 +65,7 @@ describe('OpenAI provider boundary', () => {
     { answer: 'I have deleted your records.', sources: ['policy:tables'] },
     { answer: '', sources: ['policy:tables'] },
     { answer: 'No citations.', sources: [] },
+    { answer: 'Unnecessarily verbose answer. '.repeat(50), sources: ['policy:tables'] },
   ])(
     'rejects unverified references, active content and fabricated action claims',
     async (value) => {

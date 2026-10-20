@@ -199,7 +199,8 @@ describe('Ask ChurchOS server identity, fallback and model boundary', () => {
     provider.configured = false;
     const result = await service.ask({ question: 'How do table display controls work?' }, staff());
     expect(result.mode).toBe('guides');
-    expect(result.answer).toContain('Table');
+    expect(result.answer.toLowerCase()).toContain('table');
+    expect(result.answer.split(/\s+/).length).toBeLessThanOrEqual(75);
     expect(provider.answer).not.toHaveBeenCalled();
     expect(budget.reserve).not.toHaveBeenCalled();
   });
@@ -233,7 +234,8 @@ describe('Ask ChurchOS server identity, fallback and model boundary', () => {
     const result = await service.ask({ question: 'What are my permissions?' }, staff());
     expect(result.answer).toContain('reader');
     expect(result.answer).toContain('2 effective permission grants');
-    expect(result.answer).toContain('forms: 2 grants');
+    expect(result.answer).toContain('1 area');
+    expect(result.answer.length).toBeLessThan(400);
     expect(provider.answer).not.toHaveBeenCalled();
   });
   it('does not forward tenant identifiers, full permission arrays, concrete record paths or roles to the model', async () => {
