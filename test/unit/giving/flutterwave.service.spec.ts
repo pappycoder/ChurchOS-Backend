@@ -118,21 +118,29 @@ describe('FlutterwaveService', () => {
     });
 
     it('should verify a successful transaction', async () => {
-      global.fetch = jest.fn().mockResolvedValue({
-        json: jest.fn().mockResolvedValue({
-          status: 'success',
-          message: 'Transaction verified',
-          data: {
-            id: 12345,
-            tx_ref: 'TITHSEED123abc',
-            amount: 5000,
-            currency: 'NGN',
-            status: 'successful',
-            created_at: '2026-07-20T10:00:00.000Z',
-            payment_type: 'card',
-            customer: { name: 'Test User', email: 'test@example.com' },
-          },
-        }),
+      global.fetch = jest.fn().mockImplementation(async (input: string) => {
+        // Provider contract: a typo in this route actually returns HTTP 200 HTML.
+        if (
+          input !==
+          'https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=TITHSEED123abc'
+        )
+          return new Response('<html>Not an API response</html>', { status: 200 });
+        return {
+          json: jest.fn().mockResolvedValue({
+            status: 'success',
+            message: 'Transaction verified',
+            data: {
+              id: 12345,
+              tx_ref: 'TITHSEED123abc',
+              amount: 5000,
+              currency: 'NGN',
+              status: 'successful',
+              created_at: '2026-07-20T10:00:00.000Z',
+              payment_type: 'card',
+              customer: { name: 'Test User', email: 'test@example.com' },
+            },
+          }),
+        };
       });
 
       const result = await service.verifyTransaction('TITHSEED123abc');

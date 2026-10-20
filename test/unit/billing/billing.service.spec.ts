@@ -113,7 +113,10 @@ describe('Platform subscriptions', () => {
           prices[cycle],
           expect.stringMatching(/^COSUB_[a-f0-9]{32}$/),
           { purpose: 'churchos_subscription', churchId: 'church-a' },
-          { callbackUrl: 'https://churchos.example/subscription', currency: 'USD' },
+          {
+            callbackUrl: 'https://churchos.example/subscription?payment_window=1',
+            currency: 'USD',
+          },
         );
       }
   });
@@ -361,7 +364,7 @@ describe('Platform subscriptions', () => {
       15002,
       expect.any(String),
       expect.any(Object),
-      { callbackUrl: 'https://churchos.example/subscription', currency: 'NGN' },
+      { callbackUrl: 'https://churchos.example/subscription?payment_window=1', currency: 'NGN' },
     );
     expect(prisma.subscriptionPayment.create).toHaveBeenCalledWith(
       expect.objectContaining({

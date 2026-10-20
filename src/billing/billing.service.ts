@@ -264,7 +264,10 @@ export class BillingService {
   async checkout(churchId: string, email: string, dto: CheckoutDto) {
     this.assertSubscriptionGateway(dto.gateway);
     const gateway = this.gateway(dto.gateway);
-    const callback = new URL('/subscription', this.config.getOrThrow<string>('WEB_URL')).href;
+    const callback = new URL(
+      '/subscription?payment_window=1',
+      this.config.getOrThrow<string>('WEB_URL'),
+    ).href;
     // Lock only our local ledger; provider I/O runs outside the transaction.
     const attempt = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM churches WHERE id = ${churchId} FOR UPDATE`;

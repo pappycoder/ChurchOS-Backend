@@ -180,9 +180,10 @@ export class FlutterwaveService implements PaymentGatewayProvider {
     }
 
     // Flutterwave verify endpoint requires transaction ID, not tx_ref.
-    // We use the /transactions/verify_by_tx_ref endpoint instead.
+    // Official v3 reference endpoint (the similarly named verify_by_tx_ref
+    // path returns an HTML page, even with HTTP 200).
     const result = await this.request<FlutterwaveVerifyResponse>(
-      `${this.baseUrl}/transactions/verify_by_tx_ref?tx_ref=${encodeURIComponent(reference)}`,
+      `${this.baseUrl}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`,
       {
         method: 'GET',
         headers: {

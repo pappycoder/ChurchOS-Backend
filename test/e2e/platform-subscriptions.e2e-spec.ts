@@ -124,7 +124,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
       if (url === 'https://api.paystack.co/transaction/initialize') {
         expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer ' + secret);
         const body = JSON.parse(String(init!.body));
-        expect(body.callback_url).toBe('https://churchos.example/subscription');
+        expect(body.callback_url).toBe('https://churchos.example/subscription?payment_window=1');
         expect(body.metadata.purpose).toBe('churchos_subscription');
         providerPayments.set(body.reference, {
           reference: body.reference,
@@ -163,7 +163,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
           'Bearer platform-flutterwave-test',
         );
         const body = JSON.parse(String(init!.body));
-        expect(body.redirect_url).toBe('https://churchos.example/subscription');
+        expect(body.redirect_url).toBe('https://churchos.example/subscription?payment_window=1');
         providerPayments.set(body.tx_ref, {
           reference: body.tx_ref,
           amount: body.amount,
@@ -177,7 +177,7 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
           }),
         );
       }
-      if (url.startsWith('https://api.flutterwave.com/v3/transactions/verify_by_tx_ref?')) {
+      if (url.startsWith('https://api.flutterwave.com/v3/transactions/verify_by_reference?')) {
         const ref = new URL(url).searchParams.get('tx_ref')!;
         const record = providerPayments.get(ref)!;
         return new globalThis.Response(
