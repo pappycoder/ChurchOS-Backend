@@ -27,7 +27,7 @@ export const PLAN_CAPACITIES = {
   network: { members: 1500, staff: 15, locations: 3 },
 } as const;
 export const FEATURE_LEVELS = {
-  giving: 1,
+  giving: 0,
   events: 1,
   groups: 1,
   forms: 1,

@@ -27,6 +27,7 @@ function requestContext(request: Record<string, unknown>, permissions: string[] 
 const routes = [
   ['/giving/categories', 'giving'],
   ['/giving/dashboard', 'giving'],
+  ['/giving/cell-groups/id', 'groups'],
   ['/members/id/giving', 'giving'],
   ['/events', 'events'],
   ['/events/management/tickets', 'tickets'],
@@ -42,7 +43,7 @@ const routes = [
   ['/admin/dashboard/engagement', 'pastoral'],
   ['/appointments', 'pastoral'],
   ['/analytics', 'analytics'],
-  ['/church/integrations', 'email'],
+  ['/church/integrations', 'giving'],
   ['/calls', 'calls'],
   ['/templates', 'email'],
   ['/broadcasts', 'email'],
@@ -99,7 +100,12 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
         },
       };
       await expect(make().canActivate(requestContext(request))).resolves.toBe(true);
-      expect(request.profile.permissions).toEqual(['members:all:read']);
+      expect(request.profile.permissions).toEqual([
+        'members:all:read',
+        'giving:records:read',
+        'giving:view',
+        'giving:categories:delete',
+      ]);
     }
   });
   it('uses permission metadata for premium data in another controller', async () => {
@@ -197,6 +203,39 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
         ),
       ).resolves.toBe(true);
   });
+  it('includes downloadable receipts on Essentials while respecting email and WhatsApp channel tiers', async () => {
+    await expect(
+      make().canActivate(
+        requestContext({
+          method: 'GET',
+          path: '/giving/transactions/id/receipt',
+          profile: { church_id: 'church' },
+        }),
+      ),
+    ).resolves.toBe(true);
+    for (const channel of ['email', 'whatsapp'])
+      await expect(
+        make().canActivate(
+          requestContext({
+            method: 'POST',
+            path: '/giving/transactions/id/send-receipt',
+            body: { channel },
+            profile: { church_id: 'church' },
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('does not grant giving to an expired Essentials subscription', async () => {
+    await expect(
+      make('essentials', new Date(0)).canActivate(
+        requestContext({
+          method: 'GET',
+          path: '/giving/categories',
+          profile: { church_id: 'church' },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
   it('does not grant expired Network subscriptions premium access', async () => {
     await expect(
       make('network', new Date(0)).canActivate(
@@ -204,8 +243,9 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
-  it('maps ticket/check-in permissions separately and never gives Essentials a premium feature', () => {
-    expect(planFeatures('essentials')).toEqual([]);
+  it('maps ticket/check-in permissions separately and keeps giving on Essentials without ticket or group access', () => {
+    expect(planFeatures('essentials')).toEqual(['giving']);
+    expect(featureForPermission('cell_groups:giving:read')).toBe('groups');
     expect(featureForPermission('events:checkin:read')).toBe('tickets');
     expect(
       filterPlanPermissions(['events:list:read', 'events:tickets:read'], planFeatures('community')),

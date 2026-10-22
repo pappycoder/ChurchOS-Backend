@@ -4,8 +4,8 @@
 
 | Plan | Members / staff / locations | Features |
 | --- | --- | --- |
-| Essentials | 100 / 2 / 1 | Member, family and visitor directory; visitor follow-up; services and service attendance; staff permissions; church/account settings; internal staff inbox; help and billing. |
-| Community | 300 / 5 / 1 | Essentials plus giving/receipts/payments, events and registrations, departments/cell groups, forms, reports, email communication/provider setup, sermons and media library. |
+| Essentials | 100 / 2 / 1 | Member, family and visitor directory; visitor follow-up; services and service attendance; staff permissions; giving categories, cash/bank/online giving, downloadable receipts, basic totals and administrator payment-provider setup; church/account settings; internal staff inbox; help and billing. |
+| Community | 300 / 5 / 1 | Essentials plus events and registrations, departments/cell groups, forms, reports, email communication/provider setup, sermons and media library. |
 | Network | 1,500 / 15 / 3 | Community plus event ticket management/check-in, pastoral care/appointments, assets, administrator analytics, SMS, WhatsApp, live calls and outbound webhooks. |
 | Enterprise | Explicit agreed capacities | All Network features with agreed rollout/support arrangements. No automatic unlimited capacity. |
 
@@ -23,10 +23,20 @@ Downgrades preserve stored records. Premium modules become accessible again on a
 
 ## Rollout and verification
 
-Apply `20261022140000_plan_feature_boundaries` and deploy API, persistent worker and web together. This aligns SQL eligibility with media and webhooks and protects new media/sermon/webhook records; it does not remove existing records or change plan prices/capacities. Existing permissions catalog/role assignments need no reseed. Runtime checks use the subscription record, independent of cached role permissions.
+Apply `20261022140000_plan_feature_boundaries` followed by `20261022160000_essentials_giving` and deploy API, persistent worker and web together. This aligns SQL eligibility with media and webhooks and protects new media/sermon/webhook records; it does not remove existing records or change plan prices/capacities. Existing permissions catalog/role assignments need no reseed. Runtime checks use the subscription record, independent of cached role permissions.
 
 Verification includes a four-plan API method/route matrix (including super administrator/HQ), metadata-based composite checks, server/client feature and full permission-catalog parity, fail-closed frontend grants/page rendering, recursive menu filtering, channel configuration and post-downgrade webhook/media behavior. Isolated PostgreSQL tests apply the repository migration chain and verify the SQL catalog, branded upload exceptions, feature persistence and existing quota/settlement behavior. Browser fixtures exercise Essentials direct routes, Community ticket/check-in segregation and missing entitlement data without live provider calls.
 
 Final checks passed: the relevant backend unit suites (including the four-plan route/method matrix), all 383 frontend unit tests, 14 PostgreSQL feature/capacity regressions in a fresh isolated database, four browser regressions against the production build, targeted lint, assistant catalog freshness, and both production builds.
 
 No production migration, deployment, subscription change, payment or outgoing provider delivery was performed for this change.
+
+
+## Essentials giving revision
+
+Giving is included in Essentials and every higher active plan. The server and SQL catalog both enforce this. Essentials administrators can open Integrations and manage payment accounts; the integration response exposes only Paystack/Flutterwave and the payment channel for that plan. Email delivery remains Community, and SMS/WhatsApp/advanced analytics remain Network. Receipt PDFs and basic giving totals are available on Essentials; sending receipts through external channels follows those channels’ tiers. Group meeting giving still requires Community’s groups feature. Staff permissions, church isolation, shared category uniqueness and subscription expiry checks remain in force. Prices and capacities are unchanged.
+
+The additive `20261022160000_essentials_giving` migration updates the existing SQL feature function; it does not alter tables or records. No production migration, deployment or subscription mutation was performed for this revision.
+
+
+Revision verification passed: 428 relevant backend unit tests, all 385 frontend unit tests, 15 isolated PostgreSQL entitlement/persistence tests and six browser regressions. Both production builds, TypeScript checks, targeted lint and assistant catalog freshness checks passed. The browser checks cover Essentials giving pages, payment-only administrator setup and retained higher-plan restrictions.

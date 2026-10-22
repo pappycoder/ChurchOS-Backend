@@ -46,6 +46,9 @@ export class PlanFeatureGuard implements CanActivate {
       const channel = req.body?.channel ?? req.query?.channel;
       if (channel === 'sms' || channel === 'whatsapp') requiredFeatures.push(channel);
     }
+    if (/^\/giving\/transactions\/[^/]+\/send-receipt$/.test(path)) {
+      requiredFeatures.push(req.body?.channel === 'whatsapp' ? 'whatsapp' : 'email');
+    }
     const feature = requiredFeatures.find((feature) => feature && !features.includes(feature));
     if (feature) {
       throw new ForbiddenException({

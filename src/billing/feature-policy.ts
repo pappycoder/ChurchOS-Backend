@@ -4,12 +4,12 @@ import { PlanFeature } from './plans';
 export function featureForPermission(permission: string): PlanFeature | undefined {
   const [resource, surface] = permission.split(':');
   if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
-  if (resource === 'cell_groups' && surface === 'giving') return 'giving';
   if (['assets', 'asset_categories'].includes(resource)) return 'assets';
   if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';
   if (['departments', 'cell_groups'].includes(resource)) return 'groups';
   if (['sermons', 'media'].includes(resource)) return 'media';
-  if (['templates', 'broadcasts', 'messages', 'integrations'].includes(resource)) return 'email';
+  if (['templates', 'broadcasts', 'messages'].includes(resource)) return 'email';
+  if (resource === 'integrations') return 'giving';
   if (resource === 'calls') return 'calls';
   if (resource === 'webhooks') return 'webhooks';
   if (['giving', 'events', 'forms', 'reports', 'analytics'].includes(resource))
@@ -43,9 +43,10 @@ export function featureForApiPath(path: string): PlanFeature | undefined {
   )
     return 'tickets';
   if (/^\/events(?:\/|$)/.test(path)) return 'events';
+  if (/^\/giving\/cell-groups(?:\/|$)/.test(path)) return 'groups';
+  if (/^\/church\/integrations(?:\/|$)/.test(path)) return 'giving';
   if (/^\/giving(?:\/|$)/.test(path)) return 'giving';
-  if (/^\/(?:templates|broadcasts|messages|church\/integrations)(?:\/|$)/.test(path))
-    return 'email';
+  if (/^\/(?:templates|broadcasts|messages)(?:\/|$)/.test(path)) return 'email';
   if (/^\/calls(?:\/|$)/.test(path)) return 'calls';
   if (/^\/webhooks(?:\/|$)/.test(path)) return 'webhooks';
   if (/^\/(?:sermons|media\/library)(?:\/|$)/.test(path)) return 'media';

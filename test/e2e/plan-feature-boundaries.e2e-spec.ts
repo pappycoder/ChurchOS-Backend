@@ -49,6 +49,38 @@ describe('Plan feature SQL and persistence boundaries', () => {
       ).toBe(false);
     },
   );
+  it('allows manual and online giving on active Essentials and blocks new gifts after expiry', async () => {
+    const id = await church('essentials');
+    const category = randomUUID();
+    await db.query(
+      "INSERT INTO giving_categories(id,church_id,name,updated_at) VALUES ($1,$2,'Tithe',now())",
+      [category, id],
+    );
+    for (const [type, method, status] of [
+      ['cash', 'cash', 'success'],
+      ['bank_transfer', 'bank_transfer', 'success'],
+      ['digital', 'card', 'pending'],
+    ]) {
+      await db.query(
+        'INSERT INTO transactions(id,church_id,category_id,amount,type,payment_method,status,updated_at) VALUES ($1,$2,$3,100,$4,$5,$6,now())',
+        [randomUUID(), id, category, type, method, status],
+      );
+    }
+    await db.query(
+      "UPDATE platform_subscriptions SET paid_until=now()-interval '1 second' WHERE church_id=$1",
+      [id],
+    );
+    await rejected(
+      'INSERT INTO transactions(id,church_id,amount,updated_at) VALUES ($1,$2,100,now())',
+      [randomUUID(), id],
+      'giving',
+    );
+    expect(
+      (await db.query('SELECT count(*)::int AS n FROM transactions WHERE church_id=$1', [id]))
+        .rows[0].n,
+    ).toBe(3);
+  });
+
   it('keeps branding on Essentials while rejecting library uploads and sermons', async () => {
     const id = await church('essentials');
     const media =

@@ -115,6 +115,22 @@ describe('Provider plan boundaries', () => {
     );
     return { prisma, service };
   }
+  it('exposes only payment providers and channels on Essentials', async () => {
+    const { service } = fixture('essentials');
+    const result = await service.list('church');
+    expect(result.channels.map((item) => item.channel)).toEqual(['payment']);
+    expect(result.providers.map((item) => item.id)).toEqual(['paystack', 'flutterwave']);
+    expect(result.accounts).toEqual([]);
+  });
+  it('does not let Essentials enable email, SMS or WhatsApp when configuring payments', async () => {
+    const { service, prisma } = fixture('essentials');
+    for (const channel of ['email', 'sms', 'whatsapp'])
+      await expect(
+        service.configure('church', channel, { mode: 'custom', accountId: 'account' }, 'user'),
+      ).rejects.toThrow('not available');
+    expect(prisma.integrationChannel.upsert).not.toHaveBeenCalled();
+  });
+
   it('only exposes email and payments on Community', async () => {
     const { service } = fixture('community');
     const result = await service.list('church');
