@@ -82,6 +82,26 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
     new PlanFeatureGuard({
       platformSubscription: { findUnique: async () => ({ plan, paid_until }) },
     } as never);
+  it.each([
+    ['/attendance/summary', 'attendance:dashboard:read'],
+    ['/attendance/trends', 'attendance:reports:read'],
+    ['/attendance/attendance', 'attendance:records:read'],
+    ['/services', 'attendance:services:read'],
+  ])('keeps core attendance %s available on Essentials', async (path, permission) => {
+    await expect(
+      make().canActivate(
+        requestContext(
+          {
+            method: 'GET',
+            path,
+            profile: { church_id: 'church', permissions: [permission] },
+          },
+          [permission],
+        ),
+      ),
+    ).resolves.toBe(true);
+  });
+
   it('strips all premium read/view/delete grants before sync and offline handlers run', async () => {
     for (const path of ['/sync/bootstrap', '/sync/pull', '/offline/snapshot']) {
       const request = {

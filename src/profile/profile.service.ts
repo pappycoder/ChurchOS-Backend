@@ -1015,13 +1015,23 @@ export class ProfileService {
       throw new BadRequestException('Email is required');
     }
     if (isRetiredRole(dto.role)) throw new BadRequestException('This login role has been removed');
+    if (dto.role === 'super_admin')
+      throw new ForbiddenException('Super Admin cannot be assigned through church invitations');
+    const inviteRole = await this.prisma.role.findFirst({
+      where: { name: dto.role, OR: [{ church_id: null }, { church_id: churchId }] },
+      select: { name: true },
+    });
+    if (!inviteRole) throw new BadRequestException('Role not found in this church');
 
     if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
       throw new BadRequestException('First name and last name are required');
     }
 
     const actor = this.requestContext.getStore()?.viewer;
-    if (actor) {
+    // Administrators can invite every church role even when their current plan
+    // removes paid-module grants. Invitees still receive plan-filtered access.
+    const actorRoles = actor?.roles ?? (actor ? [actor.role] : []);
+    if (actor && !actorRoles.some((role) => ['church_admin', 'super_admin'].includes(role))) {
       const requestedPermissions = await this.permissionsService.getUserPermissions(
         churchId,
         dto.role,

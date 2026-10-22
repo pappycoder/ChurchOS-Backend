@@ -7,7 +7,7 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsNotIn } from 'class-validator';
 
 /**
  * DTO for inviting new staff members.
@@ -35,13 +35,12 @@ export class InviteStaffDto {
   phone?: string;
 
   @ApiProperty({
-    description: 'Staff role',
-    enum: ['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher'],
+    description: 'Built-in church staff role or church-owned custom role',
     example: 'branch_pastor',
   })
   @IsString()
   @IsNotEmpty()
-  @IsIn(['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher'])
+  @IsNotIn(['super_admin', 'member'])
   role!: string;
 
   @ApiPropertyOptional({

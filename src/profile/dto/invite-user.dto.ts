@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsNotIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const VALID_ROLES = [
@@ -54,11 +54,12 @@ export class InviteUserDto {
   phone?: string;
 
   @ApiProperty({
-    description: 'User role',
-    enum: VALID_ROLES,
+    description: 'Church staff role (built-in or church-owned custom role)',
+    examples: [...VALID_ROLES],
     example: 'church_admin',
   })
-  @IsIn(VALID_ROLES)
+  @IsString()
+  @IsNotIn(['super_admin', 'member'])
   @IsNotEmpty()
   role!: string;
 

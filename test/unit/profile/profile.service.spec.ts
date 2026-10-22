@@ -10,6 +10,9 @@ import { RequestContextService } from '../../../src/common/services/request-cont
  * @since 1.0.0
  */
 
+import { validate } from 'class-validator';
+import { InviteUserDto } from '../../../src/profile/dto/invite-user.dto';
+import { InviteStaffDto } from '../../../src/church/dto/invite-staff.dto';
 import { ProfileService } from '../../../src/profile/profile.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
@@ -50,6 +53,19 @@ describe('ProfileService', () => {
     getUserPermissions: jest.Mock;
   };
 
+  it.each([InviteUserDto, InviteStaffDto])(
+    'accepts custom church roles and rejects platform roles in %p',
+    async (Dto) => {
+      const input = { email: 'invite@example.com', firstName: 'Test', lastName: 'User' };
+      expect(await validate(Object.assign(new Dto(), input, { role: 'media_team' }))).toEqual([]);
+      for (const role of ['member', 'super_admin']) {
+        expect(await validate(Object.assign(new Dto(), input, { role }))).toEqual(
+          expect.arrayContaining([expect.objectContaining({ property: 'role' })]),
+        );
+      }
+    },
+  );
+
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockChurchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const mockProfileId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -72,6 +88,7 @@ describe('ProfileService', () => {
             create: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
+            deleteMany: jest.fn(),
             count: jest.fn(),
           };
         }
@@ -121,6 +138,7 @@ describe('ProfileService', () => {
       getUserPermissions: jest.fn().mockResolvedValue([]),
     };
 
+    model(prisma, 'role').findFirst.mockResolvedValue({ name: 'cell_leader' });
     // Echo requested role names back as valid roles by default
     model(prisma, 'role').findMany.mockImplementation(
       ({ where }: { where?: { name?: { in?: string[] } } }) =>
@@ -955,6 +973,76 @@ describe('ProfileService', () => {
       ).rejects.toThrow(ForbiddenException);
       expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
     });
+
+    it.each(['senior_pastor', 'church_admin', 'media_team'])(
+      'allows a plan-filtered Church Admin to invite %s',
+      async (role) => {
+        const context = new RequestContextService();
+        permissionsService.getUserPermissions.mockResolvedValue([
+          'members:read',
+          'analytics:dashboard:read',
+        ]);
+        model(prisma, 'profile').findFirst.mockResolvedValue(null);
+        model(prisma, 'role').findFirst.mockResolvedValue({ name: role });
+        prisma.$transaction.mockResolvedValue({ id: 'reserved-seat' });
+        supabase.client.auth.admin.inviteUserByEmail.mockResolvedValue({
+          data: { user: { id: 'new-user' } },
+        });
+        model(prisma, 'profile').create.mockResolvedValue({
+          ...mockProfileWithRelations,
+          id: 'invited-profile',
+          role: [role],
+        });
+        await context.run(
+          {
+            userId: mockAdminUserId,
+            churchId: mockChurchId,
+            role: 'church_admin',
+            viewer: {
+              church_id: mockChurchId,
+              role: 'church_admin',
+              is_admin_hq: true,
+              permissions: ['profiles:create', 'members:read'],
+            },
+          },
+          () =>
+            service.inviteUser(
+              {
+                email: 'invite@example.com',
+                firstName: 'Test',
+                lastName: 'User',
+                role,
+              },
+              mockChurchId,
+              mockAdminUserId,
+            ),
+        );
+        expect(supabase.client.auth.admin.inviteUserByEmail).toHaveBeenCalled();
+        expect(model(prisma, 'role').findFirst).toHaveBeenCalledWith({
+          where: { name: role, OR: [{ church_id: null }, { church_id: mockChurchId }] },
+          select: { name: true },
+        });
+        expect(model(prisma, 'staffInvitationReservation').deleteMany).toHaveBeenCalledWith({
+          where: { id: 'reserved-seat' },
+        });
+      },
+    );
+
+    it.each(['super_admin', 'member', 'foreign_role'])(
+      'rejects inviting %s before reserving a seat or sending email',
+      async (role) => {
+        model(prisma, 'role').findFirst.mockResolvedValue(null);
+        await expect(
+          service.inviteUser(
+            { email: 'invite@example.com', firstName: 'Test', lastName: 'User', role },
+            mockChurchId,
+            mockAdminUserId,
+          ),
+        ).rejects.toThrow();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+      },
+    );
 
     it('validates invitation branch ownership before sending an invitation', async () => {
       model(prisma, 'branch').findFirst.mockResolvedValue(null);

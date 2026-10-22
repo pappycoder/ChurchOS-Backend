@@ -223,6 +223,23 @@ describe('ChurchService', () => {
   });
 
   describe('inviteStaff', () => {
+    beforeEach(() => prisma.role.findFirst.mockResolvedValue({ name: 'branch_pastor' }));
+
+    it.each(['super_admin', 'member', 'foreign_role'])(
+      'rejects inviting %s before sending email',
+      async (role) => {
+        prisma.role.findFirst.mockResolvedValue(null);
+        await expect(
+          service.inviteStaff(
+            'church-1',
+            { email: 'invite@example.com', firstName: 'Test', lastName: 'User', role },
+            'user-1',
+          ),
+        ).rejects.toThrow();
+        expect(supabaseClient.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
     it('should invite staff and create profile', async () => {
       prisma.profile.findFirst.mockResolvedValue(null);
       supabaseClient.auth.admin.inviteUserByEmail.mockResolvedValue({

@@ -384,6 +384,13 @@ export class ChurchService {
   ): Promise<StaffResponseDto> {
     if (isRetiredRole(dto.role?.trim()))
       throw new BadRequestException('This login role has been removed');
+    if (dto.role?.trim() === 'super_admin')
+      throw new BadRequestException('Super Admin cannot be assigned through church invitations');
+    const inviteRole = await this.prisma.role.findFirst({
+      where: { name: dto.role?.trim(), OR: [{ church_id: null }, { church_id: churchId }] },
+      select: { name: true },
+    });
+    if (!inviteRole) throw new BadRequestException('Role not found in this church');
     const existingProfile = await this.prisma.profile.findFirst({
       where: { church_id: churchId },
     });

@@ -59,6 +59,32 @@ describe('PermissionsService', () => {
     );
   });
 
+  it('hides the platform role and lists Church Admin first in the church catalog', async () => {
+    prisma.role.findMany.mockResolvedValue([
+      ...['branch_pastor', 'super_admin', 'senior_pastor', 'church_admin', 'member'].map(
+        (name) => ({ ...globalTemplate, name }),
+      ),
+      ownedRole,
+    ]);
+    prisma.permission.findMany.mockResolvedValue(allPerms);
+    prisma.churchRolePermission.findMany.mockResolvedValue([]);
+    prisma.rolePermission.findMany.mockResolvedValue([]);
+    const roles = await service.getRolesSummary(churchId);
+    expect(roles.map((role) => role.roleName)).toEqual([
+      'church_admin',
+      'branch_pastor',
+      'senior_pastor',
+      'media_team',
+    ]);
+  });
+
+  it('does not expose Super Admin through church role details', async () => {
+    await expect(service.getRolePermissions(churchId, 'super_admin')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(prisma.role.findMany).not.toHaveBeenCalled();
+  });
+
   // ─── createRole ───────────────────────────────────────────
 
   describe('createRole', () => {

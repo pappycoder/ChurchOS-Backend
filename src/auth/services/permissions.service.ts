@@ -321,7 +321,7 @@ export class PermissionsService {
       }
     >();
     for (const role of roles) {
-      if (isRetiredRole(role.name)) continue;
+      if (isRetiredRole(role.name) || role.name === 'super_admin') continue;
       const current = rolesByName.get(role.name);
       if (!current || (current.church_id === null && role.church_id !== null)) {
         rolesByName.set(role.name, role);
@@ -376,33 +376,35 @@ export class PermissionsService {
       ownedMap.get(rp.role.name)!.add(rp.permission_id);
     }
 
-    return [...rolesByName.values()].map((role) => {
-      const isOwned = role.church_id !== null;
+    return [...rolesByName.values()]
+      .sort((a, b) => Number(b.name === 'church_admin') - Number(a.name === 'church_admin'))
+      .map((role) => {
+        const isOwned = role.church_id !== null;
 
-      let effectiveIds: Set<string>;
-      if (isOwned) {
-        effectiveIds = ownedMap.get(role.name) ?? new Set<string>();
-      } else {
-        effectiveIds = new Set<string>(defaultMap.get(role.name) || new Set<string>());
-        const roleOverrides = overrideMap.get(role.name);
-        if (roleOverrides) {
-          for (const id of roleOverrides) {
-            effectiveIds.add(id);
+        let effectiveIds: Set<string>;
+        if (isOwned) {
+          effectiveIds = ownedMap.get(role.name) ?? new Set<string>();
+        } else {
+          effectiveIds = new Set<string>(defaultMap.get(role.name) || new Set<string>());
+          const roleOverrides = overrideMap.get(role.name);
+          if (roleOverrides) {
+            for (const id of roleOverrides) {
+              effectiveIds.add(id);
+            }
           }
         }
-      }
 
-      const rolePerms = permissions.filter((p: PermissionDto) => effectiveIds.has(p.id));
+        const rolePerms = permissions.filter((p: PermissionDto) => effectiveIds.has(p.id));
 
-      return {
-        roleName: role.name,
-        label: role.label,
-        description: role.description,
-        permissions: rolePerms,
-        isCustomized: !isOwned && customizedRoles.has(role.name),
-        isChurchOwned: isOwned,
-      };
-    });
+        return {
+          roleName: role.name,
+          label: role.label,
+          description: role.description,
+          permissions: rolePerms,
+          isCustomized: !isOwned && customizedRoles.has(role.name),
+          isChurchOwned: isOwned,
+        };
+      });
   }
 
   /**
@@ -414,6 +416,7 @@ export class PermissionsService {
    * @returns Role with permissions and status flags
    */
   async getRolePermissions(churchId: string, roleName: string): Promise<RoleWithPermissions> {
+    if (roleName === 'super_admin') throw new NotFoundException('Role not found');
     const role = await this.findRoleRecord(churchId, roleName);
 
     if (!role) {
