@@ -1,3 +1,4 @@
+import { AttendanceDateDto } from '../../common/dto/attendance-date.dto';
 /**
  * @file record-bulk-attendance.dto.ts
  * @description DTO for recording multiple attendance check-ins at once.
@@ -57,7 +58,7 @@ export class BulkAttendanceRecordDto {
 /**
  * DTO for recording multiple attendance check-ins for a single service.
  */
-export class RecordBulkAttendanceDto {
+export class RecordBulkAttendanceDto extends AttendanceDateDto {
   @ApiPropertyOptional({ description: 'Service ID (for service check-in)' })
   @IsString()
   @IsOptional()

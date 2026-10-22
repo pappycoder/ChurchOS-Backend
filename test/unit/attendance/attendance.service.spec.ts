@@ -10,6 +10,7 @@ import { RequestContextService } from '../../../src/common/services/request-cont
  * @since 1.0.0
  */
 
+import { RecordBulkAttendanceDto } from '../../../src/attendance/dto/record-bulk-attendance.dto';
 import { AttendanceService } from '../../../src/attendance/attendance.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
@@ -161,6 +162,74 @@ describe('AttendanceService — categories & visitors', () => {
       );
       expect(model('service').create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ category: 'children' }) }),
+      );
+    });
+  });
+
+  describe('roster attendance dates', () => {
+    it('stores and deduplicates service roster entries by the selected day', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('member').findFirst.mockResolvedValue({ id: memberId });
+      const saved = new Set<string>();
+      model('attendance').findUnique.mockImplementation(({ where }) => {
+        const key = where.service_id_member_id_attendance_date.attendance_date.toISOString();
+        return Promise.resolve(saved.has(key) ? { id: 'existing' } : null);
+      });
+      model('attendance').create.mockImplementation(({ data }) => {
+        saved.add(data.attendance_date.toISOString());
+        return Promise.resolve({ id: 'recorded' });
+      });
+      const input = Object.assign(new RecordBulkAttendanceDto(), {
+        serviceId,
+        records: [{ memberId }],
+        attendanceDate: '2026-10-18',
+      });
+      expect(await service.recordBulkAttendance(input, churchId, userId)).toMatchObject({
+        recorded: 1,
+        skipped: 0,
+      });
+      expect(await service.recordBulkAttendance(input, churchId, userId)).toMatchObject({
+        recorded: 0,
+        skipped: 1,
+      });
+      expect(
+        await service.recordBulkAttendance(
+          { ...input, attendanceDate: '2026-10-19' },
+          churchId,
+          userId,
+        ),
+      ).toMatchObject({ recorded: 1, skipped: 0 });
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            checkin_at: new Date('2026-10-18T00:00:00Z'),
+            attendance_date: new Date('2026-10-18T00:00:00Z'),
+          }),
+        }),
+      );
+      expect(saved.size).toBe(2);
+    });
+
+    it('links roster details to the attendance session for the selected day', async () => {
+      model('service').findUnique.mockResolvedValue({ ...adultServiceRow, branch_id: 'branch-a' });
+      model('member').findFirst.mockResolvedValue({ id: memberId });
+      model('attendanceSession').findFirst.mockResolvedValue({ id: 'past-session' });
+      await service.recordBulkAttendance(
+        Object.assign(new RecordBulkAttendanceDto(), {
+          serviceId,
+          attendanceDate: '2026-10-18',
+          records: [{ memberId }],
+        }),
+        churchId,
+        userId,
+      );
+      expect(model('attendanceSession').findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ attendance_date: new Date('2026-10-18T00:00:00Z') }),
+        }),
+      );
+      expect(model('attendance').create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ session_id: 'past-session' }) }),
       );
     });
   });

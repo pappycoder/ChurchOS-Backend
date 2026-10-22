@@ -1,3 +1,4 @@
+import { attendanceDay } from './attendance-day';
 import { serviceTimeForStorage, serviceTimeForResponse } from './service-time';
 import { attendanceSessionId } from './attendance-session-links';
 import { AttendanceSessionsService } from './attendance-sessions.service';
@@ -528,8 +529,7 @@ export class AttendanceService extends AttendanceSessionsService {
     skipped: number;
     errors: Array<{ index: number; message: string }>;
   }> {
-    const checkedInAt = new Date();
-    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
+    const { checkedInAt, attendanceDate } = attendanceDay(dto.attendanceDate);
     let serviceCategory: string | null = null;
     let parentBranch: string | null | undefined;
 
@@ -676,6 +676,7 @@ export class AttendanceService extends AttendanceSessionsService {
           recorded,
           skipped,
           errorCount: errors.length,
+          attendanceDate: attendanceDate.toISOString().slice(0, 10),
         },
       });
     }

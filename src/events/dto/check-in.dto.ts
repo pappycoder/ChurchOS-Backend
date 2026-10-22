@@ -1,7 +1,8 @@
+import { AttendanceDateDto } from '../../common/dto/attendance-date.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
-export class BulkCheckInDto {
+export class BulkCheckInDto extends AttendanceDateDto {
   @ApiProperty({ description: 'Member IDs to check in', type: [String] })
   @IsArray()
   @IsUUID('4', { each: true })

@@ -96,6 +96,34 @@ describe('EventsService', () => {
     );
   });
 
+  it('records an event roster and registration check-in on the chosen date', async () => {
+    prisma.event.findFirst.mockResolvedValue(mockEvent);
+    prisma.member.findFirst.mockResolvedValue({ id: mockMemberId });
+    prisma.attendance.findUnique.mockResolvedValue(null);
+    prisma.eventRegistration.findUnique.mockResolvedValue(mockRegistration);
+    const result = await service.bulkCheckInAttendees(
+      mockEventId,
+      [mockMemberId],
+      mockChurchId,
+      mockUserId,
+      '2026-10-18',
+    );
+    expect(result).toEqual({ checkedIn: 1, skipped: 0 });
+    expect(prisma.attendance.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          attendance_date: new Date('2026-10-18T00:00:00Z'),
+          checkin_at: new Date('2026-10-18T00:00:00Z'),
+        }),
+      }),
+    );
+    expect(prisma.eventRegistration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { checked_in: true, checked_in_at: new Date('2026-10-18T00:00:00Z') },
+      }),
+    );
+  });
+
   describe('createEvent', () => {
     it('should create an event and return EventResponseDto', async () => {
       prisma.event.create.mockResolvedValue(mockEvent);

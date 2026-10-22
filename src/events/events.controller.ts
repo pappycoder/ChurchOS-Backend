@@ -578,7 +578,13 @@ export class EventsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<{ checkedIn: number; skipped: number }> {
     const churchId = req.profile?.church_id || '';
-    return this.eventsService.bulkCheckInAttendees(eventId, dto.memberIds, churchId, user.sub);
+    return this.eventsService.bulkCheckInAttendees(
+      eventId,
+      dto.memberIds,
+      churchId,
+      user.sub,
+      dto.attendanceDate,
+    );
   }
 
   @Post(':eventId/check-in/walk-in')

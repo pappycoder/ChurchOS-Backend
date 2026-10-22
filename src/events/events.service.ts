@@ -1,3 +1,4 @@
+import { attendanceDay } from '../attendance/attendance-day';
 import { assertPlanFeature } from '../billing/entitlements';
 import { attendanceSessionId } from '../attendance/attendance-session-links';
 import { PaymentAccountsService } from '../giving/services/payment-accounts.service';
@@ -1888,6 +1889,7 @@ export class EventsService {
     memberIds: string[],
     churchId: string,
     userId: string,
+    selectedDate?: string,
   ): Promise<{ checkedIn: number; skipped: number }> {
     const event = await this.prisma.event.findFirst({
       where: {
@@ -1900,8 +1902,7 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    const checkedInAt = new Date();
-    const attendanceDate = new Date(checkedInAt.toISOString().slice(0, 10));
+    const { checkedInAt, attendanceDate } = attendanceDay(selectedDate);
     const sessionId = await attendanceSessionId(
       this.prisma,
       'event',
@@ -1957,7 +1958,7 @@ export class EventsService {
       if (registration && !registration.checked_in) {
         await this.prisma.eventRegistration.update({
           where: { id: registration.id },
-          data: { checked_in: true, checked_in_at: new Date() },
+          data: { checked_in: true, checked_in_at: checkedInAt },
         });
       }
 
@@ -1971,7 +1972,12 @@ export class EventsService {
         entity: 'attendance',
         action: 'CREATE',
         entityId: 'bulk-event-checkin',
-        newValues: { event_id: eventId, checkedIn, skipped },
+        newValues: {
+          event_id: eventId,
+          checkedIn,
+          skipped,
+          attendanceDate: attendanceDate.toISOString().slice(0, 10),
+        },
       });
     }
 
