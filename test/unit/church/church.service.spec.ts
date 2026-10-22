@@ -1,3 +1,7 @@
+import {
+  StaffInvitationService,
+  StaffInvitationInput,
+} from '../../../src/company-email/staff-invitation.service';
 import { RequestContextService } from '../../../src/common/services/request-context.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChurchService } from '../../../src/church/church.service';
@@ -10,6 +14,7 @@ import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 
 describe('ChurchService', () => {
   let service: ChurchService;
+  let staffInvitations: { create: jest.Mock };
   let prisma: ReturnType<typeof createPrismaMock>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let supabaseClient: Record<string, any> & { auth: { admin: Record<string, jest.Mock> } };
@@ -50,10 +55,28 @@ describe('ChurchService', () => {
       },
     };
 
+    staffInvitations = {
+      create: jest.fn(async (input: StaffInvitationInput) =>
+        prisma.profile.create({
+          data: {
+            user_id: 'auth-user-1',
+            church_id: input.churchId,
+            branch_id: input.branchId || null,
+            role: [input.role],
+            is_admin_hq: input.role === 'church_admin',
+            first_name: input.firstName,
+            last_name: input.lastName,
+            email: input.email,
+            phone: input.phone || null,
+          },
+        }),
+      ),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RequestContextService,
         ChurchService,
+        { provide: StaffInvitationService, useValue: staffInvitations },
         { provide: PrismaService, useValue: prisma },
         { provide: SupabaseService, useValue: { client: supabaseClient } },
         { provide: AuditLoggingService, useValue: { log: auditLog } },
@@ -236,7 +259,7 @@ describe('ChurchService', () => {
             'user-1',
           ),
         ).rejects.toThrow();
-        expect(supabaseClient.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+        expect(staffInvitations.create).not.toHaveBeenCalled();
         expect(prisma.$transaction).not.toHaveBeenCalled();
       },
     );
@@ -306,9 +329,8 @@ describe('ChurchService', () => {
         'user-1',
       );
 
-      expect(supabaseClient.auth.admin.inviteUserByEmail).toHaveBeenCalledWith(
-        'james@church.org',
-        expect.any(Object),
+      expect(staffInvitations.create).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'james@church.org' }),
       );
       expect(prisma.profile.create).toHaveBeenCalledWith(
         expect.objectContaining({

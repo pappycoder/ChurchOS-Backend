@@ -1,3 +1,4 @@
+import { CompanyEmailModule } from '../company-email/company-email.module';
 /**
  * @file Church management module.
  * @module ChurchModule
@@ -18,7 +19,7 @@ import { ChurchService } from './church.service';
  * Exports ChurchService for use by other modules.
  */
 @Module({
-  imports: [AuthModule, MediaModule],
+  imports: [CompanyEmailModule, AuthModule, MediaModule],
   controllers: [ChurchController],
   providers: [ChurchService],
   exports: [ChurchService],

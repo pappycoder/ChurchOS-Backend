@@ -1,6 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { companyEmail, CompanyEmailKind } from '../src/company-email/company-email.templates';
+import {
+  companyEmail,
+  CompanyEmailKind,
+  invitationEmail,
+} from '../src/company-email/company-email.templates';
 const directory = join(process.cwd(), 'docs', 'previews', 'company-emails');
 mkdirSync(directory, { recursive: true });
 for (const kind of ['welcome', 'activation', 'renewal', 'upgrade'] as CompanyEmailKind[]) {
@@ -21,4 +25,15 @@ for (const kind of ['welcome', 'activation', 'renewal', 'upgrade'] as CompanyEma
   );
   writeFileSync(join(directory, kind + '.html'), content.html + '\n');
 }
+const invitation = invitationEmail(
+  {
+    churchName: 'Grace Community Church',
+    firstName: 'Ada',
+    inviterName: 'Grace Admin',
+    roleLabel: 'Church Admin',
+    acceptUrl: 'https://church-os-web.vercel.app/accept-invitation#token_hash=preview-only',
+  },
+  'https://church-os-web.vercel.app',
+);
+writeFileSync(join(directory, 'invitation.html'), invitation.html + '\n');
 console.log(`Email previews written to ${directory}`);

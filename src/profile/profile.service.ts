@@ -1,3 +1,4 @@
+import { StaffInvitationService } from '../company-email/staff-invitation.service';
 import { filterPlanPermissions } from '../billing/feature-policy';
 import { churchEntitlements, reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
 import { RequestContextService } from '../common/services/request-context.service';
@@ -76,6 +77,7 @@ export class ProfileService {
     private readonly supabase: SupabaseService,
     private readonly permissionsService: PermissionsService,
     private readonly branchScope: BranchScopeService,
+    private readonly staffInvitations: StaffInvitationService,
   ) {}
 
   /**
@@ -1049,8 +1051,6 @@ export class ProfileService {
     )
       throw new BadRequestException('Branch not found in this church');
 
-    const supabase = this.supabase.client;
-
     const normalizedEmail = dto.email.trim().toLowerCase();
     const orConditions: Prisma.ProfileWhereInput[] = [{ email: normalizedEmail }];
     if (dto.phone) {
@@ -1069,54 +1069,18 @@ export class ProfileService {
       throw new ConflictException(`A user with this ${field} already exists in this church`);
     }
 
-    // TODO: Send the invitation via Resend (branded email with church name,
-    // inviter details, and setup instructions) instead of Supabase's default
-    // invite template.
     const reservation = await reserveStaffSeat(this.prisma, churchId, normalizedEmail);
     try {
-      const { data, error } = await supabase.auth.admin.inviteUserByEmail(dto.email, {
-        data: {
-          first_name: dto.firstName,
-          last_name: dto.lastName,
-          church_id: churchId,
-          role: dto.role,
-        },
-        redirectTo: `${this.config.get<string>('WEB_URL')}/auth/callback`,
+      const profile = await this.staffInvitations.create({
+        churchId,
+        email: normalizedEmail,
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+        role: dto.role,
+        phone: dto.phone,
+        branchId,
+        inviterUserId: invitedByUserId,
       });
-
-      if (error) {
-        this.logger.error(`Supabase invite failed: ${error.message}`);
-        throw new BadRequestException(`Failed to send invitation: ${error.message}`);
-      }
-
-      if (!data?.user) {
-        throw new BadRequestException('Failed to create user');
-      }
-
-      let profile;
-      try {
-        profile = await this.prisma.profile.create({
-          data: {
-            user_id: data.user.id,
-            church_id: churchId,
-            branch_id: branchId || null,
-            role: [dto.role],
-            is_admin_hq: dto.role === 'church_admin',
-            first_name: dto.firstName,
-            last_name: dto.lastName,
-            phone: dto.phone || null,
-            email: normalizedEmail,
-          },
-        });
-      } catch (err) {
-        // Roll back the created Supabase Auth user so we don't leak an orphaned
-        // account that has no local profile.
-        this.logger.error(
-          `Profile creation failed for invited user, deleting Supabase user ${data.user.id}: ${(err as Error).message}`,
-        );
-        await supabase.auth.admin.deleteUser(data.user.id).catch(() => {});
-        throw new BadRequestException('Failed to create user profile');
-      }
 
       await this.audit.log({
         userId: invitedByUserId,

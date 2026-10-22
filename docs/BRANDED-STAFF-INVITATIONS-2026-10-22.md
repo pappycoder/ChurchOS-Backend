@@ -1,0 +1,11 @@
+# Branded staff invitations
+
+Both church staff invitation APIs now generate a Supabase invitation token without sending Supabase's default email. They create the scoped church profile and a private company email outbox entry in one transaction, then deliver the existing ChurchOS design through the company Resend sender. Existing role validation, branch scope, staff limits and audit logging still apply. Delivery failures retain the outbox for bounded worker retries.
+
+`WEB_URL` is the sole backend website setting. Invitations build `/accept-invitation` directly from that origin and ignore the provider-generated action URL, avoiding stale Supabase Site URL redirects. No additional URL variable is needed. Production requires a public HTTPS origin. Existing organization Resend settings are used; missing delivery configuration rejects creation before creating an Auth identity.
+
+The email button opens the public acceptance page. The recipient chooses and confirms their own password, then signs in with the invited email and that password. No password is emailed. The one-time token is carried in the URL fragment, removed from browser history after reading, and submitted only on explicit form submission. Opening the page does not consume the invitation. The backend verifies only invitation tokens with an isolated Auth client, requires an active staff profile, updates the password, clears verified MFA sessions and revokes the setup session; it returns no login session. Missing/expired links point to the existing password recovery flow.
+
+Apply migration `20261022220000_branded_staff_invitations`, then deploy API, web and the persistent email worker together. The migration adds the invitation kind to the existing outbox constraint. Previously issued provider emails retain their original links; this change applies to newly created invitations. Already registered accounts cannot be reassigned to another church through invitations.
+
+Validation: 155 backend unit checks, 14 public-route checks, 8 isolated database checks, browser acceptance/recovery checks and the web production build. Providers are mocked in tests; no live email or production migration/deployment was performed. Preview: `docs/previews/company-emails/invitation.html`; regenerate with `npx ts-node scripts/preview-company-emails.ts`.

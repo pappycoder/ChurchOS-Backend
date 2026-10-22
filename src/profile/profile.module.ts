@@ -1,3 +1,4 @@
+import { CompanyEmailModule } from '../company-email/company-email.module';
 /**
  * @file profile.module.ts
  * @description Profile management module for user profiles, photo uploads, and role management.
@@ -30,7 +31,7 @@ import { ProfileService } from './profile.service';
  * ```
  */
 @Module({
-  imports: [AuthModule, MediaModule, RedisModule, CommunicationModule],
+  imports: [CompanyEmailModule, AuthModule, MediaModule, RedisModule, CommunicationModule],
   controllers: [ProfileController],
   providers: [ProfileService],
   exports: [ProfileService],

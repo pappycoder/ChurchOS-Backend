@@ -1,3 +1,7 @@
+import {
+  StaffInvitationService,
+  StaffInvitationInput,
+} from '../../../src/company-email/staff-invitation.service';
 import { RequestContextService } from '../../../src/common/services/request-context.service';
 /**
  * @file profile.service.spec.ts
@@ -30,6 +34,7 @@ import {
 
 describe('ProfileService', () => {
   let service: ProfileService;
+  let staffInvitations: { create: jest.Mock };
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
   let audit: { log: jest.Mock };
   let mediaService: { uploadImage: jest.Mock; deleteByUrl: jest.Mock };
@@ -149,6 +154,23 @@ describe('ProfileService', () => {
       error: null,
     });
 
+    staffInvitations = {
+      create: jest.fn(async (input: StaffInvitationInput) =>
+        model(prisma, 'profile').create({
+          data: {
+            user_id: 'new-user',
+            church_id: input.churchId,
+            branch_id: input.branchId || null,
+            role: [input.role],
+            is_admin_hq: input.role === 'church_admin',
+            first_name: input.firstName,
+            last_name: input.lastName,
+            email: input.email,
+            phone: input.phone || null,
+          },
+        }),
+      ),
+    };
     service = new ProfileService(
       prisma as unknown as PrismaService,
       new RequestContextService(),
@@ -158,6 +180,7 @@ describe('ProfileService', () => {
       supabase as unknown as SupabaseService,
       permissionsService as unknown as PermissionsService,
       new BranchScopeService(new RequestContextService()),
+      staffInvitations as unknown as StaffInvitationService,
     );
   });
 
@@ -971,7 +994,7 @@ describe('ProfileService', () => {
             ),
         ),
       ).rejects.toThrow(ForbiddenException);
-      expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+      expect(staffInvitations.create).not.toHaveBeenCalled();
     });
 
     it.each(['senior_pastor', 'church_admin', 'media_team'])(
@@ -1017,7 +1040,7 @@ describe('ProfileService', () => {
               mockAdminUserId,
             ),
         );
-        expect(supabase.client.auth.admin.inviteUserByEmail).toHaveBeenCalled();
+        expect(staffInvitations.create).toHaveBeenCalled();
         expect(model(prisma, 'role').findFirst).toHaveBeenCalledWith({
           where: { name: role, OR: [{ church_id: null }, { church_id: mockChurchId }] },
           select: { name: true },
@@ -1040,7 +1063,7 @@ describe('ProfileService', () => {
           ),
         ).rejects.toThrow();
         expect(prisma.$transaction).not.toHaveBeenCalled();
-        expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+        expect(staffInvitations.create).not.toHaveBeenCalled();
       },
     );
 
@@ -1059,7 +1082,7 @@ describe('ProfileService', () => {
           mockAdminUserId,
         ),
       ).rejects.toThrow(BadRequestException);
-      expect(supabase.client.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+      expect(staffInvitations.create).not.toHaveBeenCalled();
     });
 
     it('rejects HQ grants from general profile editors before writing', async () => {

@@ -649,6 +649,44 @@ describe('AuthService', () => {
 
   // ─── RESET PASSWORD ────────────────────────────────────────────────
 
+  describe('acceptInvitation', () => {
+    beforeEach(() => {
+      getUserByIdMock.mockResolvedValue({
+        data: { user: { id: mockUserId }, session: { access_token: 'invite-session' } },
+        error: null,
+      });
+      model(prisma, 'profile').findUnique.mockResolvedValue({
+        status: 'active',
+        archived_at: null,
+        role: ['church_admin'],
+      });
+      updateUserMock.mockResolvedValue({ error: null });
+    });
+    it('verifies an invitation, sets the password and revokes its session', async () => {
+      await service.acceptInvitation('invite-token', 'NewPassword123!');
+      expect(getUserByIdMock).toHaveBeenCalledWith({ token_hash: 'invite-token', type: 'invite' });
+      expect(updateUserMock).toHaveBeenCalledWith({ password: 'NewPassword123!' });
+      expect(signOutMock).toHaveBeenCalledWith('invite-session', 'global');
+    });
+    it('rejects an expired token before updating any password', async () => {
+      getUserByIdMock.mockResolvedValue({ data: {}, error: { message: 'expired' } });
+      await expect(service.acceptInvitation('old', 'NewPassword123!')).rejects.toThrow('expired');
+      expect(updateUserMock).not.toHaveBeenCalled();
+    });
+    it.each([
+      null,
+      { status: 'inactive', role: ['church_admin'] },
+      { status: 'active', archived_at: new Date(), role: ['church_admin'] },
+      { status: 'active', role: ['member'] },
+    ])('rejects unavailable staff profiles %j', async (profile) => {
+      model(prisma, 'profile').findUnique.mockResolvedValue(profile);
+      await expect(service.acceptInvitation('invite-token', 'NewPassword123!')).rejects.toThrow(
+        'no longer available',
+      );
+      expect(updateUserMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('resetPassword', () => {
     it('should update password successfully', async () => {
       getUserByIdMock.mockResolvedValue({

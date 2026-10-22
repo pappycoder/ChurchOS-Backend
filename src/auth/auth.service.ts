@@ -807,12 +807,41 @@ export class AuthService {
   }
 
   /**
-   * Completes a password reset with a recovery token.
-   *
-   * @param token - Recovery token from email link
-   * @param newPassword - New password to set
-   * @throws BadRequestException if token is invalid or expired
+   * Verifies a one-time staff invitation and sets the recipient’s chosen password.
    */
+  async acceptInvitation(token: string, newPassword: string): Promise<void> {
+    const client = this.supabase.createAuthClient();
+    const { data, error } = await client.auth.verifyOtp({ token_hash: token, type: 'invite' });
+    if (error || !data.user || !data.session)
+      throw new BadRequestException(
+        'This invitation is invalid or has expired. Request a new password link from the sign-in page.',
+      );
+    const profile = await this.prisma.profile.findUnique({
+      where: { user_id: data.user.id },
+      select: { status: true, archived_at: true, role: true },
+    });
+    if (
+      !profile ||
+      profile.status !== 'active' ||
+      profile.archived_at ||
+      !profile.role.some((role) => role !== 'member')
+    )
+      throw new BadRequestException(
+        'This invitation is no longer available. Contact your church administrator.',
+      );
+    const { error: updateError } = await client.auth.updateUser({ password: newPassword });
+    if (updateError)
+      throw new BadRequestException(
+        'Unable to set your password. Request a new password link from the sign-in page.',
+      );
+    await this.prisma.verifiedMfaSession.deleteMany({ where: { user_id: data.user.id } });
+    const { error: revokeError } = await this.supabase.client.auth.admin.signOut(
+      data.session.access_token,
+      'global',
+    );
+    if (revokeError) this.logger.warn('Invitation setup session revocation requires review');
+  }
+
   async resetPassword(token: string, newPassword: string): Promise<void> {
     // Only a recovery token may establish this isolated password-reset session.
     const client = this.supabase.createAuthClient();

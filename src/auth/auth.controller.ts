@@ -1,3 +1,4 @@
+import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 /**
  * @file auth.controller.ts
  * @description HTTP endpoints for authentication and profile management.
@@ -173,10 +174,18 @@ export class AuthController {
   }
 
   /**
-   * Complete a password reset with a recovery token.
-   *
-   * The token is obtained from the password reset email link.
+   * Accept a one-time staff invitation and choose a password.
    */
+  @Post('accept-invitation')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(RATE_LIMITS.auth)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept a staff invitation and choose a password' })
+  async acceptInvitation(@Body() dto: AcceptInvitationDto): Promise<{ success: boolean }> {
+    await this.authService.acceptInvitation(dto.token, dto.newPassword);
+    return { success: true };
+  }
+
   @Patch('reset-password')
   @UseGuards(RateLimitGuard)
   @RateLimit(RATE_LIMITS.auth)

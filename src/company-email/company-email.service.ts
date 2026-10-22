@@ -7,7 +7,15 @@ import { isEmail } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailDeliveryService } from '../communication/email-delivery.service';
 import { workersEnabled } from '../queues/workers-enabled';
-import { companyEmail, CompanyEmailInput } from './company-email.templates';
+import { publicWebUrl } from './public-web-url';
+import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  invitationEmail,
+  InvitationEmailInput,
+  CompanyEmailContent,
+  companyEmail,
+  CompanyEmailInput,
+} from './company-email.templates';
 
 const MAX_ATTEMPTS = 8;
 // Resend retains deduplication keys for 24 hours. Never retry an ambiguous send
@@ -36,14 +44,48 @@ export class CompanyEmailService {
     to: string,
     input: CompanyEmailInput,
   ): Promise<string> {
+    return this.enqueueContent(
+      tx,
+      eventKey,
+      churchId,
+      to,
+      input.kind,
+      companyEmail(input, publicWebUrl(this.config)),
+    );
+  }
+  assertInvitationDeliveryConfigured(): void {
+    publicWebUrl(this.config);
+    if (!this.config.get<string>('RESEND_API_KEY'))
+      throw new ServiceUnavailableException('ChurchOS invitation email delivery is not configured');
+  }
+  enqueueInvitation(
+    tx: Prisma.TransactionClient,
+    input: InvitationEmailInput & { churchId: string; userId: string; email: string },
+  ): Promise<string> {
+    return this.enqueueContent(
+      tx,
+      `invitation/${input.userId}`,
+      input.churchId,
+      input.email,
+      'invitation',
+      invitationEmail(input, publicWebUrl(this.config)),
+    );
+  }
+  private async enqueueContent(
+    tx: Prisma.TransactionClient,
+    eventKey: string,
+    churchId: string,
+    to: string,
+    kind: string,
+    content: CompanyEmailContent,
+  ): Promise<string> {
     if (!isEmail(to)) throw new Error('A valid company email recipient is required');
-    const content = companyEmail(input, this.config.getOrThrow<string>('WEB_URL'));
     await tx.companyEmailNotification.createMany({
       data: [
         {
           event_key: eventKey,
           church_id: churchId,
-          kind: input.kind,
+          kind,
           to_email: to,
           from_email: this.sender(),
           ...content,
