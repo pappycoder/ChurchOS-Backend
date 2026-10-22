@@ -15,6 +15,7 @@ import { RequestContextService } from '../common/services/request-context.servic
 
 import {
   Injectable,
+  ForbiddenException,
   Logger,
   NotFoundException,
   ConflictException,
@@ -829,6 +830,9 @@ export class AttendanceService extends AttendanceSessionsService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.AttendanceWhereInput = { church_id: churchId };
+    if (viewer?.permissions && !viewer.permissions.includes('events:checkin:read')) {
+      where.event_id = null;
+    }
 
     // Attendance rows have no branch column — their branch comes from the linked
     // service/event. Restrict non-HQ viewers to records whose service OR event
@@ -855,7 +859,11 @@ export class AttendanceService extends AttendanceSessionsService {
     }
 
     if (query.serviceId) where.service_id = query.serviceId;
-    if (query.eventId) where.event_id = query.eventId;
+    if (query.eventId) {
+      if (viewer?.permissions && !viewer.permissions.includes('events:checkin:read'))
+        throw new ForbiddenException('Event check-in access is required');
+      where.event_id = query.eventId;
+    }
     if (query.memberId) where.member_id = query.memberId;
     if (query.visitorId) where.visitor_id = query.visitorId;
     if (query.category) where.category = query.category;
@@ -969,6 +977,8 @@ export class AttendanceService extends AttendanceSessionsService {
     viewer?: ViewerScope | null,
   ): Promise<AttendanceSummaryDto> {
     const where: Prisma.AttendanceWhereInput = { church_id: churchId };
+    if (viewer?.permissions && !viewer.permissions.includes('events:checkin:read'))
+      where.event_id = null;
     const scope = this.branchScope.resolve(viewer);
     const effectiveBranchId = scope.churchOnly ? branchId : scope.branchId;
 
@@ -1068,6 +1078,8 @@ export class AttendanceService extends AttendanceSessionsService {
       church_id: churchId,
       checkin_at: checkinAt,
     };
+    if (viewer?.permissions && !viewer.permissions.includes('events:checkin:read'))
+      where.event_id = null;
     const scope = this.branchScope.resolve(viewer);
     const effectiveBranchId = scope.churchOnly ? branchId : scope.branchId;
 

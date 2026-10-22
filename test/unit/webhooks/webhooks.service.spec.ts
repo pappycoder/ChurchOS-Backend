@@ -1,4 +1,6 @@
-jest.mock('node:dns/promises', () => ({ lookup: jest.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]) }));
+jest.mock('node:dns/promises', () => ({
+  lookup: jest.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+}));
 /**
  * @file webhooks.service.spec.ts
  * @description Unit tests for WebhooksService.
@@ -19,6 +21,7 @@ describe('WebhooksService', () => {
   const mockSubId = '22222222-2222-2222-2222-222222222222';
 
   let prisma: {
+    platformSubscription: Record<string, jest.Mock>;
     webhookSubscription: Record<string, jest.Mock>;
     webhookDelivery: Record<string, jest.Mock>;
   };
@@ -28,6 +31,11 @@ describe('WebhooksService', () => {
 
   beforeEach(() => {
     prisma = {
+      platformSubscription: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ plan: 'network', paid_until: new Date(Date.now() + 86400000) }),
+      },
       webhookSubscription: {
         create: jest.fn(),
         findMany: jest.fn(),

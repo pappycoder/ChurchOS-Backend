@@ -1,3 +1,4 @@
+import { createPrismaMock } from '../../helpers/prisma-mock.helper';
 import { ConfigService } from '@nestjs/config';
 import { IntegrationAccountsService } from '../../../src/integrations/integration-accounts.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
@@ -91,5 +92,45 @@ describe('Provider account isolation and historical payment credentials', () => 
     );
     expect(service.validateWebhookSignature('{}', hash)).toBe(true);
     expect(service.validateWebhookSignature('{}', 'wrong')).toBe(false);
+  });
+});
+
+describe('Provider plan boundaries', () => {
+  function fixture(plan: string) {
+    const prisma = createPrismaMock();
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan,
+      paid_until: new Date(Date.now() + 86400000),
+    });
+    prisma.integrationAccount.findMany.mockResolvedValue([
+      { provider: 'resend', id: 'email-account' },
+      { provider: 'twilio', id: 'sms-account' },
+    ]);
+    prisma.integrationChannel.findMany.mockResolvedValue([]);
+    const service = new IntegrationAccountsService(
+      prisma as never,
+      new ConfigService({ INTEGRATIONS_ENCRYPTION_KEY: 'ab'.repeat(32) }),
+      { log: jest.fn() } as never,
+      {} as never,
+    );
+    return { prisma, service };
+  }
+  it('only exposes email and payments on Community', async () => {
+    const { service } = fixture('community');
+    const result = await service.list('church');
+    expect(result.channels.map((item) => item.channel)).toEqual(['email', 'payment']);
+    expect(result.providers.map((item) => item.id)).not.toContain('twilio');
+    expect(result.accounts).toEqual([{ provider: 'resend', id: 'email-account' }]);
+  });
+  it('rejects Network-only account creation and channel enablement on Community before writing or contacting a provider', async () => {
+    const { service, prisma } = fixture('community');
+    await expect(
+      service.create('church', 'twilio', 'SMS', { accountSid: 'sid', authToken: 'secret' }, 'user'),
+    ).rejects.toThrow('not available');
+    await expect(
+      service.configure('church', 'sms', { mode: 'custom', accountId: 'account' }, 'user'),
+    ).rejects.toThrow('not available');
+    expect(prisma.integrationAccount.create).not.toHaveBeenCalled();
+    expect(prisma.integrationChannel.upsert).not.toHaveBeenCalled();
   });
 });

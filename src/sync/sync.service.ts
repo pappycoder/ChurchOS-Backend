@@ -591,6 +591,8 @@ export class SyncService {
 
   private readScope(entity: string, churchId: string, viewer: SyncViewer): Record<string, unknown> {
     const where: Record<string, unknown> = { church_id: churchId };
+    if (entity === 'attendance' && !viewer.permissions?.includes('events:checkin:read'))
+      where.event_id = null;
     if (entity === 'sermonBookmark')
       where.member_id = viewer.member_id ?? '00000000-0000-0000-0000-000000000000';
     if (!viewer.is_admin_hq && entity !== 'givingCategory') {

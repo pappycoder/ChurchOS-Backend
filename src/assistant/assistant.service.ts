@@ -68,7 +68,7 @@ function conciseAccess(item: AssistantAccess | undefined, reviewing: boolean): s
     case 'admin_required':
       return 'This feature is restricted to church administrators and super administrators. HQ access alone does not enable it.';
     case 'plan_required':
-      return 'Your church plan does not currently enable this feature. Ask your church administrator to review the plan; authorized historical reads may still be available.';
+      return 'Your church plan does not currently enable this feature. Ask your church administrator to review the plan; existing records are retained until an eligible plan enables access again.';
     case 'subscription_required':
       return 'Your church subscription is not active. Your church administrator can review Plan & Billing.';
     case 'available':

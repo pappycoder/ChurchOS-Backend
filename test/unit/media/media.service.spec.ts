@@ -41,10 +41,18 @@ describe('MediaService', () => {
     prisma = createPrismaMock();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestContextService, BranchScopeService,
+      providers: [
+        RequestContextService,
+        BranchScopeService,
         MediaService,
         { provide: SupabaseService, useValue: { client: { storage: { from: storageFrom } } } },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('media'), getOrThrow: jest.fn().mockReturnValue('https://supabase.co') } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('media'),
+            getOrThrow: jest.fn().mockReturnValue('https://supabase.co'),
+          },
+        },
         { provide: PrismaService, useValue: prisma },
         { provide: AuditLoggingService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
       ],
@@ -53,9 +61,38 @@ describe('MediaService', () => {
     service = module.get<MediaService>(MediaService);
   });
 
+  it('blocks a private library download after a downgrade even for its uploader', async () => {
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'essentials',
+      paid_until: new Date(Date.now() + 86400000),
+    });
+    prisma.mediaAsset.findFirst.mockResolvedValue({
+      ...mockAsset,
+      folder: 'uploads',
+      uploaded_by_user_id: 'owner',
+    });
+    await expect(
+      service.getFile(
+        mockAssetId,
+        mockChurchId,
+        {
+          church_id: mockChurchId,
+          is_admin_hq: true,
+          permissions: ['media:library:read'],
+        } as never,
+        undefined,
+        'owner',
+      ),
+    ).rejects.toThrow('not available');
+    expect(storageFrom).not.toHaveBeenCalled();
+  });
+
   describe('deleteFile', () => {
     it('should delete a file by path', async () => {
-      prisma.mediaAsset.findFirst.mockResolvedValue({ ...mockAsset, storage_path: 'churches/church-1/logo.webp' });
+      prisma.mediaAsset.findFirst.mockResolvedValue({
+        ...mockAsset,
+        storage_path: 'churches/church-1/logo.webp',
+      });
       await service.deleteFile('churches/church-1/logo.webp', 'church-1');
 
       expect(storageFrom).toHaveBeenCalledWith('media');

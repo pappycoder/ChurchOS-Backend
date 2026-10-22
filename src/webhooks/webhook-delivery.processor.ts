@@ -1,3 +1,4 @@
+import { churchEntitlements } from '../billing/entitlements';
 /**
  * @file webhook-delivery.processor.ts
  * @description BullMQ processor for outbound webhook delivery.
@@ -36,6 +37,28 @@ export class WebhookDeliveryProcessor extends WorkerHost {
   async process(job: Job<WebhookDeliveryJob>): Promise<void> {
     const { deliveryId, url, secret, event, payload } = job.data;
 
+    const subscription = await this.prisma.webhookSubscription.findUnique({
+      where: { id: job.data.subscriptionId },
+    });
+    const entitlement = subscription
+      ? await churchEntitlements(this.prisma, subscription.church_id)
+      : null;
+    if (
+      !subscription ||
+      !subscription.is_active ||
+      subscription.archived_at ||
+      !entitlement?.active ||
+      !entitlement.features.includes('webhooks')
+    ) {
+      await this.prisma.webhookDelivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: 'failed',
+          response_body: 'Webhook subscription is unavailable on the current plan.',
+        },
+      });
+      return;
+    }
     await this.prisma.webhookDelivery.update({
       where: { id: deliveryId },
       data: { attempts: { increment: 1 } },

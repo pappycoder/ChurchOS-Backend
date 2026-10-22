@@ -15,7 +15,11 @@ const deliveryId = 'dlv-11111111';
 const secret = 'supersecret';
 
 describe('WebhookDeliveryProcessor', () => {
-  let prisma: { webhookDelivery: Record<string, jest.Mock> };
+  let prisma: {
+    platformSubscription: Record<string, jest.Mock>;
+    webhookSubscription: Record<string, jest.Mock>;
+    webhookDelivery: Record<string, jest.Mock>;
+  };
   let processor: WebhookDeliveryProcessor;
   let fetchMock: jest.Mock;
 
@@ -34,13 +38,27 @@ describe('WebhookDeliveryProcessor', () => {
 
   beforeEach(() => {
     prisma = {
+      platformSubscription: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ plan: 'network', paid_until: new Date(Date.now() + 86400000) }),
+      },
+      webhookSubscription: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ church_id: 'church', is_active: true, archived_at: null }),
+      },
       webhookDelivery: {
         update: jest.fn(),
       },
     };
     processor = new WebhookDeliveryProcessor(prisma as unknown as PrismaService);
     fetchMock = jest.fn();
-    (sendWebhook as jest.Mock).mockImplementation(async (url, body, headers) => { const response = await fetchMock(url, { body, headers }); return { status: response.status, body: await response.text() }; });
+    (sendWebhook as jest.Mock).mockClear();
+    (sendWebhook as jest.Mock).mockImplementation(async (url, body, headers) => {
+      const response = await fetchMock(url, { body, headers });
+      return { status: response.status, body: await response.text() };
+    });
   });
 
   afterEach(() => {
@@ -48,6 +66,18 @@ describe('WebhookDeliveryProcessor', () => {
   });
 
   describe('process', () => {
+    it('does not contact the destination after a downgrade', async () => {
+      prisma.platformSubscription.findUnique.mockResolvedValue({
+        plan: 'essentials',
+        paid_until: new Date(Date.now() + 86400000),
+      });
+      await processor.process(baseJob as never);
+      expect(sendWebhook).not.toHaveBeenCalled();
+      expect(prisma.webhookDelivery.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'failed' }) }),
+      );
+    });
+
     it('should increment attempts, sign the payload, and mark the delivery successful', async () => {
       let captured: { body: string; headers: Record<string, string> } | undefined;
       fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {

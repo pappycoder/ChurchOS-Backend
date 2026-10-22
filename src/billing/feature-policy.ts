@@ -1,0 +1,61 @@
+import { PlanFeature } from './plans';
+
+/** Plan eligibility is independent of staff role, HQ status and CRUD action. */
+export function featureForPermission(permission: string): PlanFeature | undefined {
+  const [resource, surface] = permission.split(':');
+  if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
+  if (resource === 'cell_groups' && surface === 'giving') return 'giving';
+  if (['assets', 'asset_categories'].includes(resource)) return 'assets';
+  if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';
+  if (['departments', 'cell_groups'].includes(resource)) return 'groups';
+  if (['sermons', 'media'].includes(resource)) return 'media';
+  if (['templates', 'broadcasts', 'messages', 'integrations'].includes(resource)) return 'email';
+  if (resource === 'calls') return 'calls';
+  if (resource === 'webhooks') return 'webhooks';
+  if (['giving', 'events', 'forms', 'reports', 'analytics'].includes(resource))
+    return resource as PlanFeature;
+  return undefined;
+}
+
+export function filterPlanPermissions(
+  permissions: readonly string[],
+  features: readonly string[],
+): string[] {
+  return permissions.filter((permission) => {
+    const feature = featureForPermission(permission);
+    return !feature || features.includes(feature);
+  });
+}
+
+export function featureForApiPath(path: string): PlanFeature | undefined {
+  if (/^\/members\/[^/]+\/giving(?:\/|$)/.test(path)) return 'giving';
+  if (/^\/admin\/dashboard(?:\/|$)/.test(path)) return 'pastoral';
+  if (/^\/analytics(?:\/|$)/.test(path)) return 'analytics';
+  if (/^\/(?:assets|asset-categories)(?:\/|$)/.test(path)) return 'assets';
+  if (/^\/(?:pastoral|appointments)(?:\/|$)/.test(path)) return 'pastoral';
+  if (/^\/forms(?:\/|$)/.test(path)) return 'forms';
+  if (/^\/admin\/(?:departments|cell-groups)(?:\/|$)/.test(path)) return 'groups';
+  if (/^\/reports(?:\/|$)/.test(path)) return 'reports';
+  if (
+    /^\/events\/(?:management\/tickets|[^/]+\/(?:tiers|tickets|check-in|attendance))(?:\/|$)/.test(
+      path,
+    )
+  )
+    return 'tickets';
+  if (/^\/events(?:\/|$)/.test(path)) return 'events';
+  if (/^\/giving(?:\/|$)/.test(path)) return 'giving';
+  if (/^\/(?:templates|broadcasts|messages|church\/integrations)(?:\/|$)/.test(path))
+    return 'email';
+  if (/^\/calls(?:\/|$)/.test(path)) return 'calls';
+  if (/^\/webhooks(?:\/|$)/.test(path)) return 'webhooks';
+  if (/^\/(?:sermons|media\/library)(?:\/|$)/.test(path)) return 'media';
+  return undefined;
+}
+
+/** Shared uploads must keep profile/church branding available on Essentials. */
+export function featureForMediaFolder(folder: string): PlanFeature | undefined {
+  if (['churches', 'branches', 'profiles'].includes(folder)) return undefined;
+  if (folder === 'assets') return 'assets';
+  if (folder === 'form-attachments') return 'forms';
+  return 'media';
+}

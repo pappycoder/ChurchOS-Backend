@@ -1,3 +1,4 @@
+import { filterPlanPermissions } from '../billing/feature-policy';
 import { churchEntitlements, reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
@@ -148,8 +149,13 @@ export class ProfileService {
 
     const entitlement = await churchEntitlements(this.prisma, profile.church_id);
     return {
-      ...this.mapToResponseDto(profile, { permissions }),
-      planFeatures: entitlement.features,
+      ...this.mapToResponseDto(profile, {
+        permissions: filterPlanPermissions(
+          permissions,
+          entitlement.active ? entitlement.features : [],
+        ),
+      }),
+      planFeatures: entitlement.active ? entitlement.features : [],
     };
   }
 

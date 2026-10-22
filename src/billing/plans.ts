@@ -33,6 +33,7 @@ export const FEATURE_LEVELS = {
   forms: 1,
   reports: 1,
   email: 1,
+  media: 1,
   tickets: 2,
   pastoral: 2,
   assets: 2,
@@ -40,6 +41,7 @@ export const FEATURE_LEVELS = {
   sms: 2,
   whatsapp: 2,
   calls: 2,
+  webhooks: 2,
 } as const;
 export type PlanFeature = keyof typeof FEATURE_LEVELS;
 export function planFeatures(plan: SubscriptionPlan): PlanFeature[] {

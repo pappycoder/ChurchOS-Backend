@@ -1,3 +1,6 @@
+import { assertPlanFeature } from '../billing/entitlements';
+import { featureForMediaFolder } from '../billing/feature-policy';
+import { PrismaService } from '../prisma/prisma.service';
 /**
  * @file Media upload controller with REST API endpoints.
  * @module MediaController
@@ -73,7 +76,10 @@ export class MediaController {
    * Creates an instance of MediaController.
    * @param mediaService - Service for media operations
    */
-  constructor(private readonly mediaService: MediaService) {}
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('files/:assetId')
   @Header('Cache-Control', 'private, no-store')
@@ -142,6 +148,8 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
+    const feature = featureForMediaFolder(folder);
+    if (feature) await assertPlanFeature(this.prisma, churchId, feature);
     assertMediaUploadPermission(folder, req.profile?.permissions ?? []);
     return this.mediaService.uploadImage(
       file,
@@ -194,6 +202,8 @@ export class MediaController {
   ): Promise<MediaResponseDto> {
     const churchId = req.profile?.church_id || '';
     const folder = dto.folder || 'uploads';
+    const feature = featureForMediaFolder(folder);
+    if (feature) await assertPlanFeature(this.prisma, churchId, feature);
     assertMediaUploadPermission(folder, req.profile?.permissions ?? []);
     return this.mediaService.uploadFile(
       file,

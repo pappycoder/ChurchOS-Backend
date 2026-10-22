@@ -1,3 +1,5 @@
+import { assertPlanFeature } from '../billing/entitlements';
+import { featureForMediaFolder } from '../billing/feature-policy';
 /**
  * @file Media upload service with Supabase Storage integration.
  * @module MediaService
@@ -630,6 +632,8 @@ export class MediaService {
       (asset.branch_id && !this.branchScope.isVisible(viewer, asset.branch_id))
     )
       throw new NotFoundException('Media not found');
+    const feature = featureForMediaFolder(asset.folder);
+    if (feature) await assertPlanFeature(this.prisma, churchId, feature);
     const permissions = viewer.permissions ?? [];
     const allowed =
       asset.uploaded_by_user_id === userId ||

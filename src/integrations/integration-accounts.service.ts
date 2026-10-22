@@ -1,4 +1,5 @@
-import { assertPlanFeature } from '../billing/entitlements';
+import { assertPlanFeature, churchEntitlements } from '../billing/entitlements';
+import { PlanFeature } from '../billing/plans';
 import {
   BadRequestException,
   Injectable,
@@ -91,7 +92,27 @@ export class IntegrationAccountsService {
       throw new ServiceUnavailableException('Integration credentials cannot be decrypted');
     }
   }
+  private channelFeature(kind: Channel): PlanFeature {
+    return kind === 'payment' ? 'giving' : kind === 'voice' ? 'calls' : kind;
+  }
+  private async assertProviderPlan(churchId: string, provider: ProviderId) {
+    const entitlement = await churchEntitlements(this.prisma, churchId);
+    const supported = definition(provider).channels.map((kind) => this.channelFeature(kind));
+    if (
+      !entitlement.active ||
+      !supported.some((feature) => entitlement.features.includes(feature))
+    ) {
+      await assertPlanFeature(this.prisma, churchId, supported[0]);
+    }
+  }
   async list(churchId: string) {
+    const entitlement = await churchEntitlements(this.prisma, churchId);
+    const eligibleChannels = CHANNELS.filter(
+      (kind) => entitlement.active && entitlement.features.includes(this.channelFeature(kind)),
+    );
+    const providers = PROVIDERS.filter((provider) =>
+      provider.channels.some((kind) => eligibleChannels.includes(kind)),
+    );
     const [accounts, channels] = await Promise.all([
       this.prisma.integrationAccount.findMany({
         where: { church_id: churchId },
@@ -101,9 +122,11 @@ export class IntegrationAccountsService {
       this.prisma.integrationChannel.findMany({ where: { church_id: churchId } }),
     ]);
     return {
-      providers: PROVIDERS,
-      accounts,
-      channels: CHANNELS.map((kind) => {
+      providers,
+      accounts: accounts.filter((account) =>
+        providers.some((provider) => provider.id === account.provider),
+      ),
+      channels: eligibleChannels.map((kind) => {
         const saved = channels.find((item) => item.channel === kind);
         return saved?.mode === 'custom'
           ? saved
@@ -126,6 +149,7 @@ export class IntegrationAccountsService {
     userId: string,
   ) {
     const provider = definition(providerValue).id;
+    await this.assertProviderPlan(churchId, provider);
     validateCredentials(provider, credentials);
     if (!label?.trim() || label.length > 80 || /[\x00-\x1f]/.test(label))
       throw new BadRequestException('Provide an account label of 1–80 characters');
@@ -157,6 +181,7 @@ export class IntegrationAccountsService {
   }
   async verify(churchId: string, id: string, userId: string) {
     const account = await this.account(churchId, id);
+    await this.assertProviderPlan(churchId, account.provider);
     const result = await this.transport.verify(account);
     await this.prisma.integrationAccount.update({
       where: { id, church_id: churchId },
@@ -211,6 +236,7 @@ export class IntegrationAccountsService {
     let accountId: string | null = null;
     let settings: Record<string, string> = {};
     if (input.mode === 'custom') {
+      await assertPlanFeature(this.prisma, churchId, this.channelFeature(kind));
       if (!input.accountId) throw new BadRequestException('Choose a provider account');
       const row = await this.prisma.integrationAccount.findFirst({
         where: { id: input.accountId, church_id: churchId, archived_at: null },

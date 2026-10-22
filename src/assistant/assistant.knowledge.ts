@@ -48,13 +48,12 @@ export function routeAccess(path: string, context: AccessContext): AssistantAcce
       detail:
         'Your church subscription is not active. Your church administrator can review Plan & Billing.',
     };
-  const feature =
-    featureForPath(path) ?? (/^\/departments(?:\/|$)/.test(path) ? 'groups' : undefined);
+  const feature = featureForPath(path);
   if (feature && !context.features.includes(feature))
     return {
       label,
       status: 'plan_required',
-      detail: `The ${feature} feature is outside your church plan. Authorized historical reads may still be available through View historical records where supported; new writes require an eligible active plan.`,
+      detail: `The ${feature} feature is outside your church plan. Reads and writes require an eligible active plan. Existing records are retained for when your church upgrades.`,
     };
   return {
     label,
@@ -219,8 +218,7 @@ export function actionAccess(
     const adminBlocked =
       /^(analytics|integrations|billing):/.test(code) && !isAdministrator(context.profile);
     const planBlocked =
-      writable &&
-      (!context.subscriptionActive || (!!feature && !context.features.includes(feature)));
+      !context.subscriptionActive || (!!feature && !context.features.includes(feature));
     return {
       label: code,
       status: adminBlocked
@@ -235,7 +233,7 @@ export function actionAccess(
         : !held
           ? 'This grant is absent from your current verified permissions.'
           : planBlocked
-            ? 'You hold this grant, but the write requires an eligible active subscription.'
+            ? 'This action requires an eligible active subscription as well as staff permission.'
             : writable
               ? 'You hold this action grant. Record ownership, branch scope and state checks still apply; those checks have not been performed here.'
               : 'You hold this read/view/delete grant. Record scope and state checks still apply; this grant does not authorize other operations.',

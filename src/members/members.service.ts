@@ -1058,6 +1058,7 @@ export class MembersService {
   async getMemberAttendanceHistory(
     id: string,
     churchId: string,
+    viewer?: ViewerScope | null,
   ): Promise<
     Array<{
       id: string;
@@ -1081,7 +1082,13 @@ export class MembersService {
     }
 
     const attendance = await this.prisma.attendance.findMany({
-      where: { member_id: id },
+      where: {
+        member_id: id,
+        church_id: churchId,
+        ...(viewer?.permissions && !viewer.permissions.includes('events:checkin:read')
+          ? { event_id: null }
+          : {}),
+      },
       orderBy: { checkin_at: 'desc' },
       include: {
         service: {

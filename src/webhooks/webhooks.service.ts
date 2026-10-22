@@ -1,3 +1,4 @@
+import { churchEntitlements } from '../billing/entitlements';
 import { resolveWebhookUrl } from './safe-webhook-request';
 /**
  * @file webhooks.service.ts
@@ -195,6 +196,8 @@ export class WebhooksService {
     event: string,
     payload: Record<string, unknown>,
   ): Promise<{ queued: number }> {
+    const entitlement = await churchEntitlements(this.prisma, churchId);
+    if (!entitlement.active || !entitlement.features.includes('webhooks')) return { queued: 0 };
     const subscriptions = await this.prisma.webhookSubscription.findMany({
       where: { church_id: churchId, is_active: true, events: { has: event } },
     });

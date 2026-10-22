@@ -40,6 +40,8 @@ describe('Subscription database enforcement', () => {
       await pool.query('DELETE FROM members WHERE church_id=$1', [id]);
       await pool.query('DELETE FROM branches WHERE church_id=$1', [id]);
       await pool.query('DELETE FROM platform_subscriptions WHERE church_id=$1', [id]);
+      // Child deletions emit audit rows; remove these scoped fixture records last.
+      await pool.query('DELETE FROM audit_logs WHERE church_id=$1', [id]);
       await pool.query('DELETE FROM churches WHERE id=$1', [id]);
     }
     await pool.end();

@@ -348,6 +348,7 @@ export class MembersController {
    * Get giving history for a member.
    */
   @Get(':memberId/giving')
+  @RequirePermissions('giving:records:read')
   @ApiGetEndpoint('Get giving history', 'Retrieves the giving transaction history for a member.')
   async getGivingHistory(
     @Param('memberId') memberId: string,
@@ -385,7 +386,11 @@ export class MembersController {
     }>;
   }> {
     const churchId = req.profile?.church_id || '';
-    const data = await this.membersService.getMemberAttendanceHistory(memberId, churchId);
+    const data = await this.membersService.getMemberAttendanceHistory(
+      memberId,
+      churchId,
+      req.profile,
+    );
     return { data };
   }
 

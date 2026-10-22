@@ -84,7 +84,7 @@ describe('Ask ChurchOS access and retrieval', () => {
     expect(access.status).toBe('available');
     expect(access.detail).toContain('restricted');
   });
-  it('allows historical read grants while withholding plan-gated writes', () => {
+  it('blocks historical reads and writes outside the current plan', () => {
     const access = actionAccess(
       'My form permissions',
       '/forms',
@@ -94,7 +94,7 @@ describe('Ask ChurchOS access and retrieval', () => {
       }),
     );
     expect(access.find((item) => item.label === 'forms:submissions:read')?.status).toBe(
-      'available',
+      'plan_required',
     );
     expect(access.find((item) => item.label === 'forms:submissions:update')?.status).toBe(
       'plan_required',
