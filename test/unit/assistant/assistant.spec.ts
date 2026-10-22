@@ -1,4 +1,4 @@
-import { ForbiddenException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AssistantService } from '../../../src/assistant/assistant.service';
 import { AssistantProvider } from '../../../src/assistant/assistant.provider';
@@ -50,13 +50,13 @@ describe('Ask ChurchOS access and retrieval', () => {
         .status,
     ).toBe('missing_permission');
   });
-  it('accepts any alternative report grant but still checks the plan', () => {
+  it('accepts financial report access with giving but still checks the plan', () => {
     expect(
       routeAccess(
         '/reports',
         context({
           profile: staff({ permissions: ['reports:financial:read'] }),
-          features: ['reports'],
+          features: ['giving'],
         }),
       ).status,
     ).toBe('available');
@@ -247,6 +247,15 @@ describe('Ask ChurchOS server identity, fallback and model boundary', () => {
     for (const secret of ['church-a', 'profile-a', 'branch-a', 'secret-record'])
       expect(facts).not.toContain(secret);
     expect(facts).not.toContain('permissions');
+  });
+  it.each(['Hi', '?', 'h'])('accepts nonblank short input %s', async (question) => {
+    const result = await service.ask({ question }, staff());
+    expect(result.answer).toEqual(expect.any(String));
+    expect(result.answer.length).toBeGreaterThan(0);
+  });
+  it.each(['', ' ', '\n\t'])('rejects blank input %j', async (question) => {
+    await expect(service.ask({ question }, staff())).rejects.toBeInstanceOf(BadRequestException);
+    expect(provider.answer).not.toHaveBeenCalled();
   });
   it('refuses an unknown question without paying for a speculative answer', async () => {
     const result = await service.ask({ question: 'astrophysics quasars relativity' }, staff());

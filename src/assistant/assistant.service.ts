@@ -128,8 +128,7 @@ export class AssistantService {
   }
   async ask(dto: AssistantQuestionDto, profile?: StaffProfile): Promise<AssistantReply> {
     const question = dto.question.trim();
-    if (question.length < 3)
-      throw new BadRequestException('Please enter a question with at least three characters.');
+    if (!question) throw new BadRequestException('Please enter a question.');
     const context = await this.verified(profile);
     const page = normalizedPage(dto.page);
     const history = (dto.history ?? []).slice(-3);
