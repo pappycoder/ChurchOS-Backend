@@ -64,6 +64,21 @@ describe('Plan feature SQL and persistence boundaries', () => {
       'media',
     );
   });
+  it('requires Network to create a paid event or change a free event to paid', async () => {
+    const id = await church('community');
+    const query =
+      "INSERT INTO events(id,church_id,title,start_date,is_free,price,updated_at) VALUES ($1,$2,'Event',now(),false,100,now())";
+    await rejected(query, [randomUUID(), id], 'tickets');
+    const eventId = randomUUID();
+    await db.query(
+      "INSERT INTO events(id,church_id,title,start_date,updated_at) VALUES ($1,$2,'Free',now(),now())",
+      [eventId, id],
+    );
+    await rejected('UPDATE events SET is_free=false,price=100 WHERE id=$1', [eventId], 'tickets');
+    await db.query("UPDATE platform_subscriptions SET plan='network' WHERE church_id=$1", [id]);
+    await db.query(query, [randomUUID(), id]);
+  });
+
   it('allows Community library uploads, keeps asset uploads and webhooks on Network, and retains rows on downgrade', async () => {
     const id = await church('community');
     const media =

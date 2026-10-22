@@ -1,3 +1,4 @@
+import { assertPlanFeature } from '../billing/entitlements';
 /**
  * @file forms.service.ts
  * @description Business logic for forms and form submissions.
@@ -588,6 +589,8 @@ export class FormsService {
       throw new NotFoundException('Form not found');
     }
 
+    await assertPlanFeature(this.prisma, form.church_id, 'forms');
+
     return {
       title: form.title,
       description: form.description ?? undefined,
@@ -617,6 +620,8 @@ export class FormsService {
     if (!form.is_public || form.status !== FormStatus.published) {
       throw new BadRequestException('This form is not accepting public submissions');
     }
+
+    await assertPlanFeature(this.prisma, form.church_id, 'forms');
 
     const fields = this.parseFields(form.fields);
     this.validateSubmissionData(fields, dto.data);

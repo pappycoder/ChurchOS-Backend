@@ -94,12 +94,34 @@ describe('FormsService', () => {
 
   beforeEach(() => {
     prisma = createPrismaMock();
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'community',
+      paid_until: new Date(Date.now() + 86400000),
+    });
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     service = new FormsService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditLoggingService,
       new BranchScopeService(new RequestContextService()),
     );
+  });
+
+  it('does not expose a public form after its church loses form eligibility', async () => {
+    prisma.form.findUnique.mockResolvedValue({
+      ...mockForm,
+      is_public: true,
+      status: FormStatus.published,
+      archived_at: null,
+    });
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'essentials',
+      paid_until: new Date(Date.now() + 86400000),
+    });
+    await expect(service.getPublicFormMeta('token')).rejects.toThrow('not available');
+    await expect(service.submitByPublicToken('token', { data: {} })).rejects.toThrow(
+      'not available',
+    );
+    expect(prisma.formSubmission.create).not.toHaveBeenCalled();
   });
 
   describe('createForm', () => {
