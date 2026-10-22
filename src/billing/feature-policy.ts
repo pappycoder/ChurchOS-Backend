@@ -9,6 +9,7 @@ export function featureForPermission(permission: string): PlanFeature | undefine
   if (['departments', 'cell_groups'].includes(resource)) return 'groups';
   if (['sermons', 'media'].includes(resource)) return 'media';
   if (['templates', 'broadcasts', 'messages'].includes(resource)) return 'email';
+  if (resource === 'reports' && (surface === 'financial' || surface === 'view')) return 'giving';
   if (resource === 'integrations') return 'giving';
   if (resource === 'calls') return 'calls';
   if (resource === 'webhooks') return 'webhooks';
@@ -35,6 +36,8 @@ export function featureForApiPath(path: string): PlanFeature | undefined {
   if (/^\/(?:pastoral|appointments)(?:\/|$)/.test(path)) return 'pastoral';
   if (/^\/forms(?:\/|$)/.test(path)) return 'forms';
   if (/^\/admin\/(?:departments|cell-groups)(?:\/|$)/.test(path)) return 'groups';
+  if (/^\/reports\/financial(?:\/|$)/.test(path)) return 'giving';
+  if (path === '/reports/export') return undefined; // Guard resolves the selected report type.
   if (/^\/reports(?:\/|$)/.test(path)) return 'reports';
   if (
     /^\/events\/(?:management\/tickets|[^/]+\/(?:tiers|tickets|check-in|attendance))(?:\/|$)/.test(

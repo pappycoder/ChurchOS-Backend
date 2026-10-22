@@ -33,10 +33,10 @@ export class ServiceResponseDto {
   @ApiPropertyOptional({ description: 'Day of week (0=Sunday, 6=Saturday)' })
   dayOfWeek?: number;
 
-  @ApiPropertyOptional({ description: 'Start time' })
+  @ApiPropertyOptional({ description: 'Local start time (24-hour HH:mm)', example: '09:00' })
   startTime?: string;
 
-  @ApiPropertyOptional({ description: 'End time' })
+  @ApiPropertyOptional({ description: 'Local end time (24-hour HH:mm)', example: '11:00' })
   endTime?: string;
 
   @ApiProperty({ description: 'Is service active' })

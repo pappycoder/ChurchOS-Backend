@@ -37,7 +37,9 @@ const routes = [
   ['/admin/departments', 'groups'],
   ['/admin/cell-groups', 'groups'],
   ['/forms', 'forms'],
-  ['/reports/financial', 'reports'],
+  ['/reports/financial', 'giving'],
+  ['/reports/attendance', 'reports'],
+  ['/reports/members', 'reports'],
   ['/assets/categories', 'assets'],
   ['/pastoral/notes', 'pastoral'],
   ['/admin/dashboard/engagement', 'pastoral'],
@@ -100,6 +102,52 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
         ),
       ),
     ).resolves.toBe(true);
+  });
+
+  it('keeps financial report reads/exports available on Essentials without unlocking other reports', async () => {
+    const permissions = [
+      'reports:view',
+      'reports:financial:read',
+      'reports:attendance:read',
+      'reports:members:read',
+    ];
+    const request = {
+      method: 'GET',
+      path: '/reports/financial',
+      profile: { church_id: 'church', permissions },
+    };
+    await expect(
+      make().canActivate(requestContext(request, ['reports:financial:read'])),
+    ).resolves.toBe(true);
+    expect(request.profile.permissions).toEqual(['reports:view', 'reports:financial:read']);
+    await expect(
+      make().canActivate(
+        requestContext(
+          {
+            method: 'POST',
+            path: '/reports/export',
+            body: { type: 'financial' },
+            profile: { church_id: 'church', permissions },
+          },
+          ['reports:view'],
+        ),
+      ),
+    ).resolves.toBe(true);
+    for (const type of ['attendance', 'members']) {
+      await expect(
+        make().canActivate(
+          requestContext(
+            {
+              method: 'POST',
+              path: '/reports/export',
+              body: { type },
+              profile: { church_id: 'church', permissions },
+            },
+            ['reports:view'],
+          ),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    }
   });
 
   it('strips all premium read/view/delete grants before sync and offline handlers run', async () => {

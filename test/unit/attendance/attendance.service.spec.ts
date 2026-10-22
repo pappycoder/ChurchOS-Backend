@@ -14,7 +14,7 @@ import { AttendanceService } from '../../../src/attendance/attendance.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('AttendanceService — categories & visitors', () => {
   let service: AttendanceService;
@@ -111,6 +111,39 @@ describe('AttendanceService — categories & visitors', () => {
   });
 
   describe('createService', () => {
+    it('creates a recurring mixed service with clock times and returns HH:mm', async () => {
+      model('service').create.mockImplementation(({ data }) =>
+        Promise.resolve({ ...adultServiceRow, ...data }),
+      );
+      const result = await service.createService(
+        {
+          name: 'Sunday Service',
+          category: 'mixed',
+          dayOfWeek: 0,
+          startTime: '09:00',
+          endTime: '11:00',
+        },
+        churchId,
+        userId,
+      );
+      expect(model('service').create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            start_time: new Date('1970-01-01T09:00:00.000Z'),
+            end_time: new Date('1970-01-01T11:00:00.000Z'),
+          }),
+        }),
+      );
+      expect(result).toMatchObject({ startTime: '09:00', endTime: '11:00', category: 'mixed' });
+    });
+
+    it('rejects invalid service times before writing', async () => {
+      await expect(
+        service.createService({ name: 'Sunday Service', startTime: '24:00' }, churchId, userId),
+      ).rejects.toThrow(BadRequestException);
+      expect(model('service').create).not.toHaveBeenCalled();
+    });
+
     it('should default the category to adult', async () => {
       model('service').create.mockResolvedValue(adultServiceRow);
       await service.createService({ name: 'Sunday Service' }, churchId, userId);
@@ -267,6 +300,24 @@ describe('AttendanceService — categories & visitors', () => {
   });
 
   describe('updateService', () => {
+    it('updates and clears clock times without requiring a calendar date', async () => {
+      model('service').findUnique.mockResolvedValue(adultServiceRow);
+      model('service').update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...adultServiceRow, ...data }),
+      );
+      const result = await service.updateService(
+        serviceId,
+        { startTime: '23:30', endTime: '01:00' },
+        churchId,
+        userId,
+      );
+      expect(result).toMatchObject({ startTime: '23:30', endTime: '01:00' });
+      await service.updateService(serviceId, { startTime: null, endTime: null }, churchId, userId);
+      expect(model('service').update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: { start_time: null, end_time: null } }),
+      );
+    });
+
     it('should clear day_of_week when an explicit null is sent', async () => {
       model('service').findUnique.mockResolvedValue(adultServiceRow);
       model('service').update.mockResolvedValue({ ...adultServiceRow, day_of_week: null });

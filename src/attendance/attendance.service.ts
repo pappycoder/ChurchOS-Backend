@@ -1,3 +1,4 @@
+import { serviceTimeForStorage, serviceTimeForResponse } from './service-time';
 import { attendanceSessionId } from './attendance-session-links';
 import { AttendanceSessionsService } from './attendance-sessions.service';
 import { RequestContextService } from '../common/services/request-context.service';
@@ -72,8 +73,8 @@ export class AttendanceService extends AttendanceSessionsService {
         name: dto.name,
         category: dto.category ?? 'adult',
         day_of_week: dto.dayOfWeek ?? null,
-        start_time: dto.startTime ? new Date(dto.startTime) : null,
-        end_time: dto.endTime ? new Date(dto.endTime) : null,
+        start_time: serviceTimeForStorage(dto.startTime),
+        end_time: serviceTimeForStorage(dto.endTime),
         is_active: dto.isActive ?? true,
       },
     });
@@ -202,9 +203,8 @@ export class AttendanceService extends AttendanceSessionsService {
     if (dto.branchId !== undefined)
       updateData.branch = dto.branchId ? { connect: { id: dto.branchId } } : { disconnect: true };
     if (dto.dayOfWeek !== undefined) updateData.day_of_week = dto.dayOfWeek;
-    if (dto.startTime !== undefined)
-      updateData.start_time = dto.startTime ? new Date(dto.startTime) : null;
-    if (dto.endTime !== undefined) updateData.end_time = dto.endTime ? new Date(dto.endTime) : null;
+    if (dto.startTime !== undefined) updateData.start_time = serviceTimeForStorage(dto.startTime);
+    if (dto.endTime !== undefined) updateData.end_time = serviceTimeForStorage(dto.endTime);
     if (dto.isActive !== undefined) updateData.is_active = dto.isActive;
 
     if (Object.keys(updateData).length === 0) {
@@ -1145,8 +1145,8 @@ export class AttendanceService extends AttendanceSessionsService {
       name: service.name,
       category: service.category || 'adult',
       dayOfWeek: service.day_of_week ?? undefined,
-      startTime: service.start_time?.toISOString() || undefined,
-      endTime: service.end_time?.toISOString() || undefined,
+      startTime: serviceTimeForResponse(service.start_time),
+      endTime: serviceTimeForResponse(service.end_time),
       isActive: service.is_active,
       attendanceCount: service._count?.attendance ?? 0,
       archivedAt: service.archived_at?.toISOString(),

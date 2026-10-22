@@ -183,6 +183,7 @@ export function featureForPath(path: string): PlanFeature | undefined {
   if (/^\/(?:pastoral|appointments)(?:\/|$)/.test(path)) return 'pastoral';
   if (/^\/forms(?:\/|$)/.test(path)) return 'forms';
   if (/^\/(?:departments|admin\/(?:departments|cell-groups))(?:\/|$)/.test(path)) return 'groups';
+  if (path === '/reports' || /^\/reports\/financial(?:\/|$)/.test(path)) return 'giving';
   if (/^\/reports(?:\/|$)/.test(path)) return 'reports';
   if (/^\/events\/(?:management|check-in|[^/]+\/tiers)(?:\/|$)/.test(path)) return 'tickets';
   if (/^\/events(?:\/|$)/.test(path)) return 'events';
@@ -202,6 +203,7 @@ export function featureForPermission(permission: string): PlanFeature | undefine
   if (['departments', 'cell_groups'].includes(resource)) return 'groups';
   if (['sermons', 'media'].includes(resource)) return 'media';
   if (['templates', 'broadcasts', 'messages'].includes(resource)) return 'email';
+  if (resource === 'reports' && (surface === 'financial' || surface === 'view')) return 'giving';
   if (resource === 'integrations') return 'giving';
   if (resource === 'calls') return 'calls';
   if (resource === 'webhooks') return 'webhooks';

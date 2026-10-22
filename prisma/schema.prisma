@@ -566,8 +566,8 @@ model Service {
   name        String // e.g., "Sunday Service", "Wednesday Bible Study"
   category    String    @default("adult") // adult | children | mixed — mixed check-ins default to unspecified
   day_of_week Int? // 0=Sunday, 6=Saturday
-  start_time  DateTime?
-  end_time    DateTime?
+  start_time  DateTime? @db.Time(3)
+  end_time    DateTime? @db.Time(3)
   is_active   Boolean   @default(true)
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt

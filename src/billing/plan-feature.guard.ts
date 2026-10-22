@@ -35,6 +35,8 @@ export class PlanFeatureGuard implements CanActivate {
         context.getClass(),
       ]) ?? [];
     const requiredFeatures = [featureForApiPath(path), ...required.map(featureForPermission)];
+    if (path === '/reports/export')
+      requiredFeatures.push(req.body?.type === 'financial' ? 'giving' : 'reports');
     if (/^\/attendance\/attendance(?:\/|$)/.test(path) && (req.query?.eventId || req.body?.eventId))
       requiredFeatures.push('tickets');
     if (

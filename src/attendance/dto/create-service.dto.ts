@@ -6,6 +6,7 @@
  * @since 1.0.0
  */
 
+import { SERVICE_TIME_PATTERN } from '../service-time';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -14,6 +15,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
 } from 'class-validator';
@@ -61,15 +63,19 @@ export class CreateServiceDto {
   dayOfWeek?: number | null;
 
   @ApiPropertyOptional({
-    description: 'Start time (ISO 8601)',
-    example: '2026-01-01T09:00:00.000Z',
+    description: 'Local start time (24-hour HH:mm)',
+    example: '09:00',
   })
   @IsOptional()
-  startTime?: string;
+  @IsString()
+  @Matches(SERVICE_TIME_PATTERN, { message: 'startTime must use 24-hour HH:mm format' })
+  startTime?: string | null;
 
-  @ApiPropertyOptional({ description: 'End time (ISO 8601)', example: '2026-01-01T11:00:00.000Z' })
+  @ApiPropertyOptional({ description: 'Local end time (24-hour HH:mm)', example: '11:00' })
   @IsOptional()
-  endTime?: string;
+  @IsString()
+  @Matches(SERVICE_TIME_PATTERN, { message: 'endTime must use 24-hour HH:mm format' })
+  endTime?: string | null;
 
   @ApiPropertyOptional({ description: 'Is service active', default: true })
   @IsBoolean()
