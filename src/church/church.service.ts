@@ -416,7 +416,7 @@ export class ChurchService {
     if (
       branchId &&
       !(await this.prisma.branch.findUnique({
-        where: { id: branchId, church_id: churchId },
+        where: { id: branchId, church_id: churchId, archived_at: null },
         select: { id: true },
       }))
     )
@@ -439,9 +439,9 @@ export class ChurchService {
         inviterUserId: userId,
       });
       let branchName: string | undefined;
-      if (dto.branchId) {
+      if (branchId) {
         const branch = await this.prisma.branch.findUnique({
-          where: { id: dto.branchId },
+          where: { id: branchId, church_id: churchId, archived_at: null },
           select: { name: true },
         });
         branchName = branch?.name;
@@ -458,6 +458,7 @@ export class ChurchService {
           firstName: normalizedFirstName,
           lastName: normalizedLastName,
           role: normalizedRole,
+          branchId,
         },
       });
 

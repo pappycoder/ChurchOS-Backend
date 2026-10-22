@@ -1008,6 +1008,7 @@ describe('ProfileService', () => {
           'members:read',
           'analytics:dashboard:read',
         ]);
+        model(prisma, 'branch').findFirst.mockResolvedValue({ id: 'branch-selected' });
         model(prisma, 'profile').findFirst.mockResolvedValue(null);
         model(prisma, 'role').findFirst.mockResolvedValue({ name: role });
         prisma.$transaction.mockResolvedValue({ id: 'reserved-seat' });
@@ -1038,12 +1039,19 @@ describe('ProfileService', () => {
                 firstName: 'Test',
                 lastName: 'User',
                 role,
+                branchId: 'branch-selected',
               },
               mockChurchId,
               mockAdminUserId,
             ),
         );
-        expect(staffInvitations.create).toHaveBeenCalled();
+        expect(staffInvitations.create).toHaveBeenCalledWith(
+          expect.objectContaining({ branchId: 'branch-selected', role }),
+        );
+        expect(model(prisma, 'branch').findFirst).toHaveBeenCalledWith({
+          where: { id: 'branch-selected', church_id: mockChurchId, archived_at: null },
+          select: { id: true },
+        });
         expect(model(prisma, 'role').findFirst).toHaveBeenCalledWith({
           where: { name: role, OR: [{ church_id: null }, { church_id: mockChurchId }] },
           select: { name: true },

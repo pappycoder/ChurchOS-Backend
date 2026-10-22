@@ -1090,7 +1090,7 @@ export class ProfileService {
     if (
       branchId &&
       !(await this.prisma.branch.findFirst({
-        where: { id: branchId, church_id: churchId },
+        where: { id: branchId, church_id: churchId, archived_at: null },
         select: { id: true },
       }))
     )
@@ -1133,7 +1133,7 @@ export class ProfileService {
         entity: 'user',
         action: 'CREATE',
         entityId: profile.id,
-        newValues: { email: dto.email, role: dto.role },
+        newValues: { email: dto.email, role: dto.role, branchId },
       });
 
       this.logger.log(`User invited: ${dto.email} as ${dto.role} for church ${churchId}`);
