@@ -95,6 +95,31 @@ export class GivingService {
     }
   }
 
+  private categoryName(value: string): string {
+    const name = value.trim();
+    if (!name) throw new BadRequestException('Category name is required');
+    return name;
+  }
+
+  private async categoryWrite<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      // The database also enforces uniqueness for simultaneous requests.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'A giving category with this name already exists in this church',
+        );
+      }
+      throw error;
+    }
+  }
+
   // ─── CATEGORY CRUD ────────────────────────────────────────────────
 
   /**
@@ -104,28 +129,31 @@ export class GivingService {
     dto: CreateCategoryDto,
     churchId: string,
     userId: string,
-    viewer?: ViewerScope | null,
+    _viewer?: ViewerScope | null,
   ): Promise<CategoryResponseDto> {
-    const scope = this.branchScope.resolve(viewer);
+    // Categories belong to the church, regardless of the creator’s branch.
+    const name = this.categoryName(dto.name);
     const existing = await this.prisma.givingCategory.findFirst({
-      where: { church_id: churchId, name: dto.name, archived_at: null },
+      where: { church_id: churchId, name: { equals: name, mode: 'insensitive' } },
     });
 
     if (existing) {
       throw new ConflictException(`Category "${dto.name}" already exists`);
     }
 
-    const category = await this.prisma.givingCategory.create({
-      data: {
-        church_id: churchId,
-        branch_id: scope.churchOnly ? (dto.branchId ?? null) : (scope.branchId ?? null),
-        name: dto.name,
-        description: dto.description,
-        display_order: dto.displayOrder ?? 0,
-        is_recurring: dto.isRecurring ?? false,
-        is_active: dto.isActive ?? true,
-      },
-    });
+    const category = await this.categoryWrite(() =>
+      this.prisma.givingCategory.create({
+        data: {
+          church_id: churchId,
+          branch_id: null,
+          name,
+          description: dto.description,
+          display_order: dto.displayOrder ?? 0,
+          is_recurring: dto.isRecurring ?? false,
+          is_active: dto.isActive ?? true,
+        },
+      }),
+    );
 
     await this.audit.log({
       userId,
@@ -151,19 +179,13 @@ export class GivingService {
     page?: number,
     limit?: number,
     archived?: boolean,
-    branchId?: string,
-    viewer?: ViewerScope | null,
+    _branchId?: string,
+    _viewer?: ViewerScope | null,
   ): Promise<{ data: CategoryResponseDto[]; total: number }> {
     const where: Prisma.GivingCategoryWhereInput = {
       church_id: churchId,
       archived_at: archived === true ? { not: null } : null,
     };
-    const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly) {
-      where.OR = [{ branch_id: scope.branchId ?? null }, { branch_id: null }];
-    } else if (scope.churchOnly && branchId) {
-      where.OR = [{ branch_id: branchId }, { branch_id: null }];
-    }
     if (isActive !== undefined) {
       where.is_active = isActive;
     }
@@ -214,10 +236,15 @@ export class GivingService {
       throw new NotFoundException('Giving category is archived');
     }
 
-    // Check name uniqueness if changing name
-    if (dto.name && dto.name !== existing.name) {
+    const name = dto.name === undefined ? undefined : this.categoryName(dto.name);
+    // Archived categories also reserve their names, so restoration stays unambiguous.
+    if (name !== undefined && name !== existing.name) {
       const duplicate = await this.prisma.givingCategory.findFirst({
-        where: { church_id: churchId, name: dto.name, id: { not: categoryId }, archived_at: null },
+        where: {
+          church_id: churchId,
+          name: { equals: name, mode: 'insensitive' },
+          id: { not: categoryId },
+        },
       });
       if (duplicate) {
         throw new ConflictException(`Category "${dto.name}" already exists`);
@@ -225,7 +252,7 @@ export class GivingService {
     }
 
     const updateData: Record<string, unknown> = {};
-    if (dto.name !== undefined) updateData.name = dto.name;
+    if (name !== undefined) updateData.name = name;
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.displayOrder !== undefined) updateData.display_order = dto.displayOrder;
     if (dto.isRecurring !== undefined) updateData.is_recurring = dto.isRecurring;
@@ -235,10 +262,12 @@ export class GivingService {
       return this.mapCategoryToDto(existing);
     }
 
-    const updated = await this.prisma.givingCategory.update({
-      where: { id: categoryId },
-      data: updateData,
-    });
+    const updated = await this.categoryWrite(() =>
+      this.prisma.givingCategory.update({
+        where: { id: categoryId },
+        data: updateData,
+      }),
+    );
 
     await this.audit.log({
       userId,
@@ -284,8 +313,8 @@ export class GivingService {
 
   /**
    * Archives a giving category by setting archived_at. Archived categories drop
-   * out of active lists (listCategories filters archived_at: null) and no longer
-   * participate in the app-level duplicate-name check, but their details stay
+   * out of active lists (listCategories filters archived_at: null). Their names
+   * stay reserved and their details stay
    * reachable by ID and they can be restored.
    *
    * @param categoryId - Category UUID
@@ -886,8 +915,6 @@ export class GivingService {
     if (!category.is_active) {
       throw new BadRequestException('This giving category is no longer active');
     }
-    if (category.branch_id && category.branch_id !== dto.branchId)
-      throw new BadRequestException('Giving category belongs to another branch');
 
     // Verify member belongs to this church if provided
     if (dto.memberId) {
@@ -1285,8 +1312,6 @@ export class GivingService {
     const branchId = scope.churchOnly ? dto.branchId : scope.branchId;
     if (branchId && member.branch_id !== branchId)
       throw new BadRequestException('Member belongs to another branch');
-    if (category.branch_id && category.branch_id !== member.branch_id)
-      throw new BadRequestException('Giving category belongs to another branch');
 
     // Check for existing active recurring giving for this member+category
     const existing = await this.prisma.recurringGiving.findFirst({

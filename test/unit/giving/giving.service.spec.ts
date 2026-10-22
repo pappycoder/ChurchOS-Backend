@@ -166,6 +166,36 @@ describe('GivingService', () => {
   // ─── CATEGORY CRUD ────────────────────────────────────────────────
 
   describe('createCategory', () => {
+    it('creates a shared category from a branch and trims its name', async () => {
+      model('givingCategory').findFirst.mockResolvedValue(null);
+      model('givingCategory').create.mockResolvedValue(mockCategory);
+      await service.createCategory(
+        { name: '  Tithe  ', branchId: mockBranchId },
+        mockChurchId,
+        mockUserId,
+        { church_id: mockChurchId, branch_id: mockBranchId, is_admin_hq: false } as never,
+      );
+      expect(model('givingCategory').create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ name: 'Tithe', branch_id: null, church_id: mockChurchId }),
+      });
+    });
+
+    it('returns a conflict when simultaneous creates hit the database constraint', async () => {
+      model('givingCategory').findFirst.mockResolvedValue(null);
+      model('givingCategory').create.mockRejectedValue({ code: 'P2002' });
+      await expect(
+        service.createCategory({ name: 'Tithe' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('rejects a blank category name', async () => {
+      await expect(
+        service.createCategory({ name: '  ' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(BadRequestException);
+      expect(model('givingCategory').create).not.toHaveBeenCalled();
+    });
+
     it('persists an explicitly inactive category', async () => {
       model('givingCategory').findFirst.mockResolvedValue(null);
       model('givingCategory').create.mockResolvedValue({ ...mockCategory, is_active: false });
@@ -205,7 +235,7 @@ describe('GivingService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should scope the duplicate-name check to active rows (archived_at null)', async () => {
+    it('reserves archived names across the church without case sensitivity', async () => {
       model('givingCategory').findFirst.mockResolvedValue(null);
       model('givingCategory').create.mockResolvedValue(mockCategory);
 
@@ -215,8 +245,7 @@ describe('GivingService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             church_id: mockChurchId,
-            name: 'Tithe',
-            archived_at: null,
+            name: { equals: 'Tithe', mode: 'insensitive' },
           }),
         }),
       );
@@ -224,6 +253,25 @@ describe('GivingService', () => {
   });
 
   describe('listCategories', () => {
+    it('lists church-wide categories even for branch staff and branch filters', async () => {
+      model('givingCategory').findMany.mockResolvedValue([mockCategory]);
+      model('givingCategory').count.mockResolvedValue(1);
+      await service.listCategories(
+        mockChurchId,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        mockBranchId,
+        { branch_id: mockBranchId, is_admin_hq: false } as never,
+      );
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { church_id: mockChurchId, archived_at: null },
+        }),
+      );
+    });
+
     it('should return all categories with total when unpaginated', async () => {
       model('givingCategory').findMany.mockResolvedValue([mockCategory]);
       model('givingCategory').count.mockResolvedValue(1);
@@ -340,6 +388,22 @@ describe('GivingService', () => {
   });
 
   describe('updateCategory', () => {
+    it('rejects blank rename requests', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      await expect(
+        service.updateCategory(mockCategoryId, { name: '  ' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('translates concurrent rename collisions into a conflict', async () => {
+      model('givingCategory').findUnique.mockResolvedValue(mockCategory);
+      model('givingCategory').findFirst.mockResolvedValue(null);
+      model('givingCategory').update.mockRejectedValue({ code: 'P2002' });
+      await expect(
+        service.updateCategory(mockCategoryId, { name: ' Offering ' }, mockChurchId, mockUserId),
+      ).rejects.toThrow(ConflictException);
+    });
+
     it('should update category fields', async () => {
       model('givingCategory').findUnique.mockResolvedValueOnce(mockCategory);
       model('givingCategory').update.mockResolvedValue({
@@ -383,7 +447,7 @@ describe('GivingService', () => {
       expect(model('givingCategory').update).not.toHaveBeenCalled();
     });
 
-    it('should scope the rename duplicate check to active rows (archived_at null)', async () => {
+    it('checks renamed categories against archived names too', async () => {
       model('givingCategory').findUnique.mockResolvedValueOnce(mockCategory);
       model('givingCategory').findFirst.mockResolvedValueOnce(null);
       model('givingCategory').update.mockResolvedValue({ ...mockCategory, name: 'Offering' });
@@ -392,7 +456,11 @@ describe('GivingService', () => {
 
       expect(model('givingCategory').findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ archived_at: null }),
+          where: {
+            church_id: mockChurchId,
+            name: { equals: 'Offering', mode: 'insensitive' },
+            id: { not: mockCategoryId },
+          },
         }),
       );
     });

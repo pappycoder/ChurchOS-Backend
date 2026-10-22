@@ -13,7 +13,10 @@ export class CreateCategoryDto {
   @IsOptional()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Branch that owns this category' })
+  @ApiPropertyOptional({
+    description: 'Deprecated: categories are shared across the church; this value is ignored',
+    deprecated: true,
+  })
   @IsUUID()
   @IsOptional()
   branchId?: string;

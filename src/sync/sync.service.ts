@@ -593,7 +593,7 @@ export class SyncService {
     const where: Record<string, unknown> = { church_id: churchId };
     if (entity === 'sermonBookmark')
       where.member_id = viewer.member_id ?? '00000000-0000-0000-0000-000000000000';
-    if (!viewer.is_admin_hq) {
+    if (!viewer.is_admin_hq && entity !== 'givingCategory') {
       const branch = {
         church_id: churchId,
         branch_id: viewer.branch_id ?? '00000000-0000-0000-0000-000000000000',
@@ -780,7 +780,7 @@ export class SyncService {
       ) as Record<string, unknown>;
       if (row.entity === 'sermonBookmark' && (old.member_id ?? old.memberId) !== viewer.member_id)
         return null;
-      if (!viewer.is_admin_hq) {
+      if (!viewer.is_admin_hq && row.entity !== 'givingCategory') {
         const branchId = old.branch_id ?? old.branchId;
         if (!viewer.branch_id) return null;
         if (row.entity === 'sermonBookmark' && (old.member_id ?? old.memberId) !== viewer.member_id)

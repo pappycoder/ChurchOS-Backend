@@ -649,6 +649,8 @@ model Attendance {
 
 // ─── Giving & finance · church merchant accounts ───
 
+// Church-wide categories: migration 20261022120000 enforces branch_id IS NULL
+// and a unique (church_id, lower(trimmed name)) expression index, including archives.
 model GivingCategory {
   id            String    @id @default(uuid())
   church_id     String

@@ -315,6 +315,18 @@ describe('SyncService', () => {
       expect(result.cursor).toMatch(/^v2:/);
     });
 
+    it('delivers shared category deletions to branch devices', async () => {
+      mockDevice();
+      model('syncQueue').findMany.mockResolvedValue([{
+        id: 'queue-category-delete', entity: 'givingCategory', entity_id: mockMemberId,
+        action: 'delete', data: { branch_id: null }, created_at: new Date('2026-07-22T10:00:00Z'),
+      }]);
+      const result = await service.pullChanges(mockChurchId, 'device-1', undefined, undefined,
+        { ...viewer, is_admin_hq: false });
+      expect(result.changes).toHaveLength(1);
+      expect(result.changes[0]).toMatchObject({ entity: 'givingCategory', action: 'delete', data: null });
+    });
+
     it('should return tombstones for deletes', async () => {
       mockDevice();
       model('syncQueue').findMany.mockResolvedValue([
@@ -447,6 +459,20 @@ describe('SyncService', () => {
         memberSince: '2026-01-01T10:00:00.000Z',
       });
       expect(result.collections.services).toEqual([]);
+    });
+
+    it('bootstraps shared categories for branch staff without exposing branch transactions', async () => {
+      model('givingCategory').findMany.mockResolvedValue([]);
+      model('transaction').findMany.mockResolvedValue([]);
+      const branchViewer = { ...viewer, is_admin_hq: false };
+      await service.bootstrap(mockChurchId, branchViewer, 100, 'givingCategory');
+      expect(model('givingCategory').findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { church_id: mockChurchId, archived_at: null },
+      }));
+      await service.bootstrap(mockChurchId, branchViewer, 100, 'transaction');
+      expect(model('transaction').findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { church_id: mockChurchId, branch_id: viewer.branch_id },
+      }));
     });
 
     it('should scope all archivable bootstrap collections to active rows', async () => {

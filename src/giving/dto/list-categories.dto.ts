@@ -9,7 +9,10 @@ import { IsBoolean, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator'
 import { Transform, Type } from 'class-transformer';
 
 export class ListCategoriesDto {
-  @ApiPropertyOptional({ description: 'Filter categories by branch' })
+  @ApiPropertyOptional({
+    description: 'Deprecated: categories are shared across the church; this value is ignored',
+    deprecated: true,
+  })
   @IsUUID()
   @IsOptional()
   branchId?: string;
