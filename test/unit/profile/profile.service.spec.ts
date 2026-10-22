@@ -48,6 +48,7 @@ describe('ProfileService', () => {
           getUserById: jest.Mock;
           generateLink: jest.Mock;
           signOut: jest.Mock;
+          deleteUser: jest.Mock;
         };
       };
     };
@@ -92,6 +93,7 @@ describe('ProfileService', () => {
             findFirst: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
+            updateMany: jest.fn(),
             delete: jest.fn(),
             deleteMany: jest.fn(),
             count: jest.fn(),
@@ -133,6 +135,7 @@ describe('ProfileService', () => {
             getUserById: jest.fn(),
             generateLink: jest.fn(),
             signOut: jest.fn(),
+            deleteUser: jest.fn().mockResolvedValue({ error: null }),
           },
         },
       },
@@ -1237,6 +1240,99 @@ describe('ProfileService', () => {
   });
 
   // ─── SOFT DELETE PROFILE ───────────────────────────────────────────
+
+  describe('deleteUserAccount', () => {
+    beforeEach(() => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+        church_id: mockChurchId,
+        role: ['usher'],
+        status: 'active',
+      });
+      prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
+    });
+    it('disables access, removes Auth and profile, and audits deletion', async () => {
+      await service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId);
+      expect(model(prisma, 'profile').findFirst).toHaveBeenCalledWith({
+        where: { id: mockProfileId, church_id: mockChurchId },
+      });
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith({
+        where: { id: mockProfileId, church_id: mockChurchId },
+        data: { status: 'inactive' },
+      });
+      expect(model(prisma, 'verifiedMfaSession').deleteMany).toHaveBeenCalledWith({
+        where: { user_id: mockUserId },
+      });
+      expect(supabase.client.auth.admin.deleteUser).toHaveBeenCalledWith(mockUserId);
+      expect(model(prisma, 'profile').deleteMany).toHaveBeenCalledWith({
+        where: { id: mockProfileId, church_id: mockChurchId },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DELETE', newValues: { deleted: true } }),
+      );
+      expect(model(prisma, 'member').delete).not.toHaveBeenCalled();
+    });
+    it('never deletes Auth when the access-blocking transaction fails', async () => {
+      prisma.$transaction.mockRejectedValue(new Error('database unavailable'));
+      await expect(
+        service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow('database unavailable');
+      expect(supabase.client.auth.admin.deleteUser).not.toHaveBeenCalled();
+      expect(model(prisma, 'profile').deleteMany).not.toHaveBeenCalled();
+    });
+    it('includes the actor branch restriction in target lookup', async () => {
+      const scope = jest
+        .spyOn(RequestContextService.prototype, 'branchWhere')
+        .mockReturnValue({ branch_id: 'allowed-branch' });
+      model(prisma, 'profile').findFirst.mockResolvedValue(null);
+      try {
+        await expect(
+          service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+        ).rejects.toThrow(NotFoundException);
+        expect(model(prisma, 'profile').findFirst).toHaveBeenCalledWith({
+          where: { id: mockProfileId, church_id: mockChurchId, branch_id: 'allowed-branch' },
+        });
+      } finally {
+        scope.mockRestore();
+      }
+    });
+    it('keeps an inactive profile for retry when Auth rejects deletion', async () => {
+      supabase.client.auth.admin.deleteUser.mockResolvedValue({ error: { status: 503 } });
+      await expect(
+        service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow('remains inactive');
+      expect(model(prisma, 'profile').deleteMany).not.toHaveBeenCalled();
+    });
+    it('allows retry if Auth was already removed', async () => {
+      supabase.client.auth.admin.deleteUser.mockResolvedValue({ error: { status: 404 } });
+      await expect(
+        service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+      ).resolves.toBeUndefined();
+    });
+    it.each([
+      ['self', mockAdminUserId, ['church_admin']],
+      ['platform', mockUserId, ['super_admin']],
+    ])('protects %s accounts', async (_label, userId, role) => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: userId,
+        role,
+      });
+      await expect(
+        service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(supabase.client.auth.admin.deleteUser).not.toHaveBeenCalled();
+    });
+    it('rejects accounts outside the tenant or branch', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(null);
+      await expect(
+        service.deleteUserAccount(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(supabase.client.auth.admin.deleteUser).not.toHaveBeenCalled();
+    });
+  });
 
   describe('softDeleteProfile', () => {
     it('should deactivate profile successfully', async () => {

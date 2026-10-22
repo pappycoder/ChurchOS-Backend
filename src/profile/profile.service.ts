@@ -20,6 +20,7 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -860,6 +861,50 @@ export class ProfileService {
     });
 
     this.logger.log(`Profile deactivated: ${profileId} by ${adminUserId}`);
+  }
+
+  /** Permanently removes a staff login, preserving church member and business records. */
+  async deleteUserAccount(profileId: string, churchId: string, adminUserId: string): Promise<void> {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
+    });
+    if (!profile) throw new NotFoundException('User not found');
+    if (profile.user_id === adminUserId)
+      throw new ForbiddenException('Cannot delete your own account');
+    if (profile.role.includes('super_admin'))
+      throw new ForbiddenException('Cannot delete a super admin account');
+
+    // Block access before contacting Auth. If either system is unavailable, this
+    // inactive profile remains visible to administrators so deletion can be retried.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.profile.update({
+        where: { id: profileId, church_id: churchId },
+        data: { status: 'inactive' },
+      });
+      await tx.verifiedMfaSession.deleteMany({ where: { user_id: profile.user_id } });
+      await tx.companyEmailNotification.updateMany({
+        where: { event_key: `invitation/${profile.user_id}`, sent_at: null },
+        data: { status: 'failed', last_error: 'account_deleted' },
+      });
+    });
+    const { error } = await this.supabase.client.auth.admin.deleteUser(profile.user_id);
+    // A previous attempt may already have removed Auth before the database failed.
+    if (error && error.status !== 404) {
+      throw new ServiceUnavailableException(
+        'Unable to delete the login account. The user remains inactive; please retry deletion.',
+      );
+    }
+    // Optional visitor assignees are set null; authenticator/session rows cascade.
+    await this.prisma.profile.deleteMany({ where: { id: profileId, church_id: churchId } });
+    await this.audit.log({
+      userId: adminUserId,
+      churchId,
+      entity: 'profile',
+      action: 'DELETE',
+      entityId: profileId,
+      oldValues: { user_id: profile.user_id, role: profile.role, status: profile.status },
+      newValues: { deleted: true },
+    });
   }
 
   /**

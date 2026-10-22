@@ -341,6 +341,24 @@ export class ProfileController {
     );
   }
 
+  @Delete(':profileId/account')
+  @RequirePermissions('profiles:delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiDeleteEndpoint(
+    'Delete user account',
+    'Permanently removes the staff login and profile while preserving church records.',
+  )
+  @ApiForbiddenResponse({ description: 'Cannot delete yourself or a platform administrator' })
+  @ApiNotFoundResponse({ description: 'User not found in your scope' })
+  async deleteAccount(
+    @Param('profileId') profileId: string,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    await this.profileService.deleteUserAccount(profileId, req.profile?.church_id || '', user.sub);
+    return { success: true };
+  }
+
   /**
    * Soft-delete a profile (admin only).
    */
