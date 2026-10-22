@@ -169,6 +169,7 @@ model Church {
 
   subscription             PlatformSubscription?
   subscription_payments    SubscriptionPayment[]
+  company_email_notifications CompanyEmailNotification[]
   branches                 Branch[]
   profiles                 Profile[]
   members                  Member[]
@@ -281,6 +282,7 @@ model SubscriptionPayment {
   amount       Int
   currency     String                    @default("NGN")
   status       SubscriptionPaymentStatus @default(pending)
+  billing_email String?
   pricing_snapshot Json?
   checkout_url String?
   intent String @default("renewal")
@@ -1613,4 +1615,31 @@ model SubscriptionAlertKey {
  period_end DateTime
  @@unique([church_id, profile_id, resource, threshold, period_end])
  @@map("subscription_alert_keys")
+}
+
+
+// Server-only, durable organization account mail. No church email integration required.
+model CompanyEmailNotification {
+  id String @id @default(uuid())
+  event_key String @unique
+  church_id String
+  kind String
+  to_email String
+  from_email String
+  subject String
+  html String
+  text String
+  status String @default("pending")
+  attempts Int @default(0)
+  available_at DateTime @default(now())
+  lease_token String?
+  lease_until DateTime?
+  first_attempt_at DateTime?
+  sent_at DateTime?
+  provider_id String?
+  last_error String?
+  created_at DateTime @default(now())
+  church Church @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  @@index([status, available_at])
+  @@map("company_email_notifications")
 }

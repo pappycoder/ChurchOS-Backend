@@ -1,3 +1,4 @@
+import { CompanyEmailService } from '../../../src/company-email/company-email.service';
 import { SubscriptionPricingService } from '../../../src/billing/subscription-pricing.service';
 import { RedisService } from '../../../src/redis/redis.service';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +15,7 @@ describe('Platform subscriptions', () => {
   let prisma: any;
   let gateway: any;
   let pricing: SubscriptionPricingService;
+  let companyEmails: { enqueueSubscription: jest.Mock; dispatch: jest.Mock };
   const payment = {
     reference,
     church_id: 'church-a',
@@ -85,6 +87,10 @@ describe('Platform subscriptions', () => {
         SUBSCRIPTION_FLUTTERWAVE_CURRENCIES: 'NGN,USD',
       }),
     );
+    companyEmails = {
+      enqueueSubscription: jest.fn().mockResolvedValue('subscription/event'),
+      dispatch: jest.fn().mockResolvedValue(undefined),
+    };
     service = new BillingService(
       prisma as PrismaService,
       {
@@ -94,6 +100,7 @@ describe('Platform subscriptions', () => {
       gateway as PaystackService,
       { ...gateway, name: 'flutterwave' } as FlutterwaveService,
       pricing,
+      companyEmails as unknown as CompanyEmailService,
     );
   });
   async function checkout(churchId: string, email: string, dto: CheckoutDto) {
@@ -273,6 +280,54 @@ describe('Platform subscriptions', () => {
     expect(gateway.verifyTransaction).not.toHaveBeenCalled();
     expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
   });
+  it('queues a first-activation email only after verified success and retries dispatch on duplicate callbacks', async () => {
+    prisma.subscriptionPayment.findFirst.mockResolvedValue(payment);
+    await service.reconcilePayment('church-a', reference);
+    expect(companyEmails.enqueueSubscription).toHaveBeenCalledTimes(1);
+    expect(companyEmails.enqueueSubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      payment,
+      true,
+      expect.any(Date),
+    );
+    expect(companyEmails.dispatch).toHaveBeenCalledWith('subscription/event');
+    prisma.subscriptionPayment.findFirst.mockResolvedValue({
+      ...payment,
+      status: 'success',
+      application_status: 'applied',
+    });
+    await service.reconcilePayment('church-a', reference);
+    expect(companyEmails.enqueueSubscription).toHaveBeenCalledTimes(1);
+    expect(companyEmails.dispatch).toHaveBeenLastCalledWith(`subscription/${reference}`);
+  });
+  it('marks notification as a renewal when an access period already exists', async () => {
+    prisma.subscriptionPayment.findFirst.mockResolvedValue(payment);
+    prisma.platformSubscription.findUniqueOrThrow.mockResolvedValue({
+      plan: 'essentials',
+      cycle: 'monthly',
+      paid_until: new Date(0),
+    });
+    await service.reconcilePayment('church-a', reference);
+    expect(companyEmails.enqueueSubscription).toHaveBeenCalledWith(
+      expect.anything(),
+      payment,
+      false,
+      expect.any(Date),
+    );
+  });
+  it('does not queue success emails for pending, failed or mismatched provider results', async () => {
+    prisma.subscriptionPayment.findFirst.mockResolvedValue(payment);
+    for (const status of ['pending', 'failed']) {
+      gateway.verifyTransaction.mockResolvedValue({
+        reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        status,
+      });
+      await service.reconcilePayment('church-a', reference);
+    }
+    expect(companyEmails.enqueueSubscription).not.toHaveBeenCalled();
+  });
   it('rejects unsigned callbacks before accessing the ledger', async () => {
     gateway.validateWebhookSignature.mockReturnValue(false);
     await expect(service.webhook('flutterwave', '{}', 'bad')).rejects.toThrow(
@@ -328,6 +383,7 @@ describe('Platform subscriptions', () => {
       }),
     );
     expect(prisma.platformSubscription.update).not.toHaveBeenCalled();
+    expect(companyEmails.enqueueSubscription).not.toHaveBeenCalled();
   });
   it('does not silently substitute a different pending quote from another tab', async () => {
     const dto: CheckoutDto = { plan: 'essentials', cycle: 'monthly', gateway: 'flutterwave' };

@@ -1,3 +1,4 @@
+import { CompanyEmailService } from '../company-email/company-email.service';
 import {
   BadRequestException,
   ConflictException,
@@ -37,6 +38,7 @@ export class BillingService {
     private readonly paystack: PaystackService,
     private readonly flutterwave: FlutterwaveService,
     private readonly pricing: SubscriptionPricingService,
+    private readonly companyEmails: CompanyEmailService,
   ) {}
 
   private gateway(name: string): PaymentGatewayProvider {
@@ -334,6 +336,7 @@ export class BillingService {
         data: {
           church_id: churchId,
           reference: `COSUB_${randomBytes(16).toString('hex')}`,
+          billing_email: email,
           gateway: dto.gateway,
           plan: dto.plan,
           cycle: dto.cycle,
@@ -411,7 +414,11 @@ export class BillingService {
       where: { reference, church_id: churchId },
     });
     if (!payment) throw new NotFoundException('Subscription payment not found');
-    if (payment.status === 'success') return;
+    if (payment.status === 'success') {
+      if (payment.application_status === 'applied')
+        await this.companyEmails.dispatch(`subscription/${payment.reference}`);
+      return;
+    }
     const verified = await this.gateway(payment.gateway).verifyTransaction(reference);
     if (
       verified.reference !== reference ||
@@ -430,7 +437,7 @@ export class BillingService {
         });
       return;
     }
-    await this.prisma.$transaction(async (tx) => {
+    const emailEvent = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM churches WHERE id = ${churchId} FOR UPDATE`;
       const current = await tx.platformSubscription.findUniqueOrThrow({
         where: { church_id: churchId },
@@ -452,21 +459,26 @@ export class BillingService {
       if (!claimed.count || staleUpgrade) return;
       const start =
         current.paid_until && current.paid_until > new Date() ? current.paid_until : new Date();
+      const paidUntil =
+        payment.intent === 'upgrade'
+          ? payment.target_paid_until
+          : subscriptionEnd(start, payment.cycle as BillingCycle);
+      if (!paidUntil)
+        throw new BadRequestException('Subscription access period could not be determined');
       await tx.platformSubscription.update({
         where: { church_id: churchId },
         data: {
           plan: payment.plan,
           cycle: payment.cycle,
-          paid_until:
-            payment.intent === 'upgrade'
-              ? payment.target_paid_until
-              : subscriptionEnd(start, payment.cycle as BillingCycle),
+          paid_until: paidUntil,
           ...(payment.intent === 'upgrade' ? {} : { period_started_at: start }),
           scheduled_plan: null,
           scheduled_cycle: null,
         },
       });
+      return this.companyEmails.enqueueSubscription(tx, payment, !current.paid_until, paidUntil);
     });
+    await this.companyEmails.dispatch(emailEvent);
   }
 
   async webhook(name: string, raw: string, signature: string) {

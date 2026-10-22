@@ -1,3 +1,4 @@
+import { CompanyEmailService } from '../company-email/company-email.service';
 /**
  * @file auth.service.ts
  * @description Auth business logic for registration, profile retrieval, and session management.
@@ -58,6 +59,7 @@ export class AuthService {
     private readonly resend: EmailDeliveryService,
     private readonly authenticator: AuthenticatorService,
     private readonly jwks: JwksService,
+    private readonly companyEmails: CompanyEmailService,
   ) {}
 
   /**
@@ -154,7 +156,18 @@ export class AuthService {
           },
         });
 
-        return { church, profile };
+        const emailEvent = await this.companyEmails.enqueueWelcome(tx, {
+          kind: 'welcome',
+          userId,
+          churchId: church.id,
+          email: dto.email,
+          churchName: church.name,
+          firstName: dto.firstName,
+          plan: dto.plan ?? 'essentials',
+          cycle: dto.billingCycle ?? 'monthly',
+          requiresEmailConfirmation: !authData.session,
+        });
+        return { church, profile, emailEvent };
       });
 
       // Audit-log the registration
@@ -172,6 +185,7 @@ export class AuthService {
         },
       });
 
+      await this.companyEmails.dispatch(result.emailEvent);
       this.logger.log('Account registered');
 
       // Supabase already authenticates confirmed signups. Release that session

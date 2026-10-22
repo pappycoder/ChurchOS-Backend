@@ -1,3 +1,4 @@
+import { CompanyEmailService } from '../../src/company-email/company-email.service';
 import { SubscriptionPricingService } from '../../src/billing/subscription-pricing.service';
 import { RedisService } from '../../src/redis/redis.service';
 import { randomUUID, createHmac } from 'node:crypto';
@@ -201,6 +202,13 @@ describe('Platform subscription checkout (PostgreSQL + HTTP)', () => {
       controllers: [BillingController, BillingWebhookController],
       providers: [
         BillingService,
+        {
+          provide: CompanyEmailService,
+          useValue: {
+            enqueueSubscription: jest.fn().mockResolvedValue(null),
+            dispatch: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         SubscriptionPricingService,
         {
           provide: RedisService,

@@ -1,3 +1,4 @@
+import { CompanyEmailModule } from '../company-email/company-email.module';
 /**
  * @file auth.module.ts
  * @description Authentication module providing JWT guard, Supabase Auth integration,
@@ -39,7 +40,7 @@ import { CommunicationModule } from '../communication/communication.module';
  * ```
  */
 @Module({
-  imports: [SupabaseModule, PermissionsModule, CommunicationModule],
+  imports: [SupabaseModule, PermissionsModule, CommunicationModule, CompanyEmailModule],
   controllers: [AuthController, PermissionsController],
   providers: [JwksService, JwtAuthGuard, RateLimitGuard, AuthService, AuthenticatorService],
   exports: [AuthenticatorService, AuthService, JwtAuthGuard, JwksService, PermissionsModule],

@@ -84,6 +84,7 @@ export class EmailDeliveryService {
     html: string,
     churchId: string,
     attachment?: EmailAttachment,
+    organizationOptions?: { text?: string; from?: string; idempotencyKey?: string },
   ): Promise<string> {
     if (churchId) {
       const integration = await this.accounts.resolve(churchId, 'email');
@@ -125,10 +126,11 @@ export class EmailDeliveryService {
 
     try {
       const payload: Record<string, unknown> = {
-        from: fromAddress,
+        from: organizationOptions?.from ?? fromAddress,
         to: [to],
         subject,
         html,
+        ...(organizationOptions?.text ? { text: organizationOptions.text } : {}),
       };
 
       if (attachment) {
@@ -147,6 +149,9 @@ export class EmailDeliveryService {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
+          ...(organizationOptions?.idempotencyKey
+            ? { 'Idempotency-Key': organizationOptions.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify(payload),
       });

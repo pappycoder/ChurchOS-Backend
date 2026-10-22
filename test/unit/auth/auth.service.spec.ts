@@ -1,3 +1,4 @@
+import { CompanyEmailService } from '../../../src/company-email/company-email.service';
 /**
  * @file auth.service.spec.ts
  * @description Unit tests for AuthService.
@@ -47,6 +48,7 @@ describe('AuthService', () => {
   };
   let resend: { sendEmail: jest.Mock };
   let audit: { log: jest.Mock };
+  let companyEmails: { enqueueWelcome: jest.Mock; dispatch: jest.Mock };
   let config: { get: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
@@ -110,6 +112,10 @@ describe('AuthService', () => {
     getUserByIdMock = jest.fn();
     adminUpdateUserByIdMock = jest.fn().mockResolvedValue({ error: null });
 
+    companyEmails = {
+      enqueueWelcome: jest.fn().mockResolvedValue('registration/event'),
+      dispatch: jest.fn().mockResolvedValue(undefined),
+    };
     service = new AuthService(
       prisma as unknown as PrismaService,
       {
@@ -158,6 +164,7 @@ describe('AuthService', () => {
           .fn()
           .mockResolvedValue({ payload: { sub: mockUserId, session_id: 'session-1' } }),
       } as never,
+      companyEmails as unknown as CompanyEmailService,
     );
   });
 
@@ -226,6 +233,16 @@ describe('AuthService', () => {
         );
 
         const result = await service.register(validDto);
+        expect(companyEmails.enqueueWelcome).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            email: validDto.email,
+            churchName: validDto.churchName,
+            plan: 'essentials',
+            requiresEmailConfirmation: !hasSession,
+          }),
+        );
+        expect(companyEmails.dispatch).toHaveBeenCalledWith('registration/event');
 
         expect(result).toEqual({
           requiresEmailConfirmation: !hasSession,

@@ -41,7 +41,8 @@
     "ops:test": "node --test test/ops/console.test.cjs",
     "ops:test:integration": "node --test test/ops/database.test.cjs",
     "create:super-admin": "bash scripts/console.sh --action admin-super",
-    "create:church-admin": "bash scripts/console.sh --action admin-church"
+    "create:church-admin": "bash scripts/console.sh --action admin-church",
+    "email:preview": "ts-node -P tsconfig.scripts.json scripts/preview-company-emails.ts"
   },
   "prisma": {
     "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"
