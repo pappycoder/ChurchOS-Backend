@@ -1,3 +1,4 @@
+import { parseGivingDate } from './giving-date';
 import { PaymentAccountsService } from './services/payment-accounts.service';
 /**
  * @file giving.service.ts
@@ -889,6 +890,9 @@ export class GivingService {
         throw new BadRequestException('Giving must use the cell group branch');
       dto.branchId = cellGroup.branch_id;
     }
+    const givingDate = parseGivingDate(
+      dto.givingDate ?? dto.cellGroupMeetingDate ?? new Date().toISOString().slice(0, 10),
+    );
     const scope = this.branchScope.resolve(viewer);
     if (!scope.churchOnly) {
       if (dto.branchId && dto.branchId !== scope.branchId)
@@ -971,6 +975,7 @@ export class GivingService {
           category_id: dto.categoryId,
           service_id: dto.serviceId,
           event_id: dto.eventId,
+          giving_date: givingDate,
           amount: dto.amount,
           currency: dto.currency || 'NGN',
           type: dto.type,
@@ -1022,6 +1027,7 @@ export class GivingService {
         type: dto.type,
         categoryId: dto.categoryId,
         cellGroupId: dto.cellGroupId,
+        givingDate: givingDate.toISOString().slice(0, 10),
       },
     });
 
@@ -1093,9 +1099,9 @@ export class GivingService {
       where.payment_gateway = query.gateway as 'paystack' | 'flutterwave' | 'manual';
 
     if (query.startDate || query.endDate) {
-      where.created_at = {};
-      if (query.startDate) where.created_at.gte = new Date(query.startDate);
-      if (query.endDate) where.created_at.lte = new Date(query.endDate + 'T23:59:59.999Z');
+      where.giving_date = {};
+      if (query.startDate) where.giving_date.gte = new Date(query.startDate);
+      if (query.endDate) where.giving_date.lte = new Date(query.endDate + 'T23:59:59.999Z');
     }
 
     return where;
@@ -1119,7 +1125,7 @@ export class GivingService {
     if (query.sortBy) {
       orderBy.push({ [query.sortBy]: (query.sortOrder || 'desc') as Prisma.SortOrder });
     } else {
-      orderBy.push({ created_at: 'desc' });
+      orderBy.push({ giving_date: 'desc' }, { created_at: 'desc' });
     }
 
     const handleListError = (error: unknown): never => {
@@ -1180,7 +1186,7 @@ export class GivingService {
 
     const [monthAgg, allTimeAgg, trendRows] = await Promise.all([
       this.prisma.transaction.aggregate({
-        where: { ...where, created_at: { gte: monthStart } },
+        where: { ...where, giving_date: { gte: monthStart } },
         _sum: { amount: true },
         _count: { _all: true },
       }),
@@ -1190,9 +1196,9 @@ export class GivingService {
         _count: { _all: true },
       }),
       this.prisma.transaction.findMany({
-        where: { ...where, created_at: { gte: trendStart, lte: trendEnd } },
-        select: { amount: true, created_at: true },
-        orderBy: { created_at: 'asc' },
+        where: { ...where, giving_date: { gte: trendStart, lte: trendEnd } },
+        select: { amount: true, giving_date: true },
+        orderBy: { giving_date: 'asc' },
       }),
     ]);
 
@@ -1203,7 +1209,7 @@ export class GivingService {
       dailyTotals.set(day.toISOString().slice(0, 10), 0);
     }
     for (const row of trendRows) {
-      const key = new Date(row.created_at).toISOString().slice(0, 10);
+      const key = new Date(row.giving_date).toISOString().slice(0, 10);
       dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + row.amount);
     }
 
@@ -1851,7 +1857,7 @@ export class GivingService {
       currency: transaction.currency,
       categoryName: transaction.category?.name ?? '',
       paymentMethod: transaction.payment_method || 'unknown',
-      createdAt: transaction.created_at,
+      createdAt: transaction.giving_date ?? transaction.created_at,
       churchName: church?.name || 'Church',
       churchId,
       churchLogoUrl: church?.logo_url || undefined,
@@ -2094,6 +2100,7 @@ export class GivingService {
     receipt_number: string | null;
     receipt_url: string | null;
     notes: string | null;
+    giving_date?: Date;
     created_at: Date;
     updated_at: Date;
     category: { name: string } | null;
@@ -2161,6 +2168,7 @@ export class GivingService {
       receiptNumber: transaction.receipt_number || undefined,
       receiptUrl: transaction.receipt_url || undefined,
       notes: transaction.notes || undefined,
+      givingDate: (transaction.giving_date ?? transaction.created_at).toISOString().slice(0, 10),
       createdAt: transaction.created_at.toISOString(),
       updatedAt: transaction.updated_at.toISOString(),
     };

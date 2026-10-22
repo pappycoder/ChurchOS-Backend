@@ -31,7 +31,7 @@ export const FEATURE_LEVELS = {
   events: 1,
   groups: 1,
   forms: 1,
-  reports: 1,
+  reports: 0,
   email: 1,
   media: 1,
   tickets: 2,

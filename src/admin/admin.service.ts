@@ -2290,15 +2290,16 @@ export class AdminService {
       });
 
       // Monthly giving total
-      const firstOfMonth = new Date();
-      firstOfMonth.setDate(1);
-      firstOfMonth.setHours(0, 0, 0, 0);
+      const givingNow = new Date();
+      const firstOfMonth = new Date(
+        Date.UTC(givingNow.getUTCFullYear(), givingNow.getUTCMonth(), 1),
+      );
 
       const givingAgg = await this.prisma.transaction.aggregate({
         where: {
           church_id: church.id,
           status: 'success',
-          created_at: { gte: firstOfMonth },
+          giving_date: { gte: firstOfMonth },
         },
         _sum: { amount: true },
       });

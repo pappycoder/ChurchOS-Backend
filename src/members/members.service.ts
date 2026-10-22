@@ -1008,6 +1008,7 @@ export class MembersService {
       currency: string;
       categoryId: string;
       status: string;
+      givingDate: string;
       createdAt: string;
     }>
   > {
@@ -1026,13 +1027,14 @@ export class MembersService {
 
     const transactions = await this.prisma.transaction.findMany({
       where: { member_id: id },
-      orderBy: { created_at: 'desc' },
+      orderBy: [{ giving_date: 'desc' }, { created_at: 'desc' }],
       select: {
         id: true,
         amount: true,
         currency: true,
         category_id: true,
         status: true,
+        giving_date: true,
         created_at: true,
       },
     });
@@ -1043,6 +1045,7 @@ export class MembersService {
       currency: t.currency,
       categoryId: t.category_id ?? '',
       status: t.status,
+      givingDate: (t.giving_date ?? t.created_at).toISOString().slice(0, 10),
       createdAt: t.created_at.toISOString(),
     }));
   }

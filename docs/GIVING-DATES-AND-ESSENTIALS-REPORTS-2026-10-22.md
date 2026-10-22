@@ -1,0 +1,13 @@
+# Giving dates, Attendance Records display and Essentials reports
+
+Record Giving now includes a required Giving Date, defaulting to today's local calendar day. Cash and bank-transfer requests carry a strictly validated YYYY-MM-DD date. A separate PostgreSQL DATE column, transactions.giving_date, records the day the gift belongs to; created_at and audit timestamps retain the actual entry instant. Omitted dates on older clients default to the current UTC day. Cell-group totals default to their selected meeting date when no separate giving date is supplied.
+
+Migration 20261022200000_giving_dates adds and backfills giving_date from the calendar day in each stored created_at timestamp, then adds the default, non-null constraint and branch/member date indexes. Existing financial amounts, statuses, references and entry timestamps are preserved. Receipts use the giving date; receipt identifiers continue using the actual issuance sequence. Giving lists, date filters/default sorting, dashboards, financial report totals/trends, analytics, member giving history and CSV exports use the giving date. DTOs and sync expose givingDate separately from createdAt. Date-only frontend values are parsed as calendar dates for display. Optional frontend fallback to createdAt supports older responses during the release.
+
+Essentials includes all standard Reports blocks: financial/giving, attendance and members, including their exports. Runtime, frontend and SQL feature catalogs assign reports to Essentials; financial reports continue to work through giving as well. Public landing and billing plan cards share the updated allocation. Staff permissions and branch/church scope still apply. Advanced analytics remains Network. Migration 20261022210000_essentials_reports updates the SQL feature function without changing other feature tiers, prices or capacities.
+
+Attendance Records now displays only the date in its table. Stored timestamps, API payloads and exported time fields remain available.
+
+Verification includes 283 focused backend tests, frontend plan mapping tests, PostgreSQL cash/bank backdating with entry timestamp preservation, receipt inputs, financial totals/monthly trends, migration backfill, SQL plan eligibility and production browser checks for selected dates and all three Essentials report blocks. Test fixtures use a local isolated database and mocked delivery/providers. No live gift or attendance was recorded.
+
+Apply both migrations, regenerate Prisma, then deploy API/web together. Database verification applied migrations only to the isolated local test database. No production migration or deployment was performed.

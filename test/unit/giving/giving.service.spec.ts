@@ -1438,8 +1438,8 @@ describe('GivingService', () => {
     it('should return month/all-time totals, count, and a 30-day zero-filled trend', async () => {
       stubSummaryAggregates(1500, 5000, 42);
       model('transaction').findMany.mockResolvedValue([
-        { amount: 1000, created_at: new Date('2026-10-05T09:00:00.000Z') },
-        { amount: 500, created_at: new Date('2026-10-05T18:00:00.000Z') },
+        { amount: 1000, giving_date: new Date('2026-10-05T09:00:00.000Z') },
+        { amount: 500, giving_date: new Date('2026-10-05T18:00:00.000Z') },
       ]);
 
       const result = await service.getTransactionsSummary(mockChurchId, {});
@@ -1499,9 +1499,9 @@ describe('GivingService', () => {
       await service.getTransactionsSummary(mockChurchId, {});
 
       const monthWhere = (model('transaction').aggregate as jest.Mock).mock.calls[0][0].where as {
-        created_at: { gte: Date };
+        giving_date: { gte: Date };
       };
-      expect(monthWhere.created_at.gte.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+      expect(monthWhere.giving_date.gte.toISOString()).toBe('2026-10-01T00:00:00.000Z');
     });
 
     it('should branch-scope a non-HQ viewer in every query', async () => {

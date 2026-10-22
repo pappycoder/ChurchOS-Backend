@@ -4,8 +4,8 @@
 
 | Plan | Members / staff / locations | Features |
 | --- | --- | --- |
-| Essentials | 100 / 2 / 1 | Member, family and visitor directory; visitor follow-up; services and service attendance; staff permissions; giving categories, cash/bank/online giving, downloadable receipts, basic totals and administrator payment-provider setup; church/account settings; internal staff inbox; help and billing. |
-| Community | 300 / 5 / 1 | Essentials plus events and registrations, departments/cell groups, forms, reports, email communication/provider setup, sermons and media library. |
+| Essentials | 100 / 2 / 1 | Member, family and visitor directory; visitor follow-up; services and service attendance; staff permissions; giving categories, cash/bank/online giving, downloadable receipts, basic totals, giving/member/attendance reports and administrator payment-provider setup; church/account settings; internal staff inbox; help and billing. |
+| Community | 300 / 5 / 1 | Essentials plus events and registrations, departments/cell groups, forms, email communication/provider setup, sermons and media library. |
 | Network | 1,500 / 15 / 3 | Community plus event ticket management/check-in, pastoral care/appointments, assets, administrator analytics, SMS, WhatsApp, live calls and outbound webhooks. |
 | Enterprise | Explicit agreed capacities | All Network features with agreed rollout/support arrangements. No automatic unlimited capacity. |
 
@@ -40,3 +40,5 @@ The additive `20261022160000_essentials_giving` migration updates the existing S
 
 
 Revision verification passed: 428 relevant backend unit tests, all 385 frontend unit tests, 15 isolated PostgreSQL entitlement/persistence tests and six browser regressions. Both production builds, TypeScript checks, targeted lint and assistant catalog freshness checks passed. The browser checks cover Essentials giving pages, payment-only administrator setup and retained higher-plan restrictions.
+
+The later `20261022210000_essentials_reports` migration includes all standard report types on Essentials. See GIVING-DATES-AND-ESSENTIALS-REPORTS-2026-10-22.md for the current giving-date/report rollout.

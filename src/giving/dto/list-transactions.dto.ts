@@ -90,11 +90,11 @@ export class ListTransactionsDto {
   @ApiPropertyOptional({
     description: 'Sort field',
     default: 'created_at',
-    enum: ['amount', 'created_at'],
+    enum: ['amount', 'created_at', 'giving_date'],
   })
-  @IsEnum(['amount', 'created_at'] as const)
+  @IsEnum(['amount', 'created_at', 'giving_date'] as const)
   @IsOptional()
-  sortBy?: 'amount' | 'created_at';
+  sortBy?: 'amount' | 'created_at' | 'giving_date';
 
   @ApiPropertyOptional({ description: 'Sort order', default: 'desc', enum: ['asc', 'desc'] })
   @IsEnum(['asc', 'desc'] as const)

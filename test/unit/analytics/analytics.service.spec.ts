@@ -78,7 +78,8 @@ describe('AnalyticsService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestContextService,
+      providers: [
+        RequestContextService,
         AnalyticsService,
         { provide: PrismaService, useValue: mockPrismaService },
         BranchScopeService,
@@ -190,7 +191,7 @@ describe('AnalyticsService', () => {
         { amount: 500, frequency: 'weekly' },
       ]);
       prisma.transaction.findMany.mockResolvedValue([
-        { created_at: new Date('2026-01-15'), amount: 1000 },
+        { giving_date: new Date('2026-01-15'), amount: 1000 },
       ]);
 
       const result = await service.getGivingAnalytics(churchId, query);

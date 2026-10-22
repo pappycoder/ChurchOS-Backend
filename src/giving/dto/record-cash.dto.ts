@@ -18,6 +18,14 @@ import {
 } from 'class-validator';
 
 export class RecordCashDto {
+  @ApiPropertyOptional({
+    description: 'Giving date (YYYY-MM-DD); defaults to today',
+    example: '2026-10-18',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  givingDate?: string;
   @ApiPropertyOptional({ description: 'Cell group meeting date (YYYY-MM-DD)' })
   @IsDateString({ strict: true })
   @Matches(/^\d{4}-\d{2}-\d{2}$/)

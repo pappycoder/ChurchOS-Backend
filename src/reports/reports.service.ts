@@ -47,7 +47,7 @@ export class ReportsService {
     const where: Record<string, unknown> = {
       church_id: churchId,
       status: 'success',
-      created_at: { gte: start, lte: end },
+      giving_date: { gte: start, lte: end },
     };
 
     if (branchId) {
@@ -255,7 +255,7 @@ export class ReportsService {
     const where: Record<string, unknown> = {
       church_id: churchId,
       status: 'success',
-      created_at: { gte: start, lte: end },
+      giving_date: { gte: start, lte: end },
     };
     if (branchId) {
       where.branch_id = branchId;
@@ -263,10 +263,10 @@ export class ReportsService {
 
     const transactions = await this.prisma.transaction.findMany({
       where,
-      select: { amount: true, created_at: true },
+      select: { amount: true, giving_date: true },
     });
 
-    return this.aggregateMonthly(transactions, 'created_at', 'amount');
+    return this.aggregateMonthly(transactions, 'giving_date', 'amount');
   }
 
   private async getMonthlyAttendanceTrend(
@@ -319,7 +319,10 @@ export class ReportsService {
 
     for (const item of items) {
       const date = item[dateField] as Date;
-      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const month =
+        dateField === 'giving_date'
+          ? date.toISOString().slice(0, 7)
+          : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const current = map.get(month) || 0;
       map.set(month, current + (valueField ? Number(item[valueField]) || 1 : 1));
     }

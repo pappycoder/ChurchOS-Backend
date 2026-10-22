@@ -132,7 +132,7 @@ export class AnalyticsService {
     const givingWhere: Prisma.TransactionWhereInput = {
       church_id: churchId,
       status: 'success',
-      ...(givingFilter ? { created_at: givingFilter } : {}),
+      ...(givingFilter ? { giving_date: givingFilter } : {}),
       ...(scope.branchId ? { branch_id: scope.branchId } : {}),
     };
     const eventWhere: Prisma.EventWhereInput = {
@@ -143,7 +143,9 @@ export class AnalyticsService {
 
     // Keep aggregation reads serial to limit per-request Postgres connections.
     const totalMembers = await this.prisma.member.count({ where: memberWhere });
-    const activeMembers = await this.prisma.member.count({ where: { ...memberWhere, status: 'active' } });
+    const activeMembers = await this.prisma.member.count({
+      where: { ...memberWhere, status: 'active' },
+    });
     const newMembers = await this.prisma.member.count({
       where: {
         ...memberWhere,
@@ -202,7 +204,9 @@ export class AnalyticsService {
         ...(branchId ? { member: { branch_id: branchId } } : {}),
       }) as Prisma.EngagementScoreWhereInput;
     const highly = await this.prisma.engagementScore.count({ where: where({ gte: 80 }) });
-    const moderately = await this.prisma.engagementScore.count({ where: where({ gte: 50, lt: 80 }) });
+    const moderately = await this.prisma.engagementScore.count({
+      where: where({ gte: 50, lt: 80 }),
+    });
     const low = await this.prisma.engagementScore.count({ where: where({ gte: 20, lt: 50 }) });
     const disengaged = await this.prisma.engagementScore.count({ where: where({ lt: 20 }) });
 
@@ -227,7 +231,7 @@ export class AnalyticsService {
     const scope = this.branchScope.resolve(viewer);
     const baseWhere: Prisma.TransactionWhereInput = {
       church_id: churchId,
-      ...(createdFilter ? { created_at: createdFilter } : {}),
+      ...(createdFilter ? { giving_date: createdFilter } : {}),
     };
 
     if (branchId && scope.churchOnly) {
@@ -288,8 +292,8 @@ export class AnalyticsService {
     });
     const transactions = await this.prisma.transaction.findMany({
       where: successWhere,
-      select: { created_at: true, amount: true },
-      orderBy: { created_at: 'asc' },
+      select: { giving_date: true, amount: true },
+      orderBy: { giving_date: 'asc' },
     });
 
     const categoryIds = byCategoryRaw.map((c) => c.category_id).filter(Boolean) as string[];
@@ -816,12 +820,12 @@ export class AnalyticsService {
    * Builds a trend from numeric records with a date field.
    */
   private buildTrend(
-    records: { created_at: Date; amount: number }[],
+    records: { giving_date: Date; amount: number }[],
     groupBy: 'day' | 'week' | 'month',
   ): DatePointDto[] {
     const map = new Map<string, DatePointDto>();
     for (const record of records) {
-      const period = this.formatPeriod(record.created_at, groupBy);
+      const period = this.formatPeriod(record.giving_date, groupBy);
       if (!map.has(period)) {
         map.set(period, { date: period, total: 0, members: 0, visitors: 0 });
       }

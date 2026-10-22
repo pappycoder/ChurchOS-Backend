@@ -171,7 +171,7 @@ export function permissionReturnTo(destination: string | null, can: (permission:
 /** Mirrors the server feature catalog; unknown/missing entitlements never grant a paid feature. */
 export const FEATURE_MINIMUM_PLAN = {
   giving: 'essentials', events: 'community', groups: 'community', forms: 'community',
-  reports: 'community', email: 'community', media: 'community',
+  reports: 'essentials', email: 'community', media: 'community',
   tickets: 'network', pastoral: 'network', assets: 'network', analytics: 'network',
   sms: 'network', whatsapp: 'network', calls: 'network', webhooks: 'network',
 } as const;

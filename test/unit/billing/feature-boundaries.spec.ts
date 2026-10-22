@@ -104,7 +104,7 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
     ).resolves.toBe(true);
   });
 
-  it('keeps financial report reads/exports available on Essentials without unlocking other reports', async () => {
+  it('keeps financial report reads/exports available on Essentials alongside the other standard reports', async () => {
     const permissions = [
       'reports:view',
       'reports:financial:read',
@@ -119,7 +119,7 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
     await expect(
       make().canActivate(requestContext(request, ['reports:financial:read'])),
     ).resolves.toBe(true);
-    expect(request.profile.permissions).toEqual(['reports:view', 'reports:financial:read']);
+    expect(request.profile.permissions).toEqual(permissions);
     await expect(
       make().canActivate(
         requestContext(
@@ -146,7 +146,7 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
             ['reports:view'],
           ),
         ),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).resolves.toBe(true);
     }
   });
 
@@ -312,7 +312,7 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
   it('maps ticket/check-in permissions separately and keeps giving on Essentials without ticket or group access', () => {
-    expect(planFeatures('essentials')).toEqual(['giving']);
+    expect(planFeatures('essentials')).toEqual(['giving', 'reports']);
     expect(featureForPermission('cell_groups:giving:read')).toBe('groups');
     expect(featureForPermission('events:checkin:read')).toBe('tickets');
     expect(

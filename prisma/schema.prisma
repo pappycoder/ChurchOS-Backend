@@ -695,6 +695,7 @@ model Transaction {
   receipt_url            String?
   metadata               Json                @default("{}")
   notes                  String?
+  giving_date            DateTime            @default(now()) @db.Date
   created_at             DateTime            @default(now())
   updated_at             DateTime            @updatedAt
 
@@ -706,6 +707,8 @@ model Transaction {
   event    Event?          @relation(fields: [event_id], references: [id], onDelete: SetNull)
 
   @@index([church_id, branch_id, created_at])
+  @@index([church_id, branch_id, giving_date])
+  @@index([church_id, member_id, giving_date])
   @@index([church_id, member_id, created_at])
   @@index([church_id, service_id])
   @@index([payment_reference])

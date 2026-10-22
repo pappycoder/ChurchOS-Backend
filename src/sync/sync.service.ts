@@ -1103,6 +1103,7 @@ export class SyncService {
     payment_method: string | null;
     receipt_number: string | null;
     notes: string | null;
+    giving_date?: Date;
     created_at: Date;
     updated_at: Date;
   }): Record<string, unknown> {
@@ -1121,6 +1122,7 @@ export class SyncService {
       paymentMethod: t.payment_method,
       receiptNumber: t.receipt_number,
       notes: t.notes,
+      givingDate: (t.giving_date ?? t.created_at).toISOString().slice(0, 10),
       createdAt: t.created_at.toISOString(),
       updatedAt: t.updated_at.toISOString(),
     };
