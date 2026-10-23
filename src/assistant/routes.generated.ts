@@ -170,6 +170,7 @@ export function permissionReturnTo(destination: string | null, can: (permission:
 
 /** Mirrors the server feature catalog; unknown/missing entitlements never grant a paid feature. */
 export const FEATURE_MINIMUM_PLAN = {
+  staff_roles: 'community', custom_roles: 'network',
   giving: 'essentials', events: 'community', groups: 'community', forms: 'community',
   reports: 'essentials', email: 'community', media: 'community',
   tickets: 'network', pastoral: 'network', assets: 'network', analytics: 'network',
@@ -197,6 +198,7 @@ export function featureForPath(path: string): PlanFeature | undefined {
 
 export function featureForPermission(permission: string): PlanFeature | undefined {
   const [resource, surface] = permission.split(':');
+  if (permission === 'roles:create') return 'custom_roles';
   if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
   if (['assets', 'asset_categories'].includes(resource)) return 'assets';
   if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';

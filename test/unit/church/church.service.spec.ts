@@ -40,6 +40,10 @@ describe('ChurchService', () => {
 
   beforeEach(async () => {
     prisma = createPrismaMock();
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'network',
+      paid_until: new Date('2099-01-01'),
+    });
     (prisma.$transaction as unknown as jest.Mock).mockResolvedValue({ id: 'seat-reservation' });
     auditLog = jest.fn();
     mediaDelete = jest.fn();

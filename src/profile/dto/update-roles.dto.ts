@@ -6,7 +6,7 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsString } from 'class-validator';
 
 /**
  * Valid roles that can be assigned to a profile.
@@ -36,8 +36,7 @@ export class UpdateRolesDto {
   })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(VALID_ROLES.length)
+  @ArrayMaxSize(32)
   @IsString({ each: true })
-  @IsIn(VALID_ROLES as unknown as string[], { each: true })
   roles!: string[];
 }

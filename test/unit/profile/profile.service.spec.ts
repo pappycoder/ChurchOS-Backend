@@ -115,6 +115,10 @@ describe('ProfileService', () => {
 
   beforeEach(() => {
     prisma = createPrismaMock();
+    model(prisma, 'platformSubscription').findUnique.mockResolvedValue({
+      plan: 'network',
+      paid_until: new Date('2099-01-01'),
+    });
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     mediaService = {
       uploadImage: jest.fn(),
@@ -807,7 +811,7 @@ describe('ProfileService', () => {
           { role: 'senior_pastor' },
           mockChurchId,
           mockAdminUserId,
-          'church_admin',
+          'branch_pastor',
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -917,6 +921,24 @@ describe('ProfileService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('allows a Church Admin to assign Senior Pastor on Essentials', async () => {
+      model(prisma, 'platformSubscription').findUnique.mockResolvedValue({
+        plan: 'essentials',
+        paid_until: new Date('2099-01-01'),
+      });
+      model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile });
+      await service.updateProfileRoles(
+        mockProfileId,
+        { roles: ['senior_pastor'] },
+        mockChurchId,
+        mockAdminUserId,
+        'church_admin',
+      );
+      expect(model(prisma, 'profile').update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: ['senior_pastor'] }) }),
+      );
+    });
+
     it('should reject roles above the caller rank', async () => {
       model(prisma, 'profile').findUnique.mockResolvedValue({ ...baseProfile });
 
@@ -926,7 +948,7 @@ describe('ProfileService', () => {
           { roles: ['senior_pastor'] },
           mockChurchId,
           mockAdminUserId,
-          'church_admin',
+          'branch_pastor',
         ),
       ).rejects.toThrow(ForbiddenException);
     });

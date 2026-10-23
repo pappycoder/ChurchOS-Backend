@@ -1,3 +1,5 @@
+import { churchEntitlements, assertPlanFeature } from '../../billing/entitlements';
+import { roleAvailableOnPlan } from '../../billing/role-policy';
 /**
  * @file permissions.service.ts
  * @description Service for managing role-based permissions with church-specific overrides.
@@ -35,7 +37,7 @@ import { isRetiredRole, RETIRED_ROLE_NAMES, accessRoles } from '../role-policy';
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 // Bump the namespace when changing seeded role mappings so deployments don't
 // keep serving permission arrays cached under the previous template set.
-const CACHE_PREFIX = 'perms:v29:';
+const CACHE_PREFIX = 'perms:v30:';
 
 /** Role names that churches cannot claim or modify. */
 export const RESERVED_ROLE_NAMES = [
@@ -151,7 +153,10 @@ export class PermissionsService {
     roleNames: string | string[],
     isAdminHq = false,
   ): Promise<string[]> {
-    const roles = [...new Set(accessRoles(Array.isArray(roleNames) ? roleNames : [roleNames]))];
+    const { plan } = await churchEntitlements(this.prisma, churchId);
+    const roles = [
+      ...new Set(accessRoles(Array.isArray(roleNames) ? roleNames : [roleNames])),
+    ].filter((role) => roleAvailableOnPlan(plan, role));
     if (roles.length === 0) {
       return [];
     }
@@ -225,6 +230,7 @@ export class PermissionsService {
     input: CreateRoleInput,
     actorUserId?: string,
   ): Promise<RoleWithPermissions> {
+    await assertPlanFeature(this.prisma, churchId, 'custom_roles');
     const roleName = this.slugifyRoleName(input.label);
 
     if (isRetiredRole(roleName))
@@ -287,6 +293,7 @@ export class PermissionsService {
    * @returns Array of roles with their permissions and status flags
    */
   async getRolesSummary(churchId: string): Promise<RoleWithPermissions[]> {
+    const { plan } = await churchEntitlements(this.prisma, churchId);
     const [roles, permissions, churchOverrides] = await Promise.all([
       this.prisma.role.findMany({
         where: { OR: [{ church_id: churchId }, { church_id: null }] },
@@ -321,7 +328,12 @@ export class PermissionsService {
       }
     >();
     for (const role of roles) {
-      if (isRetiredRole(role.name) || role.name === 'super_admin') continue;
+      if (
+        isRetiredRole(role.name) ||
+        role.name === 'super_admin' ||
+        !roleAvailableOnPlan(plan, role.name)
+      )
+        continue;
       const current = rolesByName.get(role.name);
       if (!current || (current.church_id === null && role.church_id !== null)) {
         rolesByName.set(role.name, role);
@@ -499,6 +511,10 @@ export class PermissionsService {
       throw new NotFoundException(`Role "${roleName}" not found`);
     }
 
+    if (role.church_id !== null) await assertPlanFeature(this.prisma, churchId, 'custom_roles');
+    const { plan } = await churchEntitlements(this.prisma, churchId);
+    if (!roleAvailableOnPlan(plan, roleName))
+      throw new BadRequestException('Role is not available on your subscription');
     const validPermissionIds = await this.assertPermissionsExist(permissionIds);
     const isOwned = role.church_id !== null;
 

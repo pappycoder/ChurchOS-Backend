@@ -43,7 +43,7 @@ describe('staff invitation profile and outbox integrity', () => {
     await prisma.platformSubscription.create({
       data: {
         church_id: church.id,
-        plan: 'essentials',
+        plan: 'network',
         cycle: 'monthly',
         paid_until: new Date(Date.now() + 86400000),
       },

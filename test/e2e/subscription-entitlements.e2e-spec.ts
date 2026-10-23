@@ -89,7 +89,7 @@ describe('Subscription database enforcement', () => {
     const id = await church();
     const profile = (email: string) =>
       pool.query(
-        "INSERT INTO profiles(id,user_id,church_id,first_name,last_name,role,email,updated_at) VALUES ($1,$1,$2,'A','B',ARRAY['church_admin'],$3,now())",
+        "INSERT INTO profiles(id,user_id,church_id,first_name,last_name,role,email,updated_at) VALUES ($1,$1,$2,'A','B',ARRAY[CASE WHEN $3='admin@example.test' THEN 'church_admin' ELSE 'secretary' END],$3,now())",
         [randomUUID(), id, email],
       );
     await profile('admin@example.test');

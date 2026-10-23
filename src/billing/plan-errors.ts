@@ -12,7 +12,7 @@ export function subscriptionError(exception: unknown) {
       : value;
   });
   const match =
-    /PLAN_(LIMIT_REACHED|FEATURE_REQUIRED):(members|staff|locations|giving|events|groups|forms|reports|tickets|pastoral|assets|analytics|email|sms|whatsapp|calls)/.exec(
+    /PLAN_(LIMIT_REACHED|FEATURE_REQUIRED):(staff_roles|custom_roles|members|staff|locations|giving|events|groups|forms|reports|tickets|pastoral|assets|analytics|email|sms|whatsapp|calls)/.exec(
       serialized ?? '',
     );
   if (!match) return undefined;

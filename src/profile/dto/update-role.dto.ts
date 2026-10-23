@@ -6,7 +6,7 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 /**
  * Valid roles that can be assigned to a profile.
@@ -35,6 +35,5 @@ export class UpdateRoleDto {
   })
   @IsString()
   @IsNotEmpty()
-  @IsIn(VALID_ROLES)
   role!: string;
 }

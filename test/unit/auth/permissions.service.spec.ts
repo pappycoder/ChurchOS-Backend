@@ -46,6 +46,10 @@ describe('PermissionsService', () => {
 
   beforeEach(() => {
     prisma = createPrismaMock();
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'network',
+      paid_until: new Date('2099-01-01'),
+    });
     redis = {
       get: jest.fn().mockResolvedValue(null),
       set: jest.fn().mockResolvedValue(undefined),
@@ -88,6 +92,18 @@ describe('PermissionsService', () => {
   // ─── createRole ───────────────────────────────────────────
 
   describe('createRole', () => {
+    it.each(['essentials', 'community'])(
+      'blocks custom role creation on %s before any write',
+      async (plan) => {
+        prisma.platformSubscription.findUnique.mockResolvedValue({
+          plan,
+          paid_until: new Date('2099-01-01'),
+        });
+        await expect(service.createRole(churchId, { label: 'Media Team' })).rejects.toThrow();
+        expect(prisma.role.create).not.toHaveBeenCalled();
+      },
+    );
+
     it('reserves cell_leader even when a global template is missing', async () => {
       await expect(service.createRole(churchId, { label: 'Cell Leader' })).rejects.toThrow(
         ConflictException,
@@ -244,7 +260,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v29:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v30:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {
@@ -482,7 +498,7 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v29:all', first, 900);
+      expect(redis.set).toHaveBeenCalledWith('perms:v30:all', first, 900);
     });
 
     it('serves cached resolutions when present', async () => {

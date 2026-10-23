@@ -1,3 +1,4 @@
+import { assertAssignableRoles } from '../billing/role-policy';
 import { AccountEmailService } from '../company-email/account-email.service';
 import { StaffInvitationService } from '../company-email/staff-invitation.service';
 import { filterPlanPermissions } from '../billing/feature-policy';
@@ -627,6 +628,7 @@ export class ProfileService {
     }
 
     const currentRoles = existing.role ?? [];
+    await assertAssignableRoles(this.prisma, churchId, requestedRoles, currentRoles);
 
     // Prevent modifying super_admin users unless the caller is a super_admin
     if (currentRoles.includes('super_admin') && adminRole !== 'super_admin') {
@@ -641,7 +643,10 @@ export class ProfileService {
     // Privilege-escalation guard: an admin cannot grant a role above their own
     const callerRank = ROLE_RANK[adminRole] ?? 0;
     for (const role of requestedRoles) {
-      if ((ROLE_RANK[role] ?? 0) > callerRank) {
+      if (
+        !['church_admin', 'super_admin'].includes(adminRole) &&
+        (ROLE_RANK[role] ?? 0) > callerRank
+      ) {
         throw new ForbiddenException('Cannot assign a role higher than your own');
       }
     }
@@ -1074,6 +1079,7 @@ export class ProfileService {
       throw new BadRequestException('First name and last name are required');
     }
 
+    await assertAssignableRoles(this.prisma, churchId, [dto.role]);
     const actor = this.requestContext.getStore()?.viewer;
     // Administrators can invite every church role even when their current plan
     // removes paid-module grants. Invitees still receive plan-filtered access.

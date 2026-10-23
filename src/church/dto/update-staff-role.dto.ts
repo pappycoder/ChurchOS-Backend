@@ -6,7 +6,7 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 /**
  * DTO for updating a staff member's role.
@@ -20,6 +20,5 @@ export class UpdateStaffRoleDto {
   })
   @IsString()
   @IsNotEmpty()
-  @IsIn(['church_admin', 'branch_pastor', 'secretary', 'treasurer', 'usher'])
   role!: string;
 }

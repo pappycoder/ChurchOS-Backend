@@ -3,6 +3,7 @@ import { PlanFeature } from './plans';
 /** Plan eligibility is independent of staff role, HQ status and CRUD action. */
 export function featureForPermission(permission: string): PlanFeature | undefined {
   const [resource, surface] = permission.split(':');
+  if (permission === 'roles:create') return 'custom_roles';
   if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
   if (['assets', 'asset_categories'].includes(resource)) return 'assets';
   if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';

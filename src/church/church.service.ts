@@ -1,3 +1,4 @@
+import { assertAssignableRoles } from '../billing/role-policy';
 import { StaffInvitationService } from '../company-email/staff-invitation.service';
 import { reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
 import { RequestContextService } from '../common/services/request-context.service';
@@ -426,6 +427,7 @@ export class ChurchService {
       throw new InternalServerErrorException('Email is required');
     }
 
+    await assertAssignableRoles(this.prisma, churchId, [normalizedRole]);
     const reservation = await reserveStaffSeat(this.prisma, churchId, normalizedEmail);
     try {
       const profile = await this.staffInvitations.create({
@@ -573,6 +575,13 @@ export class ChurchService {
       throw new ForbiddenException('Super administrator accounts must use the profile roles API');
     if (profile.user_id === userId) throw new ForbiddenException('Cannot change your own roles');
 
+    const role = await this.prisma.role.findFirst({
+      where: { name: dto.role, OR: [{ church_id: null }, { church_id: churchId }] },
+      select: { name: true },
+    });
+    if (!role || dto.role === 'super_admin')
+      throw new BadRequestException('Invalid church staff role');
+    await assertAssignableRoles(this.prisma, churchId, [dto.role], profile.role);
     const oldRole = profile.role;
 
     // Replace the full role set with the single requested role. is_admin_hq is
