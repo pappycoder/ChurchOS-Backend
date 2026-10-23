@@ -2039,7 +2039,7 @@ abc123challengetoken`,
     description:
       'Handle password resets and authenticated password changes for church staff and members.',
     prerequisites:
-      'User must be logged in for password change. SMTP must be configured in Supabase for forgot-password emails.',
+      'User must be logged in for password change. Password recovery uses the company Resend sender and WEB_URL. Supabase signup confirmations require their own email-template and SMTP configuration.',
     businessRule:
       'Forgot-password always returns 200 to prevent email enumeration. Change-password verifies current password against Supabase before updating.',
     steps: [

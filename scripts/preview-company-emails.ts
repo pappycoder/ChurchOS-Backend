@@ -4,6 +4,9 @@ import {
   companyEmail,
   CompanyEmailKind,
   invitationEmail,
+  passwordResetEmail,
+  signInCodeEmail,
+  signupConfirmationEmail,
 } from '../src/company-email/company-email.templates';
 const directory = join(process.cwd(), 'docs', 'previews', 'company-emails');
 mkdirSync(directory, { recursive: true });
@@ -37,3 +40,20 @@ const invitation = invitationEmail(
 );
 writeFileSync(join(directory, 'invitation.html'), invitation.html + '\n');
 console.log(`Email previews written to ${directory}`);
+
+const webUrl = 'https://church-os-web.vercel.app';
+for (const [name, content] of [
+  [
+    'password-reset',
+    passwordResetEmail(`${webUrl}/reset-password?token_hash=preview-only`, webUrl),
+  ],
+  [
+    'sign-in-code',
+    signInCodeEmail(
+      { churchName: 'Grace Community Church', code: '123456', expiresInMinutes: 10 },
+      webUrl,
+    ),
+  ],
+  ['signup-confirmation', signupConfirmationEmail(webUrl)],
+] as const)
+  writeFileSync(join(directory, `${name}.html`), content.html + '\n');

@@ -1,3 +1,4 @@
+import { AccountEmailService } from '../company-email/account-email.service';
 import { StaffInvitationService } from '../company-email/staff-invitation.service';
 import { filterPlanPermissions } from '../billing/feature-policy';
 import { churchEntitlements, reserveStaffSeat, releaseStaffSeat } from '../billing/entitlements';
@@ -22,7 +23,6 @@ import {
   ConflictException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLoggingService } from '../common/services/audit-logging.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
@@ -72,13 +72,13 @@ export class ProfileService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
-    private readonly config: ConfigService,
     private readonly audit: AuditLoggingService,
     private readonly mediaService: MediaService,
     private readonly supabase: SupabaseService,
     private readonly permissionsService: PermissionsService,
     private readonly branchScope: BranchScopeService,
     private readonly staffInvitations: StaffInvitationService,
+    private readonly accountEmails: AccountEmailService,
   ) {}
 
   /**
@@ -1220,16 +1220,7 @@ export class ProfileService {
       throw new BadRequestException('Could not find user email for password reset');
     }
 
-    // Actually deliver the reset email. generateLink() only builds a link and
-    // never sends it; resetPasswordForEmail() emails the user a reset link.
-    const { error } = await supabase.auth.resetPasswordForEmail(userData.user.email, {
-      redirectTo: `${this.config.get<string>('WEB_URL')}/auth/reset-password`,
-    });
-
-    if (error) {
-      this.logger.error(`Password reset failed: ${error.message}`);
-      throw new BadRequestException('Failed to generate password reset link');
-    }
+    await this.accountEmails.sendPasswordReset(userData.user.email);
 
     await this.audit.log({
       userId,

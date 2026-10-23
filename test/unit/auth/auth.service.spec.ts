@@ -1,3 +1,4 @@
+import { AccountEmailService } from '../../../src/company-email/account-email.service';
 import { CompanyEmailService } from '../../../src/company-email/company-email.service';
 /**
  * @file auth.service.spec.ts
@@ -49,7 +50,8 @@ describe('AuthService', () => {
   let resend: { sendEmail: jest.Mock };
   let audit: { log: jest.Mock };
   let companyEmails: { enqueueWelcome: jest.Mock; dispatch: jest.Mock };
-  let config: { get: jest.Mock };
+  let config: { get: jest.Mock; getOrThrow: jest.Mock };
+  let accountEmails: { sendPasswordReset: jest.Mock };
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockChurchId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -101,7 +103,11 @@ describe('AuthService', () => {
       del: jest.fn().mockResolvedValue(undefined),
     };
     resend = { sendEmail: jest.fn().mockResolvedValue(undefined) };
-    config = { get: jest.fn().mockReturnValue('http://localhost:3000') };
+    config = {
+      get: jest.fn().mockReturnValue('https://church-os-web.vercel.app'),
+      getOrThrow: jest.fn().mockReturnValue('https://church-os-web.vercel.app'),
+    };
+    accountEmails = { sendPasswordReset: jest.fn().mockResolvedValue(undefined) };
 
     signUpMock = jest.fn();
     signInMock = jest.fn();
@@ -165,6 +171,7 @@ describe('AuthService', () => {
           .mockResolvedValue({ payload: { sub: mockUserId, session_id: 'session-1' } }),
       } as never,
       companyEmails as unknown as CompanyEmailService,
+      accountEmails as unknown as AccountEmailService,
     );
   });
 
@@ -447,8 +454,10 @@ describe('AuthService', () => {
       expect(resend.sendEmail).toHaveBeenCalledWith(
         loginDto.email,
         expect.stringContaining('sign-in code'),
-        expect.stringContaining('<p>'),
+        expect.stringContaining('ACCOUNT SECURITY'),
         '',
+        undefined,
+        expect.objectContaining({ text: expect.stringMatching(/Sign-in code: \d{6}/) }),
       );
       expect(redis.set).toHaveBeenCalledWith(
         expect.stringContaining('2fa:login:pending:'),
@@ -622,27 +631,12 @@ describe('AuthService', () => {
   // ─── FORGOT PASSWORD ───────────────────────────────────────────────
 
   describe('forgotPassword', () => {
-    it('should call Supabase resetPasswordForEmail', async () => {
-      resetPasswordForEmailMock.mockResolvedValue({
-        data: { properties: { hashed_token: 'recovery-hash' } },
-        error: null,
-      });
-
+    it('sends recovery through the shared company sender', async () => {
       await service.forgotPassword('pastor@gracecommunity.com');
-
-      expect(resetPasswordForEmailMock).toHaveBeenCalledWith({
-        type: 'recovery',
-        email: 'pastor@gracecommunity.com',
-      });
-      expect(resend.sendEmail).toHaveBeenCalled();
+      expect(accountEmails.sendPasswordReset).toHaveBeenCalledWith('pastor@gracecommunity.com');
     });
-
-    it('should not throw even if Supabase returns an error', async () => {
-      resetPasswordForEmailMock.mockResolvedValue({
-        error: { message: 'User not found' },
-      });
-
-      // Should not throw — prevents email enumeration
+    it('keeps the public response uniform when delivery fails', async () => {
+      accountEmails.sendPasswordReset.mockRejectedValue(new Error('provider failure'));
       await expect(service.forgotPassword('unknown@email.com')).resolves.toBeUndefined();
     });
   });

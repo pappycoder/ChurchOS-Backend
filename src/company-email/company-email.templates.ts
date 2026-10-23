@@ -209,3 +209,87 @@ export function invitationEmail(input: InvitationEmailInput, webUrl: string): Co
     showBillingLink: false,
   });
 }
+
+function accountEmailLinks(webUrl: string) {
+  const url = new URL(webUrl);
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
+    throw new Error('Invalid ChurchOS website URL');
+  return {
+    billingUrl: new URL('/subscription', url.origin).href,
+    helpUrl: new URL('/help', url.origin).href,
+    logoUrl: new URL('/brand/churchos-emblem.png', url.origin).href,
+    showBillingLink: false,
+  };
+}
+
+export function passwordResetEmail(resetUrl: string, webUrl: string): CompanyEmailContent {
+  const links = accountEmailLinks(webUrl);
+  const reset = new URL(resetUrl);
+  if (
+    reset.origin !== new URL(webUrl).origin ||
+    reset.pathname !== '/reset-password' ||
+    !reset.searchParams.get('token_hash') ||
+    reset.username ||
+    reset.password
+  )
+    throw new Error('Invalid ChurchOS recovery destination');
+  return companyEmailFrame({
+    ...links,
+    subject: 'Reset your ChurchOS password',
+    title: 'A fresh start, securely.',
+    greeting: 'Hello,',
+    lead: 'We received a request to reset your ChurchOS password. Choose a new password to get back to your church workspace.',
+    rows: [
+      ['Request', 'Password reset'],
+      ['Link', 'One-time use'],
+    ],
+    next: 'Select Reset password to choose your new password, then sign in with your email address. This link expires and can be used once. If it has expired, request a new link from the sign-in page. If you did not request this, ignore this email; your password will stay the same.',
+    cta: 'Reset password',
+    preheader: 'A secure link to reset your ChurchOS password.',
+    actionUrl: reset.href,
+    headerTag: 'ACCOUNT SECURITY',
+    sectionHeading: 'Get back to your workspace',
+  });
+}
+
+export function signInCodeEmail(
+  input: { churchName: string; code: string; expiresInMinutes: number },
+  webUrl: string,
+): CompanyEmailContent {
+  if (!/^\d{6}$/.test(input.code)) throw new Error('Invalid sign-in code');
+  return companyEmailFrame({
+    ...accountEmailLinks(webUrl),
+    subject: 'Your ChurchOS sign-in code',
+    title: 'Your secure sign-in code.',
+    greeting: 'Hello,',
+    lead: `Use this code to complete your sign-in to ${input.churchName}.`,
+    rows: [
+      ['Sign-in code', input.code],
+      ['Expires in', `${input.expiresInMinutes} minutes`],
+    ],
+    next: 'Enter this code in the sign-in screen you already have open. Never share it with anyone. If you did not try to sign in, ignore this email.',
+    cta: 'Go to sign in',
+    preheader: 'Complete your ChurchOS sign-in securely.',
+    actionUrl: new URL('/login', webUrl).href,
+    headerTag: 'ACCOUNT SECURITY',
+    sectionHeading: 'Keep your account safe',
+  });
+}
+
+/** Upload this rendered HTML as the Supabase Confirm signup email template. */
+export function signupConfirmationEmail(webUrl: string): CompanyEmailContent {
+  return companyEmailFrame({
+    ...accountEmailLinks(webUrl),
+    subject: 'Confirm your ChurchOS email address',
+    title: 'You’re one step closer.',
+    greeting: 'Hello,',
+    lead: 'Confirm your email address to continue setting up your ChurchOS account and church workspace.',
+    rows: [['Request', 'Email confirmation']],
+    next: 'Select Confirm email to verify your address. If this link has expired, return to the sign-in page for help. If you did not create a ChurchOS account, ignore this email.',
+    cta: 'Confirm email',
+    preheader: 'Confirm your email address to get started with ChurchOS.',
+    actionUrl: '{{ .ConfirmationURL }}',
+    headerTag: 'WELCOME TO CHURCHOS',
+    sectionHeading: 'Verify your email address',
+  });
+}

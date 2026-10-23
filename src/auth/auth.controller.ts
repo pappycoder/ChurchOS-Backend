@@ -155,7 +155,7 @@ export class AuthController {
    * Request a password reset email.
    *
    * Always returns success to prevent email enumeration.
-   * The email is sent via Supabase Auth with a reset link.
+   * The company email sender delivers a one-time recovery link.
    */
   @Post('forgot-password')
   @UseGuards(RateLimitGuard)

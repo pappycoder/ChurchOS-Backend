@@ -1,3 +1,5 @@
+import { AccountEmailService } from '../company-email/account-email.service';
+import { signInCodeEmail } from '../company-email/company-email.templates';
 import { CompanyEmailService } from '../company-email/company-email.service';
 /**
  * @file auth.service.ts
@@ -60,6 +62,7 @@ export class AuthService {
     private readonly authenticator: AuthenticatorService,
     private readonly jwks: JwksService,
     private readonly companyEmails: CompanyEmailService,
+    private readonly accountEmails: AccountEmailService,
   ) {}
 
   /**
@@ -85,6 +88,7 @@ export class AuthService {
         email: dto.email,
         password: dto.password,
         options: {
+          emailRedirectTo: new URL('/login', this.config.getOrThrow<string>('WEB_URL')).href,
           data: {
             first_name: dto.firstName,
             last_name: dto.lastName,
@@ -711,20 +715,13 @@ export class AuthService {
       AuthService.TWO_FACTOR_TTL_SECONDS,
     );
 
-    const appUrl = this.config.get<string>('WEB_URL') ?? '';
-    const html = [
-      `<p>Hello,</p>`,
-      `<p>Your ${churchName} sign-in code is:</p>`,
-      `<p style="font-size:28px;letter-spacing:4px;font-weight:bold;margin:16px 0;">${code}</p>`,
-      `<p>Enter this code in the app to complete your sign-in. It expires in ${Math.floor(AuthService.TWO_FACTOR_TTL_SECONDS / 60)} minutes.</p>`,
-      `<p>If you didn't try to sign in, you can safely ignore this email.</p>`,
-      `<p>— ${churchName}</p>`,
-      appUrl
-        ? `<p style="color:#6b7280;font-size:12px;"><a href="${appUrl}">${appUrl}</a></p>`
-        : '',
-    ].join('');
-
-    await this.resend.sendEmail(recipient, 'Your ChurchOS sign-in code', html, '');
+    const content = signInCodeEmail(
+      { churchName, code, expiresInMinutes: Math.floor(AuthService.TWO_FACTOR_TTL_SECONDS / 60) },
+      this.config.getOrThrow<string>('WEB_URL'),
+    );
+    await this.resend.sendEmail(recipient, content.subject, content.html, '', undefined, {
+      text: content.text,
+    });
   }
 
   /**
@@ -772,7 +769,7 @@ export class AuthService {
   }
 
   /**
-   * Initiates a password reset by sending a reset email via Supabase.
+   * Initiates a password reset using the company email template and sender.
    *
    * Always returns success to prevent email enumeration.
    *
@@ -783,23 +780,7 @@ export class AuthService {
     // Generate a recovery-only token hash and deliver it without establishing
     // a session on the shared admin client. Never accept an arbitrary redirect.
     try {
-      const { data, error } = await this.supabase.client.auth.admin.generateLink({
-        type: 'recovery',
-        email,
-      });
-      if (error || !data.properties?.hashed_token) return;
-      const link = new URL(
-        '/reset-password',
-        this.config.get<string>('WEB_URL', 'http://localhost:3000'),
-      );
-      link.searchParams.set('token_hash', data.properties.hashed_token);
-      const safeLink = link.href.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-      await this.resend.sendEmail(
-        email,
-        'Reset your ChurchOS password',
-        `<h2>Reset your password</h2><p>Use the button below to choose a new password. This link can be used once.</p><p><a href="${safeLink}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
-        '',
-      );
+      await this.accountEmails.sendPasswordReset(email);
     } catch {
       // Uniform public response prevents account enumeration. No tokens in logs.
       this.logger.warn('Password recovery email could not be delivered');

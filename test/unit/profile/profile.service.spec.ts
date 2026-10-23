@@ -1,3 +1,4 @@
+import { AccountEmailService } from '../../../src/company-email/account-email.service';
 import {
   StaffInvitationService,
   StaffInvitationInput,
@@ -23,7 +24,6 @@ import { AuditLoggingService } from '../../../src/common/services/audit-logging.
 import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
 import { MediaService, MulterFile } from '../../../src/media/media.service';
 import { SupabaseService } from '../../../src/supabase/supabase.service';
-import { ConfigService } from '@nestjs/config';
 import { PermissionsService } from '../../../src/auth/services/permissions.service';
 import {
   NotFoundException,
@@ -34,11 +34,11 @@ import {
 
 describe('ProfileService', () => {
   let service: ProfileService;
+  let accountEmails: { sendPasswordReset: jest.Mock };
   let staffInvitations: { create: jest.Mock };
   let prisma: Record<string, unknown> & { $transaction: jest.Mock };
   let audit: { log: jest.Mock };
   let mediaService: { uploadImage: jest.Mock; deleteByUrl: jest.Mock };
-  let config: { get: jest.Mock };
   let supabase: {
     client: {
       auth: {
@@ -120,12 +120,6 @@ describe('ProfileService', () => {
       uploadImage: jest.fn(),
       deleteByUrl: jest.fn().mockResolvedValue(undefined),
     };
-    config = {
-      get: jest.fn().mockImplementation((key: string) => {
-        if (key === 'WEB_URL') return 'https://churchos.app';
-        return undefined;
-      }),
-    };
     supabase = {
       client: {
         auth: {
@@ -174,16 +168,17 @@ describe('ProfileService', () => {
         }),
       ),
     };
+    accountEmails = { sendPasswordReset: jest.fn().mockResolvedValue(undefined) };
     service = new ProfileService(
       prisma as unknown as PrismaService,
       new RequestContextService(),
-      config as unknown as ConfigService,
       audit as unknown as AuditLoggingService,
       mediaService as unknown as MediaService,
       supabase as unknown as SupabaseService,
       permissionsService as unknown as PermissionsService,
       new BranchScopeService(new RequestContextService()),
       staffInvitations as unknown as StaffInvitationService,
+      accountEmails as unknown as AccountEmailService,
     );
   });
 
@@ -515,6 +510,40 @@ describe('ProfileService', () => {
   // ─── LIST PROFILES ─────────────────────────────────────────────────
 
   // Authenticator lifecycle coverage lives in authenticator.service.spec.ts.
+
+  describe('administrator password recovery', () => {
+    beforeEach(() => {
+      model(prisma, 'profile').findFirst.mockResolvedValue({
+        id: mockProfileId,
+        user_id: mockUserId,
+      });
+      supabase.client.auth.admin.getUserById.mockResolvedValue({
+        data: { user: { email: 'staff@example.org' } },
+        error: null,
+      });
+    });
+    it('uses the same branded sender as public recovery and records success', async () => {
+      await expect(
+        service.resetUserPassword(mockProfileId, mockChurchId, mockAdminUserId),
+      ).resolves.toEqual({ resetSent: true });
+      expect(accountEmails.sendPasswordReset).toHaveBeenCalledWith('staff@example.org');
+      expect(audit.log).toHaveBeenCalled();
+    });
+    it('does not report success or audit delivery when sending fails', async () => {
+      accountEmails.sendPasswordReset.mockRejectedValue(new Error('mail unavailable'));
+      await expect(
+        service.resetUserPassword(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+    it('does not send for profiles outside the caller scope', async () => {
+      model(prisma, 'profile').findFirst.mockResolvedValue(null);
+      await expect(
+        service.resetUserPassword(mockProfileId, mockChurchId, mockAdminUserId),
+      ).rejects.toThrow(NotFoundException);
+      expect(accountEmails.sendPasswordReset).not.toHaveBeenCalled();
+    });
+  });
 
   describe('listProfiles', () => {
     it('should return paginated profiles', async () => {

@@ -9,10 +9,10 @@ describe('user account deletion preserves church records', () => {
   const service = new ProfileService(
     prisma,
     { branchWhere: () => ({}) } as never,
-    {} as never,
     { log: jest.fn() } as never,
     {} as never,
     { client: { auth: { admin: auth } } } as never,
+    {} as never,
     {} as never,
     {} as never,
     {} as never,
