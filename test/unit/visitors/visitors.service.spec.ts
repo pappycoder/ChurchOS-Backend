@@ -416,6 +416,59 @@ describe('VisitorsService', () => {
   });
 
   describe('update', () => {
+    it('persists an active church-owned branch change for HQ', async () => {
+      prismaMock.branch = { findFirst: jest.fn().mockResolvedValue({ id: 'branch-2' }) };
+      prismaMock.visitor.update.mockResolvedValue({
+        ...mockVisitor,
+        branch_id: 'branch-2',
+        branch: { id: 'branch-2', name: 'East' },
+      });
+      const result = await new RequestContextService().run(
+        {
+          churchId,
+          userId,
+          role: 'church_admin',
+          viewer: { church_id: churchId, role: 'church_admin', is_admin_hq: true },
+        },
+        () => service.update(mockVisitor.id, { branchId: 'branch-2' }, churchId, userId),
+      );
+      expect(prismaMock.branch.findFirst).toHaveBeenCalledWith({
+        where: { id: 'branch-2', church_id: churchId, archived_at: null },
+        select: { id: true },
+      });
+      expect(prismaMock.visitor.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { branch: { connect: { id: 'branch-2' } } } }),
+      );
+      expect(result).toMatchObject({ branchId: 'branch-2', branchName: 'East' });
+    });
+
+    it.each(['foreign', 'archived', 'missing'])(
+      'rejects reassignment to an unavailable %s branch',
+      async (branchId) => {
+        prismaMock.branch = { findFirst: jest.fn().mockResolvedValue(null) };
+        await expect(
+          service.update(mockVisitor.id, { branchId }, churchId, userId),
+        ).rejects.toThrow(BadRequestException);
+        expect(prismaMock.visitor.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects branch-scoped cross-branch reassignment', async () => {
+      prismaMock.visitor.findUnique.mockResolvedValue({ ...mockVisitor, branch_id: 'branch-1' });
+      await expect(
+        new RequestContextService().run(
+          {
+            churchId,
+            userId,
+            role: 'secretary',
+            viewer: { church_id: churchId, role: 'secretary', branch_id: 'branch-1' },
+          },
+          () => service.update(mockVisitor.id, { branchId: 'branch-2' }, churchId, userId),
+        ),
+      ).rejects.toThrow('You can only manage records in your branch');
+      expect(prismaMock.visitor.update).not.toHaveBeenCalled();
+    });
+
     it('should update visitor follow-up status and gender', async () => {
       const result = await service.update(
         mockVisitor.id,

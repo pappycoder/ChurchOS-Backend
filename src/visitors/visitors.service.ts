@@ -261,6 +261,11 @@ export class VisitorsService {
     }
 
     const updateData: Prisma.VisitorUpdateInput = {};
+    if (dto.branchId !== undefined) {
+      this.requestContext.branchIdForWrite(churchId, dto.branchId);
+      const branchId = await this.resolveVisitorBranch(dto.branchId, churchId);
+      updateData.branch = branchId ? { connect: { id: branchId } } : { disconnect: true };
+    }
     if (dto.firstName !== undefined) updateData.first_name = dto.firstName;
     if (dto.lastName !== undefined) updateData.last_name = dto.lastName;
     if (dto.gender !== undefined) updateData.gender = dto.gender;
@@ -296,7 +301,7 @@ export class VisitorsService {
       entity: 'visitor',
       action: 'UPDATE',
       entityId: id,
-      oldValues: { follow_up_status: existing.follow_up_status },
+      oldValues: { follow_up_status: existing.follow_up_status, branchId: existing.branch_id },
       newValues: updateData as Record<string, unknown>,
     });
 
@@ -542,7 +547,7 @@ export class VisitorsService {
     // trusted profile context).
     if (explicit) {
       const branch = await this.prisma.branch.findFirst({
-        where: { id: branchId as string, church_id: churchId },
+        where: { id: branchId as string, church_id: churchId, archived_at: null },
         select: { id: true },
       });
       if (!branch) {
