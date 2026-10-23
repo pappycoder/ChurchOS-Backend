@@ -214,9 +214,17 @@ export class AttendanceService extends AttendanceSessionsService {
 
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.category !== undefined) updateData.category = dto.category;
-    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
-    if (dto.branchId !== undefined)
-      updateData.branch = dto.branchId ? { connect: { id: dto.branchId } } : { disconnect: true };
+    if (dto.branchId !== undefined) {
+      const branchId = this.requestContext.branchIdForWrite(churchId, dto.branchId);
+      if (branchId) {
+        const branch = await this.prisma.branch.findFirst({
+          where: { id: branchId, church_id: churchId, archived_at: null },
+          select: { id: true },
+        });
+        if (!branch) throw new BadRequestException('Select an active branch in this church');
+      }
+      updateData.branch = branchId ? { connect: { id: branchId } } : { disconnect: true };
+    }
     if (dto.dayOfWeek !== undefined) updateData.day_of_week = dto.dayOfWeek;
     if (dto.startTime !== undefined) updateData.start_time = serviceTimeForStorage(dto.startTime);
     if (dto.endTime !== undefined) updateData.end_time = serviceTimeForStorage(dto.endTime);
@@ -237,7 +245,11 @@ export class AttendanceService extends AttendanceSessionsService {
       entity: 'service',
       action: 'UPDATE',
       entityId: id,
-      oldValues: { name: existing.name, isActive: existing.is_active },
+      oldValues: {
+        name: existing.name,
+        isActive: existing.is_active,
+        branchId: existing.branch_id,
+      },
       newValues: updateData,
     });
 

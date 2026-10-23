@@ -443,6 +443,58 @@ describe('AttendanceService — categories & visitors', () => {
   });
 
   describe('updateService', () => {
+    it('updates the branch to an active church-owned branch for HQ', async () => {
+      model('service').findUnique.mockResolvedValue({ ...adultServiceRow, branch_id: 'branch-a' });
+      model('branch').findFirst.mockResolvedValue({ id: 'branch-b' });
+      model('service').update.mockResolvedValue({ ...adultServiceRow, branch_id: 'branch-b' });
+      const result = await new RequestContextService().run(
+        {
+          userId,
+          churchId,
+          role: 'church_admin',
+          viewer: { church_id: churchId, role: 'church_admin', is_admin_hq: true },
+        },
+        () => service.updateService(serviceId, { branchId: 'branch-b' }, churchId, userId),
+      );
+      expect(model('branch').findFirst).toHaveBeenCalledWith({
+        where: { id: 'branch-b', church_id: churchId, archived_at: null },
+        select: { id: true },
+      });
+      expect(model('service').update).toHaveBeenCalledWith({
+        where: { id: serviceId },
+        data: { branch: { connect: { id: 'branch-b' } } },
+      });
+      expect(result.branchId).toBe('branch-b');
+    });
+
+    it.each(['foreign', 'archived', 'missing'])(
+      'rejects moving a service to an unavailable %s branch',
+      async (branchId) => {
+        model('service').findUnique.mockResolvedValue(adultServiceRow);
+        model('branch').findFirst.mockResolvedValue(null);
+        await expect(
+          service.updateService(serviceId, { branchId }, churchId, userId),
+        ).rejects.toThrow(BadRequestException);
+        expect(model('service').update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects branch-scoped attempts to move a service to another branch', async () => {
+      model('service').findUnique.mockResolvedValue({ ...adultServiceRow, branch_id: 'branch-a' });
+      await expect(
+        new RequestContextService().run(
+          {
+            userId,
+            churchId,
+            role: 'branch_pastor',
+            viewer: { church_id: churchId, role: 'branch_pastor', branch_id: 'branch-a' },
+          },
+          () => service.updateService(serviceId, { branchId: 'branch-b' }, churchId, userId),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(model('service').update).not.toHaveBeenCalled();
+    });
+
     it('updates and clears clock times without requiring a calendar date', async () => {
       model('service').findUnique.mockResolvedValue(adultServiceRow);
       model('service').update.mockImplementation(({ data }) =>
