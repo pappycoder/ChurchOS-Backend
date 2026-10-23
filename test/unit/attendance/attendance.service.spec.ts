@@ -15,7 +15,12 @@ import { AttendanceService } from '../../../src/attendance/attendance.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditLoggingService } from '../../../src/common/services/audit-logging.service';
 import { BranchScopeService } from '../../../src/common/services/branch-scope.service';
-import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 describe('AttendanceService — categories & visitors', () => {
   let service: AttendanceService;
@@ -112,6 +117,75 @@ describe('AttendanceService — categories & visitors', () => {
   });
 
   describe('createService', () => {
+    it('saves the selected church-owned active branch for HQ', async () => {
+      model('branch').findFirst.mockResolvedValue({ id: 'branch-b' });
+      model('service').create.mockImplementation(({ data }) =>
+        Promise.resolve({ ...adultServiceRow, ...data }),
+      );
+      const result = await service.createService(
+        { name: 'Sunday', branchId: 'branch-b' },
+        churchId,
+        userId,
+        { church_id: churchId, role: 'church_admin', is_admin_hq: true },
+      );
+      expect(model('branch').findFirst).toHaveBeenCalledWith({
+        where: { id: 'branch-b', church_id: churchId, archived_at: null },
+        select: { id: true },
+      });
+      expect(result.branchId).toBe('branch-b');
+    });
+
+    it('defaults branch-scoped creation to the assigned branch', async () => {
+      model('branch').findFirst.mockResolvedValue({ id: 'branch-a' });
+      model('service').create.mockImplementation(({ data }) =>
+        Promise.resolve({ ...adultServiceRow, ...data }),
+      );
+      await service.createService({ name: 'Sunday' }, churchId, userId, {
+        church_id: churchId,
+        role: 'branch_pastor',
+        branch_id: 'branch-a',
+      });
+      expect(model('service').create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ branch_id: 'branch-a' }) }),
+      );
+    });
+
+    it('rejects attempts to create services in another branch', async () => {
+      await expect(
+        service.createService({ name: 'Sunday', branchId: 'branch-b' }, churchId, userId, {
+          church_id: churchId,
+          role: 'branch_pastor',
+          branch_id: 'branch-a',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(model('service').create).not.toHaveBeenCalled();
+    });
+
+    it('rejects branch-scoped creation without a branch assignment', async () => {
+      await expect(
+        service.createService({ name: 'Sunday' }, churchId, userId, {
+          church_id: churchId,
+          role: 'secretary',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(model('service').create).not.toHaveBeenCalled();
+    });
+
+    it.each(['foreign', 'archived', 'missing'])(
+      'rejects an unavailable %s branch before writing',
+      async (branchId) => {
+        model('branch').findFirst.mockResolvedValue(null);
+        await expect(
+          service.createService({ name: 'Sunday', branchId }, churchId, userId, {
+            church_id: churchId,
+            role: 'church_admin',
+            is_admin_hq: true,
+          }),
+        ).rejects.toThrow(BadRequestException);
+        expect(model('service').create).not.toHaveBeenCalled();
+      },
+    );
+
     it('creates a recurring mixed service with clock times and returns HH:mm', async () => {
       model('service').create.mockImplementation(({ data }) =>
         Promise.resolve({ ...adultServiceRow, ...data }),

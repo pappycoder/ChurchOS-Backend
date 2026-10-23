@@ -67,10 +67,24 @@ export class AttendanceService extends AttendanceSessionsService {
     viewer?: ViewerScope | null,
   ): Promise<ServiceResponseDto> {
     const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? dto.branchId || null : scope.branchId || null;
+    if (!scope.churchOnly) {
+      if (!branchId || branchId === '00000000-0000-0000-0000-000000000000')
+        throw new ForbiddenException('A branch assignment is required');
+      if (dto.branchId && dto.branchId !== branchId)
+        throw new ForbiddenException('You can only create services in your branch');
+    }
+    if (branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, church_id: churchId, archived_at: null },
+        select: { id: true },
+      });
+      if (!branch) throw new BadRequestException('Select an active branch in this church');
+    }
     const service = await this.prisma.service.create({
       data: {
         church_id: churchId,
-        branch_id: scope.churchOnly ? dto.branchId || null : scope.branchId || null,
+        branch_id: branchId,
         name: dto.name,
         category: dto.category ?? 'adult',
         day_of_week: dto.dayOfWeek ?? null,
@@ -86,7 +100,7 @@ export class AttendanceService extends AttendanceSessionsService {
       entity: 'service',
       action: 'CREATE',
       entityId: service.id,
-      newValues: { name: dto.name, dayOfWeek: dto.dayOfWeek },
+      newValues: { name: dto.name, dayOfWeek: dto.dayOfWeek, branchId },
     });
 
     this.logger.log(`Service created: ${service.name} (${service.id})`);
