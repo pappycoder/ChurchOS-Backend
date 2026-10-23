@@ -298,6 +298,22 @@ describe('NotificationsService', () => {
   });
 
   describe('sendEmailWithAttachment', () => {
+    it('propagates delivery failure without recording a sent notification', async () => {
+      model('member').findMany.mockResolvedValue([]);
+      resendService.sendEmail.mockRejectedValue(new Error('provider rejected'));
+      await expect(
+        service.sendEmailWithAttachment(
+          'person@example.org',
+          'Receipt',
+          'Body',
+          Buffer.from('pdf'),
+          'receipt.pdf',
+          mockChurchId,
+        ),
+      ).rejects.toThrow('could not be delivered');
+      expect(model('notification').create).not.toHaveBeenCalled();
+    });
+
     it('should forward attachments to the email service', async () => {
       model('member').findMany.mockResolvedValue([{ id: 'member-1' }]);
       model('profile').findMany.mockResolvedValue([{ id: mockProfileId }]);

@@ -60,6 +60,7 @@ export class ReportsController {
       req.profile?.is_admin_hq
         ? query.branchId
         : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
+      query.currency,
     );
   }
 
@@ -142,6 +143,7 @@ export class ReportsController {
           req.profile?.is_admin_hq
             ? dto.branchId
             : (req.profile?.branch_id ?? '00000000-0000-0000-0000-000000000000'),
+          dto.currency,
         );
         break;
       case 'attendance':

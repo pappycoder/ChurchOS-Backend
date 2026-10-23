@@ -56,6 +56,12 @@ import { Prisma } from '@prisma/client';
  * Provides category management, payment processing, transaction recording,
  * and receipt generation. Supports multiple payment gateways.
  */
+
+const escapeReceiptText = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!,
+  );
 @Injectable()
 export class GivingService {
   private readonly logger = new Logger(GivingService.name);
@@ -979,6 +985,7 @@ export class GivingService {
           amount: dto.amount,
           currency: dto.currency || 'NGN',
           type: dto.type,
+          payment_method: dto.type,
           status: 'success', // Cash/bank is immediately confirmed
           payment_gateway: 'manual',
           receipt_number: receiptNumber,
@@ -1000,6 +1007,7 @@ export class GivingService {
           member: { select: { first_name: true, last_name: true } },
           service: { select: { name: true } },
           event: { select: { title: true } },
+          branch: { select: { name: true } },
         },
       })
       .catch((error: unknown) => {
@@ -1128,6 +1136,10 @@ export class GivingService {
       orderBy.push({ giving_date: 'desc' }, { created_at: 'desc' });
     }
 
+    // Stable ties prevent records sharing a giving date moving across export pages.
+    if (query.sortBy !== 'created_at') orderBy.push({ created_at: 'desc' });
+    orderBy.push({ id: 'desc' });
+
     const handleListError = (error: unknown): never => {
       const branchScope = this.branchScope.resolve(viewer);
       this.logger.error(
@@ -1148,6 +1160,7 @@ export class GivingService {
           member: { select: { first_name: true, last_name: true } },
           service: { select: { name: true } },
           event: { select: { title: true } },
+          branch: { select: { name: true } },
         },
       })
       .catch(handleListError);
@@ -1815,7 +1828,7 @@ export class GivingService {
   ): Promise<{ buffer: Buffer; filename: string }> {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
-      include: { category: true },
+      include: { category: true, branch: true, service: true, event: true },
     });
 
     if (!transaction || transaction.church_id !== churchId) {
@@ -1841,7 +1854,7 @@ export class GivingService {
     let memberEmail: string | undefined;
     if (transaction.member_id) {
       const member = await this.prisma.member.findUnique({
-        where: { id: transaction.member_id },
+        where: { id: transaction.member_id, church_id: churchId },
         select: { first_name: true, last_name: true, email: true },
       });
       if (member) {
@@ -1852,12 +1865,32 @@ export class GivingService {
 
     const receiptData: ReceiptTransactionData = {
       id: transaction.id,
-      receiptNumber: transaction.receipt_number || 'PENDING',
+      receiptNumber: transaction.receipt_number || 'Not assigned',
       amount: transaction.amount,
       currency: transaction.currency,
       categoryName: transaction.category?.name ?? '',
-      paymentMethod: transaction.payment_method || 'unknown',
-      createdAt: transaction.giving_date ?? transaction.created_at,
+      paymentMethod:
+        transaction.payment_method ||
+        (transaction.type === 'digital' ? 'Not recorded' : transaction.type),
+      paymentReference: transaction.payment_reference || undefined,
+      paymentGateway: transaction.payment_gateway,
+      createdAt: transaction.created_at,
+      givingDate: transaction.giving_date ?? transaction.created_at,
+      branchName: transaction.branch?.name || undefined,
+      source:
+        transaction.metadata &&
+        typeof transaction.metadata === 'object' &&
+        !Array.isArray(transaction.metadata) &&
+        typeof transaction.metadata.cellGroupName === 'string'
+          ? `Cell group: ${transaction.metadata.cellGroupName}${typeof transaction.metadata.cellGroupMeetingDate === 'string' ? ` (meeting ${transaction.metadata.cellGroupMeetingDate})` : ''}`
+          : transaction.service?.name
+            ? `Service: ${transaction.service.name}`
+            : transaction.event?.title
+              ? `Event: ${transaction.event.title}`
+              : transaction.member_id
+                ? 'Member giving'
+                : 'General giving',
+      notes: transaction.notes || undefined,
       churchName: church?.name || 'Church',
       churchId,
       churchLogoUrl: church?.logo_url || undefined,
@@ -1867,7 +1900,10 @@ export class GivingService {
     };
 
     const buffer = await this.receipt.generateReceipt(receiptData);
-    const filename = `receipt-${transaction.receipt_number || transaction.id}.pdf`;
+    const reference = (transaction.receipt_number || transaction.id)
+      .replace(/[^a-zA-Z0-9_.-]+/g, '-')
+      .slice(0, 120);
+    const filename = `receipt-${reference}.pdf`;
 
     return { buffer, filename };
   }
@@ -1906,12 +1942,18 @@ export class GivingService {
       throw new BadRequestException('Receipts can only be sent for successful transactions');
     }
 
+    if (channel === 'whatsapp') {
+      throw new BadRequestException(
+        'WhatsApp PDF delivery is unavailable. Download or email the receipt.',
+      );
+    }
+
     if (!transaction.member_id) {
       throw new BadRequestException('No member associated with this transaction');
     }
 
     const member = await this.prisma.member.findUnique({
-      where: { id: transaction.member_id },
+      where: { id: transaction.member_id, church_id: churchId },
       select: { first_name: true, last_name: true, email: true, phone: true },
     });
 
@@ -1919,33 +1961,7 @@ export class GivingService {
       throw new BadRequestException('Member not found');
     }
 
-    const { buffer, filename } = await this.generateReceipt(transactionId, churchId);
-
-    if (channel === 'whatsapp') {
-      const phone = member.phone;
-      if (!phone) {
-        throw new BadRequestException('Member has no phone number on file');
-      }
-
-      await this.notifications.sendWhatsAppWithDocument(
-        phone,
-        buffer,
-        filename,
-        `Your receipt for ${transaction.category?.name || 'giving'} - ${transaction.receipt_number || transaction.id}`,
-        churchId,
-      );
-
-      await this.audit.log({
-        userId: transaction.member_id,
-        churchId,
-        entity: 'transaction',
-        action: 'UPDATE',
-        entityId: transactionId,
-        newValues: { receiptSentVia: 'whatsapp', sentAt: new Date().toISOString() },
-      });
-
-      return { success: true, message: 'Receipt sent via WhatsApp' };
-    }
+    const { buffer, filename } = await this.generateReceipt(transactionId, churchId, viewer);
 
     // Email channel
     const email = member.email;
@@ -1956,7 +1972,7 @@ export class GivingService {
     await this.notifications.sendEmailWithAttachment(
       email,
       `Your Receipt - ${transaction.category?.name || 'Giving'}`,
-      `Dear ${member.first_name},\n\nPlease find attached your receipt for ${transaction.category?.name || 'giving'} of ${transaction.currency} ${transaction.amount.toLocaleString()}.\n\nReceipt Number: ${transaction.receipt_number || 'N/A'}\n\nGod bless you!`,
+      `<p>Dear ${escapeReceiptText(member.first_name)},</p><p>Please find attached your receipt for ${escapeReceiptText(transaction.category?.name || 'giving')} of <strong>${escapeReceiptText(transaction.currency)} ${transaction.amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.</p><p>Receipt number: ${escapeReceiptText(transaction.receipt_number || 'Not assigned')}</p><p>Thank you for your generosity.</p>`,
       buffer,
       filename,
       churchId,
@@ -2085,6 +2101,7 @@ export class GivingService {
     id: string;
     church_id: string;
     branch_id: string | null;
+    branch?: { name: string } | null;
     member_id: string | null;
     category_id: string | null;
     service_id?: string | null;
@@ -2148,6 +2165,7 @@ export class GivingService {
           : undefined,
       churchId: transaction.church_id,
       branchId: transaction.branch_id || undefined,
+      branchName: transaction.branch?.name || undefined,
       memberId: transaction.member_id || undefined,
       memberName: transaction.member
         ? `${transaction.member.first_name} ${transaction.member.last_name}`

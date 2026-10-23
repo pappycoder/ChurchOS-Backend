@@ -1557,6 +1557,63 @@ describe('GivingService', () => {
   // ─── RECEIPTS ─────────────────────────────────────────────────────
 
   describe('generateReceipt', () => {
+    it('passes saved dates, branch/source details and real references to the receipt', async () => {
+      const recorded = new Date('2026-10-23T16:30:00Z');
+      const given = new Date('2026-10-01T00:00:00Z');
+      model('transaction').findUnique.mockResolvedValue({
+        ...mockTransaction,
+        giving_date: given,
+        created_at: recorded,
+        payment_method: null,
+        type: 'bank_transfer',
+        branch: { name: 'West Branch' },
+        service: { name: 'Sunday Service' },
+        notes: 'October giving',
+        payment_reference: 'BANK-REFERENCE',
+      });
+      model('church').findUnique.mockResolvedValue({ name: 'Grace Church', address: 'Lagos' });
+      model('member').findUnique.mockResolvedValue({
+        first_name: 'Ada',
+        last_name: 'Okafor',
+        email: 'ada@example.org',
+      });
+      const result = await service.generateReceipt(mockTransactionId, mockChurchId);
+      expect(result.filename).toBe('receipt-2026-TIT-0001.pdf');
+      expect(receipt.generateReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          givingDate: given,
+          createdAt: recorded,
+          branchName: 'West Branch',
+          source: 'Service: Sunday Service',
+          memberName: 'Ada Okafor',
+          paymentMethod: 'bank_transfer',
+          paymentReference: 'BANK-REFERENCE',
+          notes: 'October giving',
+        }),
+      );
+      expect(model('member').findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: mockMemberId, church_id: mockChurchId } }),
+      );
+    });
+    it('does not label a group collection as an anonymous donor', async () => {
+      model('transaction').findUnique.mockResolvedValue({
+        ...mockTransaction,
+        member_id: null,
+        metadata: { cellGroupName: 'Hope Group', cellGroupMeetingDate: '2026-10-01' },
+      });
+      model('church').findUnique.mockResolvedValue({ name: 'Grace Church' });
+      await service.generateReceipt(mockTransactionId, mockChurchId);
+      expect(receipt.generateReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'Cell group: Hope Group (meeting 2026-10-01)' }),
+      );
+    });
+    it('does not claim a PDF was sent over WhatsApp when media delivery is unavailable', async () => {
+      model('transaction').findUnique.mockResolvedValue(mockTransaction);
+      await expect(
+        service.sendReceipt(mockTransactionId, mockChurchId, 'whatsapp'),
+      ).rejects.toThrow('WhatsApp PDF delivery is unavailable');
+    });
+
     it('should generate a PDF receipt', async () => {
       model('transaction').findUnique.mockResolvedValue(mockTransaction);
       model('church').findUnique.mockResolvedValue({

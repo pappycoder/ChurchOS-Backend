@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailDeliveryService } from '../communication/email-delivery.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
@@ -360,15 +360,16 @@ export class NotificationsService {
 
     const memberIds = members.map((m) => m.id);
 
-    if (this.resendService) {
-      try {
-        await this.resendService.sendEmail(email, subject, body, churchId, {
-          filename,
-          content: buffer,
-        });
-      } catch (err) {
-        this.logger.warn(`Email delivery failed: ${(err as Error).message}`);
-      }
+    if (!this.resendService)
+      throw new ServiceUnavailableException('Email receipt delivery is not configured');
+    try {
+      await this.resendService.sendEmail(email, subject, body, churchId, {
+        filename,
+        content: buffer,
+      });
+    } catch {
+      this.logger.warn('Receipt email delivery was not accepted');
+      throw new ServiceUnavailableException('Receipt email could not be delivered. Please retry.');
     }
 
     if (memberIds.length === 0) return;

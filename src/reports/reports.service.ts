@@ -38,15 +38,19 @@ export class ReportsService {
     startDate?: string,
     endDate?: string,
     branchId?: string,
+    currency = 'NGN',
   ): Promise<FinancialReportDto> {
     const start = startDate
       ? new Date(startDate)
       : new Date(new Date().setMonth(new Date().getMonth() - 12));
-    const end = endDate ? new Date(endDate) : new Date();
+    const end = endDate
+      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(endDate) ? `${endDate}T23:59:59.999Z` : endDate)
+      : new Date();
 
     const where: Record<string, unknown> = {
       church_id: churchId,
       status: 'success',
+      currency,
       giving_date: { gte: start, lte: end },
     };
 
@@ -84,16 +88,25 @@ export class ReportsService {
       count: c._count || 0,
     }));
 
-    const monthlyTrend = await this.getMonthlyTrend(churchId, start, end, 'transaction', branchId);
+    const monthlyTrend = await this.getMonthlyTrend(
+      churchId,
+      start,
+      end,
+      'transaction',
+      branchId,
+      currency,
+    );
 
     this.logger.log(`Financial report generated for church ${churchId}`);
 
     return {
+      currency,
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       grandTotal,
       transactionCount,
-      averageAmount: transactionCount > 0 ? Math.round(grandTotal / transactionCount) : 0,
+      averageAmount:
+        transactionCount > 0 ? Math.round((grandTotal / transactionCount) * 100) / 100 : 0,
       byCategory,
       monthlyTrend,
     };
@@ -111,7 +124,9 @@ export class ReportsService {
     const start = startDate
       ? new Date(startDate)
       : new Date(new Date().setMonth(new Date().getMonth() - 12));
-    const end = endDate ? new Date(endDate) : new Date();
+    const end = endDate
+      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(endDate) ? `${endDate}T23:59:59.999Z` : endDate)
+      : new Date();
 
     const attendanceWhere: Record<string, unknown> = {
       church_id: churchId,
@@ -197,7 +212,9 @@ export class ReportsService {
     const start = startDate
       ? new Date(startDate)
       : new Date(new Date().setMonth(new Date().getMonth() - 12));
-    const end = endDate ? new Date(endDate) : new Date();
+    const end = endDate
+      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(endDate) ? `${endDate}T23:59:59.999Z` : endDate)
+      : new Date();
 
     const memberWhere: Prisma.MemberWhereInput = { church_id: churchId };
     if (branchId) memberWhere.branch_id = branchId;
@@ -251,10 +268,12 @@ export class ReportsService {
     end: Date,
     _entity: string,
     branchId?: string,
+    currency = 'NGN',
   ): Promise<MonthlyTrendDto[]> {
     const where: Record<string, unknown> = {
       church_id: churchId,
       status: 'success',
+      currency,
       giving_date: { gte: start, lte: end },
     };
     if (branchId) {

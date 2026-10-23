@@ -6,10 +6,15 @@
  * @since 1.0.0
  */
 
-import { IsOptional, IsString, IsDateString, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsDateString, IsIn, Matches } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ReportQueryDto {
+  @ApiPropertyOptional({ description: 'Financial report currency', default: 'NGN' })
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/)
+  currency?: string;
+
   @ApiPropertyOptional({ description: 'Start date (ISO 8601)', example: '2026-01-01' })
   @IsOptional()
   @IsDateString()

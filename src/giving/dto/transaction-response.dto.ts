@@ -28,6 +28,9 @@ export class TransactionResponseDto {
   @ApiPropertyOptional({ description: 'Branch ID' })
   branchId?: string;
 
+  @ApiPropertyOptional({ description: 'Giving branch name' })
+  branchName?: string;
+
   @ApiPropertyOptional({ description: 'Member ID' })
   memberId?: string;
 

@@ -71,6 +71,40 @@ describe('ReportsService', () => {
   });
 
   describe('getFinancialReport', () => {
+    it('filters currency consistently and includes the full final report day', async () => {
+      prisma.transaction.aggregate.mockResolvedValue({ _sum: { amount: 10.5 }, _count: 2 });
+      prisma.transaction.groupBy.mockResolvedValue([]);
+      prisma.transaction.findMany.mockResolvedValue([]);
+      const result = await service.getFinancialReport(
+        churchId,
+        '2026-10-01',
+        '2026-10-23',
+        branchId,
+        'USD',
+      );
+      expect(result.currency).toBe('USD');
+      expect(result.averageAmount).toBe(5.25);
+      for (const query of [
+        prisma.transaction.aggregate,
+        prisma.transaction.groupBy,
+        prisma.transaction.findMany,
+      ]) {
+        expect(query).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              church_id: churchId,
+              branch_id: branchId,
+              currency: 'USD',
+              giving_date: {
+                gte: new Date('2026-10-01'),
+                lte: new Date('2026-10-23T23:59:59.999Z'),
+              },
+            }),
+          }),
+        );
+      }
+    });
+
     it('should return correct totals with no filters', async () => {
       prisma.transaction.aggregate.mockResolvedValue({
         _sum: { amount: 500000 },

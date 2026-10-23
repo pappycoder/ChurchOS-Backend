@@ -3,7 +3,7 @@
  * @description PDF receipt generation service for giving transactions.
  *
  * Generates PDF receipts with church branding, transaction details,
- * receipt numbers, and verification QR codes.
+ * receipt numbers, and saved transaction/payment references.
  *
  * @module giving/services/receipt.service
  * @since 1.0.0
@@ -13,7 +13,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { loadChurchLogo } from '../../common/pdf/church-logo';
 import PDFDocument from 'pdfkit';
-import { randomBytes } from 'crypto';
 import {
   PDF_COLORS as colors,
   preparePdf,
@@ -32,6 +31,12 @@ export interface ReceiptTransactionData {
   categoryName: string;
   paymentMethod: string;
   createdAt: Date;
+  givingDate?: Date;
+  branchName?: string;
+  source?: string;
+  paymentReference?: string;
+  paymentGateway?: string;
+  notes?: string;
   churchName: string;
   churchId?: string;
   churchLogoUrl?: string;
@@ -101,7 +106,7 @@ export class ReceiptService {
           const height = doc.heightOfString(text, { width: contentWidth, lineGap: 3 });
           ensureSpace(height + 8);
           doc.fillColor(color).text(text, 50, y, { width: contentWidth, lineGap: 3 });
-          y = doc.y + 8;
+          y = doc.y + 6;
         };
         const heading = (label: string) => {
           ensureSpace(55);
@@ -110,13 +115,13 @@ export class ReceiptService {
             .fontSize(9)
             .fillColor(colors.blue)
             .text(label.toUpperCase(), 50, y, { width: contentWidth });
-          y += 23;
+          y += 18;
         };
         const field = (label: string, value: string) => {
           doc.font('ChurchOSSans').fontSize(10);
           const height = Math.max(
-            26,
-            doc.heightOfString(value, { width: contentWidth - 135, lineGap: 3 }) + 12,
+            22,
+            doc.heightOfString(value, { width: contentWidth - 135, lineGap: 3 }) + 8,
           );
           ensureSpace(height);
           doc
@@ -129,7 +134,7 @@ export class ReceiptService {
             .fontSize(10)
             .fillColor(colors.ink)
             .text(value, 185, y + 3, { width: contentWidth - 135, lineGap: 3 });
-          y = Math.max(y + height, doc.y + 9);
+          y = Math.max(y + height, doc.y + 6);
           doc
             .moveTo(50, y - 5)
             .lineTo(doc.page.width - 50, y - 5)
@@ -142,8 +147,8 @@ export class ReceiptService {
         y += 12;
 
         // A clear amount panel distinguishes the financial value from metadata.
-        ensureSpace(96);
-        doc.roundedRect(50, y, contentWidth, 82, 10).fill(colors.soft);
+        ensureSpace(84);
+        doc.roundedRect(50, y, contentWidth, 70, 10).fill(colors.soft);
         doc
           .font('ChurchOSSans-Bold')
           .fontSize(8)
@@ -155,24 +160,29 @@ export class ReceiptService {
         while (amountSize > 12 && doc.widthOfString(amount) > contentWidth - 36)
           doc.fontSize(--amountSize);
         doc.fillColor(colors.ink).text(amount, 68, y + 34, { width: contentWidth - 36 });
-        y += 104;
+        y += 88;
 
         heading('Received from');
-        field('Donor', data.memberName || 'Anonymous Donor');
+        field('Donor / source', data.memberName || data.source || 'No individual donor recorded');
         if (data.memberEmail) field('Email', data.memberEmail);
-        y += 17;
+        y += 10;
 
         heading('Contribution details');
         field('Receipt number', data.receiptNumber);
-        field('Date', this.formatDate(data.createdAt));
+        field('Giving date', this.formatDate(data.givingDate ?? data.createdAt, true));
+        field('Recorded at', this.formatDate(data.createdAt));
+        if (data.branchName) field('Branch', data.branchName);
+        if (data.source) field('Linked to', data.source);
         field('Category', data.categoryName || 'Unspecified');
         field('Payment method', this.formatPaymentMethod(data.paymentMethod));
-        field('Transaction reference', data.id);
-        y += 17;
+        if (data.paymentGateway && data.paymentGateway !== 'manual')
+          field('Payment provider', data.paymentGateway);
+        if (data.paymentReference) field('Payment reference', data.paymentReference);
+        field('Transaction ID', data.id);
+        if (data.notes) field('Notes', data.notes);
+        y += 10;
 
-        heading('Receipt reference');
-        paragraph(this.generateVerificationData(data), 9, true, colors.muted);
-        y += 8;
+        ensureSpace(65);
         paragraph('Thank you for your generosity.', 13, true);
         paragraph(
           'This receipt serves as proof of your giving. Keep it for your records.',
@@ -233,25 +243,15 @@ export class ReceiptService {
   }
 
   /**
-   * Generates a verification code from transaction data.
-   *
-   * @param data - Transaction receipt data
-   * @returns 16-character verification code
-   */
-  private generateVerificationData(_data: ReceiptTransactionData): string {
-    return randomBytes(16).toString('hex').toUpperCase();
-  }
-
-  /**
    * Formats a date for display on the receipt.
    */
-  private formatDate(date: Date): string {
-    return date.toLocaleDateString('en-NG', {
+  private formatDate(date: Date, dateOnly = false): string {
+    return date.toLocaleString('en-NG', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      timeZone: dateOnly ? 'UTC' : 'Africa/Lagos',
+      ...(dateOnly ? {} : { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }),
     });
   }
 
@@ -262,6 +262,10 @@ export class ReceiptService {
     const labels: Record<string, string> = {
       paystack: 'Digital Payment (Paystack)',
       flutterwave: 'Digital Payment (Flutterwave)',
+      card: 'Card',
+      bank: 'Bank',
+      ussd: 'USSD',
+      mobile_money: 'Mobile Money',
       cash: 'Cash',
       bank_transfer: 'Bank Transfer',
     };

@@ -29,6 +29,9 @@ export class MonthlyTrendDto {
 }
 
 export class FinancialReportDto {
+  @ApiProperty({ description: 'Currency used for all amounts in this report' })
+  currency!: string;
+
   @ApiProperty({ description: 'Report period start date' })
   startDate!: string;
 
