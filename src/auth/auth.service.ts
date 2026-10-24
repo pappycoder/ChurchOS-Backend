@@ -1,3 +1,4 @@
+import { registrationLegalAcceptance } from './registration-legal-acceptance';
 import { AccountEmailService } from '../company-email/account-email.service';
 import { signInCodeEmail } from '../company-email/company-email.templates';
 import { CompanyEmailService } from '../company-email/company-email.service';
@@ -80,6 +81,7 @@ export class AuthService {
    * @throws InternalServerErrorException if Supabase or DB operations fail
    */
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    const legalAcceptance = registrationLegalAcceptance(dto);
     // TODO: Change Supabase rate limit back to 30/5mins after testing (currently set to 3000/5mins)
     // Create Supabase Auth user
     const { data: authData, error: authError } = await this.supabase
@@ -93,6 +95,7 @@ export class AuthService {
             first_name: dto.firstName,
             last_name: dto.lastName,
             church_name: dto.churchName,
+            ...(legalAcceptance ? { churchos_legal_acceptance: legalAcceptance } : {}),
           },
         },
       });
@@ -186,6 +189,7 @@ export class AuthService {
           firstName: dto.firstName,
           lastName: dto.lastName,
           churchName: dto.churchName,
+          ...(legalAcceptance ? { legalAcceptance } : {}),
         },
       });
 

@@ -1,3 +1,6 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { REGISTRATION_LEGAL_VERSION } from '../../../src/auth/registration-legal-acceptance';
 import { AccountEmailService } from '../../../src/company-email/account-email.service';
 import { CompanyEmailService } from '../../../src/company-email/company-email.service';
 /**
@@ -189,12 +192,14 @@ describe('AuthService', () => {
     };
 
     it.each([
-      [false, false],
-      [true, false],
-      [true, true],
+      [false, false, false],
+      [true, false, false],
+      [true, true, false],
+      [true, false, true],
+      [false, false, true],
     ])(
-      'creates the account with session=%s and approvalFailure=%s',
-      async (hasSession, approvalFailure) => {
+      'creates the account with session=%s, approvalFailure=%s and legalAcceptance=%s',
+      async (hasSession, approvalFailure, acceptsTerms) => {
         const approve = jest.spyOn(service['authenticator'], 'approve');
         if (approvalFailure) approve.mockRejectedValueOnce(new Error('approval unavailable'));
         signUpMock.mockResolvedValue({
@@ -239,7 +244,33 @@ describe('AuthService', () => {
           },
         );
 
-        const result = await service.register(validDto);
+        const result = await service.register({
+          ...validDto,
+          ...(acceptsTerms
+            ? {
+                termsAccepted: true,
+                acceptedTermsVersion: REGISTRATION_LEGAL_VERSION,
+              }
+            : {}),
+        });
+        const storedAcceptance = signUpMock.mock.calls[0][0].options.data.churchos_legal_acceptance;
+        if (acceptsTerms) {
+          expect(storedAcceptance).toMatchObject({
+            termsOfServiceVersion: REGISTRATION_LEGAL_VERSION,
+            websiteTermsVersion: REGISTRATION_LEGAL_VERSION,
+            privacyNoticeVersion: REGISTRATION_LEGAL_VERSION,
+            source: 'registration',
+          });
+          expect(Number.isNaN(Date.parse(storedAcceptance.acceptedAt))).toBe(false);
+          expect(audit.log).toHaveBeenCalledWith(
+            expect.objectContaining({
+              newValues: expect.objectContaining({ legalAcceptance: storedAcceptance }),
+            }),
+          );
+        } else {
+          expect(storedAcceptance).toBeUndefined();
+          expect(audit.log.mock.calls[0][0].newValues).not.toHaveProperty('legalAcceptance');
+        }
         expect(companyEmails.enqueueWelcome).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
@@ -286,6 +317,37 @@ describe('AuthService', () => {
             entity: 'auth',
             action: 'CREATE',
           }),
+        );
+      },
+    );
+
+    it.each([
+      { termsAccepted: false, acceptedTermsVersion: REGISTRATION_LEGAL_VERSION },
+      { termsAccepted: true },
+      { acceptedTermsVersion: REGISTRATION_LEGAL_VERSION },
+      { termsAccepted: true, acceptedTermsVersion: 'outdated' },
+      { termsAccepted: null, acceptedTermsVersion: REGISTRATION_LEGAL_VERSION },
+    ])(
+      'rejects incomplete or stale declared legal acceptance before signup: %j',
+      async (acceptance) => {
+        await expect(
+          service.register({ ...validDto, ...acceptance } as RegisterDto),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(signUpMock).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['true', 'false', 1, 0])(
+      'rejects non-boolean agreement declarations despite implicit conversion: %j',
+      async (termsAccepted) => {
+        const dto = plainToInstance(
+          RegisterDto,
+          { ...validDto, termsAccepted, acceptedTermsVersion: REGISTRATION_LEGAL_VERSION },
+          { enableImplicitConversion: true },
+        );
+        expect((await validate(dto)).some((error) => error.property === 'termsAccepted')).toBe(
+          true,
         );
       },
     );

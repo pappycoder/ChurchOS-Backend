@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { SubscriptionPlan, BillingCycle } from '@prisma/client';
 /**
  * @file register.dto.ts
@@ -11,6 +12,7 @@ import { SubscriptionPlan, BillingCycle } from '@prisma/client';
  */
 
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsIn,
@@ -23,6 +25,25 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
+  @ApiPropertyOptional({
+    description: 'Explicit agreement to the published website and service terms',
+  })
+  @IsOptional()
+  // Preserve the actual declaration: implicit Boolean('false') must not become consent.
+  @Transform(({ obj }: { obj: { termsAccepted?: unknown } }) => obj.termsAccepted, {
+    toClassOnly: true,
+  })
+  @IsBoolean()
+  termsAccepted?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Version of the terms explicitly accepted during registration',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  acceptedTermsVersion?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
