@@ -20,7 +20,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SupabaseJwtPayload } from '../../auth/strategies/jwt.strategy';
 import { PermissionsService } from '../../auth/services/permissions.service';
 import { JwksService } from '../../auth/services/jwks.service';
-import { queryMetrics } from '../../prisma/query-metrics';
+import { queryMetrics, measureStage } from '../../prisma/query-metrics';
 import { errors } from 'jose';
 import { accessRoles } from '../../auth/role-policy';
 
@@ -66,7 +66,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     // Verify identity before any tenant lookup; the guard reuses this result.
     let sub: string;
     try {
-      const { payload } = await this.jwks.verifyToken(token);
+      const { payload } = await measureStage('jwt', () => this.jwks.verifyToken(token));
       authReq.verifiedJwt = payload;
       sub = payload.sub ?? '';
       if (!sub) {
@@ -96,22 +96,24 @@ export class RequestContextMiddleware implements NestMiddleware {
     // role is a text array ordered by rank desc; expose the primary role
     // as `role` and the full set as `roles` for downstream consumers.
     if (!authReq.profile) {
-      const profile = await this.prisma.profile.findUnique({
-        where: { user_id: sub },
-        select: {
-          id: true,
-          church_id: true,
-          branch_id: true,
-          member_id: true,
-          role: true,
-          status: true,
-          archived_at: true,
-          is_admin_hq: true,
-          two_factor_enabled: true,
-          authenticator: { select: { revision: true } },
-          church: { select: { archived_at: true, subscription: { select: { paid_until: true } } } },
-        },
-      });
+      const profile = await measureStage('profile', () =>
+        this.prisma.profile.findUnique({
+          where: { user_id: sub },
+          select: {
+            id: true,
+            church_id: true,
+            branch_id: true,
+            member_id: true,
+            role: true,
+            status: true,
+            archived_at: true,
+            is_admin_hq: true,
+            two_factor_enabled: true,
+            authenticator: { select: { revision: true } },
+            church: { select: { archived_at: true, subscription: true } },
+          },
+        }),
+      );
       if (profile) {
         profile.role = accessRoles(profile.role);
         if (profile.role.length === 0) {
@@ -121,6 +123,10 @@ export class RequestContextMiddleware implements NestMiddleware {
           return;
         }
         const subscription = profile.church?.subscription;
+        authReq.subscriptionSnapshot = {
+          churchId: profile.church_id,
+          subscription: subscription ?? null,
+        };
         const billingExempt =
           /^\/api\/v1\/(?:auth(?:\/|$)|billing(?:\/|$)|profiles\/me$|assistant\/(?:context|message)$)/.test(
             (req.originalUrl ?? req.url ?? req.path ?? '').split('?')[0],
@@ -140,10 +146,13 @@ export class RequestContextMiddleware implements NestMiddleware {
           );
           return;
         }
-        const permissions = await this.permissionsService.getUserPermissions(
-          profile.church_id,
-          profile.role,
-          profile.is_admin_hq,
+        const permissions = await measureStage('permissions', () =>
+          this.permissionsService.getUserPermissions(
+            profile.church_id,
+            profile.role,
+            profile.is_admin_hq,
+            authReq.subscriptionSnapshot,
+          ),
         );
         authReq.profile = {
           id: profile.id,

@@ -58,17 +58,16 @@ export class ReportsService {
       where.branch_id = branchId;
     }
 
-    const transactions = await this.prisma.transaction.aggregate({
-      where,
-      _sum: { amount: true },
-      _count: true,
-    });
-    const categoryBreakdown = await this.prisma.transaction.groupBy({
-      by: ['category_id'],
-      where,
-      _sum: { amount: true },
-      _count: true,
-    });
+    const [transactions, categoryBreakdown, monthlyTrend] = await Promise.all([
+      this.prisma.transaction.aggregate({ where, _sum: { amount: true }, _count: true }),
+      this.prisma.transaction.groupBy({
+        by: ['category_id'],
+        where,
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.getMonthlyTrend(churchId, start, end, 'transaction', branchId, currency),
+    ]);
 
     const grandTotal = Number(transactions._sum.amount) || 0;
     const transactionCount = transactions._count || 0;
@@ -87,15 +86,6 @@ export class ReportsService {
       total: Number(c._sum.amount) || 0,
       count: c._count || 0,
     }));
-
-    const monthlyTrend = await this.getMonthlyTrend(
-      churchId,
-      start,
-      end,
-      'transaction',
-      branchId,
-      currency,
-    );
 
     this.logger.log(`Financial report generated for church ${churchId}`);
 
@@ -270,22 +260,14 @@ export class ReportsService {
     branchId?: string,
     currency = 'NGN',
   ): Promise<MonthlyTrendDto[]> {
-    const where: Record<string, unknown> = {
-      church_id: churchId,
-      status: 'success',
-      currency,
-      giving_date: { gte: start, lte: end },
-    };
-    if (branchId) {
-      where.branch_id = branchId;
-    }
-
-    const transactions = await this.prisma.transaction.findMany({
-      where,
-      select: { amount: true, giving_date: true },
-    });
-
-    return this.aggregateMonthly(transactions, 'giving_date', 'amount');
+    return this.monthlyRows(Prisma.sql`
+      SELECT to_char(giving_date, 'YYYY-MM') AS month, SUM(amount) AS total
+      FROM transactions
+      WHERE church_id = ${churchId} AND status = 'success' AND currency = ${currency}
+        AND giving_date >= ${start} AND giving_date <= ${end}
+        ${branchId ? Prisma.sql`AND branch_id = ${branchId}` : Prisma.empty}
+      GROUP BY 1 ORDER BY 1
+    `);
   }
 
   private async getMonthlyAttendanceTrend(
@@ -294,20 +276,20 @@ export class ReportsService {
     end: Date,
     branchId?: string,
   ): Promise<MonthlyTrendDto[]> {
-    const attendanceWhere: Record<string, unknown> = {
-      church_id: churchId,
-      checkin_at: { gte: start, lte: end },
-    };
-    if (branchId) {
-      attendanceWhere.service = { is: { branch_id: branchId } };
-    }
-
-    const attendances = await this.prisma.attendance.findMany({
-      where: attendanceWhere,
-      select: { checkin_at: true },
-    });
-
-    return this.aggregateMonthly(attendances, 'checkin_at', null);
+    return this.monthlyRows(Prisma.sql`
+      SELECT to_char(a.checkin_at, 'YYYY-MM') AS month, COUNT(*) AS total
+      FROM attendance a
+      WHERE a.church_id = ${churchId} AND a.checkin_at >= ${start} AND a.checkin_at <= ${end}
+        ${
+          branchId
+            ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM services s WHERE s.id = a.service_id AND s.church_id = ${churchId}
+            AND s.branch_id = ${branchId}
+        )`
+            : Prisma.empty
+        }
+      GROUP BY 1 ORDER BY 1
+    `);
   }
 
   private async getMonthlyMemberGrowth(
@@ -316,38 +298,21 @@ export class ReportsService {
     end: Date,
     branchId?: string,
   ): Promise<MonthlyTrendDto[]> {
-    const where: Prisma.MemberWhereInput = {
-      church_id: churchId,
-      created_at: { gte: start, lte: end },
-    };
-    if (branchId) where.branch_id = branchId;
-    const members = await this.prisma.member.findMany({
-      where,
-      select: { created_at: true },
-    });
-
-    return this.aggregateMonthly(members, 'created_at', null);
+    return this.monthlyRows(Prisma.sql`
+      SELECT to_char(created_at, 'YYYY-MM') AS month, COUNT(*) AS total
+      FROM members
+      WHERE church_id = ${churchId} AND created_at >= ${start} AND created_at <= ${end}
+        ${branchId ? Prisma.sql`AND branch_id = ${branchId}` : Prisma.empty}
+      GROUP BY 1 ORDER BY 1
+    `);
   }
 
-  private aggregateMonthly(
-    items: Array<Record<string, unknown>>,
-    dateField: string,
-    valueField: string | null,
-  ): MonthlyTrendDto[] {
-    const map = new Map<string, number>();
-
-    for (const item of items) {
-      const date = item[dateField] as Date;
-      const month =
-        dateField === 'giving_date'
-          ? date.toISOString().slice(0, 7)
-          : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const current = map.get(month) || 0;
-      map.set(month, current + (valueField ? Number(item[valueField]) || 1 : 1));
-    }
-
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, total]) => ({ month, total }));
+  /** PostgreSQL returns monthly aggregates, never an unbounded list of people/gifts. */
+  private async monthlyRows(query: Prisma.Sql): Promise<MonthlyTrendDto[]> {
+    const rows =
+      await this.prisma.$queryRaw<
+        Array<{ month: string; total: Prisma.Decimal | bigint | number }>
+      >(query);
+    return rows.map(({ month, total }) => ({ month, total: Number(total) }));
   }
 }

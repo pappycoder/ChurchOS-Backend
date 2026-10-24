@@ -1,4 +1,9 @@
-import { churchEntitlements, assertPlanFeature } from '../../billing/entitlements';
+import {
+  churchEntitlements,
+  assertPlanFeature,
+  requestEntitlements,
+  SubscriptionSnapshot,
+} from '../../billing/entitlements';
 import { roleAvailableOnPlan } from '../../billing/role-policy';
 /**
  * @file permissions.service.ts
@@ -152,8 +157,9 @@ export class PermissionsService {
     churchId: string,
     roleNames: string | string[],
     isAdminHq = false,
+    snapshot?: SubscriptionSnapshot,
   ): Promise<string[]> {
-    const { plan } = await churchEntitlements(this.prisma, churchId);
+    const { plan } = await requestEntitlements(this.prisma, churchId, snapshot);
     const roles = [
       ...new Set(accessRoles(Array.isArray(roleNames) ? roleNames : [roleNames])),
     ].filter((role) => roleAvailableOnPlan(plan, role));

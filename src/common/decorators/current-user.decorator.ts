@@ -1,3 +1,4 @@
+import type { SubscriptionSnapshot } from '../../billing/entitlements';
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import type { JWTPayload } from 'jose';
 import { Request } from 'express';
@@ -14,6 +15,7 @@ export type SupabaseUser = SupabaseJwtPayload;
  * The JwtAuthGuard attaches `user` and `profile` to the request.
  */
 export interface AuthenticatedRequest extends Request {
+  subscriptionSnapshot?: SubscriptionSnapshot;
   verifiedJwt?: JWTPayload;
   /** The authenticated Supabase user */
   user: SupabaseJwtPayload;

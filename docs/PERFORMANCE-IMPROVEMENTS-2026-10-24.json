@@ -1,0 +1,46 @@
+{
+  "reportComparison": {
+    "scope": "Local real-PostgreSQL financial report microbenchmark; excludes auth, Redis, HTTP proxy and production network",
+    "baselineCommit": "c26ab73447e56d14304df0ec73f8382f7049760c",
+    "poolConnections": 1,
+    "alternatingPairs": 7,
+    "warmupPairs": 1,
+    "dataRows": 1000,
+    "monthlyRows": 10,
+    "samplesMs": {
+      "before": [
+        10.912289999999985,
+        6.685614999999984,
+        4.613514000000009,
+        5.2022249999999985,
+        5.370243999999957,
+        4.452252000000044,
+        6.792161999999962
+      ],
+      "after": [
+        5.9376459999999724,
+        3.9925909999999476,
+        4.456988000000024,
+        3.6997250000000577,
+        3.6082569999999805,
+        4.124845999999934,
+        3.720486000000051
+      ]
+    },
+    "medianBeforeMs": 5.370243999999957,
+    "medianAfterMs": 3.9925909999999476,
+    "outputsIdentical": true
+  },
+  "checks": {
+    "targetedUnitSuites": 18,
+    "targetedUnitTestsPassed": 347,
+    "postgresqlIntegrationSuites": 4,
+    "postgresqlIntegrationTestsPassed": 19,
+    "baselineAuditFailures": {
+      "role-scope-matrix": 55,
+      "retired-role": 6,
+      "route-authorization": 1
+    },
+    "baselineCommit": "c26ab73447e56d14304df0ec73f8382f7049760c"
+  }
+}

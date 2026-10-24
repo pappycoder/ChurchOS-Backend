@@ -1,0 +1,163 @@
+{
+  "live": {
+    "recordedAt": "2026-10-24T15:51:58.667Z",
+    "rows": [
+      {
+        "round": 1,
+        "path": "/api/session",
+        "status": 200,
+        "headersMs": 754.0836469999999,
+        "totalMs": 759.78067,
+        "bytes": 19,
+        "serverTiming": null,
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/members?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1988.458627,
+        "totalMs": 1989.373114,
+        "bytes": 1745,
+        "serverTiming": "app;dur=1630, db;dur=1058",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/visitors?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1784.4945630000002,
+        "totalMs": 1787.152102,
+        "bytes": 1163,
+        "serverTiming": "app;dur=1472, db;dur=1127",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/services?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1874.2453409999998,
+        "totalMs": 1876.8612599999997,
+        "bytes": 950,
+        "serverTiming": "app;dur=1481, db;dur=704",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/giving/transactions?page=1&limit=20",
+        "status": 200,
+        "headersMs": 2015.2189479999997,
+        "totalMs": 2018.3651269999991,
+        "bytes": 1850,
+        "serverTiming": "app;dur=1684, db;dur=1761",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/reports/financial?startDate=2026-01-01&endDate=2026-12-31&currency=NGN",
+        "status": 200,
+        "headersMs": 2251.9840189999995,
+        "totalMs": 2254.25892,
+        "bytes": 526,
+        "serverTiming": "app;dur=1936, db;dur=845",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/session",
+        "status": 200,
+        "headersMs": 291.73786199999995,
+        "totalMs": 293.6738549999991,
+        "bytes": 19,
+        "serverTiming": null,
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/members?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1652.8515360000001,
+        "totalMs": 1654.685003999999,
+        "bytes": 1745,
+        "serverTiming": "app;dur=1329, db;dur=775",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/visitors?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1805.1371089999993,
+        "totalMs": 1817.4051500000005,
+        "bytes": 1163,
+        "serverTiming": "app;dur=1470, db;dur=1128",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/services?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1782.335669,
+        "totalMs": 1785.0467239999998,
+        "bytes": 950,
+        "serverTiming": "app;dur=1487, db;dur=703",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/giving/transactions?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1990.1657189999987,
+        "totalMs": 1991.5944099999997,
+        "bytes": 1850,
+        "serverTiming": "app;dur=1680, db;dur=1758",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/reports/financial?startDate=2026-01-01&endDate=2026-12-31&currency=NGN",
+        "status": 200,
+        "headersMs": 1958.7426650000016,
+        "totalMs": 1961.4632320000019,
+        "bytes": 526,
+        "serverTiming": "app;dur=1648, db;dur=563",
+        "vercelRegion": "lhr1",
+        "cache": "MISS"
+      }
+    ]
+  },
+  "configuredDependenciesFromTestMachine": {
+    "scope": "Configured local .env remote dependencies measured from this test machine, not from a Vercel function",
+    "database": {
+      "provider": "Supabase pooler",
+      "regionHint": "eu-west-1",
+      "configuredPort": "5432",
+      "diagnosticPort": "6543",
+      "connectionMs": 769.170006,
+      "selectOneMs": [
+        149.47288500000002,
+        159.62510700000007,
+        155.50129000000015,
+        165.58467800000017,
+        169.34339799999998
+      ],
+      "memberQueryExecutionMs": 4.183,
+      "memberQueryPlanningMs": 7.603,
+      "memberPlanNode": "Limit"
+    },
+    "redis": {
+      "driver": "ioredis TCP",
+      "status": "Local loopback configuration; cannot measure deployed Redis"
+    }
+  }
+}

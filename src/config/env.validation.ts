@@ -21,6 +21,7 @@ const envSchema = z
       message: 'DATABASE_URL must be a valid PostgreSQL connection string',
     }),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    DB_SERVERLESS_POOL_MAX: z.coerce.number().int().min(1).max(10).default(1),
     DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
     DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(0).default(0),
 

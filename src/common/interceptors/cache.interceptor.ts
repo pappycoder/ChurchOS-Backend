@@ -1,3 +1,4 @@
+import { measureStage } from '../../prisma/query-metrics';
 /**
  * @file cache.interceptor.ts
  * @description NestJS interceptor that caches GET responses in Redis.
@@ -106,11 +107,11 @@ export class CacheInterceptor implements NestInterceptor {
     }
 
     // ─── Try to serve from cache ─────────────────────────────────
-    const cacheKey = await this.buildCacheKey(request);
+    const cacheKey = await measureStage('response_cache', () => this.buildCacheKey(request));
     if (!cacheKey) return next.handle();
 
     try {
-      const cached = await this.redis.get<string>(cacheKey);
+      const cached = await measureStage('response_cache', () => this.redis.get<string>(cacheKey));
       if (cached) {
         try {
           return of(JSON.parse(cached));

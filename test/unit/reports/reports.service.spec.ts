@@ -12,6 +12,7 @@ import { PrismaService } from '../../../src/prisma/prisma.service';
 describe('ReportsService', () => {
   let service: ReportsService;
   let prisma: {
+    $queryRaw: jest.Mock;
     transaction: {
       aggregate: jest.Mock;
       groupBy: jest.Mock;
@@ -43,6 +44,7 @@ describe('ReportsService', () => {
 
   beforeEach(() => {
     prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
         aggregate: jest.fn(),
         groupBy: jest.fn(),
@@ -84,11 +86,19 @@ describe('ReportsService', () => {
       );
       expect(result.currency).toBe('USD');
       expect(result.averageAmount).toBe(5.25);
-      for (const query of [
-        prisma.transaction.aggregate,
-        prisma.transaction.groupBy,
-        prisma.transaction.findMany,
-      ]) {
+      const sql = prisma.$queryRaw.mock.calls[0][0];
+      expect(sql.values).toEqual(
+        expect.arrayContaining([
+          churchId,
+          branchId,
+          'USD',
+          new Date('2026-10-01'),
+          new Date('2026-10-23T23:59:59.999Z'),
+        ]),
+      );
+      expect(sql.text).toContain('SUM(amount)');
+      expect(prisma.transaction.findMany).not.toHaveBeenCalled();
+      for (const query of [prisma.transaction.aggregate, prisma.transaction.groupBy]) {
         expect(query).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({

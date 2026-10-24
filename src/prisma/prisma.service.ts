@@ -30,6 +30,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 import { InstrumentedPrismaPg } from './query-metrics';
 import type { PoolConfig } from 'pg';
+import { databasePoolSettings } from './pool-config';
 
 /**
  * PrismaService provides database access through Prisma ORM.
@@ -43,7 +44,8 @@ import type { PoolConfig } from 'pg';
  *
  * Connection pooling is configured via environment variables:
  * - DATABASE_URL: PostgreSQL connection string (required)
- * - DB_POOL_MAX: Maximum connections in pool (default: 10)
+ * - DB_POOL_MAX: Persistent-process connections (default: 10)
+ * - DB_SERVERLESS_POOL_MAX: Serverless per-instance connections (default: 1, maximum: 10)
  * - DB_IDLE_TIMEOUT_MS: Idle connection timeout in ms (default: 10000)
  * - DB_CONNECT_TIMEOUT_MS: Connection timeout in ms (default: 0 = no timeout)
  *
@@ -56,23 +58,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const isServerless = Boolean(
-      process.env.VERCEL ||
-      process.env.AWS_LAMBDA_FUNCTION_NAME ||
-      process.env.LAMBDA_TASK_ROOT ||
-      process.env.FUNCTION_TARGET,
-    );
-    const connectionString = PrismaService.getConnectionString(isServerless);
+    const { serverless: isServerless, ...settings } = databasePoolSettings(process.env);
     const poolConfig: PoolConfig = {
-      connectionString,
-      // Serverless instances scale horizontally, so a larger local pool can
-      // multiply into more database clients than the shared pooler allows.
-      max: isServerless ? 1 : parseInt(process.env.DB_POOL_MAX ?? '10', 10),
-      idleTimeoutMillis: parseInt(
-        process.env.DB_IDLE_TIMEOUT_MS ?? (isServerless ? '1000' : '10000'),
-        10,
-      ),
-      connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS ?? '15000', 10),
+      connectionString: PrismaService.getConnectionString(isServerless),
+      ...settings,
     };
 
     const adapter = new InstrumentedPrismaPg(poolConfig);

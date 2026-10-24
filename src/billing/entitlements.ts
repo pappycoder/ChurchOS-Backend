@@ -1,12 +1,10 @@
 import { ForbiddenException, ConflictException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { PlatformSubscription } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PLAN_CAPACITIES, planFeatures, PlanFeature } from './plans';
 
-export async function churchEntitlements(prisma: PrismaService, churchId: string) {
-  const subscription = await prisma.platformSubscription.findUnique({
-    where: { church_id: churchId },
-  });
+export function entitlementsFromSubscription(subscription: PlatformSubscription | null) {
   const plan = subscription?.plan ?? 'essentials';
   const agreement = subscription?.enterprise_limits as Record<string, unknown> | null;
   const enterpriseLimit = (key: string) =>
@@ -26,9 +24,39 @@ export async function churchEntitlements(prisma: PrismaService, churchId: string
     plan,
     limits,
     features: planFeatures(plan),
-    active: !!(subscription?.paid_until && subscription.paid_until > new Date()),
+    get active() {
+      return !!(subscription?.paid_until && subscription.paid_until > new Date());
+    },
   };
 }
+/** Internal snapshot from this HTTP request only; never cache across requests. */
+export interface SubscriptionSnapshot {
+  churchId: string;
+  subscription: PlatformSubscription | null;
+}
+
+export async function churchEntitlements(prisma: PrismaService, churchId: string) {
+  return entitlementsFromSubscription(
+    await prisma.platformSubscription.findUnique({
+      where: { church_id: churchId },
+    }),
+  );
+}
+
+/** Guards may reuse hydration; business writes continue to fetch fresh state. */
+export async function requestEntitlements(
+  prisma: PrismaService,
+  churchId: string,
+  snapshot?: SubscriptionSnapshot,
+) {
+  if (
+    snapshot?.churchId === churchId &&
+    (!snapshot.subscription || snapshot.subscription.church_id === churchId)
+  )
+    return entitlementsFromSubscription(snapshot.subscription);
+  return churchEntitlements(prisma, churchId);
+}
+
 export async function assertPlanFeature(
   prisma: PrismaService,
   churchId: string,

@@ -42,7 +42,10 @@
     "ops:test:integration": "node --test test/ops/database.test.cjs",
     "create:super-admin": "bash scripts/console.sh --action admin-super",
     "create:church-admin": "bash scripts/console.sh --action admin-church",
-    "email:preview": "ts-node -P tsconfig.scripts.json scripts/preview-company-emails.ts"
+    "email:preview": "ts-node -P tsconfig.scripts.json scripts/preview-company-emails.ts",
+    "load:test": "node test/load/run.mjs",
+    "load:local": "node test/load/local-server.cjs",
+    "load:check": "node --test test/load/config.test.mjs"
   },
   "prisma": {
     "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"

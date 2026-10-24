@@ -1,3 +1,4 @@
+import { queryMetrics, serverTiming } from '../../prisma/query-metrics';
 import { subscriptionError } from '../../billing/plan-errors';
 import {
   ExceptionFilter,
@@ -77,9 +78,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       },
     };
 
+    const metrics = queryMetrics.getStore();
+    if (metrics && !response.headersSent) {
+      response.setHeader(
+        'Server-Timing',
+        serverTiming(metrics, performance.now() - metrics.startedAt),
+      );
+    }
+
     // Log the error with context
     this.logger.error(
-      `${request.method} ${request.url.split('?')[0]} ${status}`,
+      `${request.method} ${request.url.split('?')[0]} ${status} queries=${metrics?.queries ?? 0} stages=${JSON.stringify(metrics?.stages ?? {})} pool=${JSON.stringify(metrics?.pool ?? {})}`,
       exception instanceof Error ? exception.stack : String(exception),
     );
 

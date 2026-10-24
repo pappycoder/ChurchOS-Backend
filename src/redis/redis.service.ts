@@ -125,18 +125,13 @@ export class RedisService implements OnModuleDestroy {
    * @returns The new counter value
    */
   async incr(key: string, ttlSeconds = 0): Promise<number> {
-    if (this._driver === 'upstash') {
-      const value = await (this._client as UpstashRedis).incr(key);
-      if (ttlSeconds) {
-        await (this._client as UpstashRedis).expire(key, ttlSeconds);
-      }
-      return value;
-    }
-    const value = await (this._client as IORedis).incr(key);
-    if (ttlSeconds) {
-      await (this._client as IORedis).expire(key, ttlSeconds);
-    }
-    return value;
+    // One atomic round trip: a counter must never be left without its TTL.
+    if (!ttlSeconds) return this._client.incr(key);
+    const script =
+      "local n = redis.call('INCR', KEYS[1]); redis.call('EXPIRE', KEYS[1], ARGV[1]); return n";
+    if (this._driver === 'upstash')
+      return Number(await (this._client as UpstashRedis).eval(script, [key], [ttlSeconds]));
+    return Number(await (this._client as IORedis).eval(script, 1, key, ttlSeconds));
   }
 
   async exists(key: string): Promise<boolean> {

@@ -1,9 +1,10 @@
+import { measureStage } from '../prisma/query-metrics';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
-import { churchEntitlements } from './entitlements';
+import { requestEntitlements } from './entitlements';
 import { featureForApiPath, featureForPermission, filterPlanPermissions } from './feature-policy';
 
 /** Staff permissions run first; plan eligibility applies to reads and writes alike. */
@@ -17,7 +18,9 @@ export class PlanFeatureGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (!req.profile || req.method === 'OPTIONS') return true;
     const path = req.path.replace(/^\/api\/v1(?=\/|$)/, '');
-    const entitlement = await churchEntitlements(this.prisma, req.profile.church_id);
+    const entitlement = await measureStage('entitlements', () =>
+      requestEntitlements(this.prisma, req.profile!.church_id, req.subscriptionSnapshot),
+    );
     const features = entitlement.active ? entitlement.features : [];
     // Composite endpoints (including offline/sync) must not use premium grants
     // from a role to return data outside the church's current subscription.

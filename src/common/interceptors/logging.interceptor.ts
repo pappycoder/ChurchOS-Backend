@@ -25,7 +25,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
-import { queryMetrics } from '../../prisma/query-metrics';
+import { queryMetrics, serverTiming } from '../../prisma/query-metrics';
 import { randomUUID } from 'crypto';
 
 /**
@@ -48,7 +48,11 @@ export class LoggingInterceptor implements NestInterceptor {
 
     const { method } = request;
     const url = request.originalUrl.split('?')[0];
-    const requestId = randomUUID();
+    const suppliedId = request.headers['x-request-id'];
+    const requestId =
+      typeof suppliedId === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(suppliedId)
+        ? suppliedId
+        : randomUUID();
 
     // Attach request ID to request and response header for tracing
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -56,29 +60,35 @@ export class LoggingInterceptor implements NestInterceptor {
     response.setHeader('X-Request-Id', requestId);
 
     const metrics = queryMetrics.getStore();
-    const startTime = metrics?.startedAt ?? performance.now();
+    const handlerStarted = performance.now();
+    const startTime = metrics?.startedAt ?? handlerStarted;
+    const recordHandler = () => {
+      if (metrics) {
+        metrics.stages ??= {};
+        metrics.stages.handler = performance.now() - handlerStarted;
+      }
+    };
 
     return next.handle().pipe(
       tap({
         next: () => {
+          recordHandler();
           const { statusCode } = response;
           const duration = Math.round(performance.now() - startTime);
 
           if (!response.headersSent)
-            response.setHeader(
-              'Server-Timing',
-              `app;dur=${duration}, db;dur=${Math.round(metrics?.milliseconds ?? 0)}`,
-            );
+            response.setHeader('Server-Timing', serverTiming(metrics, duration));
           this.logger.log(
-            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} requestId=${requestId}`,
+            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} stages=${JSON.stringify(metrics?.stages ?? {})} pool=${JSON.stringify(metrics?.pool ?? {})} requestId=${requestId}`,
           );
         },
         error: (error) => {
+          recordHandler();
           const statusCode = error instanceof HttpException ? error.getStatus() : 500;
           const duration = Math.round(performance.now() - startTime);
 
           this.logger.error(
-            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} requestId=${requestId}`,
+            `${method} ${url} ${statusCode} ${duration}ms queries=${metrics?.queries ?? 0} dbMs=${Math.round(metrics?.milliseconds ?? 0)} stages=${JSON.stringify(metrics?.stages ?? {})} pool=${JSON.stringify(metrics?.pool ?? {})} requestId=${requestId}`,
             error instanceof Error ? error.stack : String(error),
           );
         },

@@ -136,6 +136,7 @@ describe('Hydrated scope and report security', () => {
         undefined,
         undefined,
         '00000000-0000-0000-0000-000000000000',
+        ...(method === reports.getFinancialReport ? [undefined] : []),
       );
     }
   });

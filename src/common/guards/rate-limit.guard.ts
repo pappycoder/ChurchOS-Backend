@@ -1,3 +1,4 @@
+import { measureStage } from '../../prisma/query-metrics';
 /**
  * @file rate-limit.guard.ts
  * @description Guard that enforces rate limiting using Upstash Redis (cloud) or in-memory (local dev).
@@ -172,6 +173,10 @@ export class RateLimitGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    return measureStage('rate_limit', () => this.check(context));
+  }
+
+  private async check(context: ExecutionContext): Promise<boolean> {
     // Check if route is explicitly exempt from rate limiting
     const handler = context.getHandler();
     const classRef = context.getClass();

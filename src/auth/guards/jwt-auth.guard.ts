@@ -1,3 +1,4 @@
+import { measureStage } from '../../prisma/query-metrics';
 /**
  * @file jwt-auth.guard.ts
  * @description Guard that protects routes with Supabase JWT validation.
@@ -75,7 +76,9 @@ export class JwtAuthGuard {
         // Revocation is security state: an outage must not revive logged-out tokens.
         let isBlacklisted: unknown = null;
         try {
-          isBlacklisted = await this.redis.get(`auth:blacklist:${token}`);
+          isBlacklisted = await measureStage('revocation', () =>
+            this.redis.get(`auth:blacklist:${token}`),
+          );
         } catch (err) {
           this.logger.warn(
             `Blacklist lookup failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
@@ -88,7 +91,9 @@ export class JwtAuthGuard {
           throw new UnauthorizedException('Token has been revoked');
         }
 
-        await this.authenticator.assertSession(payload, request.profile);
+        await measureStage('session', () =>
+          this.authenticator.assertSession(payload, request.profile),
+        );
 
         // Map JWT payload to SupabaseJwtPayload
         // Include both `sub` and `id` (mapped from sub) for compatibility
