@@ -1,3 +1,4 @@
+import { contentBranch } from '../common/services/content-branch';
 import { assertPlanFeature } from '../billing/entitlements';
 /**
  * @file forms.service.ts
@@ -80,16 +81,10 @@ export class FormsService {
   ): Promise<FormResponseDto> {
     this.validateFieldDefinitions(dto.fields);
     const scope = this.branchScope.resolve(viewer);
-    const branchId = scope.churchOnly ? (dto.branchId ?? null) : (scope.branchId ?? null);
-    if (branchId) {
-      const branch = await this.prisma.branch.findFirst({
-        where: { id: branchId, church_id: churchId },
-        select: { id: true },
-      });
-      if (!branch) throw new NotFoundException('Branch not found');
-    }
+    const branchId = await contentBranch(this.prisma, scope, churchId, dto.branchId);
 
     const form = await this.prisma.form.create({
+      include: { branch: { select: { name: true } } },
       data: {
         church_id: churchId,
         branch_id: branchId,
@@ -159,7 +154,7 @@ export class FormsService {
         orderBy: { updated_at: 'desc' },
         skip,
         take: limit,
-        include: { _count: { select: { submissions: true } } },
+        include: { branch: { select: { name: true } }, _count: { select: { submissions: true } } },
       }),
     ]);
 
@@ -206,6 +201,10 @@ export class FormsService {
   ): Promise<FormResponseDto> {
     const existing = await this.findFormOrFail(churchId, formId);
     const oldValues = this.formToPlain(existing);
+    const branchId =
+      dto.branchId !== undefined
+        ? await contentBranch(this.prisma, this.branchScope.resolve(), churchId, dto.branchId)
+        : undefined;
 
     if (existing.archived_at) {
       throw new NotFoundException('Form is archived');
@@ -219,8 +218,10 @@ export class FormsService {
     const publicToken = isPublic && !existing.public_token ? randomUUID() : existing.public_token;
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: {
+        branch_id: branchId,
         title: dto.title,
         description: dto.description,
         fields: dto.fields
@@ -264,6 +265,7 @@ export class FormsService {
     const existing = await this.findFormOrFail(churchId, formId);
 
     await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { status: FormStatus.closed },
     });
@@ -297,6 +299,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.create({
+      include: { branch: { select: { name: true } } },
       data: {
         church_id: churchId,
         branch_id: scope.churchOnly ? source.branch_id : scope.branchId,
@@ -341,6 +344,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { archived_at: new Date() },
     });
@@ -376,6 +380,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { archived_at: null },
     });
@@ -414,6 +419,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { status: FormStatus.closed },
     });
@@ -450,6 +456,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { status: FormStatus.draft },
     });
@@ -493,6 +500,7 @@ export class FormsService {
     }
 
     const form = await this.prisma.form.update({
+      include: { branch: { select: { name: true } } },
       where: { id: formId },
       data: { public_token: randomUUID() },
     });
@@ -811,10 +819,10 @@ export class FormsService {
   private async findFormOrFail(
     churchId: string,
     formId: string,
-  ): Promise<Form & { _count?: { submissions: number } }> {
+  ): Promise<Form & { branch?: { name: string } | null; _count?: { submissions: number } }> {
     const form = await this.prisma.form.findFirst({
       where: { id: formId, church_id: churchId },
-      include: { _count: { select: { submissions: true } } },
+      include: { branch: { select: { name: true } }, _count: { select: { submissions: true } } },
     });
 
     if (!form || (form.branch_id && !this.branchScope.isVisible(undefined, form.branch_id))) {
@@ -1012,9 +1020,13 @@ export class FormsService {
   /**
    * Maps a Prisma Form record to a FormResponseDto.
    */
-  private mapForm(form: Form & { _count?: { submissions: number } }): FormResponseDto {
+  private mapForm(
+    form: Form & { branch?: { name: string } | null; _count?: { submissions: number } },
+  ): FormResponseDto {
     return {
       id: form.id,
+      branchId: form.branch_id ?? undefined,
+      branchName: form.branch?.name,
       churchId: form.church_id,
       title: form.title,
       description: form.description ?? undefined,
@@ -1058,6 +1070,7 @@ export class FormsService {
     return {
       id: form.id,
       church_id: form.church_id,
+      branch_id: form.branch_id,
       title: form.title,
       description: form.description,
       fields: form.fields,

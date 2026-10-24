@@ -19,6 +19,9 @@ export class EventResponseDto {
   })
   branchId?: string;
 
+  @ApiPropertyOptional({ description: 'Assigned branch name' })
+  branchName?: string;
+
   @ApiProperty({ description: 'Event title', example: 'Sunday Worship Service' })
   title!: string;
 

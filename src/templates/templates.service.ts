@@ -1,3 +1,4 @@
+import { contentBranch } from '../common/services/content-branch';
 /**
  * @file templates.service.ts
  * @description Business logic for message template management.
@@ -59,10 +60,12 @@ export class TemplatesService {
     viewer?: ViewerScope | null,
   ): Promise<TemplateResponseDto> {
     const scope = this.branchScope.resolve(viewer);
+    const branchId = await contentBranch(this.prisma, scope, churchId, dto.branchId);
     const template = await this.prisma.template.create({
+      include: { branch: { select: { name: true } } },
       data: {
         church_id: churchId,
-        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
+        branch_id: branchId,
         name: dto.name,
         content: dto.content,
         channel: dto.channel,
@@ -108,8 +111,10 @@ export class TemplatesService {
       archived_at: query.archived === true ? { not: null } : null,
     };
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
-    else if (scope.churchOnly && query.branchId) where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
+    if (!scope.churchOnly)
+      where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && query.branchId)
+      where.AND = [{ OR: [{ branch_id: query.branchId }, { branch_id: null }] }];
 
     if (query.channel) where.channel = query.channel;
     if (query.status) where.status = query.status;
@@ -122,6 +127,7 @@ export class TemplatesService {
 
     const [templates, total] = await Promise.all([
       this.prisma.template.findMany({
+        include: { branch: { select: { name: true } } },
         where,
         orderBy: { name: 'asc' },
         skip,
@@ -146,10 +152,14 @@ export class TemplatesService {
    */
   async findById(templateId: string, churchId: string): Promise<TemplateResponseDto> {
     const template = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!template) {
+    if (
+      !template ||
+      (template.branch_id && !this.branchScope.isVisible(undefined, template.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -172,10 +182,14 @@ export class TemplatesService {
     userId: string,
   ): Promise<TemplateResponseDto> {
     const existing = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -192,6 +206,7 @@ export class TemplatesService {
     }
 
     const updated = await this.prisma.template.update({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId },
       data: { status: 'published' },
     });
@@ -227,10 +242,14 @@ export class TemplatesService {
     userId: string,
   ): Promise<TemplateResponseDto> {
     const existing = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -239,6 +258,15 @@ export class TemplatesService {
     }
 
     const updateData: Record<string, unknown> = {};
+    if (dto.branchId !== undefined) {
+      const branchId = await contentBranch(
+        this.prisma,
+        this.branchScope.resolve(),
+        churchId,
+        dto.branchId,
+      );
+      updateData.branch_id = branchId;
+    }
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.content !== undefined) updateData.content = dto.content;
     if (dto.channel !== undefined) updateData.channel = dto.channel;
@@ -254,6 +282,7 @@ export class TemplatesService {
     }
 
     const updated = await this.prisma.template.update({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId },
       data: updateData,
     });
@@ -264,7 +293,7 @@ export class TemplatesService {
       entity: 'template',
       action: 'UPDATE',
       entityId: templateId,
-      oldValues: { name: existing.name, status: existing.status },
+      oldValues: { branchId: existing.branch_id, name: existing.name, status: existing.status },
       newValues: updateData,
     });
 
@@ -282,10 +311,14 @@ export class TemplatesService {
    */
   async delete(templateId: string, churchId: string, userId: string): Promise<void> {
     const existing = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -320,10 +353,14 @@ export class TemplatesService {
     userId: string,
   ): Promise<TemplateResponseDto> {
     const existing = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -332,6 +369,7 @@ export class TemplatesService {
     }
 
     const updated = await this.prisma.template.update({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId },
       data: { archived_at: new Date() },
     });
@@ -366,10 +404,14 @@ export class TemplatesService {
     userId: string,
   ): Promise<TemplateResponseDto> {
     const existing = await this.prisma.template.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId, church_id: churchId },
     });
 
-    if (!existing) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(undefined, existing.branch_id))
+    ) {
       throw new NotFoundException('Template not found');
     }
 
@@ -378,6 +420,7 @@ export class TemplatesService {
     }
 
     const updated = await this.prisma.template.update({
+      include: { branch: { select: { name: true } } },
       where: { id: templateId },
       data: { archived_at: null },
     });
@@ -405,6 +448,8 @@ export class TemplatesService {
   private mapToResponseDto(template: {
     id: string;
     church_id: string;
+    branch_id?: string | null;
+    branch?: { name: string } | null;
     name: string;
     content: string;
     channel: string;
@@ -420,6 +465,8 @@ export class TemplatesService {
   }): TemplateResponseDto {
     return {
       templateId: template.id,
+      branchId: template.branch_id ?? undefined,
+      branchName: template.branch?.name,
       churchId: template.church_id,
       name: template.name,
       content: template.content,

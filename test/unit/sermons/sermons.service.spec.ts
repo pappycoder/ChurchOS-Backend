@@ -268,6 +268,7 @@ describe('SermonsService', () => {
       const result = await service.archiveSermon(mockSermonId, mockChurchId, mockUserId);
 
       expect(prisma.sermon.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockSermonId },
         data: { archived_at: expect.any(Date) },
       });
@@ -308,6 +309,7 @@ describe('SermonsService', () => {
       const result = await service.restoreSermon(mockSermonId, mockChurchId, mockUserId);
 
       expect(prisma.sermon.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockSermonId },
         data: { archived_at: null },
       });

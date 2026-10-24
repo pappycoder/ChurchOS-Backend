@@ -1,3 +1,5 @@
+import { contentBranch } from '../common/services/content-branch';
+import { UpdateBroadcastDto } from './dto/update-broadcast.dto';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file broadcast.service.ts
@@ -61,7 +63,10 @@ export class BroadcastService {
     churchId: string,
     userId: string,
   ): Promise<BroadcastResponseDto> {
-    const branchId = this.requestContext.branchWhere(churchId).branch_id;
+    const branchId = await this.resolveBranch(
+      churchId,
+      dto.branchId ?? (dto.audienceFilter?.branchId as string | undefined),
+    );
     if (branchId) dto.audienceFilter = { ...dto.audienceFilter, branchId };
     const template = await this.prisma.template.findFirst({
       where: {
@@ -146,7 +151,9 @@ export class BroadcastService {
       });
     }
 
-    return this.mapToResponseDto(broadcast, template.name);
+    return (
+      await this.withBranchNames([this.mapToResponseDto(broadcast, template.name)], churchId)
+    )[0];
   }
 
   /**
@@ -164,6 +171,10 @@ export class BroadcastService {
       church_id: churchId,
       ...this.broadcastScope(churchId),
     };
+    const ownBranch = this.requestContext.branchWhere(churchId).branch_id;
+    if (!ownBranch && query.branchId)
+      where.audience_filter = { path: ['branchId'], equals: query.branchId };
+    if (query.search) where.name = { contains: query.search.trim(), mode: 'insensitive' };
     if (query.status) where.status = query.status;
     if (query.channel) where.channel = query.channel;
 
@@ -185,7 +196,10 @@ export class BroadcastService {
     const templateMap = new Map(templates.map((t) => [t.id, t.name]));
 
     return {
-      data: broadcasts.map((b) => this.mapToResponseDto(b, templateMap.get(b.template_id) || '')),
+      data: await this.withBranchNames(
+        broadcasts.map((b) => this.mapToResponseDto(b, templateMap.get(b.template_id) || '')),
+        churchId,
+      ),
       total,
     };
   }
@@ -207,7 +221,105 @@ export class BroadcastService {
       select: { name: true },
     });
 
-    return this.mapToResponseDto(broadcast, template?.name || '');
+    return (
+      await this.withBranchNames([this.mapToResponseDto(broadcast, template?.name || '')], churchId)
+    )[0];
+  }
+
+  /** Atomically replace the audience before the worker claims a scheduled broadcast. */
+  async update(
+    broadcastId: string,
+    dto: UpdateBroadcastDto,
+    churchId: string,
+    userId: string,
+  ): Promise<BroadcastResponseDto> {
+    const existing = await this.prisma.broadcast.findFirst({
+      where: { id: broadcastId, church_id: churchId, ...this.broadcastScope(churchId) },
+    });
+    if (!existing) throw new NotFoundException('Broadcast not found');
+    if (
+      existing.status !== 'scheduled' ||
+      !existing.scheduled_at ||
+      existing.scheduled_at <= new Date()
+    ) {
+      throw new BadRequestException('Only future scheduled broadcasts can change branch');
+    }
+    const branchId = await this.resolveBranch(churchId, dto.branchId);
+    const template = await this.prisma.template.findFirst({
+      where: {
+        id: existing.template_id,
+        church_id: churchId,
+        status: 'published',
+        archived_at: null,
+        OR: [{ branch_id: branchId }, { branch_id: null }],
+      },
+    });
+    if (!template)
+      throw new BadRequestException('The template is not available in the selected branch');
+    const filter = { ...(existing.audience_filter as AudienceFilter), branchId: branchId! };
+    const recipients = await this.findRecipients(churchId, existing.channel, filter);
+    if (!recipients.length)
+      throw new BadRequestException('No recipients match the selected audience filter');
+    await this.prisma.$transaction(async (tx) => {
+      // The conditional row update serializes against the worker's sending-state update.
+      const claimed = await tx.broadcast.updateMany({
+        where: {
+          id: broadcastId,
+          church_id: churchId,
+          status: 'scheduled',
+          scheduled_at: { gt: new Date() },
+        },
+        data: {
+          audience_filter: filter as Prisma.InputJsonValue,
+          total_recipients: recipients.length,
+        },
+      });
+      if (claimed.count !== 1)
+        throw new BadRequestException('Broadcast sending has already started');
+      await tx.broadcastRecipient.deleteMany({ where: { broadcast_id: broadcastId } });
+      await tx.broadcastRecipient.createMany({
+        data: recipients.map((recipient) => ({
+          broadcast_id: broadcastId,
+          member_id: recipient.memberId,
+          phone: recipient.phone,
+          status: 'pending',
+        })),
+      });
+    });
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'broadcast',
+      action: 'UPDATE',
+      entityId: broadcastId,
+      oldValues: { audienceFilter: existing.audience_filter },
+      newValues: { branchId, totalRecipients: recipients.length },
+    });
+    return this.findById(broadcastId, churchId);
+  }
+
+  private resolveBranch(churchId: string, requested?: string) {
+    const ownBranch = this.requestContext.branchWhere(churchId).branch_id;
+    return contentBranch(
+      this.prisma,
+      { churchOnly: !ownBranch, branchId: ownBranch },
+      churchId,
+      requested,
+    );
+  }
+
+  private async withBranchNames(rows: BroadcastResponseDto[], churchId: string) {
+    const ids = [...new Set(rows.flatMap((row) => (row.branchId ? [row.branchId] : [])))];
+    if (!ids.length) return rows;
+    const branches = await this.prisma.branch.findMany({
+      where: { id: { in: ids }, church_id: churchId },
+      select: { id: true, name: true },
+    });
+    const names = new Map(branches.map((branch) => [branch.id, branch.name]));
+    return rows.map((row) => ({
+      ...row,
+      branchName: row.branchId ? names.get(row.branchId) : undefined,
+    }));
   }
 
   /**
@@ -499,6 +611,7 @@ export class BroadcastService {
       church_id: string;
       name: string;
       template_id: string;
+      audience_filter?: Prisma.JsonValue;
       channel: string;
       status: string;
       scheduled_at: Date | null;
@@ -511,6 +624,10 @@ export class BroadcastService {
   ): BroadcastResponseDto {
     return {
       broadcastId: broadcast.id,
+      branchId:
+        typeof (broadcast.audience_filter as AudienceFilter | null)?.branchId === 'string'
+          ? (broadcast.audience_filter as AudienceFilter).branchId
+          : undefined,
       churchId: broadcast.church_id,
       name: broadcast.name,
       templateId: broadcast.template_id,

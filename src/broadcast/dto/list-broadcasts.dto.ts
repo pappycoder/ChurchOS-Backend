@@ -7,9 +7,19 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsIn, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsString, IsIn, IsInt, Min, Max } from 'class-validator';
 
 export class ListBroadcastsDto {
+  @ApiPropertyOptional({ description: 'Filter by audience branch' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()

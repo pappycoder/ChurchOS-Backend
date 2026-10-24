@@ -1,3 +1,4 @@
+import { UpdateBroadcastDto } from './dto/update-broadcast.dto';
 /**
  * @file broadcast.controller.ts
  * @description HTTP endpoints for broadcast messaging.
@@ -102,6 +103,18 @@ export class BroadcastController {
   ): Promise<BroadcastResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.broadcastService.findById(broadcastId, churchId);
+  }
+
+  @Patch(':broadcastId')
+  @RequirePermissions('broadcasts:update')
+  @ApiUpdateEndpoint('Update a scheduled broadcast branch')
+  async update(
+    @Param('broadcastId') broadcastId: string,
+    @Body() dto: UpdateBroadcastDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<BroadcastResponseDto> {
+    return this.broadcastService.update(broadcastId, dto, req.profile?.church_id || '', user.sub);
   }
 
   /**

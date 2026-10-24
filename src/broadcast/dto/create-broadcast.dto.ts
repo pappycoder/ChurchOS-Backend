@@ -18,6 +18,11 @@ import {
 } from 'class-validator';
 
 export class CreateBroadcastDto {
+  @ApiPropertyOptional({ description: 'Audience branch; defaults to the viewer branch' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiProperty({ example: 'Sunday Service Reminder' })
   @IsString()
   @IsNotEmpty()

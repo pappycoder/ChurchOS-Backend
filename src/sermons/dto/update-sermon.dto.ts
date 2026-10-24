@@ -5,9 +5,14 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsInt, IsUUID, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdateSermonDto {
+  @ApiPropertyOptional({ description: 'Branch that owns this record' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Sermon title', example: 'Walking in Faith' })
   @IsString()
   @IsOptional()

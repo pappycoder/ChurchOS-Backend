@@ -32,6 +32,12 @@ export class SubmissionAttachmentDto {
  * Response shape for a single form.
  */
 export class FormResponseDto {
+  @ApiPropertyOptional({ description: 'Assigned branch ID' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Assigned branch name' })
+  branchName?: string;
+
   @ApiProperty({ description: 'Form ID' })
   id!: string;
 

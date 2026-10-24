@@ -7,6 +7,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SermonResponseDto {
+  @ApiPropertyOptional({ description: 'Assigned branch ID' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Assigned branch name' })
+  branchName?: string;
+
   @ApiProperty({ description: 'Sermon ID', example: '77777777-7777-7777-7777-777777777777' })
   sermonId!: string;
 

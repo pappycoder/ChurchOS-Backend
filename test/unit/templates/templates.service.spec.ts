@@ -243,6 +243,7 @@ describe('TemplatesService', () => {
 
       expect(result.status).toBe('published');
       expect(prisma.template.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockTemplateId },
         data: { status: 'published' },
       });
@@ -290,6 +291,7 @@ describe('TemplatesService', () => {
       const result = await service.archive(mockTemplateId, mockChurchId, mockUserId);
 
       expect(prisma.template.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockTemplateId },
         data: { archived_at: expect.any(Date) },
       });
@@ -330,6 +332,7 @@ describe('TemplatesService', () => {
       const result = await service.restore(mockTemplateId, mockChurchId, mockUserId);
 
       expect(prisma.template.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockTemplateId },
         data: { archived_at: null },
       });

@@ -345,6 +345,7 @@ describe('FormsService', () => {
       const result = await service.archiveForm(mockChurchId, mockFormId, mockUserId);
 
       expect(prisma.form.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockFormId },
         data: { archived_at: expect.any(Date) },
       });
@@ -385,6 +386,7 @@ describe('FormsService', () => {
       const result = await service.restoreForm(mockChurchId, mockFormId, mockUserId);
 
       expect(prisma.form.update).toHaveBeenCalledWith({
+        include: { branch: { select: { name: true } } },
         where: { id: mockFormId },
         data: { archived_at: null },
       });

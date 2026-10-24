@@ -9,6 +9,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BroadcastResponseDto {
+  @ApiPropertyOptional({ description: 'Assigned branch ID' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Assigned branch name' })
+  branchName?: string;
+
   @ApiProperty({ description: 'Unique identifier of the broadcast' })
   broadcastId!: string;
 

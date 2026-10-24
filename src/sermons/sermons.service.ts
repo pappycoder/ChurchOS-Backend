@@ -1,3 +1,4 @@
+import { contentBranch } from '../common/services/content-branch';
 /**
  * @file sermons.service.ts
  * @description Business logic for sermon management.
@@ -43,10 +44,12 @@ export class SermonsService {
     viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const scope = this.branchScope.resolve(viewer);
+    const branchId = await contentBranch(this.prisma, scope, churchId, dto.branchId);
     const sermon = await this.prisma.sermon.create({
+      include: { branch: { select: { name: true } } },
       data: {
         church_id: churchId,
-        branch_id: scope.churchOnly ? dto.branchId ?? null : scope.branchId ?? null,
+        branch_id: branchId,
         title: dto.title,
         speaker: dto.speaker,
         sermon_date: new Date(dto.sermonDate),
@@ -90,8 +93,10 @@ export class SermonsService {
       archived_at: dto.archived === true ? { not: null } : null,
     };
     const scope = this.branchScope.resolve(viewer);
-    if (!scope.churchOnly) where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
-    else if (scope.churchOnly && dto.branchId) where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
+    if (!scope.churchOnly)
+      where.AND = [{ OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }];
+    else if (scope.churchOnly && dto.branchId)
+      where.AND = [{ OR: [{ branch_id: dto.branchId }, { branch_id: null }] }];
 
     if (dto.speaker) {
       where.speaker = { contains: dto.speaker, mode: 'insensitive' };
@@ -136,6 +141,7 @@ export class SermonsService {
 
     const [sermons, total] = await Promise.all([
       this.prisma.sermon.findMany({
+        include: { branch: { select: { name: true } } },
         where,
         orderBy,
         skip,
@@ -153,8 +159,13 @@ export class SermonsService {
   /**
    * Gets a single sermon by ID.
    */
-  async getSermon(sermonId: string, churchId: string, viewer?: ViewerScope | null): Promise<SermonResponseDto> {
+  async getSermon(
+    sermonId: string,
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<SermonResponseDto> {
     const sermon = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
@@ -176,10 +187,14 @@ export class SermonsService {
     viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException(`Sermon not found`);
     }
 
@@ -188,6 +203,15 @@ export class SermonsService {
     }
 
     const data: Prisma.SermonUpdateInput = {};
+    if (dto.branchId !== undefined) {
+      const branchId = await contentBranch(
+        this.prisma,
+        this.branchScope.resolve(viewer),
+        churchId,
+        dto.branchId,
+      );
+      data.branch = { connect: { id: branchId! } };
+    }
 
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.speaker !== undefined) data.speaker = dto.speaker;
@@ -201,6 +225,7 @@ export class SermonsService {
     if (dto.durationSeconds !== undefined) data.duration_seconds = dto.durationSeconds;
 
     const updated = await this.prisma.sermon.update({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId },
       data,
     });
@@ -210,6 +235,7 @@ export class SermonsService {
       churchId,
       entity: 'sermon',
       action: 'UPDATE',
+      oldValues: { branchId: existing.branch_id },
       entityId: sermonId,
       newValues: dto as unknown as Record<string, unknown>,
     });
@@ -221,12 +247,21 @@ export class SermonsService {
   /**
    * Deletes a sermon.
    */
-  async deleteSermon(sermonId: string, churchId: string, userId: string, viewer?: ViewerScope | null): Promise<void> {
+  async deleteSermon(
+    sermonId: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<void> {
     const existing = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException(`Sermon not found`);
     }
 
@@ -263,10 +298,14 @@ export class SermonsService {
     viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException('Sermon not found');
     }
 
@@ -275,6 +314,7 @@ export class SermonsService {
     }
 
     const updated = await this.prisma.sermon.update({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId },
       data: { archived_at: new Date() },
     });
@@ -310,10 +350,14 @@ export class SermonsService {
     viewer?: ViewerScope | null,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
-    if (!existing || (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))) {
+    if (
+      !existing ||
+      (existing.branch_id && !this.branchScope.isVisible(viewer, existing.branch_id))
+    ) {
       throw new NotFoundException('Sermon not found');
     }
 
@@ -322,6 +366,7 @@ export class SermonsService {
     }
 
     const updated = await this.prisma.sermon.update({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId },
       data: { archived_at: null },
     });
@@ -431,6 +476,7 @@ export class SermonsService {
     churchId: string,
   ): Promise<{ bookmarked: boolean }> {
     const sermon = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
@@ -551,6 +597,7 @@ export class SermonsService {
     _userId: string,
   ): Promise<SermonResponseDto> {
     const existing = await this.prisma.sermon.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId, church_id: churchId },
     });
 
@@ -563,6 +610,7 @@ export class SermonsService {
     }
 
     const updated = await this.prisma.sermon.update({
+      include: { branch: { select: { name: true } } },
       where: { id: sermonId },
       data: { audio_url: audioUrl },
     });
@@ -576,7 +624,10 @@ export class SermonsService {
   /**
    * Returns distinct series names with sermon counts for the church.
    */
-  async listSeries(churchId: string, viewer?: ViewerScope | null): Promise<{ name: string; count: number; lastDate: string }[]> {
+  async listSeries(
+    churchId: string,
+    viewer?: ViewerScope | null,
+  ): Promise<{ name: string; count: number; lastDate: string }[]> {
     const scope = this.branchScope.resolve(viewer);
     const rows = await this.prisma.sermon.groupBy({
       by: ['series_name'],
@@ -584,7 +635,9 @@ export class SermonsService {
         church_id: churchId,
         series_name: { not: null },
         archived_at: null,
-        ...(!scope.churchOnly ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] } : {}),
+        ...(!scope.churchOnly
+          ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }
+          : {}),
       },
       _count: { id: true },
       _max: { sermon_date: true },
@@ -614,7 +667,9 @@ export class SermonsService {
         church_id: churchId,
         speaker: { not: null },
         archived_at: null,
-        ...(!scope.churchOnly ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] } : {}),
+        ...(!scope.churchOnly
+          ? { OR: [{ branch_id: scope.branchId ?? null }, { branch_id: null }] }
+          : {}),
       },
       _count: { id: true },
       _max: { sermon_date: true },
@@ -646,6 +701,8 @@ export class SermonsService {
   ): SermonResponseDto {
     return {
       sermonId: sermon.id,
+      branchId: (sermon.branch_id as string) || undefined,
+      branchName: (sermon.branch as { name: string } | null)?.name,
       churchId: sermon.church_id as string,
       title: sermon.title as string,
       speaker: (sermon.speaker as string) || undefined,

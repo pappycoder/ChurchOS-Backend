@@ -9,9 +9,14 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn, IsArray } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsIn, IsArray } from 'class-validator';
 
 export class UpdateTemplateDto {
+  @ApiPropertyOptional({ description: 'Branch that owns this record' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

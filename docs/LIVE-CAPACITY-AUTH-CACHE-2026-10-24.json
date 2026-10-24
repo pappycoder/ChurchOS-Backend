@@ -1,0 +1,1000 @@
+{
+  "refinementRuntime": {
+    "recordedAt": "2026-10-24T19:45:52.624Z",
+    "status": 200,
+    "totalMs": 2033.9507729999998,
+    "serverTiming": "app;dur=1108, db;dur=746, db_queries;desc=\"4\", pool_waiting;desc=\"2\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=18, profile;dur=455, permissions;dur=0, rate_limit;dur=242, entitlements;dur=0, session;dur=75, revocation;dur=233, handler;dur=155"
+  },
+  "scope": "Live guarded read-only web-proxy test after joined profile, local global-catalogue cache, atomic response-cache read and parallel session checks",
+  "previousEvidence": "LIVE-CAPACITY-RETEST-2026-10-24.json",
+  "diagnostics": {
+    "recordedAt": "2026-10-24T17:13:48.476Z",
+    "rows": [
+      {
+        "round": 1,
+        "path": "/api/session",
+        "status": 200,
+        "headersMs": 957.0948679999999,
+        "totalMs": 969.5383179999999,
+        "bytes": 19,
+        "serverTiming": null,
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {}
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/members?page=1&limit=20",
+        "status": 200,
+        "headersMs": 2191.634469,
+        "totalMs": 2194.353855,
+        "bytes": 1745,
+        "serverTiming": "app;dur=1722, db;dur=872, db_queries;desc=\"5\", pool_waiting;desc=\"2\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=374, profile;dur=410, permissions;dur=175, rate_limit;dur=269, entitlements;dur=0, session;dur=93, revocation;dur=280, handler;dur=206",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 1722.0,
+          "db": 872.0,
+          "db_queries": 5.0,
+          "pool_waiting": 2.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 374.0,
+          "profile": 410.0,
+          "permissions": 175.0,
+          "rate_limit": 269.0,
+          "entitlements": 0.0,
+          "session": 93.0,
+          "revocation": 280.0,
+          "handler": 206.0
+        }
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/visitors?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1249.2598799999996,
+        "totalMs": 1250.9685319999999,
+        "bytes": 1163,
+        "serverTiming": "app;dur=841, db;dur=724, db_queries;desc=\"6\", pool_waiting;desc=\"2\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=73, permissions;dur=0, rate_limit;dur=228, entitlements;dur=0, session;dur=74, revocation;dur=233, handler;dur=299",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 841.0,
+          "db": 724.0,
+          "db_queries": 6.0,
+          "pool_waiting": 2.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 73.0,
+          "permissions": 0.0,
+          "rate_limit": 228.0,
+          "entitlements": 0.0,
+          "session": 74.0,
+          "revocation": 233.0,
+          "handler": 299.0
+        }
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/services?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1077.7123339999998,
+        "totalMs": 1079.9966989999994,
+        "bytes": 950,
+        "serverTiming": "app;dur=688, db;dur=290, db_queries;desc=\"4\", pool_waiting;desc=\"1\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=227, entitlements;dur=0, session;dur=73, revocation;dur=233, handler;dur=153",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 688.0,
+          "db": 290.0,
+          "db_queries": 4.0,
+          "pool_waiting": 1.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 227.0,
+          "entitlements": 0.0,
+          "session": 73.0,
+          "revocation": 233.0,
+          "handler": 153.0
+        }
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/giving/transactions?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1347.2459900000003,
+        "totalMs": 1352.828337,
+        "bytes": 1850,
+        "serverTiming": "app;dur=1050, db;dur=1374, db_queries;desc=\"9\", pool_waiting;desc=\"5\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=232, entitlements;dur=0, session;dur=72, revocation;dur=232, handler;dur=512",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 1050.0,
+          "db": 1374.0,
+          "db_queries": 9.0,
+          "pool_waiting": 5.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 232.0,
+          "entitlements": 0.0,
+          "session": 72.0,
+          "revocation": 232.0,
+          "handler": 512.0
+        }
+      },
+      {
+        "round": 1,
+        "path": "/api/backend/reports/financial?startDate=2026-01-01&endDate=2026-12-31&currency=NGN",
+        "status": 200,
+        "headersMs": 1368.7350420000002,
+        "totalMs": 1370.9485100000002,
+        "bytes": 526,
+        "serverTiming": "app;dur=1070, db;dur=672, db_queries;desc=\"6\", pool_waiting;desc=\"3\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=226, entitlements;dur=0, session;dur=73, revocation;dur=231, response_cache;dur=231, handler;dur=537",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 1070.0,
+          "db": 672.0,
+          "db_queries": 6.0,
+          "pool_waiting": 3.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 226.0,
+          "entitlements": 0.0,
+          "session": 73.0,
+          "revocation": 231.0,
+          "response_cache": 231.0,
+          "handler": 537.0
+        }
+      },
+      {
+        "round": 2,
+        "path": "/api/session",
+        "status": 200,
+        "headersMs": 305.2776620000004,
+        "totalMs": 307.28731399999924,
+        "bytes": 19,
+        "serverTiming": null,
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {}
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/members?page=1&limit=20",
+        "status": 200,
+        "headersMs": 986.2402149999998,
+        "totalMs": 988.6936270000006,
+        "bytes": 1745,
+        "serverTiming": "app;dur=679, db;dur=357, db_queries;desc=\"4\", pool_waiting;desc=\"2\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=2, profile;dur=72, permissions;dur=0, rate_limit;dur=228, entitlements;dur=0, session;dur=72, revocation;dur=232, handler;dur=144",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 679.0,
+          "db": 357.0,
+          "db_queries": 4.0,
+          "pool_waiting": 2.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 2.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 228.0,
+          "entitlements": 0.0,
+          "session": 72.0,
+          "revocation": 232.0,
+          "handler": 144.0
+        }
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/visitors?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1172.7235310000015,
+        "totalMs": 1177.9638430000014,
+        "bytes": 1163,
+        "serverTiming": "app;dur=873, db;dur=865, db_queries;desc=\"6\", pool_waiting;desc=\"2\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=226, entitlements;dur=0, session;dur=72, revocation;dur=231, handler;dur=341",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 873.0,
+          "db": 865.0,
+          "db_queries": 6.0,
+          "pool_waiting": 2.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 226.0,
+          "entitlements": 0.0,
+          "session": 72.0,
+          "revocation": 231.0,
+          "handler": 341.0
+        }
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/services?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1036.7612339999996,
+        "totalMs": 1039.0792409999995,
+        "bytes": 950,
+        "serverTiming": "app;dur=683, db;dur=286, db_queries;desc=\"4\", pool_waiting;desc=\"1\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=232, entitlements;dur=0, session;dur=73, revocation;dur=231, handler;dur=144",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 683.0,
+          "db": 286.0,
+          "db_queries": 4.0,
+          "pool_waiting": 1.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 232.0,
+          "entitlements": 0.0,
+          "session": 73.0,
+          "revocation": 231.0,
+          "handler": 144.0
+        }
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/giving/transactions?page=1&limit=20",
+        "status": 200,
+        "headersMs": 1338.5350580000013,
+        "totalMs": 1343.1821220000002,
+        "bytes": 1850,
+        "serverTiming": "app;dur=1040, db;dur=1351, db_queries;desc=\"9\", pool_waiting;desc=\"5\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=2, profile;dur=73, permissions;dur=0, rate_limit;dur=232, entitlements;dur=0, session;dur=72, revocation;dur=232, handler;dur=500",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 1040.0,
+          "db": 1351.0,
+          "db_queries": 9.0,
+          "pool_waiting": 5.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 2.0,
+          "profile": 73.0,
+          "permissions": 0.0,
+          "rate_limit": 232.0,
+          "entitlements": 0.0,
+          "session": 72.0,
+          "revocation": 232.0,
+          "handler": 500.0
+        }
+      },
+      {
+        "round": 2,
+        "path": "/api/backend/reports/financial?startDate=2026-01-01&endDate=2026-12-31&currency=NGN",
+        "status": 200,
+        "headersMs": 1103.114395999999,
+        "totalMs": 1104.516744999999,
+        "bytes": 526,
+        "serverTiming": "app;dur=765, db;dur=143, db_queries;desc=\"2\", pool_waiting;desc=\"1\", pool_max;desc=\"1\", redis_driver;desc=\"upstash-rest\", runtime_region;desc=\"iad1\", jwt;dur=1, profile;dur=72, permissions;dur=0, rate_limit;dur=227, entitlements;dur=0, session;dur=72, revocation;dur=231, response_cache;dur=231, handler;dur=232",
+        "vercelRegion": "lhr1",
+        "cache": "MISS",
+        "timings": {
+          "app": 765.0,
+          "db": 143.0,
+          "db_queries": 2.0,
+          "pool_waiting": 1.0,
+          "pool_max": 1.0,
+          "redis_driver": "upstash-rest",
+          "runtime_region": "iad1",
+          "jwt": 1.0,
+          "profile": 72.0,
+          "permissions": 0.0,
+          "rate_limit": 227.0,
+          "entitlements": 0.0,
+          "session": 72.0,
+          "revocation": 231.0,
+          "response_cache": 231.0,
+          "handler": 232.0
+        }
+      }
+    ]
+  },
+  "runtimeMarkers": {
+    "pool_max": [
+      "1.0"
+    ],
+    "redis_driver": [
+      "upstash-rest"
+    ],
+    "runtime_region": [
+      "iad1"
+    ]
+  },
+  "runs": [
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "burst",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T17:15:43.873Z",
+      "rows": [
+        {
+          "mode": "burst",
+          "level": 1,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 13.348,
+          "passed": true,
+          "requests": 1,
+          "requestsPerSecond": 0.5491488193300385,
+          "successfulRequestsPerSecond": 0.5491488193300385,
+          "measuredSeconds": 1.821,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 0.07519608066453395,
+          "p50Ms": 1360.048721,
+          "p95Ms": 1360.048721,
+          "p99Ms": 1360.048721,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 1,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 1,
+          "httpStatuses": {
+            "200": 1
+          },
+          "routeStatuses": {
+            "/visitors": {
+              "200": 1
+            }
+          }
+        },
+        {
+          "mode": "burst",
+          "level": 5,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 14.143,
+          "passed": true,
+          "requests": 5,
+          "requestsPerSecond": 1.669449081803005,
+          "successfulRequestsPerSecond": 1.669449081803005,
+          "measuredSeconds": 2.995,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 0.3549512014923286,
+          "p50Ms": 1859.822042,
+          "p95Ms": 2572.7671603999997,
+          "p99Ms": 2631.27626248,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 5,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 5,
+          "httpStatuses": {
+            "200": 5
+          },
+          "routeStatuses": {
+            "/members": {
+              "200": 1
+            },
+            "/visitors": {
+              "200": 1
+            },
+            "/services": {
+              "200": 1
+            },
+            "/giving/transactions": {
+              "200": 1
+            },
+            "/reports/financial": {
+              "200": 1
+            }
+          }
+        },
+        {
+          "mode": "burst",
+          "level": 10,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 18.111,
+          "passed": true,
+          "requests": 10,
+          "requestsPerSecond": 1.4823599169878445,
+          "successfulRequestsPerSecond": 1.4823599169878445,
+          "measuredSeconds": 6.746,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 0.5540174929303722,
+          "p50Ms": 2474.6418409999997,
+          "p95Ms": 6224.4764012,
+          "p99Ms": 6335.60736584,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 10,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 10,
+          "httpStatuses": {
+            "200": 10
+          },
+          "routeStatuses": {
+            "/reports/financial": {
+              "200": 2
+            },
+            "/members": {
+              "200": 2
+            },
+            "/services": {
+              "200": 2
+            },
+            "/visitors": {
+              "200": 2
+            },
+            "/giving/transactions": {
+              "200": 2
+            }
+          }
+        },
+        {
+          "mode": "burst",
+          "level": 20,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 19.232,
+          "passed": true,
+          "requests": 20,
+          "requestsPerSecond": 2.586652871184687,
+          "successfulRequestsPerSecond": 2.586652871184687,
+          "measuredSeconds": 7.732,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 1.0435751724870328,
+          "p50Ms": 2751.6800805000003,
+          "p95Ms": 7055.71512825,
+          "p99Ms": 7306.52432805,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 20,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 20,
+          "httpStatuses": {
+            "200": 20
+          },
+          "routeStatuses": {
+            "/reports/financial": {
+              "200": 4
+            },
+            "/visitors": {
+              "200": 4
+            },
+            "/members": {
+              "200": 4
+            },
+            "/services": {
+              "200": 4
+            },
+            "/giving/transactions": {
+              "200": 4
+            }
+          }
+        },
+        {
+          "mode": "burst",
+          "level": 50,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 18.16,
+          "passed": true,
+          "requests": 50,
+          "requestsPerSecond": 7.6923076923076925,
+          "successfulRequestsPerSecond": 7.6923076923076925,
+          "measuredSeconds": 6.5,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 2.765779524729533,
+          "p50Ms": 3485.0297885,
+          "p95Ms": 5795.98447365,
+          "p99Ms": 5989.58807749,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 50,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 50,
+          "httpStatuses": {
+            "200": 50
+          },
+          "routeStatuses": {
+            "/services": {
+              "200": 10
+            },
+            "/reports/financial": {
+              "200": 10
+            },
+            "/giving/transactions": {
+              "200": 10
+            },
+            "/members": {
+              "200": 10
+            },
+            "/visitors": {
+              "200": 10
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-bursts"
+    },
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "rps",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T17:18:04.528Z",
+      "rows": [
+        {
+          "mode": "rps",
+          "level": 1,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 41.907,
+          "passed": true,
+          "requests": 30,
+          "requestsPerSecond": 0.9905894006934126,
+          "successfulRequestsPerSecond": 0.9905894006934126,
+          "measuredSeconds": 30.285,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 0.7171376254187101,
+          "p50Ms": 1098.099311,
+          "p95Ms": 1477.9901801999993,
+          "p99Ms": 1881.1235547800004,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 3,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 30,
+          "httpStatuses": {
+            "200": 30
+          },
+          "routeStatuses": {
+            "/services": {
+              "200": 7
+            },
+            "/visitors": {
+              "200": 6
+            },
+            "/reports/financial": {
+              "200": 6
+            },
+            "/members": {
+              "200": 6
+            },
+            "/giving/transactions": {
+              "200": 5
+            }
+          }
+        },
+        {
+          "mode": "rps",
+          "level": 2,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 42.327,
+          "passed": true,
+          "requests": 61,
+          "requestsPerSecond": 1.9697116471310019,
+          "successfulRequestsPerSecond": 1.9697116471310019,
+          "measuredSeconds": 30.969,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 1.4443910639918092,
+          "p50Ms": 1215.854532,
+          "p95Ms": 1717.696681,
+          "p99Ms": 2087.547654599999,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 6,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 61,
+          "httpStatuses": {
+            "200": 61
+          },
+          "routeStatuses": {
+            "/giving/transactions": {
+              "200": 12
+            },
+            "/services": {
+              "200": 13
+            },
+            "/visitors": {
+              "200": 12
+            },
+            "/members": {
+              "200": 12
+            },
+            "/reports/financial": {
+              "200": 12
+            }
+          }
+        },
+        {
+          "mode": "rps",
+          "level": 4,
+          "endedEarly": true,
+          "generatorExitCode": 99,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 32.058,
+          "passed": false,
+          "requests": 49,
+          "requestsPerSecond": 2.4342987729147,
+          "successfulRequestsPerSecond": 2.3846192061205223,
+          "measuredSeconds": 20.129,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 1.5328185966903627,
+          "p50Ms": 4083.762907,
+          "p95Ms": 9073.648193199999,
+          "p99Ms": 9630.55463716,
+          "errorRate": 0.02040816326530612,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 0.9814814814814815,
+          "peakClientRequestsInFlight": 35,
+          "unclosedRequestsAtEnd": 35,
+          "startedRequests": 84,
+          "httpStatuses": {
+            "200": 48,
+            "0": 1
+          },
+          "routeStatuses": {
+            "/reports/financial": {
+              "200": 12
+            },
+            "/visitors": {
+              "200": 9
+            },
+            "/services": {
+              "200": 8
+            },
+            "/members": {
+              "200": 11
+            },
+            "/giving/transactions": {
+              "200": 8,
+              "0": 1
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-rates"
+    },
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "rps",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T17:22:01.188Z",
+      "rows": [
+        {
+          "mode": "rps",
+          "level": 2,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 120,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 128.082,
+          "passed": true,
+          "requests": 241,
+          "requestsPerSecond": 1.9894008684023707,
+          "successfulRequestsPerSecond": 1.9894008684023707,
+          "measuredSeconds": 121.142,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 1.882468445933601,
+          "p50Ms": 1160.853415,
+          "p95Ms": 1686.337392,
+          "p99Ms": 1894.5913951999999,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 6,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 241,
+          "httpStatuses": {
+            "200": 241
+          },
+          "routeStatuses": {
+            "/visitors": {
+              "200": 48
+            },
+            "/services": {
+              "200": 49
+            },
+            "/reports/financial": {
+              "200": 48
+            },
+            "/giving/transactions": {
+              "200": 48
+            },
+            "/members": {
+              "200": 48
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-confirmation"
+    },
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "rps",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T19:46:52.237Z",
+      "rows": [
+        {
+          "mode": "rps",
+          "level": 3,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 30,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 45.479,
+          "passed": true,
+          "requests": 91,
+          "requestsPerSecond": 2.712693018541704,
+          "successfulRequestsPerSecond": 2.712693018541704,
+          "measuredSeconds": 33.546,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 2.002842713764929,
+          "p50Ms": 2878.661635,
+          "p95Ms": 5250.6159415,
+          "p99Ms": 5671.784715199997,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 14,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 91,
+          "httpStatuses": {
+            "200": 91
+          },
+          "routeStatuses": {
+            "/reports/financial": {
+              "200": 18
+            },
+            "/visitors": {
+              "200": 18
+            },
+            "/services": {
+              "200": 18
+            },
+            "/giving/transactions": {
+              "200": 18
+            },
+            "/members": {
+              "200": 19
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-refine-3"
+    },
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "rps",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T19:49:09.743Z",
+      "rows": [
+        {
+          "mode": "rps",
+          "level": 3,
+          "endedEarly": true,
+          "generatorExitCode": 99,
+          "scheduledSeconds": 120,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 104.03,
+          "passed": false,
+          "requests": 251,
+          "requestsPerSecond": 2.747824183042312,
+          "successfulRequestsPerSecond": 2.7149816629262684,
+          "measuredSeconds": 91.345,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 2.413585864891893,
+          "p50Ms": 4470.137015,
+          "p95Ms": 8234.251581,
+          "p99Ms": 9878.295913,
+          "errorRate": 0.01195219123505976,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 0.98828125,
+          "peakClientRequestsInFlight": 26,
+          "unclosedRequestsAtEnd": 25,
+          "startedRequests": 276,
+          "httpStatuses": {
+            "200": 248,
+            "0": 3
+          },
+          "routeStatuses": {
+            "/visitors": {
+              "200": 51
+            },
+            "/services": {
+              "200": 50
+            },
+            "/members": {
+              "200": 52
+            },
+            "/reports/financial": {
+              "200": 49
+            },
+            "/giving/transactions": {
+              "200": 46,
+              "0": 3
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-confirm-3"
+    },
+    {
+      "target": "https://church-os-web.vercel.app/api/backend",
+      "mode": "rps",
+      "sessions": 1,
+      "thinkSeconds": 0,
+      "workload": "live-read",
+      "recordedAt": "2026-10-24T19:53:44.921Z",
+      "rows": [
+        {
+          "mode": "rps",
+          "level": 2,
+          "endedEarly": false,
+          "generatorExitCode": 0,
+          "scheduledSeconds": 60,
+          "p95TargetMs": 10000,
+          "p99TargetMs": 10000,
+          "wallSeconds": 72.998,
+          "passed": true,
+          "requests": 120,
+          "requestsPerSecond": 1.9794467446348747,
+          "successfulRequestsPerSecond": 1.9794467446348747,
+          "measuredSeconds": 60.623,
+          "throughputClock": "scenario span (excludes setup)",
+          "rawK6RateIncludingSetup": 1.644962598679705,
+          "p50Ms": 1215.5085545,
+          "p95Ms": 1657.0959353499998,
+          "p99Ms": 2202.8285498200007,
+          "errorRate": 0,
+          "rateLimited": 0,
+          "serverErrors": 0,
+          "authErrors": 0,
+          "droppedIterations": 0,
+          "checksRate": 1,
+          "peakClientRequestsInFlight": 5,
+          "unclosedRequestsAtEnd": 0,
+          "startedRequests": 120,
+          "httpStatuses": {
+            "200": 120
+          },
+          "routeStatuses": {
+            "/members": {
+              "200": 24
+            },
+            "/reports/financial": {
+              "200": 24
+            },
+            "/visitors": {
+              "200": 24
+            },
+            "/services": {
+              "200": 23
+            },
+            "/giving/transactions": {
+              "200": 25
+            }
+          }
+        }
+      ],
+      "name": "live-auth-cache-refine-recovery"
+    }
+  ],
+  "findings": {
+    "highestErrorFree120SecondOfferedRps": 2,
+    "previousHighestErrorFree120SecondOfferedRps": 1,
+    "twoRpsConfirmationSuccessfulRequests": 241,
+    "twoRpsConfirmationP95Ms": 1686.337392,
+    "threeRpsShortStagePassed": true,
+    "threeRps120SecondStagePassed": false,
+    "threeRpsLongSuccessfulRequests": 248,
+    "threeRpsLongTimeouts": 3,
+    "threeRpsLongCancelledRequests": 25,
+    "threeRpsLongMeasuredSeconds": 91.345,
+    "recoveryOfferedRps": 2,
+    "recoveryScheduledSeconds": 60,
+    "recoverySuccessfulRequests": 120,
+    "recoveryP95Ms": 1657.0959353499998,
+    "largestTestedErrorFreeBurst": 50,
+    "fourRpsPassed": false,
+    "eightRpsAttempted": false,
+    "distinctUserCapacityMeasured": false
+  }
+}

@@ -1,3 +1,4 @@
+import { contentBranch } from '../common/services/content-branch';
 import { attendanceDay } from '../attendance/attendance-day';
 import { assertPlanFeature } from '../billing/entitlements';
 import { attendanceSessionId } from '../attendance/attendance-session-links';
@@ -83,10 +84,17 @@ export class EventsService {
     churchId: string,
     userId: string,
   ): Promise<EventResponseDto> {
+    const branchId = await contentBranch(
+      this.prisma,
+      this.branchScope.resolve(),
+      churchId,
+      dto.branchId,
+    );
     const event = await this.prisma.event.create({
+      include: { branch: { select: { name: true } } },
       data: {
         church_id: churchId,
-        branch_id: this.requestContext.branchIdForWrite(churchId, dto.branchId) ?? null,
+        branch_id: branchId,
         title: dto.title,
         description: dto.description,
         type: (dto.type as never) || 'service',
@@ -194,7 +202,10 @@ export class EventsService {
         orderBy,
         skip,
         take: limit,
-        include: { _count: { select: { registrations: true } } },
+        include: {
+          branch: { select: { name: true } },
+          _count: { select: { registrations: true } },
+        },
       }),
       this.prisma.event.count({ where }),
     ]);
@@ -221,6 +232,7 @@ export class EventsService {
         ...this.requestContext.branchOrSharedWhere(churchId),
       },
       include: {
+        branch: { select: { name: true } },
         _count: { select: { registrations: true } },
         ticket_tiers: { orderBy: { display_order: 'asc' } },
       },
@@ -250,6 +262,7 @@ export class EventsService {
     userId: string,
   ): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
@@ -272,16 +285,22 @@ export class EventsService {
     if (dto.capacity !== undefined) data.capacity = dto.capacity;
     if (dto.isFree !== undefined) data.is_free = dto.isFree;
     if (dto.price !== undefined) data.price = dto.price;
-    if (dto.branchId !== undefined) this.requestContext.branchIdForWrite(churchId, dto.branchId);
-    if (dto.branchId !== undefined)
-      data.branch = dto.branchId ? { connect: { id: dto.branchId } } : { disconnect: true };
+    if (dto.branchId !== undefined) {
+      const branchId = await contentBranch(
+        this.prisma,
+        this.branchScope.resolve(),
+        churchId,
+        dto.branchId,
+      );
+      data.branch = { connect: { id: branchId! } };
+    }
     if (dto.registrationFields !== undefined)
       data.registration_fields = dto.registrationFields as unknown as Prisma.InputJsonValue;
 
     const updated = await this.prisma.event.update({
       where: { id: eventId },
       data,
-      include: { _count: { select: { registrations: true } } },
+      include: { branch: { select: { name: true } }, _count: { select: { registrations: true } } },
     });
 
     await this.audit.log({
@@ -289,6 +308,7 @@ export class EventsService {
       churchId,
       entity: 'event',
       action: 'UPDATE',
+      oldValues: { branchId: existing.branch_id },
       entityId: eventId,
       newValues: dto as unknown as Record<string, unknown>,
     });
@@ -311,6 +331,7 @@ export class EventsService {
    */
   async archiveEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
@@ -325,7 +346,7 @@ export class EventsService {
     const updated = await this.prisma.event.update({
       where: { id: eventId },
       data: { archived_at: new Date() },
-      include: { _count: { select: { registrations: true } } },
+      include: { branch: { select: { name: true } }, _count: { select: { registrations: true } } },
     });
 
     await this.audit.log({
@@ -354,6 +375,7 @@ export class EventsService {
    */
   async restoreEvent(eventId: string, churchId: string, userId: string): Promise<EventResponseDto> {
     const existing = await this.prisma.event.findFirst({
+      include: { branch: { select: { name: true } } },
       where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
     });
 
@@ -368,7 +390,7 @@ export class EventsService {
     const updated = await this.prisma.event.update({
       where: { id: eventId },
       data: { archived_at: null },
-      include: { _count: { select: { registrations: true } } },
+      include: { branch: { select: { name: true } }, _count: { select: { registrations: true } } },
     });
 
     await this.audit.log({
@@ -397,7 +419,7 @@ export class EventsService {
   async deleteEvent(eventId: string, churchId: string, userId: string): Promise<void> {
     const existing = await this.prisma.event.findFirst({
       where: { id: eventId, church_id: churchId, ...this.requestContext.branchWhere(churchId) },
-      include: { _count: { select: { registrations: true } } },
+      include: { branch: { select: { name: true } }, _count: { select: { registrations: true } } },
     });
 
     if (!existing) {
@@ -2201,6 +2223,7 @@ export class EventsService {
       eventId: event.id,
       churchId: event.church_id as string,
       branchId: (event.branch_id as string) || undefined,
+      branchName: (event.branch as { name: string } | null)?.name,
       title: event.title as string,
       description: (event.description as string) || undefined,
       type: event.type as string,

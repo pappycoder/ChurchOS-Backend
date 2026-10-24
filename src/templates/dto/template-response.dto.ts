@@ -9,6 +9,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TemplateResponseDto {
+  @ApiPropertyOptional({ description: 'Assigned branch ID' })
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Assigned branch name' })
+  branchName?: string;
+
   @ApiProperty({ description: 'Unique identifier for the message template' })
   templateId!: string;
 
