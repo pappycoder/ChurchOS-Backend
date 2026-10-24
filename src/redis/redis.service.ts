@@ -64,6 +64,21 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** One atomic read of related keys, with the same decoding as get(). */
+  async mget(...keys: string[]): Promise<unknown[]> {
+    if (!keys.length) return [];
+    if (this._driver === 'upstash') return (this._client as UpstashRedis).mget(...keys);
+    const values = await (this._client as IORedis).mget(...keys);
+    return values.map((value) => {
+      if (value === null) return null;
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        return value;
+      }
+    });
+  }
+
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     const serialized = typeof value === 'string' ? value : JSON.stringify(value);
     if (this._driver === 'upstash') {

@@ -1,3 +1,10 @@
+// Unit scope tests replace only the joined reader; real SQL is tested separately.
+jest.mock('../../../src/auth/services/hydrated-profile', () => ({
+  hydratedProfile: (
+    prisma: { profile: { findUnique: (query: unknown) => Promise<unknown> } },
+    userId: string,
+  ) => prisma.profile.findUnique({ where: { user_id: userId } }),
+}));
 import { validate } from 'class-validator';
 import { accessRoles } from '../../../src/auth/role-policy';
 import { PermissionsService } from '../../../src/auth/services/permissions.service';

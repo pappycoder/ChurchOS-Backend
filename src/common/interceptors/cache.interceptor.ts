@@ -66,6 +66,8 @@ export const CacheInvalidate = (...patterns: string[]) =>
 @Injectable()
 export class CacheInterceptor implements NestInterceptor {
   private readonly logger = new Logger(CacheInterceptor.name);
+  // Hints only: every cache read still atomically checks the current Redis version.
+  private readonly versionHints = new Map<string, string>();
 
   constructor(
     private readonly redis: RedisService,
@@ -107,21 +109,24 @@ export class CacheInterceptor implements NestInterceptor {
     }
 
     // ─── Try to serve from cache ─────────────────────────────────
-    const cacheKey = await measureStage('response_cache', () => this.buildCacheKey(request));
-    if (!cacheKey) return next.handle();
-
+    let entry: { key: string; cached: unknown } | null;
     try {
-      const cached = await measureStage('response_cache', () => this.redis.get<string>(cacheKey));
-      if (cached) {
+      entry = await measureStage('response_cache', () => this.readCache(request));
+    } catch {
+      this.logger.warn('Response cache unavailable; using fresh data');
+      return next.handle();
+    }
+    if (!entry) return next.handle();
+    const { key: cacheKey, cached } = entry;
+    if (cached !== null && cached !== undefined) {
+      if (typeof cached === 'string') {
         try {
           return of(JSON.parse(cached));
         } catch {
           return of(cached);
         }
       }
-    } catch (err) {
-      this.logger.warn(`Cache read error: ${(err as Error).message}`);
-      // Proceed without cache on Redis error
+      return of(cached);
     }
 
     // ─── Cache the response for next time ────────────────────────
@@ -137,7 +142,8 @@ export class CacheInterceptor implements NestInterceptor {
   }
 
   /**
-   * Builds a unique cache key from the request method, URL, query params,
+   * Reads a viewer-specific response and its live revision in one MGET.
+   * The cache key uses request method, URL, query params,
    * the authenticated tenant, the viewer's effective branch scope, and the
    * tenant's current cache version.
    *
@@ -149,7 +155,7 @@ export class CacheInterceptor implements NestInterceptor {
    * means any write to the church (via CacheVersionInterceptor) changes the
    * key and forces a recompute — stale data can never be served.
    */
-  private async buildCacheKey(request: Request): Promise<string | null> {
+  private async readCache(request: Request): Promise<{ key: string; cached: unknown } | null> {
     const url = new URL(request.originalUrl || request.url, 'http://internal');
     url.searchParams.sort();
     const queryString = url.searchParams.toString();
@@ -167,15 +173,21 @@ export class CacheInterceptor implements NestInterceptor {
     // everyone else is pinned to their own branch (or 'none' when unassigned).
     const scope = profile?.is_admin_hq ? 'hq' : profile?.branch_id || 'none';
 
-    let version = '0';
-    try {
-      version = String((await this.redis.get<number>(`cache:ver:${churchId}`)) ?? 0);
-    } catch {
-      // Never reuse a potentially stale version during a Redis outage.
-      return null;
-    }
-
-    return `cache:v3:${request.method}:${churchId}:${viewer}:${scope}:${version}:${path}:${queryString}`;
+    const prefix = `cache:v3:${request.method}:${churchId}:${viewer}:${scope}:`;
+    const suffix = `:${path}:${queryString}`;
+    const hint = this.versionHints.get(churchId) ?? '0';
+    const [currentVersion, cached] = await this.redis.mget(
+      `cache:ver:${churchId}`,
+      `${prefix}${hint}${suffix}`,
+    );
+    const version = String(currentVersion ?? 0);
+    this.versionHints.delete(churchId);
+    this.versionHints.set(churchId, version);
+    if (this.versionHints.size > 500)
+      this.versionHints.delete(this.versionHints.keys().next().value!);
+    // A changed/missing version never allows a response from the old revision.
+    // Recompute once and write under the fresh version; the next read hits.
+    return { key: `${prefix}${version}${suffix}`, cached: version === hint ? cached : null };
   }
 
   /**

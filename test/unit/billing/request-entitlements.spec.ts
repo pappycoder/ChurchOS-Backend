@@ -1,3 +1,10 @@
+// Unit scope tests replace only the joined reader; real SQL is tested separately.
+jest.mock('../../../src/auth/services/hydrated-profile', () => ({
+  hydratedProfile: (
+    prisma: { profile: { findUnique: (query: unknown) => Promise<unknown> } },
+    userId: string,
+  ) => prisma.profile.findUnique({ where: { user_id: userId } }),
+}));
 import { PlatformSubscription } from '@prisma/client';
 import { requestEntitlements } from '../../../src/billing/entitlements';
 import { RequestContextMiddleware } from '../../../src/common/middleware/request-context.middleware';
@@ -24,6 +31,7 @@ describe('Request-scoped subscription reuse', () => {
           church: { archived_at: null, subscription },
         }),
       },
+      permission: { findMany: jest.fn().mockResolvedValue([{ name: 'members:read' }]) },
       platformSubscription: { findUnique: jest.fn() },
     };
     const permissions = new PermissionsService(

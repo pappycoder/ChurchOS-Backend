@@ -18,7 +18,8 @@ import { roleAvailableOnPlan } from '../../billing/role-policy';
  *    name, and its permissions are stored directly in `RolePermission`
  *    as an absolute set.
  *
- * Results are cached in Redis with 15-minute TTL.
+ * Role grants are cached in Redis with 15-minute TTL; the global permission-name
+ * catalogue uses a 30-second per-process cache loaded directly from PostgreSQL.
  *
  * The `super_admin` role is always locked to ALL permissions.
  *
@@ -92,6 +93,10 @@ export interface CreateRoleInput {
 @Injectable()
 export class PermissionsService {
   private readonly logger = new Logger(PermissionsService.name);
+  // Only the global permission-name catalogue is local. Role grants, plans,
+  // profile state and session approvals retain their existing fresh checks.
+  private catalog?: { expiresAt: number; names: string[] };
+  private catalogLoad?: Promise<string[]>;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -739,28 +744,20 @@ export class PermissionsService {
    * Gets all permission names (used for super_admin).
    */
   private async getAllPermissionNames(): Promise<string[]> {
-    const cacheKey = `${CACHE_PREFIX}all`;
-    try {
-      const cached = await this.redis.get<string[]>(cacheKey);
-      if (cached) return cached;
-    } catch (err) {
-      this.logger.warn(
-        `Permission catalog read skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-      );
+    if (this.catalog && this.catalog.expiresAt > performance.now()) return [...this.catalog.names];
+    if (!this.catalogLoad) {
+      this.catalogLoad = this.prisma.permission
+        .findMany({ select: { name: true } })
+        .then((permissions) => {
+          const names = permissions.map((permission) => permission.name);
+          this.catalog = { names, expiresAt: performance.now() + 30000 };
+          return names;
+        })
+        .finally(() => {
+          this.catalogLoad = undefined;
+        });
     }
-
-    const permissions = await this.prisma.permission.findMany({
-      select: { name: true },
-    });
-    const names = permissions.map((p: { name: string }) => p.name);
-    try {
-      await this.redis.set(cacheKey, names, CACHE_TTL_SECONDS);
-    } catch (err) {
-      this.logger.warn(
-        `Permission catalog write skipped (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-      );
-    }
-    return names;
+    return [...(await this.catalogLoad)];
   }
 
   /**

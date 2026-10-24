@@ -1,3 +1,4 @@
+import { hydratedProfile } from '../../auth/services/hydrated-profile';
 /**
  * @file request-context.middleware.ts
  * @description Middleware that populates RequestContext from the authenticated request.
@@ -96,24 +97,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     // role is a text array ordered by rank desc; expose the primary role
     // as `role` and the full set as `roles` for downstream consumers.
     if (!authReq.profile) {
-      const profile = await measureStage('profile', () =>
-        this.prisma.profile.findUnique({
-          where: { user_id: sub },
-          select: {
-            id: true,
-            church_id: true,
-            branch_id: true,
-            member_id: true,
-            role: true,
-            status: true,
-            archived_at: true,
-            is_admin_hq: true,
-            two_factor_enabled: true,
-            authenticator: { select: { revision: true } },
-            church: { select: { archived_at: true, subscription: true } },
-          },
-        }),
-      );
+      const profile = await measureStage('profile', () => hydratedProfile(this.prisma, sub));
       if (profile) {
         profile.role = accessRoles(profile.role);
         if (profile.role.length === 0) {

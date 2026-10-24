@@ -7,7 +7,8 @@ export interface QueryMetrics {
   milliseconds: number;
   startedAt: number;
   stages?: Record<string, number>;
-  pool?: { total: number; idle: number; waiting: number };
+  pool?: { max: number; total: number; idle: number; waiting: number };
+  redisDriver?: 'upstash-rest' | 'ioredis';
 }
 export const queryMetrics = new AsyncLocalStorage<QueryMetrics>();
 export async function measureStage<T>(name: string, operation: () => Promise<T>): Promise<T> {
@@ -29,6 +30,11 @@ export function serverTiming(metrics: QueryMetrics | undefined, duration: number
     `db;dur=${Math.round(metrics?.milliseconds ?? 0)}`,
     `db_queries;desc="${metrics?.queries ?? 0}"`,
     `pool_waiting;desc="${metrics?.pool?.waiting ?? 0}"`,
+    ...(metrics?.pool ? [`pool_max;desc="${metrics.pool.max}"`] : []),
+    ...(metrics?.redisDriver ? [`redis_driver;desc="${metrics.redisDriver}"`] : []),
+    ...(process.env.VERCEL_REGION && /^[a-z0-9-]{1,20}$/.test(process.env.VERCEL_REGION)
+      ? [`runtime_region;desc="${process.env.VERCEL_REGION}"`]
+      : []),
     ...Object.entries(metrics?.stages ?? {}).map(([name, ms]) => `${name};dur=${Math.round(ms)}`),
   ].join(', ');
 }
@@ -43,6 +49,7 @@ function instrument<T extends Pick<Connection, 'queryRaw' | 'executeRaw'>>(
     const metrics = queryMetrics.getStore();
     if (metrics)
       metrics.pool = {
+        max: pool.options.max ?? 10,
         total: Math.max(metrics.pool?.total ?? 0, pool.totalCount),
         idle: Math.max(metrics.pool?.idle ?? 0, pool.idleCount),
         waiting: Math.max(metrics.pool?.waiting ?? 0, pool.waitingCount),

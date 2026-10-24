@@ -72,28 +72,21 @@ export class JwtAuthGuard {
           throw new UnauthorizedException('Invalid token: missing subject claim');
         }
 
-        // Check if token has been blacklisted (logged out)
-        // Revocation is security state: an outage must not revive logged-out tokens.
-        let isBlacklisted: unknown = null;
-        try {
-          isBlacklisted = await measureStage('revocation', () =>
-            this.redis.get(`auth:blacklist:${token}`),
-          );
-        } catch (err) {
-          this.logger.warn(
-            `Blacklist lookup failed (Redis unavailable): ${err instanceof Error ? err.message : err}`,
-          );
+        // Independent reads overlap, but both must complete successfully.
+        // allSettled preserves revocation error precedence and observes failures.
+        const [revocation, approval] = await Promise.allSettled([
+          measureStage('revocation', () => this.redis.get(`auth:blacklist:${token}`)),
+          measureStage('session', () => this.authenticator.assertSession(payload, request.profile)),
+        ]);
+        if (revocation.status === 'rejected') {
+          // Provider errors may contain URLs/credentials; do not log their text.
+          this.logger.warn('Session revocation lookup unavailable');
           throw new ServiceUnavailableException(
             'Unable to verify session revocation. Please try again.',
           );
         }
-        if (isBlacklisted) {
-          throw new UnauthorizedException('Token has been revoked');
-        }
-
-        await measureStage('session', () =>
-          this.authenticator.assertSession(payload, request.profile),
-        );
+        if (revocation.value) throw new UnauthorizedException('Token has been revoked');
+        if (approval.status === 'rejected') throw approval.reason;
 
         // Map JWT payload to SupabaseJwtPayload
         // Include both `sub` and `id` (mapped from sub) for compatibility

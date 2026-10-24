@@ -1,6 +1,6 @@
 /**
  * @file cache.interceptor.spec.ts
- * @description Unit tests for CacheInterceptor.buildCacheKey — asserts the
+ * @description Unit tests for CacheInterceptor.readCache — asserts the
  * Redis cache key is partitioned by church AND by the viewer's effective
  * branch scope, so an admin-HQ viewer (church-wide) and a branch-restricted
  * viewer hitting the same URL never share a cached entry within one church.
@@ -10,15 +10,15 @@ import type { RedisService } from '../../../src/redis/redis.service';
 import type { Reflector } from '@nestjs/core';
 
 /** Exposes the private method for direct testing without an `any` cast. */
-type KeyBuilder = { buildCacheKey(request: Request): Promise<string> };
+type KeyBuilder = { readCache(request: Request): Promise<{ key: string; cached: unknown } | null> };
 
-describe('CacheInterceptor.buildCacheKey', () => {
+describe('CacheInterceptor.readCache', () => {
   const churchId = 'church-1';
   const branchA = '11111111-1111-1111-1111-111111111111';
   const branchB = '22222222-2222-2222-2222-222222222222';
 
   function makeInterceptor(version = 7) {
-    const redis = { get: jest.fn().mockResolvedValue(version) } as unknown as RedisService;
+    const redis = { mget: jest.fn().mockResolvedValue([version, null]) } as unknown as RedisService;
     const reflector = {} as unknown as Reflector;
     return new CacheInterceptor(redis, reflector);
   }
@@ -36,8 +36,8 @@ describe('CacheInterceptor.buildCacheKey', () => {
     } as unknown as Request;
   }
 
-  const keyOf = (interceptor: CacheInterceptor, request: Request) =>
-    (interceptor as unknown as KeyBuilder).buildCacheKey(request);
+  const keyOf = async (interceptor: CacheInterceptor, request: Request) =>
+    (await (interceptor as unknown as KeyBuilder).readCache(request))?.key ?? null;
 
   it('embeds method, church, scope, version, path and query in the key', async () => {
     const interceptor = makeInterceptor(9);
@@ -49,7 +49,9 @@ describe('CacheInterceptor.buildCacheKey', () => {
         profile: { church_id: churchId, is_admin_hq: true },
       }),
     );
-    expect(key).toMatch(/^cache:v3:GET:church-1:[a-f0-9]{24}:hq:9:\/api\/v1\/analytics\/giving:branchId=x$/);
+    expect(key).toMatch(
+      /^cache:v3:GET:church-1:[a-f0-9]{24}:hq:9:\/api\/v1\/analytics\/giving:branchId=x$/,
+    );
   });
 
   it('uses the "hq" scope token for an admin-hq viewer regardless of their branch', async () => {
@@ -111,15 +113,13 @@ describe('CacheInterceptor.buildCacheKey', () => {
     expect(key).toBeNull();
   });
 
-  it('falls back to version 0 when the version read fails', async () => {
+  it('does not invent a cache version when Redis fails', async () => {
     const redis = {
-      get: jest.fn().mockRejectedValue(new Error('redis down')),
+      mget: jest.fn().mockRejectedValue(new Error('redis down')),
     } as unknown as RedisService;
     const interceptor = new CacheInterceptor(redis, {} as unknown as Reflector);
-    const key = await keyOf(
-      interceptor,
-      makeRequest({ profile: { church_id: churchId, is_admin_hq: true } }),
-    );
-    expect(key).toBeNull();
+    await expect(
+      keyOf(interceptor, makeRequest({ profile: { church_id: churchId, is_admin_hq: true } })),
+    ).rejects.toThrow('redis down');
   });
 });

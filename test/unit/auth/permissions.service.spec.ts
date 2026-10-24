@@ -498,7 +498,43 @@ describe('PermissionsService', () => {
       expect(first).toEqual(['members:read', 'members:create', 'giving:read']);
       expect(second).toEqual(first);
       expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
-      expect(redis.set).toHaveBeenCalledWith('perms:v30:all', first, 900);
+      expect(redis.get).not.toHaveBeenCalled();
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('coalesces catalogue misses, expires locally and does not expose a mutable cached array', async () => {
+      jest.useFakeTimers();
+      try {
+        prisma.permission.findMany.mockResolvedValue(allPerms);
+        const results = await Promise.all(
+          Array.from({ length: 10 }, () => service.getPermissionsForRole(churchId, 'church_admin')),
+        );
+        results[0].push('injected');
+        expect(await service.getPermissionsForRole(churchId, 'church_admin')).not.toContain(
+          'injected',
+        );
+        expect(prisma.permission.findMany).toHaveBeenCalledTimes(1);
+        jest.advanceTimersByTime(30001);
+        prisma.permission.findMany.mockResolvedValue([{ name: 'members:read' }]);
+        expect(await service.getPermissionsForRole(churchId, 'church_admin')).toEqual([
+          'members:read',
+        ]);
+        expect(prisma.permission.findMany).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('retries a failed catalogue load instead of retaining a rejected promise', async () => {
+      prisma.permission.findMany
+        .mockRejectedValueOnce(new Error('database unavailable'))
+        .mockResolvedValueOnce(allPerms);
+      await expect(service.getPermissionsForRole(churchId, 'church_admin')).rejects.toThrow(
+        'database unavailable',
+      );
+      expect(await service.getPermissionsForRole(churchId, 'church_admin')).toContain(
+        'members:read',
+      );
     });
 
     it('serves cached resolutions when present', async () => {

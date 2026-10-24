@@ -1,3 +1,10 @@
+// Unit scope tests replace only the joined reader; real SQL is tested separately.
+jest.mock('../../../src/auth/services/hydrated-profile', () => ({
+  hydratedProfile: (
+    prisma: { profile: { findUnique: (query: unknown) => Promise<unknown> } },
+    userId: string,
+  ) => prisma.profile.findUnique({ where: { user_id: userId } }),
+}));
 import { ForbiddenException, HttpException } from '@nestjs/common';
 import { RequestContextMiddleware } from '../../../src/common/middleware/request-context.middleware';
 import { RequestContextService } from '../../../src/common/services/request-context.service';
