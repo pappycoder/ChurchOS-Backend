@@ -1,3 +1,9 @@
+import {
+  attendanceConflict,
+  attendanceVisitorName,
+  isAttendanceDuplicate,
+  visitorAlreadyAttended,
+} from './attendance-duplicates';
 import { attendanceDay } from './attendance-day';
 import { serviceTimeForStorage, serviceTimeForResponse } from './service-time';
 import { attendanceSessionId } from './attendance-session-links';
@@ -404,6 +410,8 @@ export class AttendanceService extends AttendanceSessionsService {
     churchId: string,
     userId: string,
   ): Promise<AttendanceResponseDto> {
+    if (Number(!!dto.serviceId) + Number(!!dto.eventId) !== 1)
+      throw new BadRequestException('Select exactly one service or event');
     if (!dto.memberId && !dto.visitorName && !dto.visitorId) {
       throw new BadRequestException('Either memberId, visitorId, or visitorName must be provided');
     }
@@ -494,6 +502,12 @@ export class AttendanceService extends AttendanceSessionsService {
       }
     }
 
+    if (
+      !dto.memberId &&
+      (await visitorAlreadyAttended(this.prisma, churchId, dto, dto, attendanceDate))
+    )
+      throw new ConflictException('Visitor already checked in for this event or service date');
+
     const category = dto.category ?? defaultAttendanceCategory(serviceCategory);
 
     const sessionId = await attendanceSessionId(
@@ -505,26 +519,28 @@ export class AttendanceService extends AttendanceSessionsService {
       parentBranch,
       this.requestContext.getStore()?.viewer,
     );
-    const attendance = await this.prisma.attendance.create({
-      data: {
-        checkin_at: checkedInAt,
-        attendance_date: attendanceDate,
-        ...(sessionId ? { session_id: sessionId } : {}),
-        church_id: churchId,
-        service_id: dto.serviceId || null,
-        event_id: dto.eventId || null,
-        member_id: dto.memberId || null,
-        visitor_id: dto.visitorId || null,
-        visitor_name: dto.visitorName || linkedVisitorName,
-        category,
-        source: dto.source || 'manual',
-      },
-      include: {
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-        member: { select: { first_name: true, last_name: true } },
-      },
-    });
+    const attendance = await this.prisma.attendance
+      .create({
+        data: {
+          checkin_at: checkedInAt,
+          attendance_date: attendanceDate,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          church_id: churchId,
+          service_id: dto.serviceId || null,
+          event_id: dto.eventId || null,
+          member_id: dto.memberId || null,
+          visitor_id: dto.visitorId || null,
+          visitor_name: attendanceVisitorName(dto.visitorName) || linkedVisitorName,
+          category,
+          source: dto.source || 'manual',
+        },
+        include: {
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+          member: { select: { first_name: true, last_name: true } },
+        },
+      })
+      .catch(attendanceConflict);
 
     await this.audit.log({
       userId,
@@ -555,6 +571,8 @@ export class AttendanceService extends AttendanceSessionsService {
     skipped: number;
     errors: Array<{ index: number; message: string }>;
   }> {
+    if (Number(!!dto.serviceId) + Number(!!dto.eventId) !== 1)
+      throw new BadRequestException('Select exactly one service or event');
     const { checkedInAt, attendanceDate } = attendanceDay(dto.attendanceDate);
     let serviceCategory: string | null = null;
     let parentBranch: string | null | undefined;
@@ -664,6 +682,14 @@ export class AttendanceService extends AttendanceSessionsService {
           }
         }
 
+        if (
+          !record.memberId &&
+          (await visitorAlreadyAttended(this.prisma, churchId, dto, record, attendanceDate))
+        ) {
+          skipped++;
+          continue;
+        }
+
         await this.prisma.attendance.create({
           data: {
             checkin_at: checkedInAt,
@@ -674,7 +700,7 @@ export class AttendanceService extends AttendanceSessionsService {
             event_id: dto.eventId || null,
             member_id: record.memberId || null,
             visitor_id: record.visitorId || null,
-            visitor_name: record.visitorName || linkedVisitorName,
+            visitor_name: attendanceVisitorName(record.visitorName) || linkedVisitorName,
             category: dto.category ?? defaultAttendanceCategory(serviceCategory),
             source: dto.source || 'manual',
           },
@@ -682,6 +708,10 @@ export class AttendanceService extends AttendanceSessionsService {
 
         recorded++;
       } catch (error) {
+        if (isAttendanceDuplicate(error)) {
+          skipped++;
+          continue;
+        }
         errors.push({
           index: i,
           message: error instanceof Error ? error.message : 'Unknown error',
@@ -726,6 +756,8 @@ export class AttendanceService extends AttendanceSessionsService {
     churchId: string,
     userId: string,
   ): Promise<AttendanceResponseDto> {
+    if (Number(!!dto.serviceId) + Number(!!dto.eventId) !== 1)
+      throw new BadRequestException('Select exactly one service or event');
     if (!dto.visitorName || dto.visitorName.trim().length === 0) {
       throw new BadRequestException('Visitor name is required');
     }
@@ -770,6 +802,9 @@ export class AttendanceService extends AttendanceSessionsService {
       }
     }
 
+    if (await visitorAlreadyAttended(this.prisma, churchId, dto, dto, attendanceDate))
+      throw new ConflictException('Visitor already checked in for this event or service date');
+
     const sessionId = await attendanceSessionId(
       this.prisma,
       dto.eventId ? 'event' : 'service',
@@ -779,24 +814,26 @@ export class AttendanceService extends AttendanceSessionsService {
       parentBranch,
       this.requestContext.getStore()?.viewer,
     );
-    const attendance = await this.prisma.attendance.create({
-      data: {
-        checkin_at: checkedInAt,
-        attendance_date: attendanceDate,
-        ...(sessionId ? { session_id: sessionId } : {}),
-        church_id: churchId,
-        service_id: dto.serviceId || null,
-        event_id: dto.eventId || null,
-        visitor_id: dto.visitorId || null,
-        visitor_name: dto.visitorName.trim(),
-        category: dto.category ?? defaultAttendanceCategory(serviceCategory),
-        source: dto.source || 'manual',
-      },
-      include: {
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-      },
-    });
+    const attendance = await this.prisma.attendance
+      .create({
+        data: {
+          checkin_at: checkedInAt,
+          attendance_date: attendanceDate,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          church_id: churchId,
+          service_id: dto.serviceId || null,
+          event_id: dto.eventId || null,
+          visitor_id: dto.visitorId || null,
+          visitor_name: attendanceVisitorName(dto.visitorName),
+          category: dto.category ?? defaultAttendanceCategory(serviceCategory),
+          source: dto.source || 'manual',
+        },
+        include: {
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+        },
+      })
+      .catch(attendanceConflict);
 
     await this.audit.log({
       userId,

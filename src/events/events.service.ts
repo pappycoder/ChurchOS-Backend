@@ -1,3 +1,4 @@
+import { attendanceConflict, isAttendanceDuplicate } from '../attendance/attendance-duplicates';
 import { contentBranch } from '../common/services/content-branch';
 import { attendanceDay } from '../attendance/attendance-day';
 import { assertPlanFeature } from '../billing/entitlements';
@@ -1666,20 +1667,57 @@ export class EventsService {
       };
     }
 
-    // Mark ticket as used
     const now = new Date();
-    await this.prisma.ticket.update({
-      where: { id: ticket.id },
-      data: { is_used: true, used_at: now },
-    });
-
-    // Update registration check-in if linked
-    if (ticket.registration_id) {
-      await this.prisma.eventRegistration.update({
-        where: { id: ticket.registration_id },
-        data: { checked_in: true, checked_in_at: now },
+    let accepted: boolean;
+    try {
+      accepted = await this.prisma.$transaction(async (tx) => {
+        const claimed = await tx.ticket.updateMany({
+          where: { id: ticket.id, event_id: eventId, is_used: false, status: 'paid' },
+          data: { is_used: true, used_at: now },
+        });
+        if (claimed.count !== 1) return false;
+        if (ticket.member_id || ticket.visitor_id) {
+          const visitor = ticket.visitor_id
+            ? await tx.visitor.findFirst({
+                where: { id: ticket.visitor_id, church_id: churchId },
+                select: { first_name: true, last_name: true },
+              })
+            : null;
+          await tx.attendance.create({
+            data: {
+              church_id: churchId,
+              event_id: eventId,
+              member_id: ticket.member_id,
+              visitor_id: ticket.visitor_id,
+              visitor_name: visitor
+                ? [visitor.first_name, visitor.last_name].filter(Boolean).join(' ')
+                : null,
+              attendance_date: new Date(now.toISOString().slice(0, 10)),
+              checkin_at: now,
+              source: 'qr',
+              category: 'adult',
+            },
+          });
+        }
+        if (ticket.registration_id) {
+          const registration = await tx.eventRegistration.findUnique({
+            where: { id: ticket.registration_id },
+          });
+          if (registration?.checked_in)
+            throw new ConflictException('Member already checked in for this event');
+          await tx.eventRegistration.update({
+            where: { id: ticket.registration_id },
+            data: { checked_in: true, checked_in_at: now },
+          });
+        }
+        return true;
       });
+    } catch (error) {
+      if (isAttendanceDuplicate(error) || error instanceof ConflictException)
+        return { valid: false };
+      throw error;
     }
+    if (!accepted) return { valid: false };
 
     let memberName: string | undefined;
     if (ticket.member_id) {
@@ -1863,27 +1901,31 @@ export class EventsService {
       throw new ConflictException('Member already checked in for this event');
     }
 
-    const attendance = await this.prisma.attendance.create({
-      data: {
-        checkin_at: checkedInAt,
-        attendance_date: attendanceDate,
-        ...(sessionId ? { session_id: sessionId } : {}),
-        church_id: churchId,
-        event_id: eventId,
-        member_id: memberId,
-        category: 'adult',
-        source: 'manual',
-      },
-      include: {
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-        member: { select: { first_name: true, last_name: true } },
-      },
-    });
-
     const registration = await this.prisma.eventRegistration.findUnique({
       where: { event_id_member_id: { event_id: eventId, member_id: memberId } },
     });
+    if (registration?.checked_in)
+      throw new ConflictException('Member already checked in for this event');
+
+    const attendance = await this.prisma.attendance
+      .create({
+        data: {
+          checkin_at: checkedInAt,
+          attendance_date: attendanceDate,
+          ...(sessionId ? { session_id: sessionId } : {}),
+          church_id: churchId,
+          event_id: eventId,
+          member_id: memberId,
+          category: 'adult',
+          source: 'manual',
+        },
+        include: {
+          service: { select: { name: true } },
+          event: { select: { title: true } },
+          member: { select: { first_name: true, last_name: true } },
+        },
+      })
+      .catch(attendanceConflict);
 
     if (registration && !registration.checked_in) {
       await this.prisma.eventRegistration.update({
@@ -1960,22 +2002,34 @@ export class EventsService {
         continue;
       }
 
-      await this.prisma.attendance.create({
-        data: {
-          checkin_at: checkedInAt,
-          attendance_date: attendanceDate,
-          ...(sessionId ? { session_id: sessionId } : {}),
-          church_id: churchId,
-          event_id: eventId,
-          member_id: memberId,
-          category: 'adult',
-          source: 'manual',
-        },
-      });
-
       const registration = await this.prisma.eventRegistration.findUnique({
         where: { event_id_member_id: { event_id: eventId, member_id: memberId } },
       });
+      if (registration?.checked_in) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await this.prisma.attendance.create({
+          data: {
+            checkin_at: checkedInAt,
+            attendance_date: attendanceDate,
+            ...(sessionId ? { session_id: sessionId } : {}),
+            church_id: churchId,
+            event_id: eventId,
+            member_id: memberId,
+            category: 'adult',
+            source: 'manual',
+          },
+        });
+      } catch (error) {
+        if (isAttendanceDuplicate(error)) {
+          skipped++;
+          continue;
+        }
+        throw error;
+      }
 
       if (registration && !registration.checked_in) {
         await this.prisma.eventRegistration.update({
@@ -2037,59 +2091,77 @@ export class EventsService {
       this.requestContext.getStore()?.viewer,
     );
 
-    let member = await this.prisma.member.findFirst({
-      where: { church_id: churchId, phone: dto.phone },
-    });
-
-    if (!member) {
-      member = await this.prisma.member.create({
-        data: {
-          church_id: churchId,
-          first_name: dto.firstName,
-          last_name: dto.lastName,
-          phone: dto.phone,
-          email: dto.email || null,
-          gender: dto.gender || null,
-          status: 'active',
-        },
-      });
-    }
-
-    await this.prisma.eventRegistration.upsert({
-      where: {
-        event_id_member_id: { event_id: eventId, member_id: member.id },
-      },
-      create: {
-        church_id: churchId,
-        event_id: eventId,
-        member_id: member.id,
-        payment_status: 'paid',
-        checked_in: true,
-        checked_in_at: new Date(),
-      },
-      update: {
-        checked_in: true,
-        checked_in_at: new Date(),
-      },
-    });
-
-    const attendance = await this.prisma.attendance.create({
-      data: {
-        checkin_at: checkedInAt,
-        attendance_date: attendanceDate,
-        ...(sessionId ? { session_id: sessionId } : {}),
-        church_id: churchId,
-        event_id: eventId,
-        member_id: member.id,
-        category: 'adult',
-        source: 'manual',
-      },
-      include: {
-        service: { select: { name: true } },
-        event: { select: { title: true } },
-        member: { select: { first_name: true, last_name: true } },
-      },
-    });
+    const phoneDigits = dto.phone.replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15)
+      throw new BadRequestException('Enter a valid phone number');
+    const attendance = await this.prisma
+      .$transaction(async (tx) => {
+        // The lock covers member lookup/creation, so retries cannot create a
+        // second member to bypass the event/person unique constraint.
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${churchId + ':walk-in:' + phoneDigits}, 0))::text`;
+        const matches = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM members WHERE church_id=${churchId}
+          AND regexp_replace(phone, '[^0-9]', '', 'g')=${phoneDigits}
+        ORDER BY id`;
+        if (
+          matches.length &&
+          (await tx.attendance.findFirst({
+            where: { event_id: eventId, member_id: { in: matches.map((member) => member.id) } },
+            select: { id: true },
+          }))
+        )
+          throw new ConflictException('Member already checked in for this event');
+        const member =
+          matches[0] ??
+          (await tx.member.create({
+            data: {
+              church_id: churchId,
+              branch_id: event.branch_id,
+              first_name: dto.firstName.trim(),
+              last_name: dto.lastName.trim(),
+              phone: dto.phone.trim(),
+              email: dto.email || null,
+              gender: dto.gender || null,
+              status: 'active',
+            },
+          }));
+        const registration = await tx.eventRegistration.findUnique({
+          where: { event_id_member_id: { event_id: eventId, member_id: member.id } },
+        });
+        if (registration?.checked_in)
+          throw new ConflictException('Member already checked in for this event');
+        const record = await tx.attendance.create({
+          data: {
+            checkin_at: checkedInAt,
+            attendance_date: attendanceDate,
+            ...(sessionId ? { session_id: sessionId } : {}),
+            church_id: churchId,
+            event_id: eventId,
+            member_id: member.id,
+            category: 'adult',
+            source: 'manual',
+          },
+          include: {
+            service: { select: { name: true } },
+            event: { select: { title: true } },
+            member: { select: { first_name: true, last_name: true } },
+          },
+        });
+        await tx.eventRegistration.upsert({
+          where: { event_id_member_id: { event_id: eventId, member_id: member.id } },
+          create: {
+            church_id: churchId,
+            event_id: eventId,
+            member_id: member.id,
+            payment_status: 'paid',
+            checked_in: true,
+            checked_in_at: checkedInAt,
+          },
+          update: { checked_in: true, checked_in_at: checkedInAt },
+        });
+        return record;
+      })
+      .catch(attendanceConflict);
 
     await this.audit.log({
       userId,
@@ -2099,7 +2171,7 @@ export class EventsService {
       entityId: attendance.id,
       newValues: {
         event_id: eventId,
-        member_id: member.id,
+        member_id: attendance.member_id,
         walkIn: true,
       },
     });

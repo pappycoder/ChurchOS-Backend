@@ -642,6 +642,8 @@ model Attendance {
 
   @@unique([service_id, member_id, attendance_date]) // One check-in per recurring service date per member
   @@unique([event_id, member_id]) // One check-in per event per member
+  @@unique([service_id, visitor_id, attendance_date])
+  @@unique([event_id, visitor_id])
   @@index([church_id, service_id, checkin_at])
   @@index([church_id, event_id, checkin_at])
   @@index([church_id, visitor_id])

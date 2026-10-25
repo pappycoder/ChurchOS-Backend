@@ -5,7 +5,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsInt, IsUUID, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsUrl, IsInt, IsUUID, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdateSermonDto {
   @ApiPropertyOptional({ description: 'Branch that owns this record' })
@@ -50,12 +50,14 @@ export class UpdateSermonDto {
   @ApiPropertyOptional({ description: 'Audio file URL (uploaded or external)' })
   @IsString()
   @IsOptional()
-  audioUrl?: string;
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false })
+  audioUrl?: string | null;
 
   @ApiPropertyOptional({ description: 'Video file URL (uploaded or external)' })
   @IsString()
   @IsOptional()
-  videoUrl?: string;
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false })
+  videoUrl?: string | null;
 
   @ApiPropertyOptional({ description: 'Duration in seconds' })
   @IsInt()

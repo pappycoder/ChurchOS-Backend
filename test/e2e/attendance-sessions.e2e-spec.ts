@@ -39,6 +39,14 @@ describe('Shared attendance sessions with PostgreSQL', () => {
   beforeAll(async () => {
     await prisma.$connect();
     await prisma.church.create({ data: { id: church, name: 'Shared session fixtures' } });
+    await prisma.platformSubscription.create({
+      data: {
+        church_id: church,
+        plan: 'network',
+        cycle: 'monthly',
+        paid_until: new Date('2099-01-01'),
+      },
+    });
     await prisma.branch.createMany({
       data: [
         { id: branch, church_id: church, name: 'A' },

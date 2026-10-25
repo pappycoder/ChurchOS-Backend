@@ -34,6 +34,14 @@ describe('Mixed services and general headcounts with PostgreSQL', () => {
         { id: foreign, name: 'Foreign fixture' },
       ],
     });
+    await prisma.platformSubscription.createMany({
+      data: [church, foreign].map((church_id) => ({
+        church_id,
+        plan: 'network',
+        cycle: 'monthly',
+        paid_until: new Date('2099-01-01'),
+      })),
+    });
     await prisma.branch.createMany({
       data: [
         { id: branch, church_id: church, name: 'A' },
