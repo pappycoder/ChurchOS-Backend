@@ -45,7 +45,17 @@ describe('MediaService', () => {
         RequestContextService,
         BranchScopeService,
         MediaService,
-        { provide: SupabaseService, useValue: { client: { storage: { from: storageFrom } } } },
+        {
+          provide: SupabaseService,
+          useValue: {
+            client: {
+              storage: {
+                from: storageFrom,
+                getBucket: jest.fn().mockResolvedValue({ data: { public: false }, error: null }),
+              },
+            },
+          },
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -87,6 +97,52 @@ describe('MediaService', () => {
     expect(storageFrom).not.toHaveBeenCalled();
   });
 
+  it('streams a sermon recording with range support for a sermon reader without library-edit access', async () => {
+    prisma.platformSubscription.findUnique.mockResolvedValue({
+      plan: 'community',
+      paid_until: new Date(Date.now() + 86400000),
+    });
+    prisma.mediaAsset.findFirst.mockResolvedValue({
+      ...mockAsset,
+      folder: 'sermons',
+      mime_type: 'audio/mpeg',
+      filename: 'Sunday Message.mp3',
+      storage_path: 'sermons/church/recording.mp3',
+      storage_bucket: 'private',
+    });
+    storageFrom.mockReturnValue({
+      createSignedUrl: jest.fn().mockResolvedValue({
+        data: { signedUrl: 'https://storage.example/private-signed-file' },
+        error: null,
+      }),
+    });
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 206,
+        headers: { 'Content-Range': 'bytes 0-2/100', 'Content-Length': '3' },
+      }),
+    );
+    const result = await service.getFile(
+      mockAssetId,
+      mockChurchId,
+      {
+        church_id: mockChurchId,
+        role: 'media_team',
+        is_admin_hq: true,
+        permissions: ['sermons:list:read'],
+      },
+      'bytes=0-2',
+      'reader',
+    );
+    expect(result.status).toBe(206);
+    expect(result.contentRange).toBe('bytes 0-2/100');
+    expect(result.file.getHeaders()).toEqual(expect.objectContaining({ type: 'audio/mpeg' }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://storage.example/private-signed-file',
+      expect.objectContaining({ headers: { Range: 'bytes=0-2' } }),
+    );
+  });
+
   describe('deleteFile', () => {
     it('should delete a file by path', async () => {
       prisma.mediaAsset.findFirst.mockResolvedValue({
@@ -117,6 +173,34 @@ describe('MediaService', () => {
   });
 
   describe('validateFile (via uploadFile)', () => {
+    it('keeps the original recording name searchable while using a random storage path', async () => {
+      storageFrom.mockReturnValue({
+        getBucket: jest.fn().mockResolvedValue({ data: { public: false }, error: null }),
+        upload: jest.fn().mockResolvedValue({ error: null }),
+      });
+      prisma.mediaAsset.create.mockImplementation(async ({ data }) => data);
+      const result = await service.uploadFile(
+        {
+          originalname: 'C:\\recordings\\Sunday Message.mp3',
+          mimetype: 'audio/mpeg',
+          buffer: Buffer.from('4944330000', 'hex'),
+          size: 5,
+        } as never,
+        'sermons',
+        mockChurchId,
+        'uploader',
+        { is_admin_hq: true } as never,
+      );
+      expect(prisma.mediaAsset.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          filename: 'Sunday Message.mp3',
+          folder: 'sermons',
+          mime_type: 'audio/mpeg',
+        }),
+      });
+      expect(result.path).toMatch(new RegExp(`^sermons/${mockChurchId}/[a-f0-9-]+\\.mp3$`));
+      expect(result.url).toContain(`/api/backend/media/files/${result.assetId}`);
+    });
     it('should throw BadRequestException if no file provided', async () => {
       await expect(service.uploadFile(undefined as never, 'uploads', 'church-1')).rejects.toThrow(
         BadRequestException,

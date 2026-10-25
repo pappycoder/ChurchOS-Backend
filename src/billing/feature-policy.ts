@@ -4,7 +4,7 @@ import { PlanFeature } from './plans';
 export function featureForPermission(permission: string): PlanFeature | undefined {
   const [resource, surface] = permission.split(':');
   if (permission === 'roles:create') return 'custom_roles';
-  if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
+  if (resource === 'events' && surface === 'tickets') return 'tickets';
   if (['assets', 'asset_categories'].includes(resource)) return 'assets';
   if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';
   if (['departments', 'cell_groups'].includes(resource)) return 'groups';
@@ -40,11 +40,7 @@ export function featureForApiPath(path: string): PlanFeature | undefined {
   if (/^\/reports\/financial(?:\/|$)/.test(path)) return 'giving';
   if (path === '/reports/export') return undefined; // Guard resolves the selected report type.
   if (/^\/reports(?:\/|$)/.test(path)) return 'reports';
-  if (
-    /^\/events\/(?:management\/tickets|[^/]+\/(?:tiers|tickets|check-in|attendance))(?:\/|$)/.test(
-      path,
-    )
-  )
+  if (/^\/events\/(?:management\/tickets|[^/]+\/(?:tiers|tickets))(?:\/|$)/.test(path))
     return 'tickets';
   if (/^\/events(?:\/|$)/.test(path)) return 'events';
   if (/^\/giving\/cell-groups(?:\/|$)/.test(path)) return 'groups';

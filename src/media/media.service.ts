@@ -246,6 +246,14 @@ export class MediaService {
     const ext = extensions[file.mimetype] ?? 'bin';
     const filename = `${randomUUID()}.${ext}`;
     const path = `${folder}/${churchId}/${filename}`;
+    const displayName =
+      file.originalname
+        ?.replace(/\\/g, '/')
+        .split('/')
+        .pop()
+        ?.replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+        .slice(0, 200) || filename;
 
     const { error } = await this.supabase.client.storage
       .from(storageBucket)
@@ -271,7 +279,7 @@ export class MediaService {
         storage_bucket: storageBucket,
         church_id: churchId,
         branch_id: scope.churchOnly ? (branchId ?? null) : (scope.branchId ?? null),
-        filename,
+        filename: displayName,
         url: assetUrl,
         mime_type: file.mimetype,
         size_bytes: file.buffer.length,
@@ -287,7 +295,12 @@ export class MediaService {
         entity: 'media_asset',
         action: 'CREATE',
         entityId: asset.id,
-        newValues: { filename, folder, mime_type: file.mimetype, size: file.buffer.length },
+        newValues: {
+          filename: displayName,
+          folder,
+          mime_type: file.mimetype,
+          size: file.buffer.length,
+        },
       });
     }
 

@@ -186,7 +186,7 @@ export function featureForPath(path: string): PlanFeature | undefined {
   if (/^\/(?:departments|admin\/(?:departments|cell-groups))(?:\/|$)/.test(path)) return 'groups';
   if (path === '/reports' || /^\/reports\/financial(?:\/|$)/.test(path)) return 'giving';
   if (/^\/reports(?:\/|$)/.test(path)) return 'reports';
-  if (/^\/events\/(?:management|check-in|[^/]+\/tiers)(?:\/|$)/.test(path)) return 'tickets';
+  if (/^\/events\/(?:management|[^/]+\/tiers)(?:\/|$)/.test(path)) return 'tickets';
   if (/^\/events(?:\/|$)/.test(path)) return 'events';
   if (/^\/admin\/integrations(?:\/|$)/.test(path)) return 'giving';
   if (/^\/giving(?:\/|$)/.test(path)) return 'giving';
@@ -199,7 +199,7 @@ export function featureForPath(path: string): PlanFeature | undefined {
 export function featureForPermission(permission: string): PlanFeature | undefined {
   const [resource, surface] = permission.split(':');
   if (permission === 'roles:create') return 'custom_roles';
-  if (resource === 'events' && ['tickets', 'checkin'].includes(surface)) return 'tickets';
+  if (resource === 'events' && surface === 'tickets') return 'tickets';
   if (['assets', 'asset_categories'].includes(resource)) return 'assets';
   if (['pastoral', 'pastoral_confidential', 'appointments'].includes(resource)) return 'pastoral';
   if (['departments', 'cell_groups'].includes(resource)) return 'groups';

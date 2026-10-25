@@ -32,8 +32,11 @@ const routes = [
   ['/events', 'events'],
   ['/events/management/tickets', 'tickets'],
   ['/events/id/tiers', 'tickets'],
-  ['/events/id/check-in', 'tickets'],
-  ['/events/id/attendance', 'tickets'],
+  ['/events/id/check-in', 'events'],
+  ['/events/id/attendance', 'events'],
+  ['/events/id/check-in/walk-in', 'events'],
+  ['/events/id/attendance-sessions', 'events'],
+  ['/events/id/tickets/validate', 'tickets'],
   ['/admin/departments', 'groups'],
   ['/admin/cell-groups', 'groups'],
   ['/forms', 'forms'],
@@ -186,15 +189,44 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
-  it('blocks event attendance via the generic attendance endpoint on Community', async () => {
-    await expect(
-      make('community').canActivate(
-        requestContext({
-          method: 'POST',
+  it.each(['GET', 'POST'])(
+    'includes generic event attendance on Community for %s, while denying Essentials',
+    async (method) => {
+      for (const plan of ['essentials', 'community'] as const) {
+        const request = {
+          method,
           path: '/attendance/attendance',
-          body: { eventId: 'event' },
+          query: method === 'GET' ? { eventId: 'event' } : {},
+          body: method === 'POST' ? { eventId: 'event' } : {},
           profile: { church_id: 'church' },
-        }),
+        };
+        const result = make(plan).canActivate(requestContext(request));
+        if (plan === 'community') await expect(result).resolves.toBe(true);
+        else await expect(result).rejects.toBeInstanceOf(ForbiddenException);
+      }
+    },
+  );
+  it('retains Community check-in grants but strips ticket management grants', async () => {
+    const grants = ['events:checkin:read', 'events:checkin:create', 'events:checkin:update'];
+    const request = {
+      method: 'POST',
+      path: '/events/id/check-in',
+      profile: { church_id: 'church', permissions: [...grants, 'events:tickets:create'] },
+    };
+    await expect(
+      make('community').canActivate(requestContext(request, ['events:checkin:create'])),
+    ).resolves.toBe(true);
+    expect(request.profile.permissions).toEqual(grants);
+    await expect(
+      make('community', new Date(0)).canActivate(
+        requestContext(
+          {
+            method: 'POST',
+            path: '/events/id/check-in',
+            profile: { church_id: 'church' },
+          },
+          ['events:checkin:create'],
+        ),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -314,7 +346,7 @@ describe('Composite routes, missing entitlements and narrow payment exceptions',
   it('maps ticket/check-in permissions separately and keeps giving on Essentials without ticket or group access', () => {
     expect(planFeatures('essentials')).toEqual(['giving', 'reports']);
     expect(featureForPermission('cell_groups:giving:read')).toBe('groups');
-    expect(featureForPermission('events:checkin:read')).toBe('tickets');
+    expect(featureForPermission('events:checkin:read')).toBe('events');
     expect(
       filterPlanPermissions(['events:list:read', 'events:tickets:read'], planFeatures('community')),
     ).toEqual(['events:list:read']);

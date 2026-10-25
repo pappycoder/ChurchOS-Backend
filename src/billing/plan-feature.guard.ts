@@ -41,7 +41,7 @@ export class PlanFeatureGuard implements CanActivate {
     if (path === '/reports/export')
       requiredFeatures.push(req.body?.type === 'financial' ? 'giving' : 'reports');
     if (/^\/attendance\/attendance(?:\/|$)/.test(path) && (req.query?.eventId || req.body?.eventId))
-      requiredFeatures.push('tickets');
+      requiredFeatures.push('events');
     if (
       /^\/events(?:\/[^/]+)?$/.test(path) &&
       (req.body?.isFree === false || Number(req.body?.price) > 0)
