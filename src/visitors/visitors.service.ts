@@ -1,3 +1,6 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { ImportVisitorDto } from './dto/import-visitor.dto';
 import { RequestContextService } from '../common/services/request-context.service';
 import {
   Injectable,
@@ -79,6 +82,75 @@ export class VisitorsService {
     this.logger.log(`Visitor created: ${visitor.id}`);
 
     return this.toResponseDto(visitor);
+  }
+
+  async bulkImport(
+    records: ImportVisitorDto[],
+    churchId: string,
+    userId: string,
+    dryRun = false,
+    viewer?: ViewerScope | null,
+  ) {
+    if (!Array.isArray(records) || records.length < 1 || records.length > 100)
+      throw new BadRequestException('Import between 1 and 100 visitors per batch');
+    if (typeof dryRun !== 'boolean') throw new BadRequestException('dryRun must be a boolean');
+    viewer ??= this.requestContext.getStore()?.viewer;
+    const errors: Array<{ row: number; message: string }> = [];
+    const phones = new Set<string>();
+    const emails = new Set<string>();
+    let created = 0;
+    for (const [index, record] of records.entries()) {
+      try {
+        const dto = plainToInstance(ImportVisitorDto, record);
+        const issues = await validate(dto, {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          forbidUnknownValues: true,
+        });
+        if (issues.length)
+          throw new BadRequestException(
+            issues.flatMap((issue) => Object.values(issue.constraints ?? {})).join('; ') ||
+              'Invalid visitor data',
+          );
+        dto.firstName = dto.firstName.trim();
+        if (!dto.firstName) throw new BadRequestException('First name is required');
+        if (dto.email) dto.email = dto.email.trim().toLowerCase();
+        if (
+          dto.firstVisitDate &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(dto.firstVisitDate) ||
+            Number.isNaN(new Date(dto.firstVisitDate).getTime()) ||
+            new Date(dto.firstVisitDate).toISOString().slice(0, 10) !== dto.firstVisitDate)
+        )
+          throw new BadRequestException('Invalid first visit date');
+        if (viewer && !viewer.is_admin_hq && dto.branchId && dto.branchId !== viewer.branch_id)
+          throw new ForbiddenException('You can only import visitors into your branch');
+        await this.resolveVisitorBranch(dto.branchId, churchId, viewer);
+        const phone = dto.phone?.replace(/\D/g, '');
+        const email = dto.email?.toLowerCase();
+        if ((phone && phones.has(phone)) || (email && emails.has(email)))
+          throw new ConflictException('Duplicate phone or email in this batch');
+        const contacts: Prisma.VisitorWhereInput[] = [];
+        if (email) contacts.push({ email: { equals: email, mode: 'insensitive' } });
+        if (phone) contacts.push({ phone: { in: [...new Set([dto.phone!, phone, `+${phone}`])] } });
+        if (
+          contacts.length &&
+          (await this.prisma.visitor.findFirst({
+            where: { church_id: churchId, deleted_at: null, OR: contacts },
+          }))
+        )
+          throw new ConflictException('A visitor with this phone or email already exists');
+        if (!dryRun) await this.create(dto, churchId, userId, viewer);
+        if (phone) phones.add(phone);
+        if (email) emails.add(email);
+        created++;
+      } catch (cause) {
+        errors.push({
+          row: index + 1,
+          message: cause instanceof Error ? cause.message : 'Invalid visitor data',
+        });
+      }
+    }
+    return { created, errors, dryRun };
   }
 
   async findAll(

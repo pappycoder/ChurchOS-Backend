@@ -78,6 +78,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionRule[] = [
   { prefix: "/pastoral/risk-scores", permission: "pastoral:risk-scores:read" },
   { prefix: "/pastoral/engagement", permission: "pastoral:engagement:read" },
   { prefix: "/pastoral", permission: "pastoral:notes:read" },
+  { prefix: "/visitors/import", permission: "visitors:new:create" },
   { prefix: "/visitors/new", permission: "visitors:new:create" },
   { prefix: "/visitors/follow-up", permission: "visitors:list:read" },
   { prefix: "/visitors", permission: "visitors:list:read" },

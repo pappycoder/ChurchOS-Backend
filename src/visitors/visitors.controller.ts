@@ -1,3 +1,4 @@
+import { ImportVisitorDto } from './dto/import-visitor.dto';
 import {
   Controller,
   Get,
@@ -52,6 +53,27 @@ export class VisitorsController {
   ): Promise<VisitorResponseDto> {
     const churchId = req.profile?.church_id || '';
     return this.visitorsService.create(dto, churchId, user.id, req.profile);
+  }
+
+  @Post('bulk-import')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions('visitors:new:create')
+  @ApiOperation({
+    summary: 'Bulk import visitors',
+    description: 'Validate or import up to 100 visitors per batch with per-row errors.',
+  })
+  async bulkImport(
+    @Body() body: { visitors: ImportVisitorDto[]; dryRun?: boolean },
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.visitorsService.bulkImport(
+      body.visitors,
+      req.profile?.church_id || '',
+      user.id,
+      body.dryRun ?? false,
+      req.profile,
+    );
   }
 
   @Get()

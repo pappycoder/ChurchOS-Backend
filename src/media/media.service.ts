@@ -29,7 +29,9 @@ import { MediaAssetResponseDto } from './dto/media-asset-response.dto';
 import { MediaFolderSummaryDto } from './dto/media-folder-summary.dto';
 import sharp from 'sharp';
 import { Readable } from 'node:stream';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
+import { DirectUploadDto } from './dto/direct-upload.dto';
+import { assertMediaUploadPermission } from './media-upload-policy';
 import { Prisma } from '@prisma/client';
 
 /** Allowed MIME types for image uploads */
@@ -51,6 +53,23 @@ const ALLOWED_DOC_TYPES = [
   'video/ogg',
   'video/quicktime',
 ];
+const FILE_EXTENSIONS: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'text/csv': 'csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xls',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/flac': 'flac',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/ogg': 'ogg',
+  'video/quicktime': 'mov',
+};
+
 /** Maximum file size for images (5MB) */
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 /** Maximum file size for general files incl. audio/video (50MB) */
@@ -99,6 +118,180 @@ export class MediaService {
     private readonly branchScope: BranchScopeService,
   ) {
     this.bucket = this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'media');
+  }
+
+  private signUpload(payload: string) {
+    return createHmac('sha256', this.config.getOrThrow<string>('SUPABASE_SERVICE_ROLE_KEY'))
+      .update(`churchos-direct-upload:${payload}`)
+      .digest('base64url');
+  }
+
+  async prepareDirectUpload(
+    dto: DirectUploadDto,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope,
+  ) {
+    const folder = dto.folder || 'uploads';
+    this.validateFolder(folder, viewer);
+    if (this.publicFolders.has(folder))
+      throw new BadRequestException('Use the image uploader for public branding');
+    assertMediaUploadPermission(folder, viewer?.permissions ?? []);
+    const feature = featureForMediaFolder(folder);
+    if (feature) await assertPlanFeature(this.prisma, churchId, feature);
+    if (
+      !ALLOWED_DOC_TYPES.includes(dto.contentType) ||
+      !Number.isInteger(dto.size) ||
+      dto.size < 1 ||
+      dto.size > MAX_FILE_SIZE_BYTES
+    )
+      throw new BadRequestException('Choose a supported file no larger than 50 MB');
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && dto.branchId && dto.branchId !== scope.branchId)
+      throw new ForbiddenException('You can only upload to your branch');
+    const branchId = scope.churchOnly ? (dto.branchId ?? null) : (scope.branchId ?? null);
+    if (!scope.churchOnly && !branchId)
+      throw new ForbiddenException('A branch assignment is required');
+    if (
+      branchId &&
+      !(await this.prisma.branch.findFirst({
+        where: { id: branchId, church_id: churchId, archived_at: null },
+      }))
+    )
+      throw new BadRequestException('Invalid branch');
+    const bucket = await this.uploadBucket(folder);
+    const assetId = randomUUID();
+    const path = `${folder}/${churchId}/${randomUUID()}.${FILE_EXTENSIONS[dto.contentType]}`;
+    const filename = dto.filename
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.replace(/[\u0000-\u001f\u007f]/g, '')
+      .trim()
+      .slice(0, 200);
+    if (!filename) throw new BadRequestException('A filename is required');
+    const payload = Buffer.from(
+      JSON.stringify({
+        assetId,
+        path,
+        bucket,
+        filename,
+        folder,
+        churchId,
+        userId,
+        branchId,
+        size: dto.size,
+        contentType: dto.contentType,
+        expires: Date.now() + 60 * 60 * 1000,
+      }),
+    ).toString('base64url');
+    const { data, error } = await this.supabase.client.storage
+      .from(bucket)
+      .createSignedUploadUrl(path, { upsert: false });
+    if (error || !data?.signedUrl)
+      throw new InternalServerErrorException('Unable to authorize storage upload');
+    return { uploadUrl: data.signedUrl, ticket: `${payload}.${this.signUpload(payload)}` };
+  }
+
+  async completeDirectUpload(
+    ticket: string,
+    churchId: string,
+    userId: string,
+    viewer?: ViewerScope,
+  ): Promise<MediaResponseDto> {
+    const [payload, signature, extra] = ticket.split('.');
+    const expected = this.signUpload(payload ?? '');
+    if (
+      !payload ||
+      !signature ||
+      extra ||
+      !/^[A-Za-z0-9_-]{43}$/.test(signature) ||
+      signature.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    )
+      throw new ForbiddenException('Invalid upload authorization');
+    const grant = JSON.parse(Buffer.from(payload, 'base64url').toString()) as {
+      assetId: string;
+      path: string;
+      bucket: string;
+      filename: string;
+      folder: string;
+      churchId: string;
+      userId: string;
+      branchId: string | null;
+      size: number;
+      contentType: string;
+      expires: number;
+    };
+    if (grant.churchId !== churchId || grant.userId !== userId || grant.expires < Date.now())
+      throw new ForbiddenException('Upload authorization expired or belongs to another user');
+    this.validateFolder(grant.folder, viewer);
+    assertMediaUploadPermission(grant.folder, viewer?.permissions ?? []);
+    const feature = featureForMediaFolder(grant.folder);
+    if (feature) await assertPlanFeature(this.prisma, churchId, feature);
+    const scope = this.branchScope.resolve(viewer);
+    if (!scope.churchOnly && grant.branchId !== scope.branchId)
+      throw new ForbiddenException('You can only upload to your branch');
+    if (
+      grant.branchId &&
+      !(await this.prisma.branch.findFirst({
+        where: { id: grant.branchId, church_id: churchId, archived_at: null },
+      }))
+    )
+      throw new BadRequestException('Invalid branch');
+    const existing = await this.prisma.mediaAsset.findFirst({
+      where: { id: grant.assetId, church_id: churchId, uploaded_by_user_id: userId },
+    });
+    const response = (asset: { id: string; url: string }) => ({
+      assetId: asset.id,
+      url: asset.url,
+      path: grant.path,
+      size: grant.size,
+      contentType: grant.contentType,
+    });
+    if (existing) return response(existing);
+    const { data, error } = await this.supabase.client.storage.from(grant.bucket).info(grant.path);
+    if (error || !data)
+      throw new BadRequestException('The file has not finished uploading. Please retry.');
+    if (
+      Number(data.size ?? data.metadata?.size) !== grant.size ||
+      (data.contentType ?? data.metadata?.mimetype) !== grant.contentType
+    )
+      throw new BadRequestException('The uploaded file does not match its authorized type or size');
+    const url = `${this.config.get<string>('WEB_URL', 'http://localhost:3000')}/api/backend/media/files/${grant.assetId}`;
+    // Upsert makes a retried completion safe if the prior response was lost.
+    const asset = await this.prisma.mediaAsset.upsert({
+      where: { id: grant.assetId },
+      update: {},
+      create: {
+        id: grant.assetId,
+        church_id: churchId,
+        branch_id: grant.branchId,
+        uploaded_by_user_id: userId,
+        storage_bucket: grant.bucket,
+        storage_path: grant.path,
+        filename: grant.filename,
+        folder: grant.folder,
+        url,
+        mime_type: grant.contentType,
+        size_bytes: grant.size,
+        permissions: 'members',
+      },
+    });
+    await this.audit.log({
+      userId,
+      churchId,
+      entity: 'media_asset',
+      action: 'CREATE',
+      entityId: asset.id,
+      newValues: {
+        filename: grant.filename,
+        folder: grant.folder,
+        size: grant.size,
+        directUpload: true,
+      },
+    });
+    return response(asset);
   }
 
   /**
@@ -227,23 +420,7 @@ export class MediaService {
     )
       throw new BadRequestException('Invalid branch');
 
-    const extensions: Record<string, string> = {
-      'application/pdf': 'pdf',
-      'text/csv': 'csv',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-      'application/vnd.ms-excel': 'xls',
-      'audio/mpeg': 'mp3',
-      'audio/wav': 'wav',
-      'audio/ogg': 'ogg',
-      'audio/mp4': 'm4a',
-      'audio/aac': 'aac',
-      'audio/flac': 'flac',
-      'video/mp4': 'mp4',
-      'video/webm': 'webm',
-      'video/ogg': 'ogg',
-      'video/quicktime': 'mov',
-    };
-    const ext = extensions[file.mimetype] ?? 'bin';
+    const ext = FILE_EXTENSIONS[file.mimetype] ?? 'bin';
     const filename = `${randomUUID()}.${ext}`;
     const path = `${folder}/${churchId}/${filename}`;
     const displayName =

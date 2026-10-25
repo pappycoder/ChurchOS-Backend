@@ -1,3 +1,4 @@
+import { DirectUploadDto, CompleteDirectUploadDto } from './dto/direct-upload.dto';
 import { assertPlanFeature } from '../billing/entitlements';
 import { featureForMediaFolder } from '../billing/feature-policy';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,6 +73,36 @@ import { MediaFolderSummaryDto } from './dto/media-folder-summary.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('media')
 export class MediaController {
+  @Post('upload/prepare')
+  @ApiOperation({ summary: 'Authorize a direct file upload' })
+  async prepareUpload(
+    @Body() dto: DirectUploadDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.mediaService.prepareDirectUpload(
+      dto,
+      req.profile?.church_id || '',
+      user.sub,
+      req.profile,
+    );
+  }
+
+  @Post('upload/complete')
+  @ApiOperation({ summary: 'Verify and save a completed direct upload' })
+  async completeUpload(
+    @Body() dto: CompleteDirectUploadDto,
+    @CurrentUser() user: SupabaseUser,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.mediaService.completeDirectUpload(
+      dto.ticket,
+      req.profile?.church_id || '',
+      user.sub,
+      req.profile,
+    );
+  }
+
   /**
    * Creates an instance of MediaController.
    * @param mediaService - Service for media operations
