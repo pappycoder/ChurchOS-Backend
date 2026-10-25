@@ -20,6 +20,9 @@ export class RegistrationResponseDto {
   @ApiProperty({ description: 'Member ID', example: '44444444-4444-4444-4444-444444444444' })
   memberId!: string;
 
+  @ApiPropertyOptional({ description: 'Registered member display name', example: 'Grace Member' })
+  memberName?: string;
+
   @ApiPropertyOptional({
     description: 'Custom registration data',
     example: { dietary_requirements: 'None' },

@@ -1073,6 +1073,7 @@ export class EventsService {
 
       return this.mapRegistrationToDto({
         ...registration,
+        member,
         ticket_code: ticketCode,
         tier_name: tier?.name,
       });
@@ -1781,8 +1782,10 @@ export class EventsService {
     const registrations = await this.prisma.eventRegistration.findMany({
       where: {
         event_id: eventId,
+        church_id: churchId,
         ...(members ? { member_id: { in: members.map((member) => member.id) } } : {}),
       },
+      include: { member: { select: { first_name: true, last_name: true } } },
       orderBy: { created_at: 'desc' },
     });
 
@@ -2324,10 +2327,12 @@ export class EventsService {
   private mapRegistrationToDto(
     data: Record<string, unknown> & { id: string; created_at: Date },
   ): RegistrationResponseDto {
+    const member = data.member as { first_name: string; last_name: string } | null | undefined;
     return {
       registrationId: data.id,
       eventId: data.event_id as string,
       memberId: data.member_id as string,
+      memberName: member ? `${member.first_name} ${member.last_name}`.trim() : undefined,
       customData: (data.custom_data as Record<string, unknown>) || undefined,
       paymentStatus: (data.payment_status as string) || 'pending',
       ticketCode: (data.ticket_code as string) || undefined,

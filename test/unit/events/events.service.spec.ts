@@ -321,6 +321,7 @@ describe('EventsService', () => {
 
       expect(result.registrationId).toBe(mockRegistration.id);
       expect(result.memberId).toBe(mockMemberId);
+      expect(result.memberName).toBe('John Doe');
       expect(result.paymentStatus).toBe('paid');
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ entity: 'event_registration', action: 'CREATE' }),
@@ -379,12 +380,21 @@ describe('EventsService', () => {
   describe('listRegistrations', () => {
     it('should return registrations for an event', async () => {
       prisma.event.findFirst.mockResolvedValue(mockEvent);
-      prisma.eventRegistration.findMany.mockResolvedValue([mockRegistration]);
+      prisma.eventRegistration.findMany.mockResolvedValue([
+        { ...mockRegistration, member: { first_name: 'Grace', last_name: 'Member' } },
+      ]);
 
       const result = await service.listRegistrations(mockEventId, mockChurchId);
 
       expect(result).toHaveLength(1);
       expect(result[0].registrationId).toBe(mockRegistration.id);
+      expect(result[0].memberName).toBe('Grace Member');
+      expect(prisma.eventRegistration.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ church_id: mockChurchId, event_id: mockEventId }),
+          include: { member: { select: { first_name: true, last_name: true } } },
+        }),
+      );
     });
 
     it('should throw NotFoundException if event not found', async () => {
