@@ -260,7 +260,7 @@ describe('PermissionsService', () => {
       });
       expect(prisma.rolePermission.create).toHaveBeenCalledTimes(2);
       expect(prisma.churchRolePermission.deleteMany).not.toHaveBeenCalled();
-      expect(redis.del).toHaveBeenCalledWith(`perms:v30:${churchId}:media_team`);
+      expect(redis.del).toHaveBeenCalledWith(`perms:v31:${churchId}:media_team`);
     });
 
     it('replaces only church overrides for a global template', async () => {

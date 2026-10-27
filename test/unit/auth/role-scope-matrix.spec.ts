@@ -43,16 +43,31 @@ const contracts: Record<string, { allow: string[]; deny: string[] }> = {
     allow: [
       'members:new:create',
       'events:registrations:read',
+      'events:create',
+      'events:update',
       'forms:list:update',
       'reports:financial:read',
       'appointments:create',
+      'broadcasts:create',
+      'broadcasts:read',
+      'whatsapp:create',
+      'whatsapp:read',
+      'emails:create',
     ],
     deny: [
       'attendance:checkin:create',
+      'events:checkin:create',
+      'events:checkin:update',
+      'events:registrations:create',
+      'events:tickets:update',
+      'events:delete',
       'giving:records:read',
       'cell_groups:giving:read',
       'roles:update',
       'church_settings:update',
+      'integrations:update',
+      'broadcasts:delete',
+      'whatsapp:delete',
     ],
   },
   treasurer: {
@@ -100,12 +115,16 @@ const contracts: Record<string, { allow: string[]; deny: string[] }> = {
       'roles:update',
     ],
   },
-
 };
 
 function resolver() {
   const service = new PermissionsService(
-    { permission: { findMany: async () => generateAllPermissions() } } as never,
+    {
+      permission: { findMany: async () => generateAllPermissions() },
+      platformSubscription: {
+        findUnique: async () => ({ plan: 'network', paid_until: new Date('2099-01-01') }),
+      },
+    } as never,
     { get: async () => null, set: async () => undefined } as never,
     {} as never,
   );

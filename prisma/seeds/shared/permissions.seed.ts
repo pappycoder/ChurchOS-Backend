@@ -338,6 +338,11 @@ const RAW_DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     'cell_groups:read',
     // Users — read
     'users:read',
+    // Communication — send broadcasts and messages, and read their history.
+    'broadcasts:create',
+    'broadcasts:read',
+    'whatsapp:create',
+    'whatsapp:read',
     // Emails — full access
     'emails:create',
     'emails:read',
@@ -449,14 +454,18 @@ export const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = Object.fromEn
     role,
     // All roles need to resolve their own branch name for locked branch
     // filters. BranchesService limits non-HQ callers to their assigned branch.
-    expandPermissions([
-      ...perms,
-      'branches:read',
-      'offline:read',
-      ...(perms.includes('cell_groups:read') && !['treasurer', 'usher'].includes(role)
-        ? ['cell_groups:details:read']
-        : []),
-    ]),
+    [
+      ...expandPermissions([
+        ...perms,
+        'branches:read',
+        'offline:read',
+        ...(perms.includes('cell_groups:read') && !['treasurer', 'usher'].includes(role)
+          ? ['cell_groups:details:read']
+          : []),
+      ]),
+      // Event editing does not grant check-in, registrations or ticket management.
+      ...(role === 'secretary' ? ['events:create', 'events:update'] : []),
+    ],
   ]),
 );
 
