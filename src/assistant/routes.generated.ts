@@ -97,6 +97,8 @@ export const ROUTE_PERMISSIONS: RoutePermissionRule[] = [
   { prefix: "/assets/categories", permission: "assets:categories:read" },
   { prefix: "/assets/maintenance", permission: "assets:maintenance:read" },
   { prefix: "/assets/loans", permission: "assets:loans:read" },
+  { prefix: "/assets/new", permission: "assets:list:create" },
+  { prefix: "/assets/[assetId]/edit", permission: "assets:list:update", allOf: ["assets:list:read"] },
   { prefix: "/assets", permission: "assets:list:read" },
   { prefix: "/forms/new", permission: "forms:list:create" },
   { prefix: "/forms/[formId]/edit", permission: "forms:list:update" },

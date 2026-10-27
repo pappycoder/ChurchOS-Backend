@@ -85,6 +85,92 @@ describe('AssetsService', () => {
     );
   });
 
+  describe('operational worklists', () => {
+    it('scopes both loan rows and counts to the tenant and branch', async () => {
+      const context = { branchWhere: jest.fn().mockReturnValue({ branch_id: 'branch-a' }) };
+      const scoped = new AssetsService(
+        prisma as unknown as PrismaService,
+        context as unknown as RequestContextService,
+        audit as unknown as AuditLoggingService,
+      );
+      prisma.assetLoan.findMany.mockResolvedValue([]);
+      prisma.assetLoan.count.mockResolvedValue(35);
+      const result = await scoped.listLoanWorklist(mockChurchId, {
+        page: 2,
+        limit: 15,
+        search: 'Mixer',
+      });
+      const rowArgs = prisma.assetLoan.findMany.mock.calls[0][0];
+      expect(rowArgs.where.asset).toMatchObject({ church_id: mockChurchId, branch_id: 'branch-a' });
+      expect(rowArgs.where.asset.OR).toContainEqual({
+        name: { contains: 'Mixer', mode: 'insensitive' },
+      });
+      expect(rowArgs.skip).toBe(15);
+      expect(rowArgs.take).toBe(15);
+      expect(prisma.assetLoan.count).toHaveBeenCalledWith({ where: rowArgs.where });
+      expect(result.meta).toEqual({ page: 2, limit: 15, total: 35, totalPages: 3 });
+    });
+
+    it('returns maintenance jobs and archived-equipment context rather than asset rows', async () => {
+      const stamp = new Date('2026-10-27T12:00:00Z');
+      prisma.assetMaintenance.findMany.mockResolvedValue([
+        {
+          id: 'job-a',
+          asset_id: mockAssetId,
+          type: 'Repair',
+          status: 'scheduled',
+          scheduled_date: stamp,
+          created_at: stamp,
+          updated_at: stamp,
+          asset: { name: 'Mixer', asset_tag: 'AUD-001', archived_at: stamp },
+        },
+      ]);
+      prisma.assetMaintenance.count.mockResolvedValue(1);
+      const result = await service.listMaintenanceWorklist(mockChurchId, {});
+      expect(result.data[0]).toMatchObject({
+        id: 'job-a',
+        assetId: mockAssetId,
+        type: 'Repair',
+        assetName: 'Mixer',
+        assetTag: 'AUD-001',
+        assetArchived: true,
+        scheduledDate: stamp.toISOString(),
+      });
+      const rows = prisma.assetMaintenance.findMany.mock.calls[0][0];
+      expect(rows.where.asset.church_id).toBe(mockChurchId);
+      expect(prisma.assetMaintenance.count).toHaveBeenCalledWith({ where: rows.where });
+    });
+
+    it('finds overdue outstanding loans without including returned records', async () => {
+      prisma.assetLoan.findMany.mockResolvedValue([]);
+      prisma.assetLoan.count.mockResolvedValue(0);
+      await service.listLoanWorklist(mockChurchId, { status: 'overdue' });
+      const where = prisma.assetLoan.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { status: 'overdue' },
+        { status: 'borrowed', expected_return_date: { lt: expect.any(Date) } },
+      ]);
+      expect(prisma.assetLoan.count).toHaveBeenCalledWith({ where });
+    });
+
+    it('rejects status filters belonging to the other worklist', async () => {
+      await expect(
+        service.listMaintenanceWorklist(mockChurchId, { status: 'returned' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(service.listLoanWorklist(mockChurchId, { status: 'completed' })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('propagates a failed worklist read instead of returning an empty collection', async () => {
+      prisma.assetLoan.findMany.mockRejectedValue(new Error('Database unavailable'));
+      prisma.assetLoan.count.mockResolvedValue(0);
+      await expect(service.listLoanWorklist(mockChurchId, {})).rejects.toThrow(
+        'Database unavailable',
+      );
+    });
+  });
+
   describe('createCategory', () => {
     it('should create an asset category', async () => {
       prisma.assetCategory.findUnique.mockResolvedValue(null);

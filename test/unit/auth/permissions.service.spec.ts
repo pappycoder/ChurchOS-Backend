@@ -194,6 +194,7 @@ describe('PermissionsService', () => {
         expect.arrayContaining(['members:read', 'giving:read']),
       );
       expect(result.permissions).toHaveLength(2);
+      expect(result.defaultPermissionIds).toEqual(['p-members-read']);
     });
 
     it('returns the absolute stored set for church-owned roles', async () => {
@@ -207,6 +208,7 @@ describe('PermissionsService', () => {
       const result = await service.getRolePermissions(churchId, 'media_team');
 
       expect(result.isChurchOwned).toBe(true);
+      expect(result.defaultPermissionIds).toEqual([]);
       expect(result.isCustomized).toBe(false);
       expect(result.permissions.map((p) => p.name)).toEqual(
         expect.arrayContaining(['members:read', 'giving:read']),

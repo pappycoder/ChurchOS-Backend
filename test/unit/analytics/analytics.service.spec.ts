@@ -219,7 +219,7 @@ describe('AnalyticsService', () => {
 
       await service.getGivingAnalytics(
         churchId,
-        {},
+        { currency: 'USD' },
         {
           church_id: churchId,
           branch_id: 'branch-a',
@@ -228,9 +228,21 @@ describe('AnalyticsService', () => {
         },
       );
 
+      expect(prisma.recurringGiving.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ currency: 'USD', member: { branch_id: 'branch-a' } }),
+        }),
+      );
+      for (const [call] of prisma.transaction.groupBy.mock.calls)
+        expect(call.where).toMatchObject({ currency: 'USD', branch_id: 'branch-a' });
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ currency: 'USD', branch_id: 'branch-a' }),
+        }),
+      );
       expect(prisma.transaction.aggregate).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ branch_id: 'branch-a' }),
+          where: expect.objectContaining({ branch_id: 'branch-a', currency: 'USD' }),
         }),
       );
     });

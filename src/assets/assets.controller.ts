@@ -1,3 +1,4 @@
+import { ListAssetWorklistDto } from './dto/list-asset-worklist.dto';
 /**
  * @file assets.controller.ts
  * @description HTTP endpoints for asset and inventory management.
@@ -238,6 +239,23 @@ export class AssetsController {
   /**
    * Gets a single asset by ID.
    */
+  @Get('worklists/loans')
+  @RequirePermissions('assets:loans:read')
+  @ApiOperation({ summary: 'List scoped asset loan records' })
+  listLoanWorklist(@Query() query: ListAssetWorklistDto, @Request() req: AuthenticatedRequest) {
+    return this.assetsService.listLoanWorklist(this.getChurchId(req), query);
+  }
+
+  @Get('worklists/maintenance')
+  @RequirePermissions('assets:maintenance:read')
+  @ApiOperation({ summary: 'List scoped maintenance jobs' })
+  listMaintenanceWorklist(
+    @Query() query: ListAssetWorklistDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.assetsService.listMaintenanceWorklist(this.getChurchId(req), query);
+  }
+
   @Get(':assetId')
   @RequirePermissions('assets:list:read')
   @ApiGetEndpoint('Get asset by ID')

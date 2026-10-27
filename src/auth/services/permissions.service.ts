@@ -81,6 +81,8 @@ export interface RoleWithPermissions {
   isCustomized: boolean;
   /** Whether the role is owned by this church rather than a global template. */
   isChurchOwned: boolean;
+  /** Template defaults cannot be revoked by church overrides. */
+  defaultPermissionIds?: string[];
 }
 
 /** Input for creating a church-owned custom role. */
@@ -455,6 +457,7 @@ export class PermissionsService {
 
     let effectiveIds: Set<string>;
     let isCustomized = false;
+    let defaultPermissionIds: string[] = [];
 
     if (isOwned) {
       const ownedPerms = await this.prisma.rolePermission.findMany({
@@ -474,6 +477,9 @@ export class PermissionsService {
         }),
       ]);
 
+      defaultPermissionIds = defaultPerms.map(
+        (permission: { permission_id: string }) => permission.permission_id,
+      );
       isCustomized = overrideIds.length > 0;
 
       // Merge: start with global defaults, then add church overrides (additive)
@@ -494,6 +500,7 @@ export class PermissionsService {
       permissions: rolePerms,
       isCustomized,
       isChurchOwned: isOwned,
+      defaultPermissionIds,
     };
   }
 

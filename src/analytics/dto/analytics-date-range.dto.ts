@@ -9,7 +9,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Matches, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 
 /**
  * Base query DTO for analytics date ranges and branch filtering.
@@ -35,6 +35,14 @@ export class AnalyticsDateRangeDto {
  * Query DTO for analytics trend endpoints that support grouping.
  */
 export class AnalyticsTrendQueryDto extends AnalyticsDateRangeDto {
+  @ApiPropertyOptional({
+    description: 'Giving currency; filters values without conversion',
+    example: 'NGN',
+  })
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/)
+  currency?: string;
+
   @ApiPropertyOptional({
     description: 'Group trend data by day, week, or month',
     enum: ['day', 'week', 'month'],

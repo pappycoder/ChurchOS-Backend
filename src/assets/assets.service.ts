@@ -1,3 +1,4 @@
+import { ListAssetWorklistDto } from './dto/list-asset-worklist.dto';
 import { RequestContextService } from '../common/services/request-context.service';
 /**
  * @file assets.service.ts
@@ -71,6 +72,95 @@ export class AssetsService {
     private readonly requestContext: RequestContextService,
     private readonly audit: AuditLoggingService,
   ) {}
+
+  /** Paginated operational records, always scoped through their parent asset. */
+  private worklistAssetScope(
+    churchId: string,
+    query: ListAssetWorklistDto,
+  ): Prisma.AssetWhereInput {
+    const search = query.search?.trim();
+    return {
+      church_id: churchId,
+      ...this.requestContext.branchWhere(churchId),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { asset_tag: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  async listLoanWorklist(churchId: string, query: ListAssetWorklistDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where: Prisma.AssetLoanWhereInput = { asset: this.worklistAssetScope(churchId, query) };
+    const now = new Date();
+    if (query.status === 'active') where.status = { in: ['borrowed', 'overdue'] };
+    else if (query.status === 'overdue')
+      where.OR = [{ status: 'overdue' }, { status: 'borrowed', expected_return_date: { lt: now } }];
+    else if (query.status === 'borrowed')
+      Object.assign(where, { status: 'borrowed', expected_return_date: { gte: now } });
+    else if (query.status === 'returned') where.status = 'returned';
+    else if (query.status) throw new BadRequestException('Invalid loan status filter');
+
+    const [records, total] = await Promise.all([
+      this.prisma.assetLoan.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ expected_return_date: 'desc' }, { id: 'asc' }],
+        include: {
+          asset: { select: { name: true, asset_tag: true, archived_at: true } },
+          member: { select: { first_name: true, last_name: true } },
+        },
+      }),
+      this.prisma.assetLoan.count({ where }),
+    ]);
+    return {
+      data: records.map((record) => ({
+        ...this.mapLoan(record),
+        assetName: record.asset.name,
+        assetTag: record.asset.asset_tag,
+        assetArchived: !!record.asset.archived_at,
+      })),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async listMaintenanceWorklist(churchId: string, query: ListAssetWorklistDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where: Prisma.AssetMaintenanceWhereInput = {
+      asset: this.worklistAssetScope(churchId, query),
+    };
+    if (query.status) {
+      if (!['scheduled', 'in_progress', 'completed', 'cancelled'].includes(query.status))
+        throw new BadRequestException('Invalid maintenance status filter');
+      where.status = query.status as MaintenanceStatus;
+    }
+    const [records, total] = await Promise.all([
+      this.prisma.assetMaintenance.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ scheduled_date: 'desc' }, { id: 'asc' }],
+        include: { asset: { select: { name: true, asset_tag: true, archived_at: true } } },
+      }),
+      this.prisma.assetMaintenance.count({ where }),
+    ]);
+    return {
+      data: records.map((record) => ({
+        ...this.mapMaintenance(record),
+        assetName: record.asset.name,
+        assetTag: record.asset.asset_tag,
+        assetArchived: !!record.asset.archived_at,
+      })),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
 
   /**
    * Creates a new asset category scoped to a church.

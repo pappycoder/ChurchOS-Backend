@@ -231,6 +231,7 @@ export class AnalyticsService {
     const scope = this.branchScope.resolve(viewer);
     const baseWhere: Prisma.TransactionWhereInput = {
       church_id: churchId,
+      ...(query.currency ? { currency: query.currency } : {}),
       ...(createdFilter ? { giving_date: createdFilter } : {}),
     };
 
@@ -286,6 +287,7 @@ export class AnalyticsService {
       where: {
         church_id: churchId,
         is_active: true,
+        ...(query.currency ? { currency: query.currency } : {}),
         ...(recurringBranchId ? { member: { branch_id: recurringBranchId } } : {}),
       },
       select: { amount: true, frequency: true },
