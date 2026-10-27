@@ -1,3 +1,4 @@
+import { seedWorkflowSubscription } from '../helpers/workflow-subscription.helper';
 import { randomUUID, createHmac } from 'node:crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -80,6 +81,8 @@ describe('Provider accounts, independent channels and signed callbacks (PostgreS
         { id: churchB, name: 'Integration test B' },
       ],
     });
+    await seedWorkflowSubscription(prisma, churchA);
+    await seedWorkflowSubscription(prisma, churchB);
     const module = await Test.createTestingModule({
       controllers: [IntegrationsController, IntegrationCallbacksController],
       providers: [

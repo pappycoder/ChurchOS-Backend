@@ -1,3 +1,4 @@
+import { seedWorkflowSubscription } from '../helpers/workflow-subscription.helper';
 /**
  * @file sync.e2e-spec.ts
  * @description End-to-end tests for SyncService (pull hydration, watermark
@@ -20,7 +21,21 @@ describe('SyncService (e2e)', () => {
   const memberId = randomUUID();
   const branchId = randomUUID();
 
-  const viewer = { id: randomUUID(), church_id: churchId, role: 'church_admin', branch_id: branchId, is_admin_hq: true, permissions: ['members:all:read', 'members:new:create', 'members:all:update', 'members:all:delete', 'attendance:services:read', 'giving:categories:read'] };
+  const viewer = {
+    id: randomUUID(),
+    church_id: churchId,
+    role: 'church_admin',
+    branch_id: branchId,
+    is_admin_hq: true,
+    permissions: [
+      'members:all:read',
+      'members:new:create',
+      'members:all:update',
+      'members:all:delete',
+      'attendance:services:read',
+      'giving:categories:read',
+    ],
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -34,7 +49,10 @@ describe('SyncService (e2e)', () => {
     await prisma.church.create({
       data: { id: churchId, name: 'e2e-sync-church' },
     });
-    await prisma.branch.create({ data: { id: branchId, church_id: churchId, name: 'Offline branch' } });
+    await seedWorkflowSubscription(prisma, churchId);
+    await prisma.branch.create({
+      data: { id: branchId, church_id: churchId, name: 'Offline branch' },
+    });
   });
 
   afterAll(async () => {
@@ -90,7 +108,13 @@ describe('SyncService (e2e)', () => {
 
     await prisma.member.delete({ where: { id: memberId } });
 
-    const after = await service.pullChanges(churchId, 'web', 100, before.cursor ?? undefined, viewer);
+    const after = await service.pullChanges(
+      churchId,
+      'web',
+      100,
+      before.cursor ?? undefined,
+      viewer,
+    );
     expect(after.changes.length).toBeGreaterThanOrEqual(1);
 
     const deleteChange = after.changes.find(
@@ -102,14 +126,19 @@ describe('SyncService (e2e)', () => {
 
   it('applies pushed changes and suppresses duplicate outbox rows', async () => {
     const pushedMemberId = randomUUID();
-    const result = await service.pushChanges(churchId, randomUUID(), [
-      {
-        entity: 'member',
-        entityId: pushedMemberId,
-        action: 'create',
-        data: { firstName: 'Kelechi', lastName: 'Nwosu' },
-      },
-    ], viewer);
+    const result = await service.pushChanges(
+      churchId,
+      randomUUID(),
+      [
+        {
+          entity: 'member',
+          entityId: pushedMemberId,
+          action: 'create',
+          data: { firstName: 'Kelechi', lastName: 'Nwosu' },
+        },
+      ],
+      viewer,
+    );
 
     expect(result.accepted).toBe(1);
 
@@ -137,12 +166,17 @@ describe('SyncService (e2e)', () => {
       },
     });
 
-    const result = await service.pushChanges(churchId, randomUUID(), [
-      { entity: 'member', entityId: pushedMemberId, action: 'delete', data: {} },
-    ], viewer);
+    const result = await service.pushChanges(
+      churchId,
+      randomUUID(),
+      [{ entity: 'member', entityId: pushedMemberId, action: 'delete', data: {} }],
+      viewer,
+    );
 
     expect(result.accepted).toBe(1);
-    expect(await prisma.member.findUnique({ where: { id: pushedMemberId } })).toMatchObject({ archived_at: expect.any(Date) });
+    expect(await prisma.member.findUnique({ where: { id: pushedMemberId } })).toMatchObject({
+      archived_at: expect.any(Date),
+    });
   });
 
   it('purges expired and synced queue rows during cleanup', async () => {

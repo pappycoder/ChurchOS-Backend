@@ -1,3 +1,4 @@
+import { seedWorkflowSubscription } from '../helpers/workflow-subscription.helper';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -188,6 +189,8 @@ describe('all-role CRUD with isolated PostgreSQL', () => {
         { id: foreignChurchId, name: 'Isolated foreign tenant' },
       ],
     });
+    await seedWorkflowSubscription(prisma, churchId);
+    await seedWorkflowSubscription(prisma, foreignChurchId);
     await prisma.branch.createMany({
       data: [
         { id: branchId, church_id: churchId, name: 'Own branch' },
@@ -277,6 +280,7 @@ describe('all-role CRUD with isolated PostgreSQL', () => {
       'attendance',
       'service',
       'visitor',
+      'member',
       'auditLog',
       'syncQueue',
       'branch',
@@ -439,11 +443,32 @@ describe('all-role CRUD with isolated PostgreSQL', () => {
     expect(await prisma.form.count({ where: { church_id: churchId } })).toBe(before);
   });
 
-  it('pins branch-created forms to the actor branch despite a foreign branch input', async () => {
+  it('denies form creation to a read-only role', async () => {
+    const before = await prisma.form.count({ where: { church_id: churchId } });
+    const denied = await call('custom_readonly', false, 'POST', 'forms', {
+      title: 'Unauthorized form',
+      fields: [],
+      branchId,
+    });
+    expect(denied.status).toBe(403);
+    expect(await prisma.form.count({ where: { church_id: churchId } })).toBe(before);
+  });
+
+  it('rejects branch form creation with a foreign branch before persisting', async () => {
+    const before = await prisma.form.count({ where: { church_id: churchId } });
+    const denied = await call('secretary', false, 'POST', 'forms', {
+      title: 'Foreign branch',
+      fields: [],
+      branchId: foreignBranchId,
+    });
+    expect(denied.status).toBe(403);
+    expect(await prisma.form.count({ where: { church_id: churchId } })).toBe(before);
+  });
+
+  it('defaults branch-created forms to the actor branch', async () => {
     const created = await call('secretary', false, 'POST', 'forms', {
       title: 'Pinned branch',
       fields: [],
-      branchId: foreignBranchId,
     });
     expect(created.status).toBe(201);
     expect(await prisma.form.findUnique({ where: { id: created.data.data.id } })).toMatchObject({

@@ -33,7 +33,7 @@ describe('user account deletion preserves church records', () => {
     await prisma.platformSubscription.create({
       data: {
         church_id: church.id,
-        plan: 'essentials',
+        plan: 'community',
         cycle: 'monthly',
         paid_until: new Date(Date.now() + 86400000),
       },

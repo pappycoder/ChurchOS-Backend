@@ -41,6 +41,11 @@ describe('sync_outbox DB triggers (e2e)', () => {
        RETURNING id`,
       [`e2e-triggers-${suffix}`],
     );
+    await client.query(
+      `INSERT INTO platform_subscriptions (church_id, plan, cycle, paid_until)
+       VALUES ($1, 'essentials', 'monthly', NOW() + INTERVAL '7 days')`,
+      [rows[0].id],
+    );
     return rows[0].id;
   }
 
@@ -78,24 +83,38 @@ describe('sync_outbox DB triggers (e2e)', () => {
     });
   });
 
-  it('queues update and delete events in order', async () => {
+  it('queues each create, update and delete with the correct row snapshot', async () => {
     await withTx(async (client) => {
       const churchId = await seedChurch(client);
       const memberId = await insertMember(client, churchId);
+      expect(await queueRows(client, churchId)).toEqual([
+        expect.objectContaining({ entity: 'member', action: 'create' }),
+      ]);
 
       await client.query(
         `UPDATE members SET status = 'inactive', updated_at = NOW() WHERE id = $1`,
         [memberId],
       );
+      const updated = await queueRows(client, churchId);
+      expect(updated).toHaveLength(2);
+      expect(updated.find((row) => row.action === 'update')).toMatchObject({
+        entity: 'member',
+        entity_id: memberId,
+        data: { status: 'inactive' },
+      });
       await client.query(`DELETE FROM members WHERE id = $1`, [memberId]);
 
       const rows = await queueRows(client, churchId);
-      expect(rows.map((r) => `${r.entity}:${r.action}`)).toEqual([
+      // NOW() is transaction-scoped; tied timestamps do not define mutation order.
+      expect(rows.map((r) => `${r.entity}:${r.action}`).sort()).toEqual([
         'member:create',
-        'member:update',
         'member:delete',
+        'member:update',
       ]);
-      expect(rows[2].data.status).toBe('inactive');
+      expect(rows.find((row) => row.action === 'delete')).toMatchObject({
+        entity_id: memberId,
+        data: { status: 'inactive' },
+      });
     });
   });
 

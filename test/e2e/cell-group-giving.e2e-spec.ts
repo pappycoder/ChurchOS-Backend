@@ -1,3 +1,4 @@
+import { seedWorkflowSubscription } from '../helpers/workflow-subscription.helper';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { GivingService } from '../../src/giving/giving.service';
@@ -44,6 +45,7 @@ describe('Cell group meeting giving with PostgreSQL', () => {
   beforeAll(async () => {
     await prisma.$connect();
     await prisma.church.create({ data: { id: churchId, name: 'Isolated meeting giving tests' } });
+    await seedWorkflowSubscription(prisma, churchId);
     await prisma.branch.createMany({
       data: [
         { id: branchId, church_id: churchId, name: 'Lekki' },

@@ -1,3 +1,4 @@
+import { seedWorkflowSubscription } from '../helpers/workflow-subscription.helper';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/admin/admin.service';
@@ -43,6 +44,8 @@ describe('Department meeting attendance with PostgreSQL', () => {
         { id: otherChurch, name: 'Other tenant' },
       ],
     });
+    await seedWorkflowSubscription(prisma, church);
+    await seedWorkflowSubscription(prisma, otherChurch);
     await prisma.branch.createMany({
       data: [
         { id: branch, church_id: church, name: 'Branch A' },

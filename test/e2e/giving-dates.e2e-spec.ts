@@ -73,7 +73,10 @@ describe('Giving dates on Essentials with PostgreSQL', () => {
       expect(rows.data.some((row) => row.transactionId === saved.transactionId)).toBe(true);
       await service.generateReceipt(saved.transactionId, church);
       expect(receipt.generateReceipt).toHaveBeenLastCalledWith(
-        expect.objectContaining({ createdAt: new Date('2025-12-24T00:00:00Z') }),
+        expect.objectContaining({
+          createdAt: new Date(saved.createdAt),
+          givingDate: new Date('2025-12-24T00:00:00Z'),
+        }),
       );
     },
   );
