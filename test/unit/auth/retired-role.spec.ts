@@ -34,7 +34,7 @@ describe('Retired member login role', () => {
     'rejects retired-role assignments in %p',
     async (Dto) => {
       const errors = await validate(Object.assign(new Dto(), { role: 'member' }));
-      expect(errors.find((e) => e.property === 'role')?.constraints?.isIn).toBeDefined();
+      expect(errors.find((e) => e.property === 'role')?.constraints?.isNotIn).toBeDefined();
     },
   );
 
@@ -42,15 +42,33 @@ describe('Retired member login role', () => {
     const errors = await validate(
       Object.assign(new UpdateRolesDto(), { roles: ['cell_leader', 'member'] }),
     );
-    expect(errors.find((e) => e.property === 'roles')?.constraints?.isIn).toBeDefined();
+    expect(errors.find((e) => e.property === 'roles')?.constraints?.isNotIn).toBeDefined();
   });
+
+  it.each([InviteUserDto, UpdateRoleDto, InviteStaffDto, UpdateStaffRoleDto])(
+    'continues to accept church-owned custom role names in %p',
+    async (Dto) => {
+      const errors = await validate(Object.assign(new Dto(), { role: 'media_team' }));
+      expect(errors.find((error) => error.property === 'role')).toBeUndefined();
+    },
+  );
 
   it('ignores retired grants even when Redis contains an old resolution and reserves the custom name', async () => {
     const redis = { get: jest.fn().mockResolvedValue(['members:read']) };
-    const service = new PermissionsService({} as never, redis as never, {} as never);
+    const prisma = {
+      platformSubscription: {
+        findUnique: jest.fn().mockResolvedValue({
+          church_id: 'church',
+          plan: 'network',
+          paid_until: new Date(Date.now() + 86_400_000),
+        }),
+      },
+    };
+    const service = new PermissionsService(prisma as never, redis as never, {} as never);
     expect(await service.getPermissionsForRole('church', 'member')).toEqual([]);
     expect(await service.getUserPermissions('church', ['member'])).toEqual([]);
     expect(redis.get).not.toHaveBeenCalled();
+    expect(prisma.platformSubscription.findUnique).not.toHaveBeenCalled();
     await expect(service.createRole('church', { label: 'Member' })).rejects.toThrow('reserved');
     await expect(service.getRolePermissions('church', 'member')).rejects.toThrow('not found');
     await expect(service.setPermissionsForRole('church', 'member', [])).rejects.toThrow(

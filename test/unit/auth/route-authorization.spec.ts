@@ -21,6 +21,8 @@ const exceptions: Record<string, string[]> = {
     'resetPassword',
     'changePassword',
     'refreshSession',
+    // One-time invitation token plus rate limiting; no existing account session.
+    'acceptInvitation',
   ],
   'common/audit-logs.controller.ts': ['listMyLogs'],
   'custom-fields/custom-fields.controller.ts': ['findAll', 'findOne'],
@@ -36,7 +38,14 @@ const exceptions: Record<string, string[]> = {
     'handleFlutterwaveWebhook',
   ],
   'health/health.controller.ts': ['check'],
-  'media/media.controller.ts': ['file', 'uploadImage', 'uploadFile'],
+  // Upload services enforce folder-specific grants, branch/plan scope and signed completion tickets.
+  'media/media.controller.ts': [
+    'file',
+    'uploadImage',
+    'uploadFile',
+    'prepareUpload',
+    'completeUpload',
+  ],
   'members/members.controller.ts': [
     'findAll',
     'search',
@@ -91,6 +100,7 @@ const publicRoutes = new Set([
   'auth/auth.controller.ts:forgotPassword',
   'auth/auth.controller.ts:resetPassword',
   'auth/auth.controller.ts:refreshSession',
+  'auth/auth.controller.ts:acceptInvitation',
   'developer-guide/developer-guide.controller.ts:getGuide',
   'events/event-webhooks.controller.ts:handlePaystackWebhook',
   'forms/forms-public.controller.ts:getPublicFormMeta',

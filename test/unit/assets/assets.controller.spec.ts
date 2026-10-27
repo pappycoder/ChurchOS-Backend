@@ -29,7 +29,7 @@ describe('AssetsController permission decorators', () => {
     return source.slice(startIdx, endIdx);
   };
 
-  it('covers all 26 routes with a granular surface permission (reads 10, creates 5, updates 9, deletes 2)', () => {
+  it('covers all 28 routes with a granular surface permission (reads 12, creates 5, updates 9, deletes 2)', () => {
     const readCount =
       (source.match(/@RequirePermissions\('assets:list:read'\)/g)?.length ?? 0) +
       (source.match(/@RequirePermissions\('assets:categories:read'\)/g)?.length ?? 0) +
@@ -48,10 +48,18 @@ describe('AssetsController permission decorators', () => {
     const deleteCount =
       (source.match(/@RequirePermissions\('assets:list:delete'\)/g)?.length ?? 0) +
       (source.match(/@RequirePermissions\('assets:categories:delete'\)/g)?.length ?? 0);
-    expect(readCount).toBe(10);
+    expect(readCount).toBe(12);
     expect(createCount).toBe(5);
     expect(updateCount).toBe(9);
     expect(deleteCount).toBe(2);
+  });
+
+  it.each([
+    ['loans', 'assets:loans:read', 'listLoanWorklist'],
+    ['maintenance', 'assets:maintenance:read', 'listMaintenanceWorklist'],
+  ])('protects the %s worklist with its independent read grant', (route, permission, handler) => {
+    const block = blockBetween(`@Get('worklists/${route}')`, `${handler}(`);
+    expect(block).toContain(`@RequirePermissions('${permission}')`);
   });
 
   it('requires the import from permissions.decorator', () => {

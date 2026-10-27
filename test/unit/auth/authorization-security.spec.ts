@@ -57,7 +57,7 @@ describe('Authorization boundaries', () => {
     expect(permissions.getUserPermissions).not.toHaveBeenCalled();
   });
 
-  it('rejects revoked tokens and revocation-store outages before session approval', async () => {
+  it('never authorizes revoked tokens or revocation-store outages while session reads run concurrently', async () => {
     const redis = { get: jest.fn().mockResolvedValue(true) };
     const authenticator = { assertSession: jest.fn() };
     const guard = new JwtAuthGuard({} as never, redis as never, authenticator as never);
@@ -65,7 +65,8 @@ describe('Authorization boundaries', () => {
     await expect(guard.canActivate(context(request))).rejects.toThrow(UnauthorizedException);
     redis.get.mockRejectedValue(new Error('Redis offline'));
     await expect(guard.canActivate(context(request))).rejects.toThrow(ServiceUnavailableException);
-    expect(authenticator.assertSession).not.toHaveBeenCalled();
+    expect(authenticator.assertSession).toHaveBeenCalledTimes(2);
+    expect(request).not.toHaveProperty('user');
   });
 
   it('does not grant church-wide scope to a request without a profile', async () => {

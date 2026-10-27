@@ -166,10 +166,12 @@ export class PermissionsService {
     isAdminHq = false,
     snapshot?: SubscriptionSnapshot,
   ): Promise<string[]> {
-    const { plan } = await requestEntitlements(this.prisma, churchId, snapshot);
-    const roles = [
+    const activeRoles = [
       ...new Set(accessRoles(Array.isArray(roleNames) ? roleNames : [roleNames])),
-    ].filter((role) => roleAvailableOnPlan(plan, role));
+    ];
+    if (activeRoles.length === 0) return [];
+    const { plan } = await requestEntitlements(this.prisma, churchId, snapshot);
+    const roles = activeRoles.filter((role) => roleAvailableOnPlan(plan, role));
     if (roles.length === 0) {
       return [];
     }
