@@ -8,7 +8,7 @@
  * @since 1.0.0
  */
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Matches, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 
 /**
@@ -31,9 +31,10 @@ export class AnalyticsDateRangeDto {
   branchId?: string;
 }
 
-/**
- * Query DTO for analytics trend endpoints that support grouping.
- */
+/** Optional branch selection; member demographics remain current snapshots. */
+export class MemberAnalyticsQueryDto extends PickType(AnalyticsDateRangeDto, ['branchId'] as const) {}
+
+/** Query DTO for analytics trend endpoints that support grouping. */
 export class AnalyticsTrendQueryDto extends AnalyticsDateRangeDto {
   @ApiPropertyOptional({
     description: 'Giving currency; filters values without conversion',

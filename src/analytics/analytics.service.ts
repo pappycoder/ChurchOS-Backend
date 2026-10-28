@@ -14,7 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BranchScopeService, ViewerScope } from '../common/services/branch-scope.service';
 import { Prisma } from '@prisma/client';
-import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto } from './dto/analytics-date-range.dto';
+import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto, MemberAnalyticsQueryDto } from './dto/analytics-date-range.dto';
 import {
   DashboardResponseDto,
   GivingAnalyticsResponseDto,
@@ -547,11 +547,13 @@ export class AnalyticsService {
   async getMemberAnalytics(
     churchId: string,
     viewer?: ViewerScope | null,
+    query: MemberAnalyticsQueryDto = {},
   ): Promise<MemberAnalyticsResponseDto> {
     const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? query.branchId : scope.branchId;
     const where: Prisma.MemberWhereInput = {
       church_id: churchId,
-      ...(scope.branchId ? { branch_id: scope.branchId } : {}),
+      ...(branchId ? { branch_id: branchId } : {}),
     };
     const members = await this.prisma.member.findMany({
       where,

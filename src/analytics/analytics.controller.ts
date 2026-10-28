@@ -17,7 +17,7 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AuthenticatedRequest } from '../common/decorators/current-user.decorator';
 import { CacheInterceptor, CacheTTL } from '../common/interceptors/cache.interceptor';
 import { AnalyticsService } from './analytics.service';
-import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto } from './dto/analytics-date-range.dto';
+import { AnalyticsDateRangeDto, AnalyticsTrendQueryDto, MemberAnalyticsQueryDto } from './dto/analytics-date-range.dto';
 import {
   DashboardResponseDto,
   GivingAnalyticsResponseDto,
@@ -101,9 +101,9 @@ export class AnalyticsController {
   @RequirePermissions('analytics:members:read')
   @ApiOperation({ summary: 'Get member analytics' })
   @ApiOkResponse({ description: 'Member analytics retrieved', type: MemberAnalyticsResponseDto })
-  async getMemberAnalytics(@Req() req: AuthenticatedRequest): Promise<MemberAnalyticsResponseDto> {
+  async getMemberAnalytics(@Req() req: AuthenticatedRequest, @Query() query: MemberAnalyticsQueryDto): Promise<MemberAnalyticsResponseDto> {
     const churchId = req.profile?.church_id || '';
-    return this.analyticsService.getMemberAnalytics(churchId, req.profile);
+    return this.analyticsService.getMemberAnalytics(churchId, req.profile, query);
   }
 
   /**
