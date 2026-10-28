@@ -26,13 +26,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiOkResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { MembersService } from './members.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 import { MemberResponseDto } from './dto/member-response.dto';
+import { MemberDashboardQueryDto, MemberDashboardResponseDto } from './dto/member-dashboard.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser, SupabaseUser } from '../common/decorators/current-user.decorator';
@@ -100,8 +101,17 @@ export class MembersController {
   }
 
   /**
-   * Search members by name, email, or phone.
+   * Aggregate dashboard counts without returning member records.
    */
+  @Get('dashboard')
+  @RequirePermissions('members:all:read')
+  @ApiOperation({ summary: 'Read scoped member dashboard aggregates' })
+  @ApiOkResponse({ type: MemberDashboardResponseDto })
+  async getDashboard(@Query() query: MemberDashboardQueryDto, @Request() req: AuthenticatedRequest): Promise<MemberDashboardResponseDto> {
+    return this.membersService.getDashboard(req.profile?.church_id || '', query, req.profile);
+  }
+
+  /** Search members by name, email, or phone. */
   @Get('search')
   @ApiListEndpoint(
     'Search members',

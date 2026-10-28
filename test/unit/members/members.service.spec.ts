@@ -101,6 +101,44 @@ describe('MembersService', () => {
     );
   });
 
+  describe('getDashboard', () => {
+    it.each([
+      [true, 'branch-a', 'branch-b', 'branch-b'],
+      [true, 'branch-a', undefined, undefined],
+      [false, 'branch-a', 'branch-b', 'branch-a'],
+      [false, undefined, 'branch-b', '00000000-0000-0000-0000-000000000000'],
+    ])('keeps church and non-archived scope for HQ=%s own=%s requested=%s', async (hq, own, requested, expected) => {
+      model('member').findMany.mockResolvedValue([]);
+      const result = await service.getDashboard(mockChurchId, { branchId: requested as string | undefined }, {
+        church_id: mockChurchId, role: 'church_admin', is_admin_hq: hq as boolean, branch_id: own as string | undefined,
+      });
+      expect(model('member').findMany).toHaveBeenCalledWith({
+        where: { church_id: mockChurchId, archived_at: null, ...(expected ? { branch_id: expected } : {}) },
+        select: { status: true, date_of_birth: true, member_since: true },
+      });
+      expect(result.total).toBe(0);
+      expect(result.growth).toEqual([]);
+    });
+
+    it('returns demographic and cumulative growth aggregates without individual records', async () => {
+      model('member').findMany.mockResolvedValue([
+        { status: 'active', date_of_birth: new Date(Date.UTC(new Date().getUTCFullYear() - 20, 0, 1)), member_since: new Date('2025-02-01') },
+        { status: 'inactive', date_of_birth: null, member_since: new Date('2025-01-01') },
+        { status: 'active', date_of_birth: null, member_since: new Date('2025-02-02') },
+      ]);
+      const result = await service.getDashboard(mockChurchId, {});
+      expect(Object.keys(result).sort()).toEqual(['byAgeGroup', 'byStatus', 'growth', 'total']);
+      expect(result.total).toBe(3);
+      expect(result.byStatus).toEqual({ active: 2, inactive: 1 });
+      expect(result.byAgeGroup.age_18_30).toBe(1);
+      expect(result.byAgeGroup.unspecified).toBe(2);
+      expect(result.growth).toEqual([
+        { date: '2025-01-01', total: 1, members: 1, visitors: 0 },
+        { date: '2025-02-01', total: 3, members: 2, visitors: 0 },
+      ]);
+    });
+  });
+
   describe('createMember', () => {
     it('should create a member successfully', async () => {
       const dto: CreateMemberDto = {

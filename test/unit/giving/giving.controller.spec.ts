@@ -1,4 +1,5 @@
 import { PERMISSIONS_KEY } from '../../../src/auth/decorators/permissions.decorator';
+import { GivingDashboardChartsQueryDto } from '../../../src/giving/dto/dashboard-charts.dto';
 import { GivingDashboardQueryDto } from '../../../src/giving/dto/dashboard-query.dto';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 
@@ -37,6 +38,7 @@ describe('GivingController webhooks', () => {
 
 describe('Giving dashboard read isolation', () => {
   it('uses independent dashboard and transaction read grants', () => {
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, GivingController.prototype.getDashboardCharts)).toEqual(['giving:dashboard:read']);
     expect(Reflect.getMetadata(PERMISSIONS_KEY, GivingController.prototype.getDashboard)).toEqual([
       'giving:dashboard:read',
     ]);
@@ -66,5 +68,17 @@ describe('Giving dashboard read isolation', () => {
         { type: 'query', metatype: GivingDashboardQueryDto },
       ),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+
+describe('Giving dashboard chart query validation', () => {
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  it.each([{ memberId: 'donor' }, { status: 'pending' }, { startDate: 'bad' }, { endDate: '2026-02-31' }, { currency: 'usd' }, { currency: 'US' }])('rejects unsupported or malformed filters %j', async input => {
+    await expect(pipe.transform(input, { type: 'query', metatype: GivingDashboardChartsQueryDto })).rejects.toThrow(BadRequestException);
+  });
+  it('accepts branch, ISO date bounds and a single currency', async () => {
+    const query = { branchId: '11111111-1111-4111-8111-111111111111', startDate: '2026-10-01', endDate: '2026-10-28T23:59:59.999Z', currency: 'USD' };
+    await expect(pipe.transform(query, { type: 'query', metatype: GivingDashboardChartsQueryDto })).resolves.toMatchObject(query);
   });
 });

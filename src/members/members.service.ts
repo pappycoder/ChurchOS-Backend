@@ -30,6 +30,7 @@ import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { ListMembersDto } from './dto/list-members.dto';
 import { MemberResponseDto } from './dto/member-response.dto';
+import { MemberDashboardQueryDto, MemberDashboardResponseDto } from './dto/member-dashboard.dto';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
@@ -170,6 +171,41 @@ export class MembersService {
     }
 
     return this.mapToResponseDto(member, viewerPermissions);
+  }
+
+  /** Current non-archived member aggregates within the viewer scope. */
+  async getDashboard(churchId: string, query: MemberDashboardQueryDto, viewer?: ViewerScope | null): Promise<MemberDashboardResponseDto> {
+    const scope = this.branchScope.resolve(viewer);
+    const branchId = scope.churchOnly ? query.branchId : scope.branchId;
+    const rows = await this.prisma.member.findMany({
+      where: { church_id: churchId, archived_at: null, ...(branchId ? { branch_id: branchId } : {}) },
+      select: { status: true, date_of_birth: true, member_since: true },
+    });
+    const byStatus: Record<string, number> = {};
+    const byAgeGroup: Record<string, number> = {
+      under_18: 0, age_18_30: 0, age_31_45: 0, age_46_60: 0, age_60_plus: 0, unspecified: 0,
+    };
+    const monthly = new Map<string, number>();
+    const today = new Date();
+    for (const row of rows) {
+      byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+      let bin = 'unspecified';
+      if (row.date_of_birth) {
+        const birth = row.date_of_birth;
+        let age = today.getUTCFullYear() - birth.getUTCFullYear();
+        if (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
+        if (age >= 0) bin = age < 18 ? 'under_18' : age <= 30 ? 'age_18_30' : age <= 45 ? 'age_31_45' : age <= 60 ? 'age_46_60' : 'age_60_plus';
+      }
+      byAgeGroup[bin]++;
+      const month = row.member_since.toISOString().slice(0, 7);
+      monthly.set(month, (monthly.get(month) ?? 0) + 1);
+    }
+    let cumulative = 0;
+    const growth = [...monthly.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => {
+      cumulative += count;
+      return { date: `${month}-01`, total: cumulative, members: count, visitors: 0 };
+    });
+    return { total: rows.length, byStatus, byAgeGroup, growth };
   }
 
   /**
